@@ -52,7 +52,9 @@ class Scheduler:
     def run(self):
         self.ioloop.run()
 
-    def start(self, task, name):
+    def start(self, task, name=None):
+        if name is None:
+            name = task.__name__  # If it doesn't have one, pass one.
         self.ioloop.call_soon(self.run_task, task, name)
 
     def run_task(self, task, name):
@@ -279,10 +281,10 @@ def doit():
     gen2 = urlfetch('127.0.0.1', 8080, path='/home', hdrs={'host': 'localhost'})
     sched.start(gen2, 'gen2')
 
-##     # Fetch python.org home page.
-##     gen3 = urlfetch('82.94.164.162', 80, path='/',
-##                     hdrs={'host': 'python.org'})
-##     sched.run(gen3, 'gen3')
+    # Fetch python.org home page.
+    gen3 = urlfetch('82.94.164.162', 80, path='/',
+                    hdrs={'host': 'python.org'})
+    sched.start(gen3, 'gen3')
 
 ##     # Fetch many links from python.org (/x.y.z).
 ##     for x in '123':
@@ -291,6 +293,7 @@ def doit():
 ##             g = urlfetch('82.94.164.162', 80,
 ##                          path=path, hdrs={'host': 'python.org'})
 ##             sched.run(g, path)
+
     sched.run()
 
 

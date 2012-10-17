@@ -13,7 +13,6 @@ TODO:
 - Separate scheduler and event loop.
 - Make coroutines an optinal part of the API.
 - A more varied set of test URLs.
-- A Hg repo.
 - Profiling.
 - Unittests.
 

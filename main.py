@@ -8,10 +8,7 @@ There are many micro-optimizations possible here, but that's not the point.
 Some incomplete laundry lists:
 
 TODO:
-- Use poll() etc.; need to figure out how to keep fds registered.
-- Support an external event loop.
-- Separate scheduler and event loop.
-- Make coroutines an optinal part of the API.
+- Cancellation.
 - A more varied set of test URLs.
 - Profiling.
 - Unittests.
@@ -32,6 +29,7 @@ FUNCTIONALITY:
 
 __author__ = 'Guido van Rossum <guido@python.org>'
 
+# Standard library imports (keep in alphabetic order).
 import collections
 import errno
 import logging
@@ -40,70 +38,70 @@ import select
 import socket
 import time
 
+# Local imports (keep in alphabetic order).
+import polling
+
 
 class Scheduler:
 
-    def __init__(self):
-        self.runnable = collections.deque()
+    def __init__(self, ioloop):
+        self.ioloop = ioloop
         self.current = None
-        self.readers = {}
-        self.writers = {}
+        self.current_name = None
 
-    def run(self, task):
-        self.runnable.append(task)
+    def run(self):
+        self.ioloop.run()
 
-    def loop(self):
-        while self.runnable or self.readers or self.writers:
-            self.loop1()
+    def start(self, task, name):
+        self.ioloop.call_soon(self.run_task, task, name)
 
-    def loop1(self):
-##         print('loop1')
-        while self.runnable:
-            self.current = self.runnable.popleft()
-            try:
-                next(self.current)
-            except StopIteration:
-                self.current = None
-            except Exception:
-                self.current = None
-                logging.exception('Exception in task')
-            else:
-                if self.current is not None:
-                    self.runnable.append(self.current)
-                    self.current = None
-        if self.readers or self.writers:
-            # TODO: Schedule timed calls as well.
-            # TODO: Use poll() or better.
-            t0 = time.time()
-            ready_r, ready_w, _ = select.select(self.readers, self.writers, [])
-            t1 = time.time()
-##             print('select({}, {}) took {:.3f} secs to return {}, {}'
-##                   .format(list(self.readers), list(self.writers),
-##                           t1 - t0, ready_r, ready_w))
-            for fd in ready_r:
-                self.unblock(self.readers.pop(fd))
-            for fd in ready_w:
-                self.unblock(self.writers.pop(fd))
-
-    def unblock(self, task):
-        assert task
-        self.runnable.append(task)
-
-    def block(self, queue, fd):
-        assert isinstance(fd, int)
-        assert fd not in queue
-        assert self.current is not None
-        queue[fd] = self.current
-        self.current = None
+    def run_task(self, task, name):
+        try:
+            self.current = task
+            self.current_name = name
+            next(self.current)
+        except StopIteration:
+            pass
+        except Exception:
+            logging.exception('Exception in task %r', name)
+        else:
+            if self.current is not None:
+                self.start(task, name)
+        finally:
+            self.current = None
+            self.current_name = None
+        
 
     def block_r(self, fd):
-        self.block(self.readers, fd)
+        self.block(fd, 'r')
 
     def block_w(self, fd):
-        self.block(self.writers, fd)
+        self.block(fd, 'w')
+
+    def block(self, fd, flag):
+        assert isinstance(fd, int), repr(fd)
+        assert flag in ('r', 'w'), repr(flag)
+        assert self.current is not None
+        task = self.current
+        self.current = None
+        if flag == 'r':
+            method = self.ioloop.add_reader
+            callback = self.unblock_r
+        else:
+            method = self.ioloop.add_writer
+            callback = self.unblock_w
+        method(fd, callback, fd, task, self.current_name)
+
+    def unblock_r(self, fd, task, name):
+        self.ioloop.remove_reader(fd)
+        self.start(task, name)
+
+    def unblock_w(self, fd, task, name):
+        self.ioloop.remove_writer(fd)
+        self.start(task, name)
 
 
-sched = Scheduler()
+sched = Scheduler(polling.best_pollster())
 
 
 class RawReader:
@@ -274,17 +272,26 @@ def urlfetch(host, port=80, method='GET', path='/',
 
 
 def doit():
+    # This references NDB's default test service.
+    # (Sadly the service is single-threaded.)
     gen1 = urlfetch('127.0.0.1', 8080, path='/', hdrs={'host': 'localhost'})
-    gen2 = urlfetch('82.94.164.162', 80, path='/', hdrs={'host': 'python.org'})
-    sched.run(gen1)
-    sched.run(gen2)
-    for x in '123':
-        for y in '0123456789':
-            g = urlfetch('82.94.164.162', 80,
-                         path='/{}.{}'.format(x, y),
-                         hdrs={'host': 'python.org'})
-            sched.run(g)
-    sched.loop()
+    sched.start(gen1, 'gen1')
+    gen2 = urlfetch('127.0.0.1', 8080, path='/home', hdrs={'host': 'localhost'})
+    sched.start(gen2, 'gen2')
+
+##     # Fetch python.org home page.
+##     gen3 = urlfetch('82.94.164.162', 80, path='/',
+##                     hdrs={'host': 'python.org'})
+##     sched.run(gen3, 'gen3')
+
+##     # Fetch many links from python.org (/x.y.z).
+##     for x in '123':
+##         for y in '0123456789':
+##             path = '/{}.{}'.format(x, y)
+##             g = urlfetch('82.94.164.162', 80,
+##                          path=path, hdrs={'host': 'python.org'})
+##             sched.run(g, path)
+    sched.run()
 
 
 def main():

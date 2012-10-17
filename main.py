@@ -8,8 +8,10 @@ There are many micro-optimizations possible here, but that's not the point.
 Some incomplete laundry lists:
 
 TODO:
-- Use poll() or better; need to figure out how to keep fds registered.
+- Use poll() etc.; need to figure out how to keep fds registered.
+- Support an external event loop.
 - Separate scheduler and event loop.
+- Make coroutines an optinal part of the API.
 - A more varied set of test URLs.
 - A Hg repo.
 - Profiling.

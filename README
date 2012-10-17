@@ -1,0 +1,10 @@
+Tulip is the codename for my attempt at understanding PEP-380 style
+coroutines (i.e. those using generators and 'yield from').
+
+For reference, see many threads in python-ideas@python.org started in
+October 2012, especially those with "The async API of the Future" in
+their subject, and the various spin-off threads.
+
+Copyright/license: Open source, Apache 2.0.  Enjoy.
+
+--Guido van Rossum <guido@python.org>

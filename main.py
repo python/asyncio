@@ -30,6 +30,7 @@ FUNCTIONALITY:
 __author__ = 'Guido van Rossum <guido@python.org>'
 
 # Standard library imports (keep in alphabetic order).
+import concurrent.futures
 import collections
 import errno
 import logging
@@ -75,24 +76,34 @@ class Scheduler:
         
 
     def block_r(self, fd):
-        self.block(fd, 'r')
+        self.block_io(fd, 'r')
 
     def block_w(self, fd):
-        self.block(fd, 'w')
+        self.block_io(fd, 'w')
 
-    def block(self, fd, flag):
+    def block_io(self, fd, flag):
         assert isinstance(fd, int), repr(fd)
         assert flag in ('r', 'w'), repr(flag)
-        assert self.current is not None
-        task = self.current
-        self.current = None
+        task, name = self.block()
         if flag == 'r':
             method = self.ioloop.add_reader
             callback = self.unblock_r
         else:
             method = self.ioloop.add_writer
             callback = self.unblock_w
-        method(fd, callback, fd, task, self.current_name)
+        method(fd, callback, fd, task, name)
+
+    def block_future(self, future):
+        task, name = self.block()
+        self.ioloop.add_future(future)
+        # TODO: Don't use closures or lambdas.
+        future.add_done_callback(lambda unused_future: self.start(task, name))
+
+    def block(self):
+        assert self.current
+        task = self.current
+        self.current = None
+        return task, self.current_name
 
     def unblock_r(self, fd, task, name):
         self.ioloop.remove_reader(fd)
@@ -106,7 +117,23 @@ class Scheduler:
 sched = Scheduler(polling.best_pollster())
 
 
+max_workers = 5
+threadpool = None  # Thread pool, lazily initialized.
+
+def call_in_thread(func, *args, **kwds):
+    # TODO: Timeout?
+    global threadpool
+    if threadpool is None:
+        threadpool = concurrent.futures.ThreadPoolExecutor(max_workers)
+    future = threadpool.submit(func, *args, **kwds)
+    sched.block_future(future)
+    yield
+    assert future.done()
+    return future.result()
+
+
 class RawReader:
+    # TODO: Merge with send() and newsocket() functions.
 
     def __init__(self, sock):
         self.sock = sock
@@ -188,8 +215,8 @@ def send(sock, data):
         data = data[n:]
 
 
-def newsocket():
-    sock = socket.socket()
+def newsocket(af, socktype, proto):
+    sock = socket.socket(af, socktype, proto)
     sock.setblocking(False)
     return sock
 
@@ -212,9 +239,26 @@ def urlfetch(host, port=80, method='GET', path='/',
     t0 = time.time()
     # Must pass in an IP address.  Later we'll call getaddrinfo()
     # using a thread pool.  We'll also support IPv6.
-    assert re.match(r'(\d+)(\.\d+)(\.\d+)(\.\d+)\Z', host), repr(host)
-    sock = newsocket()
-    yield from connect(sock, (host, port))
+    if not re.match(r'(\d+)(\.\d+)(\.\d+)(\.\d+)\Z', host):
+        infos = yield from call_in_thread(socket.getaddrinfo,
+                                          host, port, socket.AF_INET,
+                                          socket.SOCK_STREAM,
+                                          socket.SOL_TCP)
+    else:
+        infos = [(socket.AF_INET, socket.SOCK_STREAM, socket.SOL_TCP, '',
+                  (host, port))]
+    assert infos, 'No address info for (%r, %r)' % (host, port)
+    for af, socktype, proto, cname, address in infos:
+        sock = None
+        try:
+            sock = newsocket(af, socktype, proto)
+            yield from connect(sock, address)
+            break
+        except socket.error:
+            if sock is not None:
+                sock.close()
+    else:
+        raise
     yield from send(sock,
                     method.encode(encoding) + b' ' +
                     path.encode(encoding) + b' HTTP/1.0\r\n')
@@ -222,6 +266,8 @@ def urlfetch(host, port=80, method='GET', path='/',
         kwds = dict(hdrs)
     else:
         kwds = {}
+    if 'host' not in kwds:
+        kwds['host'] = host
     if body is not None:
         kwds['content_length'] = len(body)
     for header, value in kwds.items():
@@ -276,14 +322,14 @@ def urlfetch(host, port=80, method='GET', path='/',
 def doit():
     # This references NDB's default test service.
     # (Sadly the service is single-threaded.)
-    gen1 = urlfetch('127.0.0.1', 8080, path='/', hdrs={'host': 'localhost'})
+    gen1 = urlfetch('localhost', 8080, path='/')
     sched.start(gen1, 'gen1')
-    gen2 = urlfetch('127.0.0.1', 8080, path='/home', hdrs={'host': 'localhost'})
+
+    gen2 = urlfetch('localhost', 8080, path='/home')
     sched.start(gen2, 'gen2')
 
     # Fetch python.org home page.
-    gen3 = urlfetch('82.94.164.162', 80, path='/',
-                    hdrs={'host': 'python.org'})
+    gen3 = urlfetch('python.org', 80, path='/')
     sched.start(gen3, 'gen3')
 
 ##     # Fetch many links from python.org (/x.y.z).

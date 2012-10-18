@@ -13,6 +13,7 @@ import collections
 import heapq
 import logging
 import select
+import time
 
 
 class Pollster:
@@ -22,6 +23,7 @@ class Pollster:
         self.scheduled = []  # [(when, callback, args), ...]
         self.readers = {}  # {fd: (callback, args), ...}.
         self.writers = {}  # {fd: (callback, args), ...}.
+        self.futures = set()  # {concurrent.futures.Future(), ...}.
         self.pollster = select.poll()
 
     def update(self, fd):
@@ -52,6 +54,10 @@ class Pollster:
         del self.writers[fd]
         self.update(fd)
 
+    def add_future(self, future):
+        self.futures.add(future)
+        future.add_done_callback(self.futures.remove)
+
     def call_soon(self, callback, *args):
         self.ready.append((callback, args))
 
@@ -64,7 +70,7 @@ class Pollster:
         # Timeout is in seconds, but poll() takes milliseconds. :-(
         msecs = None if timeout is None else int(1000 * timeout)
         quads = []
-        for fd, flags in self.pollster.poll():
+        for fd, flags in self.pollster.poll(msecs):
             if flags & select.POLLIN:
                 if fd in self.readers:
                     callback, args = self.readers[fd]
@@ -90,12 +96,19 @@ class Pollster:
                 logging.exception('Exception in callback %s %r', callback, args)
 
         # Inspect the poll queue.
-        if self.readers or self.writers:
+        if self.readers or self.writers or self.futures:
             if self.scheduled:
                 when, _, _ = self.scheduled[0]
                 timeout = max(0, when - time.time())
             else:
                 timeout = None
+            if self.futures:
+                # When there's a pending future, wait no more than 100 msec.
+                # TODO: Find a more reasonable way to wait for Futures.
+                if timeout == None:
+                    timeout = 0.1
+                else:
+                    timeout = min(timeout, 0.1)
             quads = self.rawpoll(timeout)
             for fd, flag, callback, args in quads:
                 self.call_soon(callback, *args)
@@ -109,7 +122,8 @@ class Pollster:
             self.call_soon(callback, *args)
 
     def run(self):
-        while self.ready or self.readers or self.writers or self.scheduled:
+        while (self.ready or self.readers or self.writers or
+               self.scheduled or self.futures):
             self.run_once()
 
 

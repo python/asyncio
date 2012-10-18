@@ -8,7 +8,7 @@ There are many micro-optimizations possible here, but that's not the point.
 Some incomplete laundry lists:
 
 TODO:
-- Cancellation.
+- Cancellation?
 - A more varied set of test URLs.
 - Profiling.
 - Unittests.

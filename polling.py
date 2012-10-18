@@ -10,8 +10,10 @@ TODO:
 """
 
 import collections
+import concurrent.futures
 import heapq
 import logging
+import os
 import select
 import time
 
@@ -23,7 +25,6 @@ class Pollster:
         self.scheduled = []  # [(when, callback, args), ...]
         self.readers = {}  # {fd: (callback, args), ...}.
         self.writers = {}  # {fd: (callback, args), ...}.
-        self.futures = set()  # {concurrent.futures.Future(), ...}.
         self.pollster = select.poll()
 
     def update(self, fd):
@@ -53,10 +54,6 @@ class Pollster:
     def remove_writer(self, fd):
         del self.writers[fd]
         self.update(fd)
-
-    def add_future(self, future):
-        self.futures.add(future)
-        future.add_done_callback(self.futures.remove)
 
     def call_soon(self, callback, *args):
         self.ready.append((callback, args))
@@ -96,19 +93,12 @@ class Pollster:
                 logging.exception('Exception in callback %s %r', callback, args)
 
         # Inspect the poll queue.
-        if self.readers or self.writers or self.futures:
+        if self.readers or self.writers:
             if self.scheduled:
                 when, _, _ = self.scheduled[0]
                 timeout = max(0, when - time.time())
             else:
                 timeout = None
-            if self.futures:
-                # When there's a pending future, wait no more than 100 msec.
-                # TODO: Find a more reasonable way to wait for Futures.
-                if timeout == None:
-                    timeout = 0.1
-                else:
-                    timeout = min(timeout, 0.1)
             quads = self.rawpoll(timeout)
             for fd, flag, callback, args in quads:
                 self.call_soon(callback, *args)
@@ -122,10 +112,34 @@ class Pollster:
             self.call_soon(callback, *args)
 
     def run(self):
-        while (self.ready or self.readers or self.writers or
-               self.scheduled or self.futures):
+        while self.ready or self.readers or self.writers or self.scheduled:
             self.run_once()
 
 
-def best_pollster():
-    return Pollster()
+class ThreadRunner:
+
+    def __init__(self, ioloop, max_workers=5):
+        self.ioloop = ioloop
+        self.threadpool = concurrent.futures.ThreadPoolExecutor(max_workers)
+        self.pipe_read_fd, self.pipe_write_fd = os.pipe()
+        self.active_count = 0
+
+    def read_callback(self):
+        # Semi-permanent callback while at least one future is active.
+        assert self.active_count > 0, self.active_count
+        data = os.read(self.pipe_read_fd, 8192)
+        self.active_count -= len(data)
+        if self.active_count == 0:
+            self.ioloop.remove_reader(self.pipe_read_fd)
+        assert self.active_count >= 0, self.active_count
+
+    def submit(self, func, *args, **kwds):
+        assert self.active_count >= 0, self.active_count
+        future = self.threadpool.submit(func, *args, **kwds)
+        if self.active_count == 0:
+            self.ioloop.add_reader(self.pipe_read_fd, self.read_callback)
+        self.active_count += 1
+        def done_callback(future):
+            os.write(self.pipe_write_fd, b'x')
+        future.add_done_callback(done_callback)
+        return future

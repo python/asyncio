@@ -23,14 +23,12 @@ FUNCTIONALITY:
 - Chunked encoding (request and response).
 - Pipelining, e.g. zlib (request and response).
 - Automatic encoding/decoding.
-- Thread pool and getaddrinfo() calling.
 - A write() call that isn't a generator.
 """
 
 __author__ = 'Guido van Rossum <guido@python.org>'
 
 # Standard library imports (keep in alphabetic order).
-import concurrent.futures
 import collections
 import errno
 import logging
@@ -93,12 +91,6 @@ class Scheduler:
             callback = self.unblock_w
         method(fd, callback, fd, task, name)
 
-    def block_future(self, future):
-        task, name = self.block()
-        self.ioloop.add_future(future)
-        # TODO: Don't use closures or lambdas.
-        future.add_done_callback(lambda unused_future: self.start(task, name))
-
     def block(self):
         assert self.current
         task = self.current
@@ -114,19 +106,16 @@ class Scheduler:
         self.start(task, name)
 
 
-sched = Scheduler(polling.best_pollster())
+ioloop = polling.Pollster()
+trunner = polling.ThreadRunner(ioloop)
+sched = Scheduler(ioloop)
 
-
-max_workers = 5
-threadpool = None  # Thread pool, lazily initialized.
 
 def call_in_thread(func, *args, **kwds):
-    # TODO: Timeout?
-    global threadpool
-    if threadpool is None:
-        threadpool = concurrent.futures.ThreadPoolExecutor(max_workers)
-    future = threadpool.submit(func, *args, **kwds)
-    sched.block_future(future)
+    # TODO: Prove there is no race condition here.
+    task, name = sched.block()
+    future = trunner.submit(func, *args, **kwds)
+    future.add_done_callback(lambda _: sched.start(task, name))
     yield
     assert future.done()
     return future.result()

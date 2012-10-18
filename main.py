@@ -219,7 +219,7 @@ def connect(sock, address):
     err = sock.connect_ex(address)
     if err == errno.ECONNREFUSED:
         raise IOError('Connection refused')
-    if err != errno.EISCONN:
+    if err not in (0, errno.EISCONN):
         raise IOError('Connect error %d: %s' % (err, errno.errorcode.get(err)))
 
 
@@ -237,17 +237,21 @@ def urlfetch(host, port=80, method='GET', path='/',
         infos = [(socket.AF_INET, socket.SOCK_STREAM, socket.SOL_TCP, '',
                   (host, port))]
     assert infos, 'No address info for (%r, %r)' % (host, port)
+    exc = None
     for af, socktype, proto, cname, address in infos:
         sock = None
         try:
             sock = newsocket(af, socktype, proto)
             yield from connect(sock, address)
             break
-        except socket.error:
+        except socket.error as err:
             if sock is not None:
                 sock.close()
+            if exc is None:
+                exc = err
     else:
-        raise
+        if exc is not None:
+            raise exc
     yield from send(sock,
                     method.encode(encoding) + b' ' +
                     path.encode(encoding) + b' HTTP/1.0\r\n')

@@ -288,7 +288,7 @@ def urlfetch(host, port=80, method='GET', path='/',
     m = re.match(br'(?ix) http/(\d\.\d) \s+ (\d\d\d) \s+ ([^\r]*)\r?\n\Z', resp)
     if not m:
         sock.close()
-        raise IOError('No valid HTTP response: %r' % response)
+        raise IOError('No valid HTTP response: %r' % resp)
     http_version, status, message = m.groups()
 
     # Read HTTP headers.
@@ -338,7 +338,7 @@ def doit():
 ##             path = '/{}.{}'.format(x, y)
 ##             g = urlfetch('82.94.164.162', 80,
 ##                          path=path, hdrs={'host': 'python.org'})
-##             sched.run(g, path)
+##             sched.start(g, path)
 
     sched.run()
 

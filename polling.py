@@ -68,14 +68,14 @@ class Pollster:
         msecs = None if timeout is None else int(1000 * timeout)
         quads = []
         for fd, flags in self.pollster.poll(msecs):
-            if flags & select.POLLIN:
+            if flags & (select.POLLIN | select.POLLHUP):
                 if fd in self.readers:
                     callback, args = self.readers[fd]
-                    quads.append((fd, select.POLLIN, callback, args))
-            if flags & select.POLLOUT:
+                    quads.append((fd, flags, callback, args))
+            if flags & (select.POLLOUT | select.POLLHUP):
                 if fd in self.writers:
                     callback, args = self.writers[fd]
-                    quads.append((fd, select.POLLOUT, callback, args))
+                    quads.append((fd, flags, callback, args))
         return quads
 
     def run_once(self):

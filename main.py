@@ -8,6 +8,7 @@ There are many micro-optimizations possible here, but that's not the point.
 Some incomplete laundry lists:
 
 TODO:
+- Refactor RawReader -> Connection, with read/write operations.
 - Take test urls from command line.
 - Cancellation?
 - Profiling.
@@ -226,8 +227,6 @@ def connect(sock, address):
 def urlfetch(host, port=80, method='GET', path='/',
              body=None, hdrs=None, encoding='utf-8'):
     t0 = time.time()
-    # Must pass in an IP address.  Later we'll call getaddrinfo()
-    # using a thread pool.  We'll also support IPv6.
     if not re.match(r'(\d+)(\.\d+)(\.\d+)(\.\d+)\Z', host):
         infos = yield from call_in_thread(socket.getaddrinfo,
                                           host, port, socket.AF_INET,

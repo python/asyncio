@@ -90,7 +90,8 @@ class Pollster:
             try:
                 callback(*args)
             except Exception:
-                logging.exception('Exception in callback %s %r', callback, args)
+                logging.exception('Exception in callback %s %r',
+                                  callback, args)
 
         # Inspect the poll queue.
         if self.readers or self.writers:

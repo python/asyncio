@@ -39,6 +39,6 @@ def submain(depth):
 def main(reasonable=100):
     for depth in range(reasonable):
         submain(depth)
-        
+
 if __name__ == '__main__':
     main()

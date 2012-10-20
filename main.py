@@ -72,7 +72,6 @@ class Scheduler:
         finally:
             self.current = None
             self.current_name = None
-        
 
     def block_r(self, fd):
         self.block_io(fd, 'r')

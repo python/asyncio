@@ -213,15 +213,16 @@ def newsocket(af, socktype, proto):
 
 def connect(sock, address):
 ##     print('connect:', address)
-    err = sock.connect_ex(address)
-    assert err == errno.EINPROGRESS, err
+    try:
+        sock.connect(address)
+    except socket.error as err:
+        if err.errno != errno.EINPROGRESS:
+            raise
     sched.block_w(sock.fileno())
     yield
-    err = sock.connect_ex(address)
-    if err == errno.ECONNREFUSED:
+    err = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+    if err != 0:
         raise IOError('Connection refused')
-    if err not in (0, errno.EISCONN):
-        raise IOError('Connect error %d: %s' % (err, errno.errorcode.get(err)))
 
 
 def urlfetch(host, port=80, method='GET', path='/',

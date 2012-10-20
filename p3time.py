@@ -16,13 +16,13 @@ def coroutine(n):
     r = yield from coroutine(n-1)
     return l + 1 + r
 
-def main():
-    depth = 20
-
+def submain(depth):
     t0 = time.time()
     k = plain(depth)
     t1 = time.time()
-    print('plain', k, t1-t0)
+    fmt = ' {} {} {:-9,.5f}'
+    delta0 = t1-t0
+    print(('plain' + fmt).format(depth, k, delta0))
 
     t0 = time.time()
     try:
@@ -31,8 +31,14 @@ def main():
             next(g)
     except StopIteration as err:
         k = err.value
-    t1 = time.time()
-    print('coro.', k, t1-t0)
+        t1 = time.time()
+        delta1 = t1-t0
+        print(('coro.' + fmt).format(depth, k, delta1))
+    print(('relat' + fmt).format(depth, k, delta1/delta0))
 
+def main(reasonable=100):
+    for depth in range(reasonable):
+        submain(depth)
+        
 if __name__ == '__main__':
     main()

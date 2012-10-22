@@ -147,11 +147,11 @@ class EPollMixin(PollsterBase):
             timeout = -1  # epoll.poll() uses -1 to mean "wait forever".
         events = []
         for fd, eventmask in self._epoll.poll(timeout):
-            if eventmask & (select.EPOLLIN | select.EPOLLHUP):
+            if eventmask & select.EPOLLIN:
                 if fd in self.readers:
                     callback, args = self.readers[fd]
                     events.append((fd, eventmask, callback, args))
-            if eventmask & (select.EPOLLOUT | select.EPOLLHUP):
+            if eventmask & select.EPOLLOUT:
                 if fd in self.writers:
                     callback, args = self.writers[fd]
                     events.append((fd, eventmask, callback, args))
@@ -265,6 +265,8 @@ elif hasattr(select, 'poll'):  # Newer UNIX
     poll_base = PollMixin
 else:  # All UNIX; Windows (for sockets only)
     poll_base = SelectMixin
+
+logging.info('Using Pollster base class %r', poll_base.__name__)
 
 
 class Pollster(EventLoopMixin, poll_base):

@@ -38,6 +38,9 @@ import select
 import socket
 import time
 
+# Initialize logging before we import polling.
+logging.basicConfig(level=logging.INFO)
+
 # Local imports (keep in alphabetic order).
 import polling
 

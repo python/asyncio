@@ -18,14 +18,16 @@ import select
 import time
 
 
-class Pollster:
+class PollsterMixin:
 
     def __init__(self):
-        self.ready = collections.deque()  # [(callback, args), ...]
-        self.scheduled = []  # [(when, callback, args), ...]
+        super().__init__()
         self.readers = {}  # {fd: (callback, args), ...}.
         self.writers = {}  # {fd: (callback, args), ...}.
         self.pollster = select.poll()
+
+    def pollable(self):
+        return bool(self.readers or self.writers)
 
     def update(self, fd):
         assert isinstance(fd, int), fd
@@ -55,14 +57,6 @@ class Pollster:
         del self.writers[fd]
         self.update(fd)
 
-    def call_soon(self, callback, *args):
-        self.ready.append((callback, args))
-
-    def call_later(self, when, callback, *args):
-        if when < 10000000:
-            when += time.time()
-        heapq.heappush(self.scheduled, (when, callback, args))
-
     def rawpoll(self, timeout=None):
         # Timeout is in seconds, but poll() takes milliseconds. :-(
         msecs = None if timeout is None else int(1000 * timeout)
@@ -77,6 +71,22 @@ class Pollster:
                     callback, args = self.writers[fd]
                     quads.append((fd, flags, callback, args))
         return quads
+
+
+class EventLoopMixin:
+
+    def __init__(self):
+        self.ready = collections.deque()  # [(callback, args), ...]
+        self.scheduled = []  # [(when, callback, args), ...]
+        super().__init__()
+
+    def call_soon(self, callback, *args):
+        self.ready.append((callback, args))
+
+    def call_later(self, when, callback, *args):
+        if when < 10000000:
+            when += time.time()
+        heapq.heappush(self.scheduled, (when, callback, args))
 
     def run_once(self):
         # TODO: Break each of these into smaller pieces.
@@ -94,7 +104,7 @@ class Pollster:
                                   callback, args)
 
         # Inspect the poll queue.
-        if self.readers or self.writers:
+        if self.pollable():
             if self.scheduled:
                 when, _, _ = self.scheduled[0]
                 timeout = max(0, when - time.time())
@@ -113,8 +123,12 @@ class Pollster:
             self.call_soon(callback, *args)
 
     def run(self):
-        while self.ready or self.readers or self.writers or self.scheduled:
+        while self.ready or self.scheduled or self.pollable():
             self.run_once()
+
+
+class Pollster(EventLoopMixin, PollsterMixin):
+    pass
 
 
 class ThreadRunner:

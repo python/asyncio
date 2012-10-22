@@ -4,9 +4,8 @@ If both exist, kqueue() is preferred.  If neither exists, raise
 ImportError.
 
 TODO:
+- Do we need fd and flags in event tuples?
 - Docstrings, unittests.
-- Support epoll().
-- Fall back on select() if no poll() variant at all.
 - Keyword args to callbacks.
 """
 
@@ -60,7 +59,7 @@ class PollMixin(PollsterBase):
 
     def __init__(self):
         super().__init__()
-        self._pollster = select.poll()
+        self._poll = select.poll()
 
     def _update(self, fd):
         assert isinstance(fd, int), fd
@@ -70,9 +69,9 @@ class PollMixin(PollsterBase):
         if fd in self.writers:
             flags |= select.POLLOUT
         if flags:
-            self._pollster.register(fd, flags)
+            self._poll.register(fd, flags)
         else:
-            self._pollster.unregister(fd)
+            self._poll.unregister(fd)
 
     def add_reader(self, fd, callback, *args):
         super().add_reader(fd, callback, *args)
@@ -92,9 +91,9 @@ class PollMixin(PollsterBase):
 
     def poll(self, timeout=None):
         # Timeout is in seconds, but poll() takes milliseconds. :-(
-        msecs = None if timeout is None else int(1000 * timeout)
-        events = []  # TODO: Do we need fd and flags in events?
-        for fd, flags in self._pollster.poll(msecs):
+        msecs = None if timeout is None else int(round(1000 * timeout))
+        events = []
+        for fd, flags in self._poll.poll(msecs):
             if flags & (select.POLLIN | select.POLLHUP):
                 if fd in self.readers:
                     callback, args = self.readers[fd]
@@ -103,6 +102,59 @@ class PollMixin(PollsterBase):
                 if fd in self.writers:
                     callback, args = self.writers[fd]
                     events.append((fd, flags, callback, args))
+        return events
+
+
+class EPollMixin(PollsterBase):
+
+    def __init__(self):
+        super().__init__()
+        self._epoll = select.epoll()
+
+    def _update(self, fd):
+        assert isinstance(fd, int), fd
+        eventmask = 0
+        if fd in self.readers:
+            eventmask |= select.EPOLLIN
+        if fd in self.writers:
+            eventmask |= select.EPOLLOUT
+        if eventmask:
+            try:
+                self._epoll.register(fd, eventmask)
+            except IOError:
+                self._epoll.modify(fd, eventmask)
+        else:
+            self._epoll.unregister(fd)
+
+    def add_reader(self, fd, callback, *args):
+        super().add_reader(fd, callback, *args)
+        self._update(fd)
+
+    def add_writer(self, fd, callback, *args):
+        super().add_writer(fd, callback, *args)
+        self._update(fd)
+
+    def remove_reader(self, fd):
+        super().remove_reader(fd)
+        self._update(fd)
+
+    def remove_writer(self, fd):
+        super().remove_writer(fd)
+        self._update(fd)
+
+    def poll(self, timeout=None):
+        if timeout is None:
+            timeout = -1  # epoll.poll() uses -1 to mean "wait forever".
+        events = []
+        for fd, eventmask in self._epoll.poll(timeout):
+            if eventmask & (select.EPOLLIN | select.EPOLLHUP):
+                if fd in self.readers:
+                    callback, args = self.readers[fd]
+                    events.append((fd, eventmask, callback, args))
+            if eventmask & (select.EPOLLOUT | select.EPOLLHUP):
+                if fd in self.writers:
+                    callback, args = self.writers[fd]
+                    events.append((fd, eventmask, callback, args))
         return events
 
 
@@ -160,6 +212,7 @@ class EventLoopMixin(PollsterBase):
         self.ready.append((callback, args))
 
     def call_later(self, when, callback, *args):
+        # If when is small enough (~11 days), it's a relative time.
         if when < 10000000:
             when += time.time()
         heapq.heappush(self.scheduled, (when, callback, args))
@@ -203,15 +256,19 @@ class EventLoopMixin(PollsterBase):
             self.run_once()
 
 
-if hasattr(select, 'kqueue'):
-    class Pollster(EventLoopMixin, KqueueMixin):
-        pass
-elif hasattr(select, 'poll'):
-    class Pollster(EventLoopMixin, PollMixin):
-        pass
-else:
-    class Pollster(EventLoopMixin, SelectMixin):
-        pass
+# Select most appropriate base class for platform.
+if hasattr(select, 'kqueue'):  # Most BSD
+    poll_base = KqueueMixin
+elif hasattr(select, 'epoll'):  # Linux 2.5 and later
+    poll_base = EPollMixin
+elif hasattr(select, 'poll'):  # Newer UNIX
+    poll_base = PollMixin
+else:  # All UNIX; Windows (for sockets only)
+    poll_base = SelectMixin
+
+
+class Pollster(EventLoopMixin, poll_base):
+    pass
 
 
 class ThreadRunner:
@@ -225,7 +282,7 @@ class ThreadRunner:
     def read_callback(self):
         # Semi-permanent callback while at least one future is active.
         assert self.active_count > 0, self.active_count
-        data = os.read(self.pipe_read_fd, 8192)
+        data = os.read(self.pipe_read_fd, 8192)  # Traditional buffer size.
         self.active_count -= len(data)
         if self.active_count == 0:
             self.ioloop.remove_reader(self.pipe_read_fd)

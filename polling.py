@@ -45,6 +45,17 @@ class PollsterBase:
         raise NotImplementedError
 
 
+class SelectMixin(PollsterBase):
+
+    def poll(self, timeout=None):
+        readable, writable, _ = select.select(self.readers, self.writers,
+                                              [], timeout)
+        events = []
+        events += ((fd, 'r') + self.readers[fd] for fd in readable)
+        events += ((fd, 'w') + self.writers[fd] for fd in writable)
+        return events
+
+
 class PollMixin(PollsterBase):
 
     def __init__(self):
@@ -99,34 +110,34 @@ class KqueueMixin(PollsterBase):
 
     def __init__(self):
         super().__init__()
-        self.kqueue = select.kqueue()
+        self._kqueue = select.kqueue()
 
     def add_reader(self, fd, callback, *args):
         if fd not in self.readers:
             kev = select.kevent(fd, select.KQ_FILTER_READ, select.KQ_EV_ADD)
-            self.kqueue.control([kev], 0, 0)
+            self._kqueue.control([kev], 0, 0)
         super().add_reader(fd, callback, *args)
 
     def add_writer(self, fd, callback, *args):
         if fd not in self.readers:
             kev = select.kevent(fd, select.KQ_FILTER_WRITE, select.KQ_EV_ADD)
-            self.kqueue.control([kev], 0, 0)
+            self._kqueue.control([kev], 0, 0)
         super().add_writer(fd, callback, *args)
 
     def remove_reader(self, fd):
         super().remove_reader(fd)
         kev = select.kevent(fd, select.KQ_FILTER_READ, select.KQ_EV_DELETE)
-        self.kqueue.control([kev], 0, 0)
+        self._kqueue.control([kev], 0, 0)
 
     def remove_writer(self, fd):
         super().remove_writer(fd)
         kev = select.kevent(fd, select.KQ_FILTER_WRITE, select.KQ_EV_DELETE)
-        self.kqueue.control([kev], 0, 0)
+        self._kqueue.control([kev], 0, 0)
 
     def poll(self, timeout=None):
         events = []
         max_ev = len(self.readers) + len(self.writers)
-        for kev in self.kqueue.control(None, max_ev, timeout):
+        for kev in self._kqueue.control(None, max_ev, timeout):
             fd = kev.ident
             flag = kev.filter
             if flag == select.KQ_FILTER_READ and fd in self.readers:
@@ -199,7 +210,8 @@ elif hasattr(select, 'poll'):
     class Pollster(EventLoopMixin, PollMixin):
         pass
 else:
-    raise ImportError('Neither poll() not kqueue() supported')
+    class Pollster(EventLoopMixin, SelectMixin):
+        pass
 
 
 class ThreadRunner:

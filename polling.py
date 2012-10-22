@@ -1,10 +1,11 @@
-"""I/O loop based on poll().
+"""I/O loop implementations based on kqueue() and poll().
+
+If both exist, kqueue() is preferred.  If neither exists, raise
+ImportError.
 
 TODO:
-- Docstrings.
-- Use _ for non-public methods and instance variables.
-- Support some of the other POLL* flags.
-- Use kpoll(), epoll() etc. in preference.
+- Docstrings, unittests.
+- Support epoll().
 - Fall back on select() if no poll() variant at all.
 - Keyword args to callbacks.
 """
@@ -18,16 +19,37 @@ import select
 import time
 
 
-class PollMixin:
+class PollsterBase:
 
     def __init__(self):
         super().__init__()
         self.readers = {}  # {fd: (callback, args), ...}.
         self.writers = {}  # {fd: (callback, args), ...}.
-        self._pollster = select.poll()
 
     def pollable(self):
         return bool(self.readers or self.writers)
+
+    def add_reader(self, fd, callback, *args):
+        self.readers[fd] = (callback, args)
+
+    def add_writer(self, fd, callback, *args):
+        self.writers[fd] = (callback, args)
+
+    def remove_reader(self, fd):
+        del self.readers[fd]
+
+    def remove_writer(self, fd):
+        del self.writers[fd]
+
+    def poll(self, timeout=None):
+        raise NotImplementedError
+
+
+class PollMixin(PollsterBase):
+
+    def __init__(self):
+        super().__init__()
+        self._pollster = select.poll()
 
     def _update(self, fd):
         assert isinstance(fd, int), fd
@@ -42,19 +64,19 @@ class PollMixin:
             self._pollster.unregister(fd)
 
     def add_reader(self, fd, callback, *args):
-        self.readers[fd] = (callback, args)
+        super().add_reader(fd, callback, *args)
         self._update(fd)
 
     def add_writer(self, fd, callback, *args):
-        self.writers[fd] = (callback, args)
+        super().add_writer(fd, callback, *args)
         self._update(fd)
 
     def remove_reader(self, fd):
-        del self.readers[fd]
+        super().remove_reader(fd)
         self._update(fd)
 
     def remove_writer(self, fd):
-        del self.writers[fd]
+        super().remove_writer(fd)
         self._update(fd)
 
     def poll(self, timeout=None):
@@ -73,36 +95,31 @@ class PollMixin:
         return events
 
 
-class KqueueMixin:
+class KqueueMixin(PollsterBase):
 
     def __init__(self):
         super().__init__()
-        self.readers = {}
-        self.writers = {}
         self.kqueue = select.kqueue()
-
-    def pollable(self):
-        return bool(self.readers or self.writers)
 
     def add_reader(self, fd, callback, *args):
         if fd not in self.readers:
             kev = select.kevent(fd, select.KQ_FILTER_READ, select.KQ_EV_ADD)
             self.kqueue.control([kev], 0, 0)
-        self.readers[fd] = (callback, args)
+        super().add_reader(fd, callback, *args)
 
     def add_writer(self, fd, callback, *args):
         if fd not in self.readers:
             kev = select.kevent(fd, select.KQ_FILTER_WRITE, select.KQ_EV_ADD)
             self.kqueue.control([kev], 0, 0)
-        self.writers[fd] = (callback, args)
+        super().add_writer(fd, callback, *args)
 
     def remove_reader(self, fd):
-        del self.readers[fd]
+        super().remove_reader(fd)
         kev = select.kevent(fd, select.KQ_FILTER_READ, select.KQ_EV_DELETE)
         self.kqueue.control([kev], 0, 0)
 
     def remove_writer(self, fd):
-        del self.writers[fd]
+        super().remove_writer(fd)
         kev = select.kevent(fd, select.KQ_FILTER_WRITE, select.KQ_EV_DELETE)
         self.kqueue.control([kev], 0, 0)
 
@@ -121,7 +138,7 @@ class KqueueMixin:
         return events
 
 
-class EventLoopMixin:
+class EventLoopMixin(PollsterBase):
 
     def __init__(self):
         super().__init__()

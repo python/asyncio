@@ -109,7 +109,7 @@ class Scheduler:
         self.start(task, name)
 
 
-ioloop = polling.Pollster()
+ioloop = polling.EventLoop()
 trunner = polling.ThreadRunner(ioloop)
 sched = Scheduler(ioloop)
 

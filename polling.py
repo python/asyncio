@@ -1,12 +1,31 @@
-"""I/O loop implementations based on kqueue() and poll().
+"""Event loop and related classes.
 
-If both exist, kqueue() is preferred.  If neither exists, raise
-ImportError.
+The event loop can be broken up into a pollster (the part responsible
+for telling us when file descriptors are ready) and the event loop
+proper, which adds functionality for scheduling callbacks, immediately
+or at a given time in the future.
+
+There are several implementations of the pollster part, several using
+esoteric system calls that exist only on some platforms.  These are:
+
+- kqueue (most BSD systems)
+- epoll (newer Linux systems)
+- poll (most UNIX systems)
+- select (all UNIX systems, and Windows)
+- TODO: Support IOCP on Windows and some UNIX platforms.
+
+NOTE: We don't use select on systems where any of the others is
+available, because select performs poorly as the number of file
+descriptors goes up.  The ranking is roughly:
+
+  1. kqueue, epoll, IOCP
+  2. poll
+  3. select
+
 
 TODO:
-- Do we need fd and flags in event tuples?
-- Docstrings, unittests.
-- Keyword args to callbacks.
+- Optimize the various pollster.
+- Unittests.
 """
 
 import collections
@@ -19,6 +38,16 @@ import time
 
 
 class PollsterBase:
+    """Base class for all polling implementations.
+
+    This defines an interface to register and unregister readers and
+    writers (defined as a callback plus optional positional arguments)
+    for specific file descriptors, and an interface to get a list of
+    events.  There's also an interface to check whether any readers or
+    writers are currently registered.  The readers and writers
+    attributes are public -- they are simply mappings of file
+    descriptors to tuples of (callback, args).
+    """
 
     def __init__(self):
         super().__init__()
@@ -26,25 +55,49 @@ class PollsterBase:
         self.writers = {}  # {fd: (callback, args), ...}.
 
     def pollable(self):
+        """Return True if any readers or writers are currently registered."""
         return bool(self.readers or self.writers)
 
+    # Subclasses are expected to extend the add/remove methods.
+
     def add_reader(self, fd, callback, *args):
+        """Add or update a reader for a file descriptor."""
         self.readers[fd] = (callback, args)
 
     def add_writer(self, fd, callback, *args):
+        """Add or update a writer for a file descriptor."""
         self.writers[fd] = (callback, args)
 
     def remove_reader(self, fd):
+        """Remove the reader for a file descriptor."""
         del self.readers[fd]
 
     def remove_writer(self, fd):
+        """Remove the writer for a file descriptor."""
         del self.writers[fd]
 
     def poll(self, timeout=None):
+        """Poll for events.  A subclass must implement this.
+
+        If timeout is omitted or None, this blocks until at least one
+        event is ready.  Otherwise, timeout gives a maximum time to
+        wait (an int of float in seconds) -- the method returns as
+        soon as at least one event is ready or when the timeout is
+        expired.  For a non-blocking poll, pass 0.
+
+        The return value is a list of events; it is empty when the
+        timeout expired before any events were ready.  Each event
+        is a tuple of the form (fd, flag, callback, args):
+          fd: the file descriptor
+          flag: 'r' or 'w' (to distinguish readers from writers)
+          callback: callback function
+          args: arguments tuple for callback
+        """
         raise NotImplementedError
 
 
 class SelectMixin(PollsterBase):
+    """Pollster implementation using select."""
 
     def poll(self, timeout=None):
         readable, writable, _ = select.select(self.readers, self.writers,
@@ -56,6 +109,7 @@ class SelectMixin(PollsterBase):
 
 
 class PollMixin(PollsterBase):
+    """Pollster implementation using poll."""
 
     def __init__(self):
         super().__init__()
@@ -90,22 +144,23 @@ class PollMixin(PollsterBase):
         self._update(fd)
 
     def poll(self, timeout=None):
-        # Timeout is in seconds, but poll() takes milliseconds. :-(
+        # Timeout is in seconds, but poll() takes milliseconds.
         msecs = None if timeout is None else int(round(1000 * timeout))
         events = []
         for fd, flags in self._poll.poll(msecs):
             if flags & (select.POLLIN | select.POLLHUP):
                 if fd in self.readers:
                     callback, args = self.readers[fd]
-                    events.append((fd, flags, callback, args))
+                    events.append((fd, 'r', callback, args))
             if flags & (select.POLLOUT | select.POLLHUP):
                 if fd in self.writers:
                     callback, args = self.writers[fd]
-                    events.append((fd, flags, callback, args))
+                    events.append((fd, 'w', callback, args))
         return events
 
 
 class EPollMixin(PollsterBase):
+    """Pollster implementation using epoll."""
 
     def __init__(self):
         super().__init__()
@@ -150,15 +205,16 @@ class EPollMixin(PollsterBase):
             if eventmask & select.EPOLLIN:
                 if fd in self.readers:
                     callback, args = self.readers[fd]
-                    events.append((fd, eventmask, callback, args))
+                    events.append((fd, 'r', callback, args))
             if eventmask & select.EPOLLOUT:
                 if fd in self.writers:
                     callback, args = self.writers[fd]
-                    events.append((fd, eventmask, callback, args))
+                    events.append((fd, 'w', callback, args))
         return events
 
 
 class KqueueMixin(PollsterBase):
+    """Pollster implementation using kqueue."""
 
     def __init__(self):
         super().__init__()
@@ -194,14 +250,22 @@ class KqueueMixin(PollsterBase):
             flag = kev.filter
             if flag == select.KQ_FILTER_READ and fd in self.readers:
                 callback, args = self.readers[fd]
-                events.append((fd, flag, callback, args))
+                events.append((fd, 'r', callback, args))
             elif flag == select.KQ_FILTER_WRITE and fd in self.writers:
                 callback, args = self.writers[fd]
-                events.append((fd, flag, callback, args))
+                events.append((fd, 'w', callback, args))
         return events
 
 
 class EventLoopMixin(PollsterBase):
+    """Event loop functionality.
+
+    This defines call_soon(), call_later(), run_once() and run().
+
+    This is an abstract class, inheriting from the abstract class
+    PollsterBase.  A concrete class can be formed trivially by
+    inheriting from any of the pollster mixin classes.
+    """
 
     def __init__(self):
         super().__init__()
@@ -269,7 +333,7 @@ else:  # All UNIX; Windows (for sockets only)
 logging.info('Using Pollster base class %r', poll_base.__name__)
 
 
-class Pollster(EventLoopMixin, poll_base):
+class EventLoop(EventLoopMixin, poll_base):
     pass
 
 

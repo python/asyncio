@@ -5,6 +5,13 @@ for telling us when file descriptors are ready) and the event loop
 proper, which adds functionality for scheduling callbacks, immediately
 or at a given time in the future.
 
+Whenever a public API takes a callback, subsequent positional
+arguments will be passed to the callback if/when it is called.  This
+avoids the proliferation of trivial lambdas implementing closures.
+Keyword arguments for the callback are not supported; this is a
+conscious design decision, leaving the door open for keyword arguments
+to modify the meaning of the API call itself.
+
 There are several implementations of the pollster part, several using
 esoteric system calls that exist only on some platforms.  These are:
 
@@ -260,11 +267,19 @@ class KqueueMixin(PollsterBase):
 class EventLoopMixin(PollsterBase):
     """Event loop functionality.
 
-    This defines call_soon(), call_later(), run_once() and run().
-
     This is an abstract class, inheriting from the abstract class
     PollsterBase.  A concrete class can be formed trivially by
-    inheriting from any of the pollster mixin classes.
+    inheriting from any of the pollster mixin classes; the concrete
+    class EventLoop is such a concrete class using the preferred mixin
+    given the platform.
+
+    This defines public APIs call_soon(), call_later(), run_once() and
+    run().  It also inherits public APIs add_reader(), add_writer(),
+    remove_reader(), remove_writer() from the mixin class.  The APIs
+    pollable() and poll(), implemented by the mix-in, are not part of
+    the public API.
+
+    This class's instance variables are not part of its API.
     """
 
     def __init__(self):
@@ -273,21 +288,56 @@ class EventLoopMixin(PollsterBase):
         self.scheduled = []  # [(when, callback, args), ...]
 
     def call_soon(self, callback, *args):
+        """Arrange for a callback to be called as soon as possible.
+
+        This operates as a FIFO queue, callbacks are called in the
+        order in which they are registered.  Each callback will be
+        called exactly once.
+
+        Any positional arguments after the callback will be passed to
+        the callback when it is called.
+        """
         self.ready.append((callback, args))
 
     def call_later(self, when, callback, *args):
-        # If when is small enough (~11 days), it's a relative time.
+        """Arrange for a callback to be called at a given time.
+
+        The time can be an int or float, expressed in seconds.
+
+        If when is small enough (~11 days), it's assumed to be a
+        relative time, meaning the call will be scheduled that many
+        seconds in the future; otherwise it's assumed to be a posix
+        timestamp as returned by time.time().
+
+        Each callback will be called exactly once.  If two callbacks
+        are scheduled for exactly the same time, it undefined which
+        will be called first.
+
+        Any positional arguments after the callback will be passed to
+        the callback when it is called.
+        """
         if when < 10000000:
             when += time.time()
         heapq.heappush(self.scheduled, (when, callback, args))
 
     def run_once(self):
+        """Run one full iteration of the event loop.
+
+        This calls all currently ready callbacks, polls for I/O,
+        schedules the resulting callbacks, and finally schedules
+        'call_later' callbacks.
+        """
         # TODO: Break each of these into smaller pieces.
         # TODO: Pass in a timeout or deadline or something.
         # TODO: Refactor to separate the callbacks from the readers/writers.
+        # TODO: As step 4, run everything scheduled by steps 1-3.
+        # TODO: An alternative API would be to do the *minimal* amount
+        # of work, e.g. one callback or one I/O poll.
 
         # This is the only place where callbacks are actually *called*.
         # All other places just add them to ready.
+        # TODO: Ensure this loop always finishes, even if some
+        # callbacks keeps registering more callbacks.
         while self.ready:
             callback, args = self.ready.popleft()
             try:
@@ -316,49 +366,68 @@ class EventLoopMixin(PollsterBase):
             self.call_soon(callback, *args)
 
     def run(self):
+        """Run the event loop until there is no work left to do.
+
+        This keeps going as long as there are either readable and
+        writable file descriptors, or scheduled callbacks (of either
+        variety).
+        """
         while self.ready or self.scheduled or self.pollable():
             self.run_once()
 
 
-# Select most appropriate base class for platform.
-if hasattr(select, 'kqueue'):  # Most BSD
+# Select the most appropriate base class for the platform.
+if hasattr(select, 'kqueue'):
     poll_base = KqueueMixin
-elif hasattr(select, 'epoll'):  # Linux 2.5 and later
+elif hasattr(select, 'epoll'):
     poll_base = EPollMixin
-elif hasattr(select, 'poll'):  # Newer UNIX
+elif hasattr(select, 'poll'):
     poll_base = PollMixin
-else:  # All UNIX; Windows (for sockets only)
+else:
     poll_base = SelectMixin
 
 logging.info('Using Pollster base class %r', poll_base.__name__)
 
 
 class EventLoop(EventLoopMixin, poll_base):
-    pass
+    """Event loop implementation using the optimal pollster mixin."""
 
 
 class ThreadRunner:
+    """Helper to submit work to a thread pool and wait for it.
 
-    def __init__(self, ioloop, max_workers=5):
-        self.ioloop = ioloop
+    This is the glue between the single-threaded callback-based async
+    world and the threaded world.  Use it to call functions that must
+    block and don't have an async alternative (e.g. getaddrinfo()).
+
+    The only public API is submit().
+    """
+
+    def __init__(self, eventloop, max_workers=5):
+        self.eventloop = eventloop
         self.threadpool = concurrent.futures.ThreadPoolExecutor(max_workers)
         self.pipe_read_fd, self.pipe_write_fd = os.pipe()
         self.active_count = 0
 
     def read_callback(self):
-        # Semi-permanent callback while at least one future is active.
+        """Semi-permanent callback while at least one future is active."""
         assert self.active_count > 0, self.active_count
         data = os.read(self.pipe_read_fd, 8192)  # Traditional buffer size.
         self.active_count -= len(data)
         if self.active_count == 0:
-            self.ioloop.remove_reader(self.pipe_read_fd)
+            self.eventloop.remove_reader(self.pipe_read_fd)
         assert self.active_count >= 0, self.active_count
 
-    def submit(self, func, *args, **kwds):
+    def submit(self, func, *args):
+        """Submit a function to the thread pool.
+
+        This returns a concurrent.futures.Future instance.  The caller
+        should not wait for that, but rather add a callback to it.
+        """
         assert self.active_count >= 0, self.active_count
-        future = self.threadpool.submit(func, *args, **kwds)
+        future = self.threadpool.submit(func, *args)
         if self.active_count == 0:
-            self.ioloop.add_reader(self.pipe_read_fd, self.read_callback)
+            self.eventloop.add_reader(self.pipe_read_fd, self.read_callback)
         self.active_count += 1
         def done_callback(future):
             os.write(self.pipe_write_fd, b'x')

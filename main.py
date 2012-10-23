@@ -47,18 +47,18 @@ import polling
 
 class Scheduler:
 
-    def __init__(self, ioloop):
-        self.ioloop = ioloop
+    def __init__(self, eventloop):
+        self.eventloop = eventloop
         self.current = None
         self.current_name = None
 
     def run(self):
-        self.ioloop.run()
+        self.eventloop.run()
 
     def start(self, task, name=None):
         if name is None:
             name = task.__name__  # If it doesn't have one, pass one.
-        self.ioloop.call_soon(self.run_task, task, name)
+        self.eventloop.call_soon(self.run_task, task, name)
 
     def run_task(self, task, name):
         try:
@@ -87,10 +87,10 @@ class Scheduler:
         assert flag in ('r', 'w'), repr(flag)
         task, name = self.block()
         if flag == 'r':
-            method = self.ioloop.add_reader
+            method = self.eventloop.add_reader
             callback = self.unblock_r
         else:
-            method = self.ioloop.add_writer
+            method = self.eventloop.add_writer
             callback = self.unblock_w
         method(fd, callback, fd, task, name)
 
@@ -101,23 +101,23 @@ class Scheduler:
         return task, self.current_name
 
     def unblock_r(self, fd, task, name):
-        self.ioloop.remove_reader(fd)
+        self.eventloop.remove_reader(fd)
         self.start(task, name)
 
     def unblock_w(self, fd, task, name):
-        self.ioloop.remove_writer(fd)
+        self.eventloop.remove_writer(fd)
         self.start(task, name)
 
 
-ioloop = polling.EventLoop()
-trunner = polling.ThreadRunner(ioloop)
-sched = Scheduler(ioloop)
+eventloop = polling.EventLoop()
+threadrunner = polling.ThreadRunner(eventloop)
+sched = Scheduler(eventloop)
 
 
-def call_in_thread(func, *args, **kwds):
+def call_in_thread(func, *args):
     # TODO: Prove there is no race condition here.
     task, name = sched.block()
-    future = trunner.submit(func, *args, **kwds)
+    future = threadrunner.submit(func, *args)
     future.add_done_callback(lambda _: sched.start(task, name))
     yield
     assert future.done()

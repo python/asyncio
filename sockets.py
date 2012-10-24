@@ -13,6 +13,7 @@ TODO:
 __author__ = 'Guido van Rossum <guido@python.org>'
 
 import errno
+import re
 import socket
 
 
@@ -118,3 +119,37 @@ def connect(sock, address):
     if err != 0:
         raise IOError('Connection refused')
 
+
+def create_connection(address):
+    host, port = address
+    match = re.match(r'(\d+)(\.\d+)(\.\d+)(\.\d+)\Z', host)
+    if match:
+        d1, d2, d3, d4 = map(int, match.groups())
+        if not (0 <= d1 <= 255 and 0 <= d2 <= 255 and
+                0 <= d3 <= 255 and 0 <= d4 <= 255):
+            match = None
+    if not match:
+        infos = yield from scheduler.call_in_thread(socket.getaddrinfo,
+                                                    host, port, socket.AF_INET,
+                                                    socket.SOCK_STREAM,
+                                                    socket.SOL_TCP)
+    else:
+        infos = [(socket.AF_INET, socket.SOCK_STREAM, socket.SOL_TCP, '',
+                  (host, port))]
+    assert infos, 'No address info for (%r, %r)' % (host, port)
+    exc = None
+    for af, socktype, proto, cname, address in infos:
+        sock = None
+        try:
+            sock = newsocket(af, socktype, proto)
+            yield from connect(sock, address)
+            break
+        except socket.error as err:
+            if sock is not None:
+                sock.close()
+            if exc is None:
+                exc = err
+    else:
+        if exc is not None:
+            raise exc
+    return sock

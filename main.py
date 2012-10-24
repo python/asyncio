@@ -25,7 +25,6 @@ __author__ = 'Guido van Rossum <guido@python.org>'
 # Standard library imports (keep in alphabetic order).
 import logging
 import re
-import socket
 import time
 
 # Initialize logging before we import polling.
@@ -46,30 +45,7 @@ sockets.scheduler = scheduler  # TODO: Find a better way.
 def urlfetch(host, port=80, method='GET', path='/',
              body=None, hdrs=None, encoding='utf-8'):
     t0 = time.time()
-    if not re.match(r'(\d+)(\.\d+)(\.\d+)(\.\d+)\Z', host):
-        infos = yield from scheduler.call_in_thread(socket.getaddrinfo,
-                                                    host, port, socket.AF_INET,
-                                                    socket.SOCK_STREAM,
-                                                    socket.SOL_TCP)
-    else:
-        infos = [(socket.AF_INET, socket.SOCK_STREAM, socket.SOL_TCP, '',
-                  (host, port))]
-    assert infos, 'No address info for (%r, %r)' % (host, port)
-    exc = None
-    for af, socktype, proto, cname, address in infos:
-        sock = None
-        try:
-            sock = sockets.newsocket(af, socktype, proto)
-            yield from sockets.connect(sock, address)
-            break
-        except socket.error as err:
-            if sock is not None:
-                sock.close()
-            if exc is None:
-                exc = err
-    else:
-        if exc is not None:
-            raise exc
+    sock = yield from sockets.create_connection((host, port))
     yield from sockets.send(sock,
                             method.encode(encoding) + b' ' +
                             path.encode(encoding) + b' HTTP/1.0\r\n')

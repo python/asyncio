@@ -264,6 +264,28 @@ class KqueueMixin(PollsterBase):
         return events
 
 
+class DelayedCall:
+    """Object returned by call_later(); can be used to cancel the call."""
+
+    def __init__(self, when, callback, args):
+        self.when = when
+        self.callback = callback
+        self.args = args
+        self.cancelled = False
+
+    def cancel(self):
+        self.cancelled = True
+
+    def __lt__(self, other):
+        return self.when < other.when
+
+    def __le__(self, other):
+        return self.when <= other.when
+
+    def __eq__(self, other):
+        return self.when == other.when
+
+
 class EventLoopMixin(PollsterBase):
     """Event loop functionality.
 
@@ -302,6 +324,9 @@ class EventLoopMixin(PollsterBase):
     def call_later(self, when, callback, *args):
         """Arrange for a callback to be called at a given time.
 
+        Return an object with a cancel() method that can be used to
+        cancel the call.
+
         The time can be an int or float, expressed in seconds.
 
         If when is small enough (~11 days), it's assumed to be a
@@ -318,7 +343,9 @@ class EventLoopMixin(PollsterBase):
         """
         if when < 10000000:
             when += time.time()
-        heapq.heappush(self.scheduled, (when, callback, args))
+        dcall = DelayedCall(when, callback, args)
+        heapq.heappush(self.scheduled, dcall)
+        return dcall
 
     def run_once(self):
         """Run one full iteration of the event loop.
@@ -346,10 +373,14 @@ class EventLoopMixin(PollsterBase):
                 logging.exception('Exception in callback %s %r',
                                   callback, args)
 
+        # Remove delayed calls that were cancelled from head of queue.
+        while self.scheduled and self.scheduled[0].cancelled:
+            heapq.heappop(self.scheduled)
+
         # Inspect the poll queue.
         if self.pollable():
             if self.scheduled:
-                when, _, _ = self.scheduled[0]
+                when = self.scheduled[0].when
                 timeout = max(0, when - time.time())
             else:
                 timeout = None
@@ -359,11 +390,11 @@ class EventLoopMixin(PollsterBase):
 
         # Handle 'later' callbacks that are ready.
         while self.scheduled:
-            when, _, _ = self.scheduled[0]
-            if when > time.time():
+            dcall = self.scheduled[0]
+            if dcall.when > time.time():
                 break
-            when, callback, args = heapq.heappop(self.scheduled)
-            self.call_soon(callback, *args)
+            dcall = heapq.heappop(self.scheduled)
+            self.call_soon(dcall.callback, *dcall.args)
 
     def run(self):
         """Run the event loop until there is no work left to do.

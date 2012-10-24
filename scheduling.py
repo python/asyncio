@@ -61,7 +61,8 @@ class Task:
             self.sched.current = None
 
     def start(self):
-        self.sched.eventloop.call_soon(self.run)
+        if self.alive:
+            self.sched.eventloop.call_soon(self.run)
 
 
 class Scheduler:
@@ -87,13 +88,17 @@ class Scheduler:
         assert isinstance(fd, int), repr(fd)
         assert flag in ('r', 'w'), repr(flag)
         task = self.block()
-        if flag == 'r':
-            self.eventloop.add_reader(fd, self.unblock_io, fd, flag, task)
-        else:
-            self.eventloop.add_writer(fd, self.unblock_io, fd, flag, task)
+        dcall = None
         if task.timeout:
-            self.eventloop.call_later(task.timeout,
-                                      self.unblock_timeout, fd, flag, task)
+            dcall = self.eventloop.call_later(task.timeout,
+                                              self.unblock_timeout,
+                                              fd, flag, task)
+        if flag == 'r':
+            self.eventloop.add_reader(fd, self.unblock_io,
+                                      fd, flag, task, dcall)
+        else:
+            self.eventloop.add_writer(fd, self.unblock_io,
+                                      fd, flag, task, dcall)
 
     def block(self):
         assert self.current
@@ -101,7 +106,9 @@ class Scheduler:
         self.current = None
         return task
 
-    def unblock_io(self, fd, flag, task):
+    def unblock_io(self, fd, flag, task, dcall):
+        if dcall is not None:
+            dcall.cancel()
         if flag == 'r':
             self.eventloop.remove_reader(fd)
         else:
@@ -109,17 +116,17 @@ class Scheduler:
         task.start()
 
     def unblock_timeout(self, fd, flag, task):
-        if not task.alive:
-            return
+        # NOTE: Due to the call_soon() semantics, we can't guarantee
+        # that unblock_timeout() isn't called *after* unblock_io() has
+        # already been called.  So we must write this defensively.
         if flag == 'r':
             if fd in self.eventloop.readers:
                 self.eventloop.remove_reader(fd)
         else:
             if fd in self.eventloop.writers:
                 self.eventloop.remove_writer(fd)
-        if task.alive:
-            task.timeout = 0  # Force it to cancel
-            task.start()
+        task.timeout = 0  # Force it to cancel.
+        task.start()
 
     def call_in_thread(self, func, *args):
         # TODO: Prove there is no race condition here.

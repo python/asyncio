@@ -8,33 +8,29 @@ There are many micro-optimizations possible here, but that's not the point.
 Some incomplete laundry lists:
 
 TODO:
+- Make nice transport and protocol abstractions.
 - Refactor RawReader -> Connection, with read/write operations.
 - Take test urls from command line.
 - Cancellation?
 - Profiling.
+- Docstrings.
 - Unittests.
-
-PATTERNS TO TRY:
-- Wait for all, collate results.
-- Wait for first N that are ready.
-- Wait until some predicate becomes true.
 
 FUNCTIONALITY:
 - Connection pool (keep connection open).
 - Chunked encoding (request and response).
 - Pipelining, e.g. zlib (request and response).
 - Automatic encoding/decoding.
-- A write() call that isn't a generator.
+- A write() call that isn't a generator (needed so you can substitute it
+  for sys.stderr, pass it to logging.StreamHandler, etc.).
 """
 
 __author__ = 'Guido van Rossum <guido@python.org>'
 
 # Standard library imports (keep in alphabetic order).
-import collections
 import errno
 import logging
 import re
-import select
 import socket
 import time
 
@@ -43,85 +39,12 @@ logging.basicConfig(level=logging.INFO)
 
 # Local imports (keep in alphabetic order).
 import polling
-
-
-class Scheduler:
-
-    def __init__(self, eventloop):
-        self.eventloop = eventloop
-        self.current = None
-        self.current_name = None
-
-    def run(self):
-        self.eventloop.run()
-
-    def start(self, task, name=None):
-        if name is None:
-            name = task.__name__  # If it doesn't have one, pass one.
-        self.eventloop.call_soon(self.run_task, task, name)
-
-    def run_task(self, task, name):
-        try:
-            self.current = task
-            self.current_name = name
-            next(self.current)
-        except StopIteration:
-            pass
-        except Exception:
-            logging.exception('Exception in task %r', name)
-        else:
-            if self.current is not None:
-                self.start(task, name)
-        finally:
-            self.current = None
-            self.current_name = None
-
-    def block_r(self, fd):
-        self.block_io(fd, 'r')
-
-    def block_w(self, fd):
-        self.block_io(fd, 'w')
-
-    def block_io(self, fd, flag):
-        assert isinstance(fd, int), repr(fd)
-        assert flag in ('r', 'w'), repr(flag)
-        task, name = self.block()
-        if flag == 'r':
-            method = self.eventloop.add_reader
-            callback = self.unblock_r
-        else:
-            method = self.eventloop.add_writer
-            callback = self.unblock_w
-        method(fd, callback, fd, task, name)
-
-    def block(self):
-        assert self.current
-        task = self.current
-        self.current = None
-        return task, self.current_name
-
-    def unblock_r(self, fd, task, name):
-        self.eventloop.remove_reader(fd)
-        self.start(task, name)
-
-    def unblock_w(self, fd, task, name):
-        self.eventloop.remove_writer(fd)
-        self.start(task, name)
+import scheduling
 
 
 eventloop = polling.EventLoop()
 threadrunner = polling.ThreadRunner(eventloop)
-sched = Scheduler(eventloop)
-
-
-def call_in_thread(func, *args):
-    # TODO: Prove there is no race condition here.
-    task, name = sched.block()
-    future = threadrunner.submit(func, *args)
-    future.add_done_callback(lambda _: sched.start(task, name))
-    yield
-    assert future.done()
-    return future.result()
+scheduler = scheduling.Scheduler(eventloop, threadrunner)
 
 
 class RawReader:
@@ -133,7 +56,7 @@ class RawReader:
     def read(self, n):
         """Read up to n bytes, blocking at most once."""
         assert n >= 0, n
-        sched.block_r(self.sock.fileno())
+        scheduler.block_r(self.sock.fileno())
         yield
         return self.sock.recv(n)
 
@@ -198,7 +121,7 @@ class BufferedReader:
 def send(sock, data):
 ##     print('send:', repr(data))
     while data:
-        sched.block_w(sock.fileno())
+        scheduler.block_w(sock.fileno())
         yield
         n = sock.send(data)
         assert 0 <= n <= len(data), (n, len(data))
@@ -220,7 +143,7 @@ def connect(sock, address):
     except socket.error as err:
         if err.errno != errno.EINPROGRESS:
             raise
-    sched.block_w(sock.fileno())
+    scheduler.block_w(sock.fileno())
     yield
     err = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
     if err != 0:
@@ -231,10 +154,10 @@ def urlfetch(host, port=80, method='GET', path='/',
              body=None, hdrs=None, encoding='utf-8'):
     t0 = time.time()
     if not re.match(r'(\d+)(\.\d+)(\.\d+)(\.\d+)\Z', host):
-        infos = yield from call_in_thread(socket.getaddrinfo,
-                                          host, port, socket.AF_INET,
-                                          socket.SOCK_STREAM,
-                                          socket.SOL_TCP)
+        infos = yield from scheduler.call_in_thread(socket.getaddrinfo,
+                                                    host, port, socket.AF_INET,
+                                                    socket.SOCK_STREAM,
+                                                    socket.SOL_TCP)
     else:
         infos = [(socket.AF_INET, socket.SOCK_STREAM, socket.SOL_TCP, '',
                   (host, port))]
@@ -318,14 +241,14 @@ def doit():
     # This references NDB's default test service.
     # (Sadly the service is single-threaded.)
     gen1 = urlfetch('localhost', 8080, path='/')
-    sched.start(gen1, 'gen1')
+    scheduler.start(gen1, 'gen1')
 
     gen2 = urlfetch('localhost', 8080, path='/home')
-    sched.start(gen2, 'gen2')
+    scheduler.start(gen2, 'gen2')
 
     # Fetch python.org home page.
     gen3 = urlfetch('python.org', 80, path='/')
-    sched.start(gen3, 'gen3')
+    scheduler.start(gen3, 'gen3')
 
 ##     # Fetch many links from python.org (/x.y.z).
 ##     for x in '123':
@@ -333,9 +256,9 @@ def doit():
 ##             path = '/{}.{}'.format(x, y)
 ##             g = urlfetch('82.94.164.162', 80,
 ##                          path=path, hdrs={'host': 'python.org'})
-##             sched.start(g, path)
+##             scheduler.start(g, path)
 
-    sched.run()
+    scheduler.run()
 
 
 def main():

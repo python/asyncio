@@ -129,7 +129,11 @@ class Scheduler:
         task = self.block()
         future = self.threadrunner.submit(func, *args)
         future.add_done_callback(lambda _: task.start())
-        yield
+        try:
+            yield
+        except TimeoutExpired:
+            future.cancel()
+            raise
         assert future.done()
         return future.result()
 

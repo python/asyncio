@@ -105,14 +105,14 @@ def doit():
     # This references NDB's default test service.
     # (Sadly the service is single-threaded.)
     gen1 = urlfetch('localhost', 8080, path='/')
-    scheduler.start(gen1, 'gen1')
+    scheduler.start(gen1, 'gen1', timeout=2)
 
     gen2 = urlfetch('localhost', 8080, path='/home')
-    scheduler.start(gen2, 'gen2')
+    scheduler.start(gen2, 'gen2', timeout=2)
 
     # Fetch python.org home page.
     gen3 = urlfetch('python.org', 80, path='/')
-    scheduler.start(gen3, 'gen3')
+    scheduler.start(gen3, 'gen3', timeout=2)
 
 ##     # Fetch many links from python.org (/x.y.z).
 ##     for x in '123':

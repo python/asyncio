@@ -21,6 +21,50 @@ __author__ = 'Guido van Rossum <guido@python.org>'
 
 # Standard library imports (keep in alphabetic order).
 import logging
+import time
+
+
+class TimeoutExpired(Exception):
+    pass
+
+
+class Task:
+    """Lightweight wrapper around a generator."""
+
+    def __init__(self, sched, gen, name=None, *, timeout=None):
+        self.sched = sched
+        self.gen = gen
+        self.name = name or gen.__name__
+        if timeout is not None and timeout < 1000000:
+            timeout += time.time()
+        self.timeout = timeout
+        self.alive = True
+
+    def run(self):
+        if not self.alive:
+            return
+        self.sched.current = self
+        try:
+            if self.timeout is not None and self.timeout < time.time():
+                self.gen.throw(TimeoutExpired)
+            else:
+                next(self.gen)
+        except StopIteration:
+            self.alive = False
+        except Exception:
+            self.alive = False
+            logging.exception('Uncaught exception in task %r', self.name)
+        except BaseException:
+            self.alive = False
+            raise
+        else:
+            if self.sched.current is not None:
+                self.start()
+        finally:
+            self.sched.current = None
+
+    def start(self):
+        self.sched.eventloop.call_soon(self.run)
 
 
 class Scheduler:
@@ -28,32 +72,13 @@ class Scheduler:
     def __init__(self, eventloop, threadrunner):
         self.eventloop = eventloop  # polling.EventLoop instance.
         self.threadrunner = threadrunner  # polling.Threadrunner instance.
-        self.current = None  # Current generator.
-        self.current_name = None  # Current generator's name.
+        self.current = None  # Current Task.
 
     def run(self):
         self.eventloop.run()
 
-    def start(self, task, name=None):
-        if name is None:
-            name = task.__name__  # If it doesn't have one, pass one.
-        self.eventloop.call_soon(self.run_task, task, name)
-
-    def run_task(self, task, name):
-        try:
-            self.current = task
-            self.current_name = name
-            next(self.current)
-        except StopIteration:
-            pass
-        except Exception:
-            logging.exception('Exception in task %r', name)
-        else:
-            if self.current is not None:
-                self.start(task, name)
-        finally:
-            self.current = None
-            self.current_name = None
+    def start(self, gen, name=None, *, timeout=None):
+        Task(self, gen, name, timeout=timeout).start()
 
     def block_r(self, fd):
         self.block_io(fd, 'r')
@@ -64,39 +89,51 @@ class Scheduler:
     def block_io(self, fd, flag):
         assert isinstance(fd, int), repr(fd)
         assert flag in ('r', 'w'), repr(flag)
-        task, name = self.block()
+        task = self.block()
         if flag == 'r':
-            method = self.eventloop.add_reader
-            callback = self.unblock_r
+            self.eventloop.add_reader(fd, self.unblock_io, fd, flag, task)
         else:
-            method = self.eventloop.add_writer
-            callback = self.unblock_w
-        method(fd, callback, fd, task, name)
+            self.eventloop.add_writer(fd, self.unblock_io, fd, flag, task)
+        if task.timeout:
+            self.eventloop.call_later(task.timeout,
+                                      self.unblock_timeout, fd, flag, task)
 
     def block(self):
         assert self.current
         task = self.current
         self.current = None
-        return task, self.current_name
+        return task
 
-    def unblock_r(self, fd, task, name):
-        self.eventloop.remove_reader(fd)
-        self.start(task, name)
+    def unblock_io(self, fd, flag, task):
+        if flag == 'r':
+            self.eventloop.remove_reader(fd)
+        else:
+            self.eventloop.remove_writer(fd)
+        task.start()
 
-    def unblock_w(self, fd, task, name):
-        self.eventloop.remove_writer(fd)
-        self.start(task, name)
+    def unblock_timeout(self, fd, flag, task):
+        if not task.alive:
+            return
+        if flag == 'r':
+            if fd in self.eventloop.readers:
+                self.eventloop.remove_reader(fd)
+        else:
+            if fd in self.eventloop.writers:
+                self.eventloop.remove_writer(fd)
+        if task.alive:
+            task.timeout = 0  # Force it to cancel
+            task.start()
 
     def call_in_thread(self, func, *args):
         # TODO: Prove there is no race condition here.
-        task, name = self.block()
+        task = self.block()
         future = self.threadrunner.submit(func, *args)
-        future.add_done_callback(lambda _: self.start(task, name))
+        future.add_done_callback(lambda _: task.start())
         yield
         assert future.done()
         return future.result()
 
     def sleep(self, secs):
-        task, name = self.block()
-        self.eventloop.call_later(secs, self.start, task, name)
+        task = self.block()
+        self.eventloop.call_later(secs, task.start)
         yield

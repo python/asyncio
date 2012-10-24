@@ -45,10 +45,9 @@ sockets.scheduler = scheduler  # TODO: Find a better way.
 def urlfetch(host, port=80, method='GET', path='/',
              body=None, hdrs=None, encoding='utf-8'):
     t0 = time.time()
-    sock = yield from sockets.create_connection((host, port))
-    yield from sockets.send(sock,
-                            method.encode(encoding) + b' ' +
-                            path.encode(encoding) + b' HTTP/1.0\r\n')
+    trans = yield from sockets.create_transport((host, port))
+    yield from trans.send(method.encode(encoding) + b' ' +
+                          path.encode(encoding) + b' HTTP/1.0\r\n')
     if hdrs:
         kwds = dict(hdrs)
     else:
@@ -58,23 +57,20 @@ def urlfetch(host, port=80, method='GET', path='/',
     if body is not None:
         kwds['content_length'] = len(body)
     for header, value in kwds.items():
-        yield from sockets.send(sock,
-                                header.replace('_', '-').encode(encoding) +
-                                b': ' + value.encode(encoding) + b'\r\n')
+        yield from trans.send(header.replace('_', '-').encode(encoding) +
+                              b': ' + value.encode(encoding) + b'\r\n')
 
-    yield from sockets.send(sock, b'\r\n')
+    yield from trans.send(b'\r\n')
     if body is not None:
-        yield from sockets.send(sock, body)
-    ##sock.shutdown(1)  # Close the writing end of the socket.
+        yield from trans.send(body)
+    trans.shutdown('w')  # Close the writing end of the socket.
 
     # Read HTTP response line.
-    raw = sockets.RawReader(sock)
-    buf = sockets.BufferedReader(raw)
-    resp = yield from buf.readline()
-##     print('resp =', repr(resp))
+    rdr = sockets.BufferedReader(trans)
+    resp = yield from rdr.readline()
     m = re.match(br'(?ix) http/(\d\.\d) \s+ (\d\d\d) \s+ ([^\r]*)\r?\n\Z', resp)
     if not m:
-        sock.close()
+        trans.close()
         raise IOError('No valid HTTP response: %r' % resp)
     http_version, status, message = m.groups()
 
@@ -82,7 +78,7 @@ def urlfetch(host, port=80, method='GET', path='/',
     headers = []
     hdict = {}
     while True:
-        line = yield from buf.readline()
+        line = yield from rdr.readline()
         if not line.strip():
             break
         m = re.match(br'([^\s:]+):\s*([^\r]*)\r?\n\Z', line)
@@ -99,10 +95,9 @@ def urlfetch(host, port=80, method='GET', path='/',
         assert size >= 0, size
     else:
         size = 2**20  # Protective limit (1 MB).
-    data = yield from buf.readexactly(size)
-    sock.close()  # Can this block?
+    data = yield from rdr.readexactly(size)
+    trans.close()  # Can this block?
     t1 = time.time()
-##     print(http_version, status, message, headers, hdict, len(data))
     print(host, port, path, status, len(data), '{:.3}'.format(t1-t0))
 
 

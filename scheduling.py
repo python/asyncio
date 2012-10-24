@@ -95,3 +95,8 @@ class Scheduler:
         yield
         assert future.done()
         return future.result()
+
+    def sleep(self, secs):
+        task, name = self.block()
+        self.eventloop.call_later(secs, self.start, task, name)
+        yield

@@ -20,12 +20,9 @@ PATTERNS TO TRY:
 __author__ = 'Guido van Rossum <guido@python.org>'
 
 # Standard library imports (keep in alphabetic order).
+from concurrent.futures import TimeoutError
 import logging
 import time
-
-
-class TimeoutExpired(Exception):
-    pass
 
 
 class Task:
@@ -46,7 +43,7 @@ class Task:
         self.sched.current = self
         try:
             if self.timeout is not None and self.timeout < time.time():
-                self.gen.throw(TimeoutExpired)
+                self.gen.throw(TimeoutError)
             else:
                 next(self.gen)
         except StopIteration:
@@ -131,7 +128,7 @@ class Scheduler:
         future.add_done_callback(lambda _: task.start())
         try:
             yield
-        except TimeoutExpired:
+        except TimeoutError:
             future.cancel()
             raise
         assert future.done()

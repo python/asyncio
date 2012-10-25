@@ -26,7 +26,14 @@ import time
 
 
 class Task:
-    """Lightweight wrapper around a generator."""
+    """Lightweight wrapper around a generator.
+
+    This is a bit like a Future, but with a different interface.
+
+    TODO:
+    - cancellation.
+    - wait for result.
+    """
 
     def __init__(self, sched, gen, name=None, *, timeout=None):
         self.sched = sched
@@ -36,6 +43,12 @@ class Task:
             timeout += time.time()
         self.timeout = timeout
         self.alive = True
+        self.result = None
+        self.exception = None
+
+    def __repr__(self):
+        return 'Task<%r, timeout=%s>(alive=%r, result=%r, exception=%r)' % (
+            self.name, self.timeout, self.alive, self.result, self.exception)
 
     def run(self):
         if not self.alive:
@@ -46,12 +59,15 @@ class Task:
                 self.gen.throw(TimeoutError)
             else:
                 next(self.gen)
-        except StopIteration:
+        except StopIteration as exc:
+            self.result = exc.value
             self.alive = False
-        except Exception:
+        except Exception as exc:
+            self.exception = exc
             self.alive = False
             logging.exception('Uncaught exception in task %r', self.name)
         except BaseException:
+            self.exception = exc
             self.alive = False
             raise
         else:
@@ -75,8 +91,13 @@ class Scheduler:
     def run(self):
         self.eventloop.run()
 
+    def newtask(self, gen, name=None, *, timeout=None):
+        return Task(self, gen, name, timeout=timeout)
+
     def start(self, gen, name=None, *, timeout=None):
-        Task(self, gen, name, timeout=timeout).start()
+        task = self.newtask(gen, name, timeout=timeout)
+        task.start()
+        return task
 
     def block_r(self, fd):
         self.block_io(fd, 'r')

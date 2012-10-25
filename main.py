@@ -26,9 +26,19 @@ __author__ = 'Guido van Rossum <guido@python.org>'
 import logging
 import re
 import time
+import sys
 
 # Initialize logging before we import polling.
-logging.basicConfig(level=logging.INFO)
+# TODO: Change polling.py so we can do this in main().
+if '-d' in sys.argv:
+    level = logging.DEBUG
+elif '-v' in sys.argv:
+    level = logging.INFO
+elif '-q' in sys.argv:
+    level = logging.ERROR
+else:
+    level = logging.WARN
+logging.basicConfig(level=level)
 
 # Local imports (keep in alphabetic order).
 import polling
@@ -98,21 +108,22 @@ def urlfetch(host, port=80, method='GET', path='/',
     data = yield from rdr.readexactly(size)
     trans.close()  # Can this block?
     t1 = time.time()
-    print(host, port, path, status, len(data), '{:.3}'.format(t1-t0))
+    return (host, port, path, status, len(data), '{:.3}'.format(t1-t0))
 
 
 def doit():
     # This references NDB's default test service.
     # (Sadly the service is single-threaded.)
-    gen1 = urlfetch('localhost', 8080, path='/')
-    scheduler.start(gen1, 'gen1', timeout=2)
-
-    gen2 = urlfetch('localhost', 8080, path='/home')
-    scheduler.start(gen2, 'gen2', timeout=2)
+    task1 = scheduler.newtask(urlfetch('localhost', 8080, path='/'),
+                              'task1', timeout=2)
+    task2 = scheduler.newtask(urlfetch('localhost', 8080, path='/home'),
+                              'task2', timeout=2)
 
     # Fetch python.org home page.
-    gen3 = urlfetch('python.org', 80, path='/')
-    scheduler.start(gen3, 'gen3', timeout=2)
+    task3 = scheduler.newtask(urlfetch('python.org', 80, path='/'),
+                              'task3', timeout=2)
+
+    tasks = {task1, task2, task3}
 
 ##     # Fetch many links from python.org (/x.y.z).
 ##     for x in '123':
@@ -120,9 +131,16 @@ def doit():
 ##             path = '/{}.{}'.format(x, y)
 ##             g = urlfetch('82.94.164.162', 80,
 ##                          path=path, hdrs={'host': 'python.org'})
-##             scheduler.start(g, path)
+##             t = scheduler.newtask(g, path, timeout=2)
+##             tasks.add(t)
 
+##    print(tasks)
+    for t in tasks:
+        t.start()
     scheduler.run()
+##    print(tasks)
+    for t in tasks:
+        print(t.name + ':', t.exception or t.result)
 
 
 def main():

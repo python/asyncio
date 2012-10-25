@@ -3,14 +3,15 @@
 Classes:
 
 - SocketTransport: a transport implementation wrapping a socket.
+- SslTransport: a transport implementation wrapping SSL around a socket.
 - BufferedReader: a buffer wrapping the read end of a transport.
 
 Functions (all coroutines):
 
 - connect(): connect a socket.
 - getaddrinfo(): look up an address.
-- create_connection(): look up an address and return a connected socket for it.
-- create_transport(): look up an address and return a connected trahsport.
+- create_connection(): look up address and return a connected socket for it.
+- create_transport(): look up address and return a connected transport.
 
 TODO:
 - Improve transport abstraction.
@@ -18,7 +19,6 @@ TODO:
 - Unittests.
 - A write() call that isn't a generator (needed so you can substitute it
   for sys.stderr, pass it to logging.StreamHandler, etc.).
-- Move getaddrinfo() call here.
 """
 
 __author__ = 'Guido van Rossum <guido@python.org>'
@@ -61,7 +61,7 @@ class SocketTransport:
         self.sock.close()
 
 
-class SSLTransport:
+class SslTransport:
     """Transport wrapping a socket in SSL.
 
     The socket must already be connected at the TCP level in
@@ -204,9 +204,8 @@ def getaddrinfo(host, port, af=0, socktype=0, proto=0):
     return infos
 
 
-def create_connection(address):
+def create_connection(host, port, af=0, socktype=socket.SOCK_STREAM):
     """COROUTINE: Look up address and create a socket connected to it."""
-    host, port = address
     match = re.match(r'(\d+)\.(\d+)\.(\d+)\.(\d+)\Z', host)
     if match:
         d1, d2, d3, d4 = map(int, match.groups())
@@ -215,7 +214,7 @@ def create_connection(address):
             match = None
     if not match:
         infos = yield from getaddrinfo(host, port,
-                                       socktype=socket.SOCK_STREAM)
+                                       af=af, socktype=socket.SOCK_STREAM)
     else:
         infos = [(socket.AF_INET, socket.SOCK_STREAM, socket.SOL_TCP, '',
                   (host, port))]
@@ -239,15 +238,14 @@ def create_connection(address):
     return sock
 
 
-def create_transport(address):
+def create_transport(host, port, af=0, ssl=None):
     """COROUTINE: Look up address and create a transport connected to it."""
-    sock = yield from create_connection(address)
-    return SocketTransport(sock)
-
-
-def create_ssl_transport(address):
-    """COROUTINE: Look up address and create an SSL transport connected."""
-    rawsock = yield from create_connection(address)
-    trans = SSLTransport(rawsock)
-    yield from trans.do_handshake()
+    if ssl is None:
+        ssl = (port == 443)
+    sock = yield from create_connection(host, port, af=af)
+    if ssl:
+        trans = SslTransport(sock)
+        yield from trans.do_handshake()
+    else:
+        trans = SocketTransport(sock)
     return trans

@@ -27,6 +27,7 @@ import logging
 import os
 import re
 import time
+import socket
 import sys
 
 # Initialize logging before we import polling.
@@ -54,14 +55,9 @@ sockets.scheduler = scheduler  # TODO: Find a better way.
 
 
 def urlfetch(host, port=80, method='GET', path='/',
-             body=None, hdrs=None, encoding='utf-8', ssl=None):
+             body=None, hdrs=None, encoding='utf-8', ssl=None, af=0):
     t0 = time.time()
-    if ssl is None:
-        ssl = (port == 443)
-    if ssl:
-        trans = yield from sockets.create_ssl_transport((host, port))
-    else:
-        trans = yield from sockets.create_transport((host, port))
+    trans = yield from sockets.create_transport(host, port, ssl=ssl, af=af)
     yield from trans.send(method.encode(encoding) + b' ' +
                           path.encode(encoding) + b' HTTP/1.0\r\n')
     if hdrs:
@@ -131,8 +127,9 @@ def doit():
 
     tasks = {task1, task2, task3}
 
-    # Fetch XKCD home page using SSL.
-    task4 = scheduler.newtask(urlfetch('xkcd.com', 443, path='/'),
+    # Fetch XKCD home page using SSL.  (Doesn't like IPv6.)
+    task4 = scheduler.newtask(urlfetch('xkcd.com', 443, path='/',
+                                       af=socket.AF_INET),
                               'xkcd', timeout=2)
     tasks.add(task4)
 

@@ -162,7 +162,7 @@ def getaddrinfo(host, port, af=0, socktype=0, proto=0):
 def create_connection(address):
     """COROUTINE: Look up address and create a socket connected to it."""
     host, port = address
-    match = re.match(r'(\d+)(\.\d+)(\.\d+)(\.\d+)\Z', host)
+    match = re.match(r'(\d+)\.(\d+)\.(\d+)\.(\d+)\Z', host)
     if match:
         d1, d2, d3, d4 = map(int, match.groups())
         if not (0 <= d1 <= 255 and 0 <= d2 <= 255 and

@@ -24,6 +24,7 @@ __author__ = 'Guido van Rossum <guido@python.org>'
 
 # Standard library imports (keep in alphabetic order).
 import logging
+import os
 import re
 import time
 import sys
@@ -143,8 +144,18 @@ def doit():
         print(t.name + ':', t.exception or t.result)
 
 
+def logtimes(real):
+    utime, stime, cutime, cstime, unused = os.times()
+    logging.info('real %10.3f', real)
+    logging.info('user %10.3f', utime + cutime)
+    logging.info('sys  %10.3f', stime + cstime)
+
+
 def main():
+    t0 = time.time()
     doit()
+    t1 = time.time()
+    logtimes(t1-t0)
 
 
 if __name__ == '__main__':

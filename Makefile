@@ -1,5 +1,5 @@
 test:
-	time -p python3.3 main.py
+	python3.3 main.py -v
 
 profile:
 	python3.3 -m profile -s time main.py

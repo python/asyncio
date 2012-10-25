@@ -60,15 +60,15 @@ class Task:
             else:
                 next(self.gen)
         except StopIteration as exc:
+            self.alive = False
             self.result = exc.value
-            self.alive = False
         except Exception as exc:
-            self.exception = exc
             self.alive = False
+            self.exception = exc
             logging.exception('Uncaught exception in task %r', self.name)
         except BaseException:
-            self.exception = exc
             self.alive = False
+            self.exception = exc
             raise
         else:
             if self.sched.current is not None:

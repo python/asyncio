@@ -150,10 +150,10 @@ class Scheduler:
         task.timeout = 0  # Force it to cancel.
         task.start()
 
-    def call_in_thread(self, func, *args):
+    def call_in_thread(self, func, *args, executor=None):
         # TODO: Prove there is no race condition here.
         task = self.block()
-        future = self.threadrunner.submit(func, *args)
+        future = self.threadrunner.submit(func, *args, executor=executor)
         future.add_done_callback(lambda _: task.start())
         try:
             yield

@@ -453,14 +453,16 @@ class ThreadRunner:
             self.eventloop.remove_reader(self.pipe_read_fd)
         assert self.active_count >= 0, self.active_count
 
-    def submit(self, func, *args):
+    def submit(self, func, *args, executor=None):
         """Submit a function to the thread pool.
 
         This returns a concurrent.futures.Future instance.  The caller
         should not wait for that, but rather add a callback to it.
         """
+        if executor is None:
+            executor = self.threadpool
         assert self.active_count >= 0, self.active_count
-        future = self.threadpool.submit(func, *args)
+        future = executor.submit(func, *args)
         if self.active_count == 0:
             self.eventloop.add_reader(self.pipe_read_fd, self.read_callback)
         self.active_count += 1

@@ -119,6 +119,7 @@ class Scheduler:
         # NOTE: Due to the call_soon() semantics, we can't guarantee
         # that unblock_timeout() isn't called *after* unblock_io() has
         # already been called.  So we must write this defensively.
+        # TODO: Analyse this further for race conditions etc.
         if flag == 'r':
             if fd in self.eventloop.readers:
                 self.eventloop.remove_reader(fd)

@@ -384,7 +384,11 @@ class EventLoopMixin(PollsterBase):
                 timeout = max(0, when - time.time())
             else:
                 timeout = None
+            t0 = time.time()
             events = self.poll(timeout)
+            t1 = time.time()
+            print('poll' if timeout is None else 'poll {:.3f}'.format(timeout),
+                  'took {:.3f} seconds'.format(t1-t0))
             for fd, flag, callback, args in events:
                 self.call_soon(callback, *args)
 

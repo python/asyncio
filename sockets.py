@@ -26,12 +26,13 @@ __author__ = 'Guido van Rossum <guido@python.org>'
 import errno
 import re
 import socket
+import ssl
 
 
 class SocketTransport:
     """Transport wrapping a socket.
 
-    The socket must already be connected.
+    The socket must already be connected in non-blocking mode.
     """
 
     def __init__(self, sock):
@@ -55,26 +56,70 @@ class SocketTransport:
                 break
             data = data[n:]
 
-    def shutdown(self, flag):
-        """Call shutdown() on the socket.  (Not a coroutine.)
-
-        This is like closing one direction.
-
-        The argument must be 'r', 'w' or 'rw'.
-        """
-        if flag == 'r':
-            flag = socket.SHUT_RD
-        elif flag == 'w':
-            flag = socket.SHUT_WR
-        elif flag == 'rw':
-            flag = socket.SHUT_RDWR
-        else:
-            raise ValueError('flag must be r, w or rw, not %s' % flag)
-        self.sock.shutdown(flag)
-
     def close(self):
         """Close the socket.  (Not a coroutine.)"""
         self.sock.close()
+
+
+class SSLTransport:
+    """Transport wrapping a socket in SSL.
+
+    The socket must already be connected at the TCP level in
+    non-blocking mode.
+    """
+
+    def __init__(self, rawsock, sslcontext=None):
+        self.rawsock = rawsock
+        self.sslcontext = sslcontext or ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+        self.sslsock = self.sslcontext.wrap_socket(
+            self.rawsock, do_handshake_on_connect=False)
+
+    def do_handshake(self):
+        """COROUTINE: Finish the SSL handshake."""
+        while True:
+            try:
+                self.sslsock.do_handshake()
+            except ssl.SSLWantReadError:
+                scheduler.block_r(self.sslsock.fileno())
+                yield
+            except ssl.SSLWantWriteError:
+                scheduler.block_w(self.sslsock.fileno())
+                yield
+            else:
+                break
+
+    def recv(self, n):
+        """COROUTINE: Read up to n bytes.
+
+        This blocks until at least one byte is read, or until EOF.
+        """
+        while True:
+            try:
+                return self.sslsock.recv(n)
+            except socket.error as err:
+                scheduler.block_r(self.sslsock.fileno())
+                yield
+
+    def send(self, data):
+        """COROUTINE: Send data to the socket, blocking as needed."""
+        while data:
+            try:
+                n = self.sslsock.send(data)
+            except socket.error as err:
+                scheduler.block_w(self.sslsock.fileno())
+                yield
+            if n == len(data):
+                break
+            data = data[n:]
+
+    def close(self):
+        """Close the socket.  (Not a coroutine.)
+
+        This also closes the raw socket.
+        """
+        self.sslsock.close()
+
+    # TODO: More SSL-specific methods, e.g. certificate stuff, unwrap(), ...
 
 
 class BufferedReader:
@@ -169,7 +214,8 @@ def create_connection(address):
                 0 <= d3 <= 255 and 0 <= d4 <= 255):
             match = None
     if not match:
-        infos = yield from getaddrinfo(host, port, socktype=socket.SOCK_STREAM)
+        infos = yield from getaddrinfo(host, port,
+                                       socktype=socket.SOCK_STREAM)
     else:
         infos = [(socket.AF_INET, socket.SOCK_STREAM, socket.SOL_TCP, '',
                   (host, port))]
@@ -197,3 +243,11 @@ def create_transport(address):
     """COROUTINE: Look up address and create a transport connected to it."""
     sock = yield from create_connection(address)
     return SocketTransport(sock)
+
+
+def create_ssl_transport(address):
+    """COROUTINE: Look up address and create an SSL transport connected."""
+    rawsock = yield from create_connection(address)
+    trans = SSLTransport(rawsock)
+    yield from trans.do_handshake()
+    return trans

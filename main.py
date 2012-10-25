@@ -54,9 +54,14 @@ sockets.scheduler = scheduler  # TODO: Find a better way.
 
 
 def urlfetch(host, port=80, method='GET', path='/',
-             body=None, hdrs=None, encoding='utf-8'):
+             body=None, hdrs=None, encoding='utf-8', ssl=None):
     t0 = time.time()
-    trans = yield from sockets.create_transport((host, port))
+    if ssl is None:
+        ssl = (port == 443)
+    if ssl:
+        trans = yield from sockets.create_ssl_transport((host, port))
+    else:
+        trans = yield from sockets.create_transport((host, port))
     yield from trans.send(method.encode(encoding) + b' ' +
                           path.encode(encoding) + b' HTTP/1.0\r\n')
     if hdrs:
@@ -74,12 +79,12 @@ def urlfetch(host, port=80, method='GET', path='/',
     yield from trans.send(b'\r\n')
     if body is not None:
         yield from trans.send(body)
-    trans.shutdown('w')  # Close the writing end of the socket.
 
     # Read HTTP response line.
     rdr = sockets.BufferedReader(trans)
     resp = yield from rdr.readline()
-    m = re.match(br'(?ix) http/(\d\.\d) \s+ (\d\d\d) \s+ ([^\r]*)\r?\n\Z', resp)
+    m = re.match(br'(?ix) http/(\d\.\d) \s+ (\d\d\d) \s+ ([^\r]*)\r?\n\Z',
+                 resp)
     if not m:
         trans.close()
         raise IOError('No valid HTTP response: %r' % resp)
@@ -109,22 +114,27 @@ def urlfetch(host, port=80, method='GET', path='/',
     data = yield from rdr.readexactly(size)
     trans.close()  # Can this block?
     t1 = time.time()
-    return (host, port, path, status, len(data), '{:.3}'.format(t1-t0))
+    return (host, port, path, int(status), len(data), round(t1-t0, 3))
 
 
 def doit():
     # This references NDB's default test service.
     # (Sadly the service is single-threaded.)
     task1 = scheduler.newtask(urlfetch('localhost', 8080, path='/'),
-                              'task1', timeout=2)
+                              'root', timeout=2)
     task2 = scheduler.newtask(urlfetch('localhost', 8080, path='/home'),
-                              'task2', timeout=2)
+                              'home', timeout=2)
 
     # Fetch python.org home page.
     task3 = scheduler.newtask(urlfetch('python.org', 80, path='/'),
-                              'task3', timeout=2)
+                              'python', timeout=2)
 
     tasks = {task1, task2, task3}
+
+    # Fetch XKCD home page using SSL.
+    task4 = scheduler.newtask(urlfetch('xkcd.com', 443, path='/'),
+                              'xkcd', timeout=2)
+    tasks.add(task4)
 
 ##     # Fetch many links from python.org (/x.y.z).
 ##     for x in '123':

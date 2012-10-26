@@ -97,7 +97,9 @@ def urlfetch(host, port=None, method='GET', path='/',
     data = yield from rdr.readexactly(size)
     trans.close()  # Can this block?
     t1 = time.time()
-    return (host, port, path, int(status), len(data), round(t1-t0, 3))
+    result = (host, port, path, int(status), len(data), round(t1-t0, 3))
+##     print(result)
+    return result
 
 
 def doit():
@@ -136,10 +138,10 @@ def doit():
 ##     print(tasks)
     for t in tasks:
         t.start()
-    scheduling.run()
-##     print(tasks)
-    for t in tasks:
-        print(t.name + ':', repr(t.exception) if t.exception else t.result)
+    winner = yield from scheduling.wait_any(tasks)
+    print('The winner is:', winner)
+    tasks = yield from scheduling.wait_all(tasks)
+    return tasks
 
 
 def logtimes(real):
@@ -163,7 +165,18 @@ def main():
         level = logging.WARN
     logging.basicConfig(level=level)
 
-    doit()
+    # Run doit() as a task.
+    task = scheduling.Task(doit())
+    task.start()
+    scheduling.run()
+    if task.exception:
+        print('Exception:', repr(task.exception))
+    else:
+        for t in task.result:
+            print(t.name + ':',
+                  repr(t.exception) if t.exception else t.result)
+
+    # Report real, user, sys times.
     t1 = time.time()
     logtimes(t1-t0)
 

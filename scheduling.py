@@ -59,7 +59,7 @@ class Context(threading.local):
             self._threadrunner = polling.ThreadRunner(self.eventloop)
         return self._threadrunner
 
-    
+
 context = Context()  # Thread-local!
 
 
@@ -88,6 +88,12 @@ class Task:
         self.alive = True
         self.result = None
         self.exception = None
+        self.done_callbacks = []
+
+    def add_done_callback(self, done_callback):
+        # For better or for worse, the callback will always be called
+        # with the task as an argument, like concurrent.futures.Future.
+        self.done_callbacks.append(done_callback)
 
     def __repr__(self):
         return 'Task<%r, timeout=%s>(alive=%r, result=%r, exception=%r)' % (
@@ -125,9 +131,13 @@ class Task:
                 self.eventloop.call_soon(self.step)
         finally:
             context.current_task = None
-            # Cancel timeout callback if set.
-            if not self.alive and self.canceleer is not None:
-                self.canceleer.cancel()
+            if not self.alive:
+                # Cancel timeout callback if set.
+                if self.canceleer is not None:
+                    self.canceleer.cancel()
+                # Schedule done_callbacks.
+                for callback in self.done_callbacks:
+                    self.eventloop.call_soon(callback, self)
 
     def start(self):
         assert self.alive
@@ -140,7 +150,8 @@ class Task:
         self.blocked = True
         self.unblocker = (unblock_callback, unblock_args)
 
-    def unblock(self):
+    def unblock(self, unused=None):
+        # Ignore optional argument so we can be a Future's done_callback.
         assert self.alive
         assert self.blocked
         self.blocked = False
@@ -165,8 +176,19 @@ class Task:
             self.block(self.eventloop.remove_writer, fd)
             self.eventloop.add_writer(fd, self.unblock)
 
+    def wait(self):
+        """COROUTINE: Wait until this task is finished."""
+        current_task = context.current_task
+        assert self is not current_task  # How confusing!
+        if not self.alive:
+            return
+        current_task.block()
+        self.add_done_callback(current_task.unblock)
+        yield
+
 
 def run():
+    """Run the event loop until it's out of work."""
     context.eventloop.run()
 
 
@@ -178,10 +200,12 @@ def sleep(secs):
 
 
 def block_r(fd):
+    """Helper to call block_io() for reading."""
     context.current_task.block_io(fd, 'r')
 
 
 def block_w(fd):
+    """Helper to call block_io() for writing."""
     context.current_task.block_io(fd, 'w')
 
 
@@ -191,7 +215,50 @@ def call_in_thread(func, *args, executor=None):
     future = context.threadrunner.submit(func, *args, executor=executor)
     task = context.current_task
     task.block(future.cancel)
-    future.add_done_callback(lambda _: task.unblock())
+    future.add_done_callback(task.unblock)
     yield
     assert future.done()
     return future.result()
+
+
+def wait_any(tasks):
+    """COROUTINE: Wait for the first of a set of tasks to complete."""
+    assert tasks
+    current_task = context.current_task
+    assert all(task is not current_task for task in tasks)
+    for task in tasks:
+        if not task.alive:
+            return task
+    winner = None
+    def wait_any_callback(task):
+        nonlocal winner, current_task
+        if not winner:
+            winner = task
+            current_task.unblock()
+    # TODO: Avoid adding N callbacks.
+    for task in tasks:
+        task.add_done_callback(wait_any_callback)
+    current_task.block()
+    yield
+    return winner
+
+
+def wait_all(tasks):
+    """COROUTINE: Wait for all of a set of tasks to complete."""
+    assert tasks
+    current_task = context.current_task
+    assert all(task is not current_task for task in tasks)
+    todo = set()
+    def wait_all_callback(task):
+        nonlocal todo, current_task
+        todo.remove(task)
+        if not todo:
+            current_task.unblock()
+    for task in tasks:
+        if task.alive:
+            todo.add(task)
+            task.add_done_callback(wait_all_callback)
+    if todo:
+        current_task.block()
+        yield
+    return tasks  # Not redundant: handy if called with a comprehension.

@@ -13,7 +13,6 @@ PATTERNS TO TRY:
 - Wait for all, collate results.
 - Wait for first N that are ready.
 - Wait until some predicate becomes true.
-- Run with timeout.
 - Various synchronization primitives (Lock, RLock, Event, Condition,
   Semaphore, BoundedSemaphore, Barrier).
 """
@@ -21,11 +20,13 @@ PATTERNS TO TRY:
 __author__ = 'Guido van Rossum <guido@python.org>'
 
 # Standard library imports (keep in alphabetic order).
-from concurrent.futures import TimeoutError
+from concurrent.futures import CancelledError, TimeoutError
 import logging
 import threading
 import time
+import types
 
+# Local imports (keep in alphabetic order).
 import polling
 
 
@@ -68,16 +69,22 @@ class Task:
     This is a bit like a Future, but with a different interface.
 
     TODO:
-    - cancellation.
     - wait for result.
     """
 
     def __init__(self, gen, name=None, *, timeout=None):
+        assert isinstance(gen, types.GeneratorType), repr(gen)
         self.gen = gen
         self.name = name or gen.__name__
-        if timeout is not None and timeout < 1000000:
-            timeout += time.time()
         self.timeout = timeout
+        self.eventloop = context.eventloop
+        self.canceleer = None
+        if timeout is not None:
+            self.canceleer = self.eventloop.call_later(timeout, self.cancel)
+        self.blocked = False
+        self.unblocker = None
+        self.cancelled = False
+        self.must_cancel = False
         self.alive = True
         self.result = None
         self.exception = None
@@ -86,13 +93,19 @@ class Task:
         return 'Task<%r, timeout=%s>(alive=%r, result=%r, exception=%r)' % (
             self.name, self.timeout, self.alive, self.result, self.exception)
 
-    def run(self):
-        if not self.alive:
-            return
-        context.current_task = self
+    def cancel(self):
+        if self.alive:
+            self.must_cancel = True
+            self.unblock()
+
+    def step(self):
+        assert self.alive
         try:
-            if self.timeout is not None and self.timeout < time.time():
-                self.gen.throw(TimeoutError)
+            context.current_task = self
+            if self.must_cancel:
+                self.must_cancel = False
+                self.cancelled = True
+                self.gen.throw(CancelledError())
             else:
                 next(self.gen)
         except StopIteration as exc:
@@ -101,20 +114,56 @@ class Task:
         except Exception as exc:
             self.alive = False
             self.exception = exc
-            logging.exception('Uncaught exception in task %r', self.name)
+            logging.debug('Uncaught exception in task %r', self.name,
+                          exc_info=True, stack_info=True)
         except BaseException:
             self.alive = False
             self.exception = exc
             raise
         else:
-            if context.current_task is not None:
-                self.start()
+            if not self.blocked:
+                self.eventloop.call_soon(self.step)
         finally:
             context.current_task = None
+            # Cancel timeout callback if set.
+            if not self.alive and self.canceleer is not None:
+                self.canceleer.cancel()
 
     def start(self):
-        if self.alive:
-            context.eventloop.call_soon(self.run)
+        assert self.alive
+        self.eventloop.call_soon(self.step)
+
+    def block(self, unblock_callback=None, *unblock_args):
+        assert self is context.current_task
+        assert self.alive
+        assert not self.blocked
+        self.blocked = True
+        self.unblocker = (unblock_callback, unblock_args)
+
+    def unblock(self):
+        assert self.alive
+        assert self.blocked
+        self.blocked = False
+        unblock_callback, unblock_args = self.unblocker
+        if unblock_callback is not None:
+            try:
+                unblock_callback(*unblock_args)
+            except Exception:
+                logging.error('Exception in unblocker in task %r', self.name)
+                raise
+            finally:
+                self.unblocker = None
+        self.eventloop.call_soon(self.step)
+
+    def block_io(self, fd, flag):
+        assert isinstance(fd, int), repr(fd)
+        assert flag in ('r', 'w'), repr(flag)
+        if flag == 'r':
+            self.block(self.eventloop.remove_reader, fd)
+            self.eventloop.add_reader(fd, self.unblock)
+        else:
+            self.block(self.eventloop.remove_writer, fd)
+            self.eventloop.add_writer(fd, self.unblock)
 
 
 def run():
@@ -122,76 +171,27 @@ def run():
 
 
 def sleep(secs):
-    task = block()
-    context.eventloop.call_later(secs, task.start)
+    """COROUTINE: Sleep for some time (a float in seconds)."""
+    context.current_task.block()
+    context.eventloop.call_later(secs, self.unblock)
     yield
 
 
 def block_r(fd):
-    block_io(fd, 'r')
+    context.current_task.block_io(fd, 'r')
 
 
 def block_w(fd):
-        block_io(fd, 'w')
-
-
-def block_io(fd, flag):
-    assert isinstance(fd, int), repr(fd)
-    assert flag in ('r', 'w'), repr(flag)
-    task = block()
-    dcall = None
-    if task.timeout:
-        dcall = context.eventloop.call_later(task.timeout, unblock_timeout,
-                                             fd, flag, task)
-    if flag == 'r':
-        context.eventloop.add_reader(fd, unblock_io, fd, flag, task, dcall)
-    else:
-        context.eventloop.add_writer(fd, unblock_io, fd, flag, task, dcall)
-
-
-def block():
-    assert context.current_task
-    task = context.current_task
-    context.current_task = None
-    return task
-
-
-def unblock_io(fd, flag, task, dcall):
-    if dcall is not None:
-        dcall.cancel()
-    if flag == 'r':
-        context.eventloop.remove_reader(fd)
-    else:
-        context.eventloop.remove_writer(fd)
-    task.start()
-
-
-def unblock_timeout(fd, flag, task):
-    # NOTE: Due to the call_soon() semantics, we can't guarantee
-    # that unblock_timeout() isn't called *after* unblock_io() has
-    # already been called.  So we must write this defensively.
-    # TODO: Analyse this further for race conditions etc.
-    if flag == 'r':
-        if fd in context.eventloop.readers:
-            context.eventloop.remove_reader(fd)
-    else:
-        if fd in context.eventloop.writers:
-            context.eventloop.remove_writer(fd)
-    task.timeout = 0  # Force it to cancel.
-    task.start()
+    context.current_task.block_io(fd, 'w')
 
 
 def call_in_thread(func, *args, executor=None):
+    """COROUTINE: Run a function in a thread."""
     # TODO: Prove there is no race condition here.
-    task = block()
     future = context.threadrunner.submit(func, *args, executor=executor)
-    # Don't reference context in the lambda!  It is called in another thread.
-    this_eventloop = context.eventloop
-    future.add_done_callback(lambda _: this_eventloop.call_soon(task.run))
-    try:
-        yield
-    except TimeoutError:
-        future.cancel()
-        raise
+    task = context.current_task
+    task.block(future.cancel)
+    future.add_done_callback(lambda _: task.unblock())
+    yield
     assert future.done()
     return future.result()

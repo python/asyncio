@@ -23,10 +23,14 @@ TODO:
 
 __author__ = 'Guido van Rossum <guido@python.org>'
 
+# Stdlib imports.
 import errno
 import re
 import socket
 import ssl
+
+# Local imports.
+import scheduling
 
 
 class SocketTransport:
@@ -41,14 +45,14 @@ class SocketTransport:
     def recv(self, n):
         """COROUTINE: Read up to n bytes, blocking at most once."""
         assert n >= 0, n
-        scheduler.block_r(self.sock.fileno())
+        scheduling.block_r(self.sock.fileno())
         yield
         return self.sock.recv(n)
 
     def send(self, data):
         """COROUTINE; Send data to the socket, blocking until all written."""
         while data:
-            scheduler.block_w(self.sock.fileno())
+            scheduling.block_w(self.sock.fileno())
             yield
             n = self.sock.send(data)
             assert 0 <= n <= len(data), (n, len(data))
@@ -80,10 +84,10 @@ class SslTransport:
             try:
                 self.sslsock.do_handshake()
             except ssl.SSLWantReadError:
-                scheduler.block_r(self.sslsock.fileno())
+                scheduling.block_r(self.sslsock.fileno())
                 yield
             except ssl.SSLWantWriteError:
-                scheduler.block_w(self.sslsock.fileno())
+                scheduling.block_w(self.sslsock.fileno())
                 yield
             else:
                 break
@@ -97,7 +101,7 @@ class SslTransport:
             try:
                 return self.sslsock.recv(n)
             except socket.error as err:
-                scheduler.block_r(self.sslsock.fileno())
+                scheduling.block_r(self.sslsock.fileno())
                 yield
 
     def send(self, data):
@@ -106,7 +110,7 @@ class SslTransport:
             try:
                 n = self.sslsock.send(data)
             except socket.error as err:
-                scheduler.block_w(self.sslsock.fileno())
+                scheduling.block_w(self.sslsock.fileno())
                 yield
             if n == len(data):
                 break
@@ -186,7 +190,7 @@ def connect(sock, address):
     except socket.error as err:
         if err.errno != errno.EINPROGRESS:
             raise
-    scheduler.block_w(sock.fileno())
+    scheduling.block_w(sock.fileno())
     yield
     err = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
     if err != 0:
@@ -198,9 +202,9 @@ def getaddrinfo(host, port, af=0, socktype=0, proto=0):
 
     Each info is a tuple (af, socktype, protocol, canonname, address).
     """
-    infos = yield from scheduler.call_in_thread(socket.getaddrinfo,
-                                                host, port, af,
-                                                socktype, proto)
+    infos = yield from scheduling.call_in_thread(socket.getaddrinfo,
+                                                 host, port, af,
+                                                 socktype, proto)
     return infos
 
 

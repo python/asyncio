@@ -421,11 +421,16 @@ elif hasattr(select, 'poll'):
 else:
     poll_base = SelectMixin
 
-logging.info('Using Pollster base class %r', poll_base.__name__)
-
 
 class EventLoop(EventLoopMixin, poll_base):
     """Event loop implementation using the optimal pollster mixin."""
+
+    def __init__(self):
+        super().__init__()
+        logging.info('Using Pollster base class %r', poll_base.__name__)
+
+
+MAX_WORKERS = 5  # Default max workers when creating an executor.
 
 
 class ThreadRunner:
@@ -438,9 +443,9 @@ class ThreadRunner:
     The only public API is submit().
     """
 
-    def __init__(self, eventloop, max_workers=5):
+    def __init__(self, eventloop, executor=None):
         self.eventloop = eventloop
-        self.threadpool = concurrent.futures.ThreadPoolExecutor(max_workers)
+        self.executor = executor  # Will be constructed lazily.
         self.pipe_read_fd, self.pipe_write_fd = os.pipe()
         self.active_count = 0
 
@@ -460,7 +465,12 @@ class ThreadRunner:
         should not wait for that, but rather add a callback to it.
         """
         if executor is None:
-            executor = self.threadpool
+            executor = self.executor
+            if executor is None:
+                # Lazily construct a default executor.
+                # TODO: Should this be shared between threads?
+                executor = concurrent.futures.ThreadPoolExecutor(MAX_WORKERS)
+                self.executor = executor
         assert self.active_count >= 0, self.active_count
         future = executor.submit(func, *args)
         if self.active_count == 0:

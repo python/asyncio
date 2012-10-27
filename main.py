@@ -138,7 +138,7 @@ def doit():
 ##     print(tasks)
     for t in tasks:
         t.start()
-    yield from scheduling.sleep(0.2)
+    yield from scheduling.with_timeout(0.2, scheduling.sleep(1))
     winners = yield from scheduling.wait_any(tasks)
     print('And the winners are:', [w.name for w in winners])
     tasks = yield from scheduling.wait_all(tasks)
@@ -168,7 +168,7 @@ def main():
     logging.basicConfig(level=level)
 
     # Run doit() as a task.
-    task = scheduling.Task(doit())
+    task = scheduling.Task(doit(), timeout=2.1)
     task.start()
     scheduling.run()
     if task.exception:

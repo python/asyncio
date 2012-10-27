@@ -10,9 +10,6 @@ TODO:
 - Unittests.
 
 PATTERNS TO TRY:
-- Wait for all, collate results.
-- Wait for first N that are ready.
-- Wait until some predicate becomes true.
 - Various synchronization primitives (Lock, RLock, Event, Condition,
   Semaphore, BoundedSemaphore, Barrier).
 """
@@ -195,8 +192,8 @@ def run():
 def sleep(secs):
     """COROUTINE: Sleep for some time (a float in seconds)."""
     current_task = context.current_task
-    current_task.block()
-    context.eventloop.call_later(secs, current_task.unblock)
+    unblocker = context.eventloop.call_later(secs, current_task.unblock)
+    current_task.block(unblocker.cancel)
     yield
 
 
@@ -264,3 +261,11 @@ def wait_any(tasks):
 def wait_all(tasks):
     """COROUTINE: Wait for all of a set of tasks to complete."""
     return wait_for(len(tasks), tasks)
+
+
+def with_timeout(timeout, gen, name=None):
+    """COROUTINE: Run generator synchronously with a timeout."""
+    assert timeout is not None
+    task = Task(gen, name, timeout=timeout)
+    task.start()
+    return (yield from task.wait())

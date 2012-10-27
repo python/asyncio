@@ -138,9 +138,11 @@ def doit():
 ##     print(tasks)
     for t in tasks:
         t.start()
-    winner = yield from scheduling.wait_any(tasks)
-    print('The winner is:', winner)
+    yield from scheduling.sleep(0.2)
+    winners = yield from scheduling.wait_any(tasks)
+    print('And the winners are:', [w.name for w in winners])
     tasks = yield from scheduling.wait_all(tasks)
+    print('And the players were:', [t.name for t in tasks])
     return tasks
 
 

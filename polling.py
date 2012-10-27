@@ -58,8 +58,8 @@ class PollsterBase:
 
     def __init__(self):
         super().__init__()
-        self.readers = {}  # {fd: (callback, args), ...}.
-        self.writers = {}  # {fd: (callback, args), ...}.
+        self.readers = {}  # {fd: <DelayedCall>, ...}.
+        self.writers = {}  # {fd: <DelayedCall>, ...}.
 
     def pollable(self):
         """Return True if any readers or writers are currently registered."""
@@ -69,11 +69,15 @@ class PollsterBase:
 
     def add_reader(self, fd, callback, *args):
         """Add or update a reader for a file descriptor."""
-        self.readers[fd] = (callback, args)
+        dcall = DelayedCall(None, callback, args)
+        self.readers[fd] = dcall
+        return dcall
 
     def add_writer(self, fd, callback, *args):
         """Add or update a writer for a file descriptor."""
-        self.writers[fd] = (callback, args)
+        dcall = DelayedCall(None, callback, args)
+        self.writers[fd] = dcall
+        return dcall
 
     def remove_reader(self, fd):
         """Remove the reader for a file descriptor."""
@@ -110,8 +114,8 @@ class SelectMixin(PollsterBase):
         readable, writable, _ = select.select(self.readers, self.writers,
                                               [], timeout)
         events = []
-        events += ((fd, 'r') + self.readers[fd] for fd in readable)
-        events += ((fd, 'w') + self.writers[fd] for fd in writable)
+        events += ((fd, 'r', self.readers[fd]) for fd in readable)
+        events += ((fd, 'w', self.writers[fd]) for fd in writable)
         return events
 
 
@@ -135,12 +139,14 @@ class PollMixin(PollsterBase):
             self._poll.unregister(fd)
 
     def add_reader(self, fd, callback, *args):
-        super().add_reader(fd, callback, *args)
+        dcall = super().add_reader(fd, callback, *args)
         self._update(fd)
+        return dcall
 
     def add_writer(self, fd, callback, *args):
-        super().add_writer(fd, callback, *args)
+        dcall = super().add_writer(fd, callback, *args)
         self._update(fd)
+        return dcall
 
     def remove_reader(self, fd):
         super().remove_reader(fd)
@@ -157,12 +163,12 @@ class PollMixin(PollsterBase):
         for fd, flags in self._poll.poll(msecs):
             if flags & (select.POLLIN | select.POLLHUP):
                 if fd in self.readers:
-                    callback, args = self.readers[fd]
-                    events.append((fd, 'r', callback, args))
+                    dcall = self.readers[fd]
+                    events.append((fd, 'r', dcall))
             if flags & (select.POLLOUT | select.POLLHUP):
                 if fd in self.writers:
-                    callback, args = self.writers[fd]
-                    events.append((fd, 'w', callback, args))
+                    dcall = self.writers[fd]
+                    events.append((fd, 'w', dcall))
         return events
 
 
@@ -189,12 +195,14 @@ class EPollMixin(PollsterBase):
             self._epoll.unregister(fd)
 
     def add_reader(self, fd, callback, *args):
-        super().add_reader(fd, callback, *args)
+        dcall = super().add_reader(fd, callback, *args)
         self._update(fd)
+        return dcall
 
     def add_writer(self, fd, callback, *args):
-        super().add_writer(fd, callback, *args)
+        dcall = super().add_writer(fd, callback, *args)
         self._update(fd)
+        return dcall
 
     def remove_reader(self, fd):
         super().remove_reader(fd)
@@ -211,12 +219,12 @@ class EPollMixin(PollsterBase):
         for fd, eventmask in self._epoll.poll(timeout):
             if eventmask & select.EPOLLIN:
                 if fd in self.readers:
-                    callback, args = self.readers[fd]
-                    events.append((fd, 'r', callback, args))
+                    dcall = self.readers[fd]
+                    events.append((fd, 'r', dcall))
             if eventmask & select.EPOLLOUT:
                 if fd in self.writers:
-                    callback, args = self.writers[fd]
-                    events.append((fd, 'w', callback, args))
+                    dcall = self.writers[fd]
+                    events.append((fd, 'w', dcall))
         return events
 
 
@@ -231,13 +239,13 @@ class KqueueMixin(PollsterBase):
         if fd not in self.readers:
             kev = select.kevent(fd, select.KQ_FILTER_READ, select.KQ_EV_ADD)
             self._kqueue.control([kev], 0, 0)
-        super().add_reader(fd, callback, *args)
+        return super().add_reader(fd, callback, *args)
 
     def add_writer(self, fd, callback, *args):
         if fd not in self.readers:
             kev = select.kevent(fd, select.KQ_FILTER_WRITE, select.KQ_EV_ADD)
             self._kqueue.control([kev], 0, 0)
-        super().add_writer(fd, callback, *args)
+        return super().add_writer(fd, callback, *args)
 
     def remove_reader(self, fd):
         super().remove_reader(fd)
@@ -256,16 +264,16 @@ class KqueueMixin(PollsterBase):
             fd = kev.ident
             flag = kev.filter
             if flag == select.KQ_FILTER_READ and fd in self.readers:
-                callback, args = self.readers[fd]
-                events.append((fd, 'r', callback, args))
+                dcall = self.readers[fd]
+                events.append((fd, 'r', dcall))
             elif flag == select.KQ_FILTER_WRITE and fd in self.writers:
-                callback, args = self.writers[fd]
-                events.append((fd, 'w', callback, args))
+                dcall = self.writers[fd]
+                events.append((fd, 'w', dcall))
         return events
 
 
 class DelayedCall:
-    """Object returned by call_later(); can be used to cancel the call."""
+    """Object returned by call_soon/later(), add_reader/writer()."""
 
     def __init__(self, when, callback, args):
         self.when = when
@@ -309,6 +317,15 @@ class EventLoopMixin(PollsterBase):
         self.ready = collections.deque()  # [(callback, args), ...]
         self.scheduled = []  # [(when, callback, args), ...]
 
+    def add_callback(self, dcall):
+        """Add a DelayedCall to ready or scheduled."""
+        if dcall.cancelled:
+            return
+        if dcall.when is None:
+            self.ready.append(dcall)
+        else:
+            heapq.heappush(self.scheduled, dcall)
+
     def call_soon(self, callback, *args):
         """Arrange for a callback to be called as soon as possible.
 
@@ -319,7 +336,9 @@ class EventLoopMixin(PollsterBase):
         Any positional arguments after the callback will be passed to
         the callback when it is called.
         """
-        self.ready.append((callback, args))
+        dcall = DelayedCall(None, callback, args)
+        self.ready.append(dcall)
+        return dcall
 
     def call_later(self, when, callback, *args):
         """Arrange for a callback to be called at a given time.
@@ -366,12 +385,13 @@ class EventLoopMixin(PollsterBase):
         # TODO: Ensure this loop always finishes, even if some
         # callbacks keeps registering more callbacks.
         while self.ready:
-            callback, args = self.ready.popleft()
-            try:
-                callback(*args)
-            except Exception:
-                logging.exception('Exception in callback %s %r',
-                                  callback, args)
+            dcall = self.ready.popleft()
+            if not dcall.cancelled:
+                try:
+                    dcall.callback(*dcall.args)
+                except Exception:
+                    logging.exception('Exception in callback %s %r',
+                                      callback, args)
 
         # Remove delayed calls that were cancelled from head of queue.
         while self.scheduled and self.scheduled[0].cancelled:
@@ -389,8 +409,8 @@ class EventLoopMixin(PollsterBase):
             t1 = time.time()
             argstr = '' if timeout is None else ' %.3f' % timeout
             logging.debug('poll%s took %.3f seconds', argstr, t1-t0)
-            for fd, flag, callback, args in events:
-                self.call_soon(callback, *args)
+            for fd, flag, dcall in events:
+                self.add_callback(dcall)
 
         # Handle 'later' callbacks that are ready.
         while self.scheduled:

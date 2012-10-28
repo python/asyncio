@@ -391,7 +391,7 @@ class EventLoopMixin(PollsterBase):
                     dcall.callback(*dcall.args)
                 except Exception:
                     logging.exception('Exception in callback %s %r',
-                                      callback, args)
+                                      dcall.callback, dcall.args)
 
         # Remove delayed calls that were cancelled from head of queue.
         while self.scheduled and self.scheduled[0].cancelled:

@@ -9,5 +9,8 @@ profile:
 time:
 	$(PYTHON) p3time.py
 
+ytime:
+	$(PYTHON) yyftime.py
+
 check:
 	$(PYTHON) longlines.py

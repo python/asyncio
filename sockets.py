@@ -25,7 +25,6 @@ __author__ = 'Guido van Rossum <guido@python.org>'
 
 # Stdlib imports.
 import errno
-import re
 import socket
 import ssl
 
@@ -272,21 +271,11 @@ def getaddrinfo(host, port, af=0, socktype=0, proto=0):
     return infos
 
 
-def create_connection(host, port, af=0, socktype=socket.SOCK_STREAM):
+def create_connection(host, port, af=0, socktype=socket.SOCK_STREAM, proto=0):
     """COROUTINE: Look up address and create a socket connected to it."""
-    match = re.match(r'(\d+)\.(\d+)\.(\d+)\.(\d+)\Z', host)
-    if match:
-        d1, d2, d3, d4 = map(int, match.groups())
-        if not (0 <= d1 <= 255 and 0 <= d2 <= 255 and
-                0 <= d3 <= 255 and 0 <= d4 <= 255):
-            match = None
-    if not match:
-        infos = yield from getaddrinfo(host, port,
-                                       af=af, socktype=socket.SOCK_STREAM)
-    else:
-        infos = [(socket.AF_INET, socket.SOCK_STREAM, socket.SOL_TCP, '',
-                  (host, port))]
-    assert infos, 'No address info for (%r, %r)' % (host, port)
+    infos = yield from getaddrinfo(host, port, af, socktype, proto)
+    if not infos:
+        raise IOError('getaddrinfo() returned an empty list')
     exc = None
     for af, socktype, proto, cname, address in infos:
         sock = None
@@ -301,8 +290,7 @@ def create_connection(host, port, af=0, socktype=socket.SOCK_STREAM):
             if exc is None:
                 exc = err
     else:
-        if exc is not None:
-            raise exc
+        raise exc
     return sock
 
 
@@ -310,10 +298,59 @@ def create_transport(host, port, af=0, ssl=None):
     """COROUTINE: Look up address and create a transport connected to it."""
     if ssl is None:
         ssl = (port == 443)
-    sock = yield from create_connection(host, port, af=af)
+    sock = yield from create_connection(host, port, af)
     if ssl:
         trans = SslTransport(sock)
         yield from trans.do_handshake()
     else:
         trans = SocketTransport(sock)
     return trans
+
+
+class Listener:
+    """Wrapper for a listening socket."""
+
+    def __init__(self, sock):
+        self.sock = sock
+
+    def accept(self):
+        """COROUTINE: Accept a connection."""
+        while True:
+            try:
+                conn, addr = self.sock.accept()
+            except socket.error as err:
+                if err.errno in _TRYAGAIN:
+                    scheduling.block_r(self.sock.fileno())
+                    yield
+                else:
+                    raise  # Unexpected, propagate.
+            else:
+                conn.setblocking(False)
+                return conn, addr
+
+
+def create_listener(host, port, af=0, socktype=0, proto=0,
+                    backlog=5, reuse_addr=True):
+    """COROUTINE: Look up address and create a listener for it."""
+    infos = yield from getaddrinfo(host, port, af, socktype, proto)
+    if not infos:
+        raise IOError('getaddrinfo() returned an empty list')
+    exc = None
+    for af, socktype, proto, cname, address in infos:
+        sock = None
+        try:
+            sock = socket.socket(af, socktype, proto)
+            sock.setblocking(False)
+            if reuse_addr:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind(address)
+            sock.listen(backlog)
+            break
+        except socket.error as err:
+            if sock is not None:
+                sock.close()
+            if exc is None:
+                exc = err
+    else:
+        raise exc
+    return Listener(sock)

@@ -111,7 +111,7 @@ def doit():
     task1 = scheduling.Task(urlfetch('localhost', 8080, path='/'),
                             'root', timeout=TIMEOUT)
     tasks.add(task1)
-    task2 = scheduling.Task(urlfetch('localhost', 8080, path='/home'),
+    task2 = scheduling.Task(urlfetch('127.0.0.1', 8080, path='/home'),
                             'home', timeout=TIMEOUT)
     tasks.add(task2)
 

@@ -3,6 +3,9 @@ PYTHON=python3.3
 test:
 	$(PYTHON) main.py -v
 
+echo:
+	$(PYTHON) echosvr.py -v
+
 profile:
 	$(PYTHON) -m profile -s time main.py
 

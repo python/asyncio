@@ -11,7 +11,7 @@ TO DO SMALLER TASKS
 
 TO DO LARGER TASKS
 
-- Need more examples, e.g. simple client, simple server (echo).
+- Need more examples.
 
 - Benchmarkable HTTP server?
 
@@ -92,7 +92,7 @@ FROM OLDER LIST
 
 MISTAKES I MADE
 
-- Forgetting yield from.  (E.g.: scheduler.sleep(1).)
+- Forgetting yield from.  (E.g.: scheduler.sleep(1); listener.accept().)
 
 - Forgot to add bare yield at end of internal function, after block().
 
@@ -107,3 +107,11 @@ MISTAKES I MADE
 - Nasty race: eventloop.ready may contain both an I/O callback and a
   cancel callback.  How to avoid?  Keep the DelayedCall in ready.  Is
   that enough?
+
+- If a toplevel task raises an error it just stops and nothing is logged
+  unless you have debug logging on.  This confused me.  (Then again,
+  previously I logged whenever a task raised an error, and that was too
+  chatty...)
+
+- Forgot to set the connection socket returned by accept() in
+  nonblocking mode.

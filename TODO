@@ -1,3 +1,13 @@
+- Need more examples, e.g. simple client, simple server (echo).
+
+- Benchmarkable HTTP server?
+
+- Do we need call_every()?
+
+- What to do about callbacks with keyword-only arguments?
+
+- Example of using UDP.
+
 - Ensure multiple tasks can do atomic writes to the same pipe (since
   UNIX guarantees that short writes to pipes are atomic).
 

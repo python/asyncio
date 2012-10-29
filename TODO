@@ -22,7 +22,9 @@
 
 - Do we need synchronous parallel APIs for all async APIs?
 
-- Add a decorator just for documenting a coroutine?
+- Add a decorator just for documenting a coroutine.  It should set a
+  flag on the function.  It should not interfere with methods,
+  staticmethod, classmethod and the like.
 
 - Fix recv(), send() to catch EAGAIN.
 
@@ -30,7 +32,10 @@
 
 - Could BufferedReader reuse the standard io module's readers???
 
-[From older list]
+- Support ZeroMQ "sockets" which are user objects.
+
+
+FROM OLDER LIST
 
 - Is it better to have separate add_{reader,writer} methods, vs. one
   add_thingie method taking a fd and a r/w flag?

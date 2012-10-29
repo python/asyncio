@@ -42,7 +42,11 @@
 
 - Could BufferedReader reuse the standard io module's readers???
 
-- Support ZeroMQ "sockets" which are user objects.
+- Support ZeroMQ "sockets" which are user objects.  Though possibly
+  this can be supported by getting the underlying fd?  See
+  http://mail.python.org/pipermail/python-ideas/2012-October/017532.html
+  OTOH see 
+  https://github.com/zeromq/pyzmq/blob/master/zmq/eventloop/ioloop.py
 
 
 FROM OLDER LIST

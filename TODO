@@ -36,10 +36,6 @@
   flag on the function.  It should not interfere with methods,
   staticmethod, classmethod and the like.
 
-- Fix recv(), send() to catch EAGAIN.
-
-- Fix ssh recv(), send() to catch SSLWantReadError and SSLWantWriteError.
-
 - Could BufferedReader reuse the standard io module's readers???
 
 - Support ZeroMQ "sockets" which are user objects.  Though possibly
@@ -77,8 +73,6 @@ FROM OLDER LIST
 - Make Task more like Future?  (Or less???)
 
 - Implement various lock styles a la threading.py.
-
-- Handle disconnect errors from send() (and from recv()???).
 
 - Add write() calls that don't require yield from.
 

@@ -32,6 +32,18 @@ import ssl
 # Local imports.
 import scheduling
 
+# Errno values indicating the connection was disconnected.
+_DISCONNECTED = frozenset((errno.ECONNRESET,
+                           errno.ENOTCONN,
+                           errno.ESHUTDOWN,
+                           errno.ECONNABORTED,
+                           errno.EPIPE,
+                           errno.EBADF,
+                           ))
+
+# Errno values indicating the socket isn't ready for I/O just yet.
+_TRYAGAIN = frozenset((errno.EAGAIN, errno.EWOULDBLOCK))
+
 
 class SocketTransport:
     """Transport wrapping a socket.
@@ -43,22 +55,49 @@ class SocketTransport:
         self.sock = sock
 
     def recv(self, n):
-        """COROUTINE: Read up to n bytes, blocking at most once."""
+        """COROUTINE: Read up to n bytes, blocking as needed.
+
+        Always returns at least one byte, except if the socket was
+        closed or disconnected and there's no more data; then it
+        returns b''.
+        """
         assert n >= 0, n
-        scheduling.block_r(self.sock.fileno())
-        yield
-        return self.sock.recv(n)
+        while True:
+            try:
+                return self.sock.recv(n)
+            except socket.error as err:
+                if err.errno in _TRYAGAIN:
+                    scheduling.block_r(self.sock.fileno())
+                    yield
+                elif err.errno in _DISCONNECTED:
+                    # Can this happen?
+                    return b''
+                else:
+                    raise  # Unexpected, propagate.
 
     def send(self, data):
-        """COROUTINE; Send data to the socket, blocking until all written."""
+        """COROUTINE; Send data to the socket, blocking until all written.
+
+        Return True if all went well, False if socket was disconnected.
+        """
         while data:
-            scheduling.block_w(self.sock.fileno())
-            yield
-            n = self.sock.send(data)
-            assert 0 <= n <= len(data), (n, len(data))
-            if n == len(data):
-                break
-            data = data[n:]
+            try:
+                n = self.sock.send(data)
+            except socket.error as err:
+                if err.errno in _TRYAGAIN:
+                    scheduling.block_w(self.sock.fileno())
+                    yield
+                elif err.errno in _DISCONNECTED:
+                    return False
+                else:
+                    raise  # Unexpected, propagate.
+            else:
+                assert 0 <= n <= len(data), (n, len(data))
+                if n == len(data):
+                    break
+                data = data[n:]
+
+        return True
 
     def close(self):
         """Close the socket.  (Not a coroutine.)"""
@@ -100,21 +139,46 @@ class SslTransport:
         while True:
             try:
                 return self.sslsock.recv(n)
-            except socket.error as err:
+            except ssl.SSLWantReadError:
                 scheduling.block_r(self.sslsock.fileno())
                 yield
+            except ssl.SSLWantWriteError:
+                scheduling.block_w(self.sslsock.fileno())
+                yield
+            except socket.error as err:
+                if err.errno in _TRYAGAIN:
+                    scheduling.block_r(self.sock.fileno())
+                    yield
+                elif err.errno in _DISCONNECTED:
+                    # Can this happen?
+                    return b''
+                else:
+                    raise  # Unexpected, propagate.
 
     def send(self, data):
         """COROUTINE: Send data to the socket, blocking as needed."""
         while data:
             try:
                 n = self.sslsock.send(data)
-            except socket.error as err:
+            except ssl.SSLWantReadError:
+                scheduling.block_r(self.sslsock.fileno())
+                yield
+            except ssl.SSLWantWriteError:
                 scheduling.block_w(self.sslsock.fileno())
                 yield
+            except socket.error as err:
+                if err.errno in _TRYAGAIN:
+                    scheduling.block_w(self.sock.fileno())
+                    yield
+                elif err.errno in _DISCONNECTED:
+                    return False
+                else:
+                    raise  # Unexpected, propagate.
             if n == len(data):
                 break
             data = data[n:]
+
+        return True
 
     def close(self):
         """Close the socket.  (Not a coroutine.)

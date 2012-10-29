@@ -1,0 +1,85 @@
+- Ensure multiple tasks can do atomic writes to the same pipe (since
+  UNIX guarantees that short writes to pipes are atomic).
+
+- Ensure some easy way of distributing accepted connections across tasks.
+
+- Make pollster take an abstract token and return it.
+
+- Make pollster a sub-object instead of a superclass of the eventloop.
+
+- Be wary of thread-local storage.  There should be a standard API to
+  get the current Context (which holds current task, event loop, and
+  maybe more) and a standard meta-API to change how that standard API
+  works (i.e. without monkey-patching).
+
+- See how much of asyncore I've already replaced.
+
+- Write up a tutorial for the scheduling API.
+
+- Change block_r/w into COROUTINE style APIs.
+
+- Do we need _async suffixes to all async APIs?
+
+- Do we need synchronous parallel APIs for all async APIs?
+
+- Add a decorator just for documenting a coroutine?
+
+- Fix recv(), send() to catch EAGAIN.
+
+- Fix ssh recv(), send() to catch SSLWantReadError and SSLWantWriteError.
+
+- Could BufferedReader reuse the standard io module's readers???
+
+[From older list]
+
+- Is it better to have separate add_{reader,writer} methods, vs. one
+  add_thingie method taking a fd and a r/w flag?
+
+- Multiple readers/writers per socket?  (At which level? pollster,
+  eventloop, or scheduler?)
+
+- Should poll() return a list of tokens or a list of (fd, flag, token)?
+
+- Could poll() usefully be an iterator?
+
+- Do we need to support more epoll and/or kqueue modes/flags/options/etc.?
+
+- Optimize register/unregister calls away if they cancel each other out?
+
+- Should block() use a queue?
+
+- Add explicit wait queue to wait for Task's completion, instead of
+  callbacks?
+
+- Global functions vs. Task methods?
+
+- Is the Task design good?
+
+- Make Task more like Future?  (Or less???)
+
+- Implement various lock styles a la threading.py.
+
+- Handle disconnect errors from send() (and from recv()???).
+
+- Add write() calls that don't require yield from.
+
+- Add simple non-async APIs, for simple apps?
+
+
+MISTAKES I MADE
+
+- Forgetting yield from.  (E.g.: scheduler.sleep(1).)
+
+- Forgot to add bare yield at end of internal function, after block().
+
+- Forgot to call add_done_callback().
+
+- Forgot to pass an undoer to block(), bug only found when cancelled.
+
+- Subtle accounting mistake in a callback.
+
+- Used context.eventloop from a different thread, forgetting about TLS.
+
+- Nasty race: eventloop.ready may contain both an I/O callback and a
+  cancel callback.  How to avoid?  Keep the DelayedCall in ready.  Is
+  that enough?

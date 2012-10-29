@@ -1,5 +1,6 @@
 """Compare timing of plain vs. yield-from calls."""
 
+import gc
 import time
 
 def plain(n):
@@ -34,9 +35,11 @@ def submain(depth):
         t1 = time.time()
         delta1 = t1-t0
         print(('coro.' + fmt).format(depth, k, delta1))
-    print(('relat' + fmt).format(depth, k, delta1/delta0))
+    if delta0:
+        print(('relat' + fmt).format(depth, k, delta1/delta0))
 
-def main(reasonable=100):
+def main(reasonable=16):
+    gc.disable()
     for depth in range(reasonable):
         submain(depth)
 

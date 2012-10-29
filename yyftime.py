@@ -1,5 +1,6 @@
 """Compare timing of yield-from <generator> vs. yield <future> calls."""
 
+import gc
 import time
 
 def coroutine(n):
@@ -63,10 +64,12 @@ def run_olds(depth):
     return t1-t0
 
 def main():
-    for depth in range(30):
+    gc.disable()
+    for depth in range(16):
         tc = run_coro(depth)
         to = run_olds(depth)
-        print('ratio', round(to/tc, 2))
+        if tc:
+            print('ratio', round(to/tc, 2))
 
 if __name__ == '__main__':
     main()

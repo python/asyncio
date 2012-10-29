@@ -66,8 +66,7 @@ class SocketTransport:
                 return self.sock.recv(n)
             except socket.error as err:
                 if err.errno in _TRYAGAIN:
-                    scheduling.block_r(self.sock.fileno())
-                    yield
+                    yield from scheduling.block_r(self.sock.fileno())
                 elif err.errno in _DISCONNECTED:
                     # Can this happen?
                     return b''
@@ -84,8 +83,7 @@ class SocketTransport:
                 n = self.sock.send(data)
             except socket.error as err:
                 if err.errno in _TRYAGAIN:
-                    scheduling.block_w(self.sock.fileno())
-                    yield
+                    yield from scheduling.block_w(self.sock.fileno())
                 elif err.errno in _DISCONNECTED:
                     return False
                 else:
@@ -122,11 +120,9 @@ class SslTransport:
             try:
                 self.sslsock.do_handshake()
             except ssl.SSLWantReadError:
-                scheduling.block_r(self.sslsock.fileno())
-                yield
+                yield from scheduling.block_r(self.sslsock.fileno())
             except ssl.SSLWantWriteError:
-                scheduling.block_w(self.sslsock.fileno())
-                yield
+                yield from scheduling.block_w(self.sslsock.fileno())
             else:
                 break
 
@@ -139,15 +135,12 @@ class SslTransport:
             try:
                 return self.sslsock.recv(n)
             except ssl.SSLWantReadError:
-                scheduling.block_r(self.sslsock.fileno())
-                yield
+                yield from scheduling.block_r(self.sslsock.fileno())
             except ssl.SSLWantWriteError:
-                scheduling.block_w(self.sslsock.fileno())
-                yield
+                yield from scheduling.block_w(self.sslsock.fileno())
             except socket.error as err:
                 if err.errno in _TRYAGAIN:
-                    scheduling.block_r(self.sock.fileno())
-                    yield
+                    yield from scheduling.block_r(self.sock.fileno())
                 elif err.errno in _DISCONNECTED:
                     # Can this happen?
                     return b''
@@ -160,15 +153,12 @@ class SslTransport:
             try:
                 n = self.sslsock.send(data)
             except ssl.SSLWantReadError:
-                scheduling.block_r(self.sslsock.fileno())
-                yield
+                yield from scheduling.block_r(self.sslsock.fileno())
             except ssl.SSLWantWriteError:
-                scheduling.block_w(self.sslsock.fileno())
-                yield
+                yield from scheduling.block_w(self.sslsock.fileno())
             except socket.error as err:
                 if err.errno in _TRYAGAIN:
-                    scheduling.block_w(self.sock.fileno())
-                    yield
+                    yield from scheduling.block_w(self.sock.fileno())
                 elif err.errno in _DISCONNECTED:
                     return False
                 else:
@@ -253,8 +243,7 @@ def connect(sock, address):
     except socket.error as err:
         if err.errno != errno.EINPROGRESS:
             raise
-    scheduling.block_w(sock.fileno())
-    yield
+    yield from scheduling.block_w(sock.fileno())
     err = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
     if err != 0:
         raise IOError(err, 'Connection refused')
@@ -320,8 +309,7 @@ class Listener:
                 conn, addr = self.sock.accept()
             except socket.error as err:
                 if err.errno in _TRYAGAIN:
-                    scheduling.block_r(self.sock.fileno())
-                    yield
+                    yield from scheduling.block_r(self.sock.fileno())
                 else:
                     raise  # Unexpected, propagate.
             else:

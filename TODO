@@ -4,8 +4,6 @@ TO DO SMALLER TASKS
 
 - Make pollster a sub-object instead of a superclass of the eventloop.
 
-- Change block_r/w into COROUTINE style APIs.
-
 - Should poll() return a list of tokens or a list of (fd, flag, token)?
 
 

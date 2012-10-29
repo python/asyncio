@@ -198,13 +198,15 @@ def sleep(secs):
 
 
 def block_r(fd):
-    """Helper to call block_io() for reading."""
+    """COROUTINE: Block until a file descriptor is ready for reading."""
     context.current_task.block_io(fd, 'r')
+    yield
 
 
 def block_w(fd):
-    """Helper to call block_io() for writing."""
+    """COROUTINE: Block until a file descriptor is ready for writing."""
     context.current_task.block_io(fd, 'w')
+    yield
 
 
 def call_in_thread(func, *args, executor=None):

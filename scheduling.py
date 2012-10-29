@@ -119,7 +119,7 @@ class Task:
             self.exception = exc
             logging.debug('Uncaught exception in task %r', self.name,
                           exc_info=True, stack_info=True)
-        except BaseException:
+        except BaseException as exc:
             self.alive = False
             self.exception = exc
             raise

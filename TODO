@@ -1,21 +1,35 @@
+TO DO SMALLER TASKS
+
+- Make pollster take an abstract token and return it.
+
+- Make pollster a sub-object instead of a superclass of the eventloop.
+
+- Change block_r/w into COROUTINE style APIs.
+
+- Should poll() return a list of tokens or a list of (fd, flag, token)?
+
+
+TO DO LARGER TASKS
+
 - Need more examples, e.g. simple client, simple server (echo).
 
 - Benchmarkable HTTP server?
+
+- Example of using UDP.
+
+- Write up a tutorial for the scheduling API.
+
+
+TO DO LATER
 
 - Do we need call_every()?
 
 - What to do about callbacks with keyword-only arguments?
 
-- Example of using UDP.
-
 - Ensure multiple tasks can do atomic writes to the same pipe (since
   UNIX guarantees that short writes to pipes are atomic).
 
 - Ensure some easy way of distributing accepted connections across tasks.
-
-- Make pollster take an abstract token and return it.
-
-- Make pollster a sub-object instead of a superclass of the eventloop.
 
 - Be wary of thread-local storage.  There should be a standard API to
   get the current Context (which holds current task, event loop, and
@@ -23,10 +37,6 @@
   works (i.e. without monkey-patching).
 
 - See how much of asyncore I've already replaced.
-
-- Write up a tutorial for the scheduling API.
-
-- Change block_r/w into COROUTINE style APIs.
 
 - Do we need _async suffixes to all async APIs?
 
@@ -53,8 +63,6 @@ FROM OLDER LIST
 - Multiple readers/writers per socket?  (At which level? pollster,
   eventloop, or scheduler?)
 
-- Should poll() return a list of tokens or a list of (fd, flag, token)?
-
 - Could poll() usefully be an iterator?
 
 - Do we need to support more epoll and/or kqueue modes/flags/options/etc.?
@@ -77,6 +85,9 @@ FROM OLDER LIST
 - Add write() calls that don't require yield from.
 
 - Add simple non-async APIs, for simple apps?
+
+- Look at pyfdpdlib's ioloop.py:
+  http://code.google.com/p/pyftpdlib/source/browse/trunk/pyftpdlib/lib/ioloop.py
 
 
 MISTAKES I MADE

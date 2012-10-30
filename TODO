@@ -1,5 +1,8 @@
 TO DO SMALLER TASKS
 
+- Move accept loop into Listener class.  (Windows works better if you
+  make many AcceptEx() calls in parallel.)
+
 - Echo client demo.
 
 
@@ -15,6 +18,17 @@ TO DO LARGER TASKS
 
 
 TO DO LATER
+
+- Wrap select(), epoll() etc. in try/except checking for EINTR.
+
+- When multiple tasks are accessing the same socket, they should
+  either get interleaved I/O or an immediate exception; it should not
+  compromise the integrity of the scheduler or the app or leave a task
+  hanging.
+
+- For epoll you probably want to check/(log?) EPOLLHUP and EPOLLERR errors.
+
+- Add the simplest API possible to run a generator with a timeout.
 
 - Do we need call_every()?  (Easily emulated with a loop and sleep().)
 

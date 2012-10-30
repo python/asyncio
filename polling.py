@@ -298,6 +298,7 @@ class EventLoop:
     def __init__(self, pollster=None):
         super().__init__()
         if pollster is None:
+            logging.info('Using pollster: %s', best_pollster.__name__)
             pollster = best_pollster()
         self.pollster = pollster
         self.ready = collections.deque()  # [(callback, args), ...]
@@ -417,7 +418,11 @@ class EventLoop:
             events = self.pollster.poll(timeout)
             t1 = time.time()
             argstr = '' if timeout is None else ' %.3f' % timeout
-            logging.debug('poll%s took %.3f seconds', argstr, t1-t0)
+            if t1-t0 >= 1:
+                level = logging.INFO
+            else:
+                level = logging.DEBUG
+            logging.log(level, 'poll%s took %.3f seconds', argstr, t1-t0)
             for dcall in events:
                 self.add_callback(dcall)
 

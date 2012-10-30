@@ -26,81 +26,13 @@ __author__ = 'Guido van Rossum <guido@python.org>'
 # Standard library imports (keep in alphabetic order).
 import logging
 import os
-import re
 import time
 import socket
 import sys
 
 # Local imports (keep in alphabetic order).
 import scheduling
-import sockets
-
-
-def urlfetch(host, port=None, method='GET', path='/',
-             body=None, hdrs=None, encoding='utf-8', ssl=None, af=0):
-    t0 = time.time()
-    if port is None:
-        if ssl:
-            port = 443
-        else:
-            port = 80
-    trans = yield from sockets.create_transport(host, port, ssl=ssl, af=af)
-    yield from trans.send(method.encode(encoding) + b' ' +
-                          path.encode(encoding) + b' HTTP/1.0\r\n')
-    if hdrs:
-        kwds = dict(hdrs)
-    else:
-        kwds = {}
-    if 'host' not in kwds:
-        kwds['host'] = host
-    if body is not None:
-        kwds['content_length'] = len(body)
-    for header, value in kwds.items():
-        yield from trans.send(header.replace('_', '-').encode(encoding) +
-                              b': ' + value.encode(encoding) + b'\r\n')
-
-    yield from trans.send(b'\r\n')
-    if body is not None:
-        yield from trans.send(body)
-
-    # Read HTTP response line.
-    rdr = sockets.BufferedReader(trans)
-    resp = yield from rdr.readline()
-    m = re.match(br'(?ix) http/(\d\.\d) \s+ (\d\d\d) \s+ ([^\r]*)\r?\n\Z',
-                 resp)
-    if not m:
-        trans.close()
-        raise IOError('No valid HTTP response: %r' % resp)
-    http_version, status, message = m.groups()
-
-    # Read HTTP headers.
-    headers = []
-    hdict = {}
-    while True:
-        line = yield from rdr.readline()
-        if not line.strip():
-            break
-        m = re.match(br'([^\s:]+):\s*([^\r]*)\r?\n\Z', line)
-        if not m:
-            raise IOError('Invalid header: %r' % line)
-        header, value = m.groups()
-        headers.append((header, value))
-        hdict[header.decode(encoding).lower()] = value.decode(encoding)
-
-    # Read response body.
-    content_length = hdict.get('content-length')
-    if content_length is not None:
-        size = int(content_length)  # TODO: Catch errors.
-        assert size >= 0, size
-    else:
-        size = 2**20  # Protective limit (1 MB).
-    data = yield from rdr.readexactly(size)
-    trans.close()  # Can this block?
-    t1 = time.time()
-    result = (host, port, path, int(status), len(data), round(t1-t0, 3))
-##     print(result)
-    return result
-
+import http_client
 
 def doit():
     TIMEOUT = 2
@@ -108,21 +40,22 @@ def doit():
 
     # This references NDB's default test service.
     # (Sadly the service is single-threaded.)
-    task1 = scheduling.Task(urlfetch('localhost', 8080, path='/'),
+    task1 = scheduling.Task(http_client.urlfetch('localhost', 8080, path='/'),
                             'root', timeout=TIMEOUT)
     tasks.add(task1)
-    task2 = scheduling.Task(urlfetch('127.0.0.1', 8080, path='/home'),
+    task2 = scheduling.Task(http_client.urlfetch('127.0.0.1', 8080,
+                                                 path='/home'),
                             'home', timeout=TIMEOUT)
     tasks.add(task2)
 
     # Fetch python.org home page.
-    task3 = scheduling.Task(urlfetch('python.org', 80, path='/'),
+    task3 = scheduling.Task(http_client.urlfetch('python.org', 80, path='/'),
                             'python', timeout=TIMEOUT)
     tasks.add(task3)
 
     # Fetch XKCD home page using SSL.  (Doesn't like IPv6.)
-    task4 = scheduling.Task(urlfetch('xkcd.com', ssl=True, path='/',
-                                     af=socket.AF_INET),
+    task4 = scheduling.Task(http_client.urlfetch('xkcd.com', ssl=True, path='/',
+                                                 af=socket.AF_INET),
                             'xkcd', timeout=TIMEOUT)
     tasks.add(task4)
 
@@ -130,8 +63,8 @@ def doit():
 ##     for x in '123':
 ##         for y in '0123456789':
 ##             path = '/{}.{}'.format(x, y)
-##             g = urlfetch('82.94.164.162', 80,
-##                          path=path, hdrs={'host': 'python.org'})
+##             g = http_client.urlfetch('82.94.164.162', 80,
+##                                      path=path, hdrs={'host': 'python.org'})
 ##             t = scheduling.Task(g, path, timeout=2)
 ##             tasks.add(t)
 

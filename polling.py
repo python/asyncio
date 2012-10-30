@@ -2,8 +2,8 @@
 
 The event loop can be broken up into a pollster (the part responsible
 for telling us when file descriptors are ready) and the event loop
-proper, which adds functionality for scheduling callbacks, immediately
-or at a given time in the future.
+proper, which wraps a pollster with functionality for scheduling
+callbacks, immediately or at a given time in the future.
 
 Whenever a public API takes a callback, subsequent positional
 arguments will be passed to the callback if/when it is called.  This
@@ -29,9 +29,8 @@ descriptors goes up.  The ranking is roughly:
   2. poll
   3. select
 
-
 TODO:
-- Optimize the various pollster.
+- Optimize the various pollsters.
 - Unittests.
 """
 
@@ -48,18 +47,15 @@ class PollsterBase:
     """Base class for all polling implementations.
 
     This defines an interface to register and unregister readers and
-    writers (defined as a callback plus optional positional arguments)
-    for specific file descriptors, and an interface to get a list of
-    events.  There's also an interface to check whether any readers or
-    writers are currently registered.  The readers and writers
-    attributes are public -- they are simply mappings of file
-    descriptors to tuples of (callback, args).
+    writers for specific file descriptors, and an interface to get a
+    list of events.  There's also an interface to check whether any
+    readers or writers are currently registered.
     """
 
     def __init__(self):
         super().__init__()
-        self.readers = {}  # {fd: <DelayedCall>, ...}.
-        self.writers = {}  # {fd: <DelayedCall>, ...}.
+        self.readers = {}  # {fd: token, ...}.
+        self.writers = {}  # {fd: token, ...}.
 
     def pollable(self):
         """Return True if any readers or writers are currently registered."""
@@ -67,23 +63,19 @@ class PollsterBase:
 
     # Subclasses are expected to extend the add/remove methods.
 
-    def add_reader(self, fd, callback, *args):
+    def register_reader(self, fd, token):
         """Add or update a reader for a file descriptor."""
-        dcall = DelayedCall(None, callback, args)
-        self.readers[fd] = dcall
-        return dcall
+        self.readers[fd] = token
 
-    def add_writer(self, fd, callback, *args):
+    def register_writer(self, fd, token):
         """Add or update a writer for a file descriptor."""
-        dcall = DelayedCall(None, callback, args)
-        self.writers[fd] = dcall
-        return dcall
+        self.writers[fd] = token
 
-    def remove_reader(self, fd):
+    def unregister_reader(self, fd):
         """Remove the reader for a file descriptor."""
         del self.readers[fd]
 
-    def remove_writer(self, fd):
+    def unregister_writer(self, fd):
         """Remove the writer for a file descriptor."""
         del self.writers[fd]
 
@@ -98,16 +90,15 @@ class PollsterBase:
 
         The return value is a list of events; it is empty when the
         timeout expired before any events were ready.  Each event
-        is a tuple of the form (fd, flag, callback, args):
+        is a tuple of the form (fd, flag, token):
           fd: the file descriptor
           flag: 'r' or 'w' (to distinguish readers from writers)
-          callback: callback function
-          args: arguments tuple for callback
+          token: whatever you passed to register_reader/writer().
         """
         raise NotImplementedError
 
 
-class SelectMixin(PollsterBase):
+class SelectPollster(PollsterBase):
     """Pollster implementation using select."""
 
     def poll(self, timeout=None):
@@ -119,7 +110,7 @@ class SelectMixin(PollsterBase):
         return events
 
 
-class PollMixin(PollsterBase):
+class PollPollster(PollsterBase):
     """Pollster implementation using poll."""
 
     def __init__(self):
@@ -138,22 +129,20 @@ class PollMixin(PollsterBase):
         else:
             self._poll.unregister(fd)
 
-    def add_reader(self, fd, callback, *args):
-        dcall = super().add_reader(fd, callback, *args)
-        self._update(fd)
-        return dcall
-
-    def add_writer(self, fd, callback, *args):
-        dcall = super().add_writer(fd, callback, *args)
-        self._update(fd)
-        return dcall
-
-    def remove_reader(self, fd):
-        super().remove_reader(fd)
+    def register_reader(self, fd, callback, *args):
+        super().register_reader(fd, callback, *args)
         self._update(fd)
 
-    def remove_writer(self, fd):
-        super().remove_writer(fd)
+    def register_writer(self, fd, callback, *args):
+        super().register_writer(fd, callback, *args)
+        self._update(fd)
+
+    def unregister_reader(self, fd):
+        super().unregister_reader(fd)
+        self._update(fd)
+
+    def unregister_writer(self, fd):
+        super().unregister_writer(fd)
         self._update(fd)
 
     def poll(self, timeout=None):
@@ -163,16 +152,14 @@ class PollMixin(PollsterBase):
         for fd, flags in self._poll.poll(msecs):
             if flags & (select.POLLIN | select.POLLHUP):
                 if fd in self.readers:
-                    dcall = self.readers[fd]
-                    events.append((fd, 'r', dcall))
+                    events.append((fd, 'r', self.readers[fd]))
             if flags & (select.POLLOUT | select.POLLHUP):
                 if fd in self.writers:
-                    dcall = self.writers[fd]
-                    events.append((fd, 'w', dcall))
+                    events.append((fd, 'w', self.writers[fd]))
         return events
 
 
-class EPollMixin(PollsterBase):
+class EPollPollster(PollsterBase):
     """Pollster implementation using epoll."""
 
     def __init__(self):
@@ -194,22 +181,20 @@ class EPollMixin(PollsterBase):
         else:
             self._epoll.unregister(fd)
 
-    def add_reader(self, fd, callback, *args):
-        dcall = super().add_reader(fd, callback, *args)
-        self._update(fd)
-        return dcall
-
-    def add_writer(self, fd, callback, *args):
-        dcall = super().add_writer(fd, callback, *args)
-        self._update(fd)
-        return dcall
-
-    def remove_reader(self, fd):
-        super().remove_reader(fd)
+    def register_reader(self, fd, callback, *args):
+        super().register_reader(fd, callback, *args)
         self._update(fd)
 
-    def remove_writer(self, fd):
-        super().remove_writer(fd)
+    def register_writer(self, fd, callback, *args):
+        super().register_writer(fd, callback, *args)
+        self._update(fd)
+
+    def unregister_reader(self, fd):
+        super().unregister_reader(fd)
+        self._update(fd)
+
+    def unregister_writer(self, fd):
+        super().unregister_writer(fd)
         self._update(fd)
 
     def poll(self, timeout=None):
@@ -219,41 +204,39 @@ class EPollMixin(PollsterBase):
         for fd, eventmask in self._epoll.poll(timeout):
             if eventmask & select.EPOLLIN:
                 if fd in self.readers:
-                    dcall = self.readers[fd]
-                    events.append((fd, 'r', dcall))
+                    events.append((fd, 'r', self.readers[fd]))
             if eventmask & select.EPOLLOUT:
                 if fd in self.writers:
-                    dcall = self.writers[fd]
-                    events.append((fd, 'w', dcall))
+                    events.append((fd, 'w', self.writers[fd]))
         return events
 
 
-class KqueueMixin(PollsterBase):
+class KqueuePollster(PollsterBase):
     """Pollster implementation using kqueue."""
 
     def __init__(self):
         super().__init__()
         self._kqueue = select.kqueue()
 
-    def add_reader(self, fd, callback, *args):
+    def register_reader(self, fd, callback, *args):
         if fd not in self.readers:
             kev = select.kevent(fd, select.KQ_FILTER_READ, select.KQ_EV_ADD)
             self._kqueue.control([kev], 0, 0)
-        return super().add_reader(fd, callback, *args)
+        return super().register_reader(fd, callback, *args)
 
-    def add_writer(self, fd, callback, *args):
+    def register_writer(self, fd, callback, *args):
         if fd not in self.readers:
             kev = select.kevent(fd, select.KQ_FILTER_WRITE, select.KQ_EV_ADD)
             self._kqueue.control([kev], 0, 0)
-        return super().add_writer(fd, callback, *args)
+        return super().register_writer(fd, callback, *args)
 
-    def remove_reader(self, fd):
-        super().remove_reader(fd)
+    def unregister_reader(self, fd):
+        super().unregister_reader(fd)
         kev = select.kevent(fd, select.KQ_FILTER_READ, select.KQ_EV_DELETE)
         self._kqueue.control([kev], 0, 0)
 
-    def remove_writer(self, fd):
-        super().remove_writer(fd)
+    def unregister_writer(self, fd):
+        super().unregister_writer(fd)
         kev = select.kevent(fd, select.KQ_FILTER_WRITE, select.KQ_EV_DELETE)
         self._kqueue.control([kev], 0, 0)
 
@@ -264,16 +247,25 @@ class KqueueMixin(PollsterBase):
             fd = kev.ident
             flag = kev.filter
             if flag == select.KQ_FILTER_READ and fd in self.readers:
-                dcall = self.readers[fd]
-                events.append((fd, 'r', dcall))
+                events.append((fd, 'r', self.readers[fd]))
             elif flag == select.KQ_FILTER_WRITE and fd in self.writers:
-                dcall = self.writers[fd]
-                events.append((fd, 'w', dcall))
+                events.append((fd, 'w', self.writers[fd]))
         return events
 
 
+# Pick the best pollster class for the platform.
+if hasattr(select, 'kqueue'):
+    best_pollster = KqueuePollster
+elif hasattr(select, 'epoll'):
+    best_pollster = EPollPollster
+elif hasattr(select, 'poll'):
+    best_pollster = PollPollster
+else:
+    best_pollster = SelectPollster
+
+
 class DelayedCall:
-    """Object returned by call_soon/later(), add_reader/writer()."""
+    """Object returned by callback registration methods."""
 
     def __init__(self, when, callback, args):
         self.when = when
@@ -294,28 +286,44 @@ class DelayedCall:
         return self.when == other.when
 
 
-class EventLoopMixin(PollsterBase):
+class EventLoop:
     """Event loop functionality.
 
-    This is an abstract class, inheriting from the abstract class
-    PollsterBase.  A concrete class can be formed trivially by
-    inheriting from any of the pollster mixin classes; the concrete
-    class EventLoop is such a concrete class using the preferred mixin
-    given the platform.
-
     This defines public APIs call_soon(), call_later(), run_once() and
-    run().  It also inherits public APIs add_reader(), add_writer(),
-    remove_reader(), remove_writer() from the mixin class.  The APIs
-    pollable() and poll(), implemented by the mix-in, are not part of
-    the public API.
+    run().  It also wraps Pollster APIs register_reader(),
+    register_writer(), remove_reader(), remove_writer() with
+    add_reader() etc.
 
     This class's instance variables are not part of its API.
     """
 
-    def __init__(self):
+    def __init__(self, pollster=None):
         super().__init__()
+        if pollster is None:
+            pollster = best_pollster()
+        self.pollster = pollster
         self.ready = collections.deque()  # [(callback, args), ...]
         self.scheduled = []  # [(when, callback, args), ...]
+
+    def add_reader(self, fd, callback, *args):
+        """Add a reader callback.  Return a DelayedCall instance."""
+        dcall = DelayedCall(None, callback, args)
+        self.pollster.register_reader(fd, dcall)
+        return dcall
+
+    def remove_reader(self, fd):
+        """Remove a reader callback."""
+        self.pollster.unregister_reader(fd)
+
+    def add_writer(self, fd, callback, *args):
+        """Add a writer callback.  Return a DelayedCall instance."""
+        dcall = DelayedCall(None, callback, args)
+        self.pollster.register_writer(fd, dcall)
+        return dcall
+
+    def remove_writer(self, fd):
+        """Remove a writer callback."""
+        self.pollster.unregister_writer(fd)
 
     def add_callback(self, dcall):
         """Add a DelayedCall to ready or scheduled."""
@@ -398,14 +406,14 @@ class EventLoopMixin(PollsterBase):
             heapq.heappop(self.scheduled)
 
         # Inspect the poll queue.
-        if self.pollable():
+        if self.pollster.pollable():
             if self.scheduled:
                 when = self.scheduled[0].when
                 timeout = max(0, when - time.time())
             else:
                 timeout = None
             t0 = time.time()
-            events = self.poll(timeout)
+            events = self.pollster.poll(timeout)
             t1 = time.time()
             argstr = '' if timeout is None else ' %.3f' % timeout
             logging.debug('poll%s took %.3f seconds', argstr, t1-t0)
@@ -427,27 +435,8 @@ class EventLoopMixin(PollsterBase):
         writable file descriptors, or scheduled callbacks (of either
         variety).
         """
-        while self.ready or self.scheduled or self.pollable():
+        while self.ready or self.scheduled or self.pollster.pollable():
             self.run_once()
-
-
-# Select the most appropriate base class for the platform.
-if hasattr(select, 'kqueue'):
-    poll_base = KqueueMixin
-elif hasattr(select, 'epoll'):
-    poll_base = EPollMixin
-elif hasattr(select, 'poll'):
-    poll_base = PollMixin
-else:
-    poll_base = SelectMixin
-
-
-class EventLoop(EventLoopMixin, poll_base):
-    """Event loop implementation using the optimal pollster mixin."""
-
-    def __init__(self):
-        super().__init__()
-        logging.info('Using Pollster base class %r', poll_base.__name__)
 
 
 MAX_WORKERS = 5  # Default max workers when creating an executor.

@@ -1,9 +1,5 @@
 TO DO SMALLER TASKS
 
-- Make pollster take an abstract token and return it.
-
-- Make pollster a sub-object instead of a superclass of the eventloop.
-
 - Should poll() return a list of tokens or a list of (fd, flag, token)?
 
 

@@ -90,10 +90,7 @@ class PollsterBase:
 
         The return value is a list of events; it is empty when the
         timeout expired before any events were ready.  Each event
-        is a tuple of the form (fd, flag, token):
-          fd: the file descriptor
-          flag: 'r' or 'w' (to distinguish readers from writers)
-          token: whatever you passed to register_reader/writer().
+        is a token previously passed to register_reader/writer().
         """
         raise NotImplementedError
 
@@ -105,8 +102,8 @@ class SelectPollster(PollsterBase):
         readable, writable, _ = select.select(self.readers, self.writers,
                                               [], timeout)
         events = []
-        events += ((fd, 'r', self.readers[fd]) for fd in readable)
-        events += ((fd, 'w', self.writers[fd]) for fd in writable)
+        events += (self.readers[fd] for fd in readable)
+        events += (self.writers[fd] for fd in writable)
         return events
 
 
@@ -152,10 +149,10 @@ class PollPollster(PollsterBase):
         for fd, flags in self._poll.poll(msecs):
             if flags & (select.POLLIN | select.POLLHUP):
                 if fd in self.readers:
-                    events.append((fd, 'r', self.readers[fd]))
+                    events.append(self.readers[fd])
             if flags & (select.POLLOUT | select.POLLHUP):
                 if fd in self.writers:
-                    events.append((fd, 'w', self.writers[fd]))
+                    events.append(self.writers[fd])
         return events
 
 
@@ -204,10 +201,10 @@ class EPollPollster(PollsterBase):
         for fd, eventmask in self._epoll.poll(timeout):
             if eventmask & select.EPOLLIN:
                 if fd in self.readers:
-                    events.append((fd, 'r', self.readers[fd]))
+                    events.append(self.readers[fd])
             if eventmask & select.EPOLLOUT:
                 if fd in self.writers:
-                    events.append((fd, 'w', self.writers[fd]))
+                    events.append(self.writers[fd])
         return events
 
 
@@ -247,9 +244,9 @@ class KqueuePollster(PollsterBase):
             fd = kev.ident
             flag = kev.filter
             if flag == select.KQ_FILTER_READ and fd in self.readers:
-                events.append((fd, 'r', self.readers[fd]))
+                events.append(self.readers[fd])
             elif flag == select.KQ_FILTER_WRITE and fd in self.writers:
-                events.append((fd, 'w', self.writers[fd]))
+                events.append(self.writers[fd])
         return events
 
 
@@ -267,10 +264,11 @@ else:
 class DelayedCall:
     """Object returned by callback registration methods."""
 
-    def __init__(self, when, callback, args):
+    def __init__(self, when, callback, args, kwds=None):
         self.when = when
         self.callback = callback
         self.args = args
+        self.kwds = kwds
         self.cancelled = False
 
     def cancel(self):
@@ -396,7 +394,10 @@ class EventLoop:
             dcall = self.ready.popleft()
             if not dcall.cancelled:
                 try:
-                    dcall.callback(*dcall.args)
+                    if dcall.kwds:
+                        dcall.callback(*dcall.args, **dcall.kwds)
+                    else:
+                        dcall.callback(*dcall.args)
                 except Exception:
                     logging.exception('Exception in callback %s %r',
                                       dcall.callback, dcall.args)
@@ -417,7 +418,7 @@ class EventLoop:
             t1 = time.time()
             argstr = '' if timeout is None else ' %.3f' % timeout
             logging.debug('poll%s took %.3f seconds', argstr, t1-t0)
-            for fd, flag, dcall in events:
+            for dcall in events:
                 self.add_callback(dcall)
 
         # Handle 'later' callbacks that are ready.

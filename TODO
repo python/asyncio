@@ -1,6 +1,6 @@
 TO DO SMALLER TASKS
 
-- Should poll() return a list of tokens or a list of (fd, flag, token)?
+- Echo client demo.
 
 
 TO DO LARGER TASKS
@@ -16,9 +16,7 @@ TO DO LARGER TASKS
 
 TO DO LATER
 
-- Do we need call_every()?
-
-- What to do about callbacks with keyword-only arguments?
+- Do we need call_every()?  (Easily emulated with a loop and sleep().)
 
 - Ensure multiple tasks can do atomic writes to the same pipe (since
   UNIX guarantees that short writes to pipes are atomic).

@@ -199,6 +199,9 @@ def run(arg=None):
             t = Task(arg)
         t.start()
     context.eventloop.run()
+    if t is not None and t.exception is not None:
+            logging.error('Uncaught exception in startup task: %r',
+                          t.exception)
     return t
 
 

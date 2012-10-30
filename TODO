@@ -60,6 +60,8 @@ TO DO LATER
   OTOH see 
   https://github.com/zeromq/pyzmq/blob/master/zmq/eventloop/ioloop.py
 
+- Study goroutines (again).
+
 
 FROM OLDER LIST
 

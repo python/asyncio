@@ -36,8 +36,8 @@ class Future:
                 value = f.value
         except StopIteration as err:
             self.value = err.value
-            
-            
+
+
 
 def task(func):  # Decorator
     def wrapper(*args):

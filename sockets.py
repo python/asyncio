@@ -66,12 +66,12 @@ class SocketTransport:
                 return self.sock.recv(n)
             except socket.error as err:
                 if err.errno in _TRYAGAIN:
-                    yield from scheduling.block_r(self.sock.fileno())
+                    pass
                 elif err.errno in _DISCONNECTED:
-                    # Can this happen?
                     return b''
                 else:
                     raise  # Unexpected, propagate.
+            yield from scheduling.block_r(self.sock.fileno())
 
     def send(self, data):
         """COROUTINE; Send data to the socket, blocking until all written.
@@ -83,7 +83,7 @@ class SocketTransport:
                 n = self.sock.send(data)
             except socket.error as err:
                 if err.errno in _TRYAGAIN:
-                    yield from scheduling.block_w(self.sock.fileno())
+                    pass
                 elif err.errno in _DISCONNECTED:
                     return False
                 else:
@@ -93,6 +93,8 @@ class SocketTransport:
                 if n == len(data):
                     break
                 data = data[n:]
+                continue
+            yield from scheduling.block_w(self.sock.fileno())
 
         return True
 

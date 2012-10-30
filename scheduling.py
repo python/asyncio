@@ -184,9 +184,22 @@ class Task:
         yield
 
 
-def run():
-    """Run the event loop until it's out of work."""
+def run(arg=None):
+    """Run the event loop until it's out of work.
+
+    If you pass a generator, it will be spawned for you.
+    If you pass a Task, it will be started for you.
+    Returns the task.
+    """
+    t = None
+    if arg is not None:
+        if isinstance(arg, Task):
+            t = arg
+        else:
+            t = Task(arg)
+        t.start()
     context.eventloop.run()
+    return t
 
 
 def sleep(secs):

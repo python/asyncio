@@ -100,10 +100,8 @@ def main():
         level = logging.WARN
     logging.basicConfig(level=level)
 
-    # Run doit() as a task.
-    task = scheduling.Task(doit(), timeout=2.1)
-    task.start()
-    scheduling.run()
+    # Run scheduler, starting it off with doit().
+    task = scheduling.run(doit())
     if task.exception:
         print('Exception:', repr(task.exception))
     else:

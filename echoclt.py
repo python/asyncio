@@ -15,12 +15,19 @@ import sockets
 def echoclient(host, port):
     """COROUTINE"""
     testdata = b'hi hi hi ha ha ha\n'
-    trans = yield from sockets.create_transport(host, port, af=socket.AF_INET)
-    ok = yield from trans.send(testdata)
-    if ok:
-        response = yield from trans.recv(100)
-    trans.close()
-    return response == testdata.upper()
+    try:
+        trans = yield from sockets.create_transport(host, port,
+                                                    af=socket.AF_INET)
+    except OSError:
+        return False
+    try:
+        ok = yield from trans.send(testdata)
+        if ok:
+            response = yield from trans.recv(100)
+            ok = response == testdata.upper()
+        return ok
+    finally:
+        trans.close()
 
 
 def doit(n):

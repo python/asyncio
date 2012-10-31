@@ -30,7 +30,8 @@ def doit():
     """COROUTINE: Set the wheels in motion."""
     # Set up listener.
     listener = yield from sockets.create_listener('localhost', 1111,
-                                                  af=socket.AF_INET)
+                                                  af=socket.AF_INET,
+                                                  backlog=100)
     logging.info('Listening on %r', listener.sock.getsockname())
 
     # Loop accepting connections.

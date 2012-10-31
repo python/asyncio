@@ -18,6 +18,8 @@ TO DO LARGER TASKS
 - More systematic approach to logging.  Logger objects?  What about
   heavy-duty logging, tracking essentially all task state changes?
 
+- Restructure directory, move demos and benchmarks to subdirectories.
+
 
 TO DO LATER
 

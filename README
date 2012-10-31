@@ -13,10 +13,11 @@ http://www.cosc.canterbury.ac.nz/greg.ewing/python/generators/yf_current/Example
 A message I posted with some explanation of the design:
 http://mail.python.org/pipermail/python-ideas/2012-October/017501.html
 
-Essential files here:
+Essential files here (in top-to-bottom ordering):
 
-- main.py: the main program for testing, and a rough HTTP client
-- sockets.py: transports for sockets and SSL, and a buffering layer
+- main.py: the main program for testing
+- http_client.py: a rough HTTP/1.0 client
+- sockets.py: transports for sockets and (client) SSL, and a buffering layer
 - scheduling.py: a Task class and related stuff; this is where the PEP
   380 scheduler is implemented
 - polling.py: an event loop and basic polling implementations for:
@@ -28,8 +29,10 @@ Secondary files:
 - Makefile: various quick shell commands
 - README: this file
 - TODO: longer list of TODO items and general thoughts
+- http_server.py: enough of an HTTP server to point 'ab' at
 - longlines.py: stupid style checker
 - p3time.py: benchmark yield from vs. plain functions
+- tulip_bench.py: yet another benchmark (like p3time.py and yyftime.py)
 - xkcd.py: *synchronous* ssl example
 - yyftime.py: benchmark yield from vs. yield <future>
 

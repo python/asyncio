@@ -1,16 +1,13 @@
 TO DO SMALLER TASKS
 
-- Move accept loop into Listener class.  (Windows works better if you
-  make many AcceptEx() calls in parallel.)
-
-- Echo client demo.
+- Make Task more like Future; getting result() should re-raise exception.
 
 
 TO DO LARGER TASKS
 
 - Need more examples.
 
-- Benchmarkable HTTP server?
+- Benchmarkable but more realistic HTTP server?
 
 - Example of using UDP.
 
@@ -20,6 +17,10 @@ TO DO LARGER TASKS
 TO DO LATER
 
 - Wrap select(), epoll() etc. in try/except checking for EINTR.
+
+- Move accept loop into Listener class?  (Windows is said to work
+  better if you make many AcceptEx() calls in parallel.)  OTOH we can
+  already accept many incoming connections without suspending.
 
 - When multiple tasks are accessing the same socket, they should
   either get interleaved I/O or an immediate exception; it should not

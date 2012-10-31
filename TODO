@@ -1,3 +1,5 @@
+# -*- Mode: text -*-
+   
 TO DO SMALLER TASKS
 
 - Make Task more like Future; getting result() should re-raise exception.
@@ -12,6 +14,9 @@ TO DO LARGER TASKS
 - Example of using UDP.
 
 - Write up a tutorial for the scheduling API.
+
+- More systematic approach to logging.  Logger objects?  What about
+  heavy-duty logging, tracking essentially all task state changes?
 
 
 TO DO LATER
@@ -126,3 +131,10 @@ MISTAKES I MADE
 
 - Forgot to set the connection socket returned by accept() in
   nonblocking mode.
+
+- Nastiest so far (cost me about a day): A race condition in
+  call_in_thread() where the Future's done_callback (which was
+  task.unblock()) would run immediately at the time when
+  add_done_callback() was called, and this screwed over the task
+  state.  Solution: wrap the callback in eventloop.call_later().
+  Ironically, I had a comment stating there might be a race condition.

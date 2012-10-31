@@ -93,8 +93,19 @@ class Task:
         self.done_callbacks.append(done_callback)
 
     def __repr__(self):
-        return 'Task<%r, timeout=%s>(alive=%r, result=%r, exception=%r)' % (
-            self.name, self.timeout, self.alive, self.result, self.exception)
+        parts = [self.name]
+        if self.alive:
+            is_current = (self is context.current_task)
+            if self.blocked:
+                parts.append('blocking' if is_current else 'blocked')
+            else:
+                parts.append('running' if is_current else 'runnable')
+        else:
+            if self.exception:
+                parts.append('exception=%r' % self.exception)
+            else:
+                parts.append('result=%r' % self.result)
+        return 'Task<' + ', '.join(parts) + '>'
 
     def cancel(self):
         if self.alive:

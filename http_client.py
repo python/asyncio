@@ -11,7 +11,7 @@ import time
 import sockets
 
 
-def urlfetch(host, port=None, method='GET', path='/',
+def urlfetch(host, port=None, path='/', method='GET',
              body=None, hdrs=None, encoding='utf-8', ssl=None, af=0):
     """COROUTINE: Make an HTTP 1.0 request."""
     t0 = time.time()

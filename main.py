@@ -34,6 +34,22 @@ import sys
 import scheduling
 import http_client
 
+
+
+def doit2():
+    argses = [
+        ('localhost', 8080, '/'),
+        ('127.0.0.1', 8080, '/home'),
+        ('python.org', 80, '/'),
+        ('xkcd.com', 443, '/'),
+        ]
+    results = yield from scheduling.map_over(
+        lambda args: http_client.urlfetch(*args), argses, timeout=2)
+    for res in results:
+        print('-->', res)
+    return []
+
+
 def doit():
     TIMEOUT = 2
     tasks = set()
@@ -102,6 +118,8 @@ def main():
     task = scheduling.run(doit())
     if task.exception:
         print('Exception:', repr(task.exception))
+        if isinstance(task.exception, AssertionError):
+            raise task.exception
     else:
         for t in task.result:
             print(t.name + ':',

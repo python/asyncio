@@ -115,8 +115,10 @@ class Task:
 
     def cancel(self):
         if self.alive:
-            self.must_cancel = True
-            self.unblock()
+            if not self.must_cancel and not self.cancelled:
+                self.must_cancel = True
+                if self.blocked:
+                    self.unblock()
 
     def step(self):
         assert self.alive, self
@@ -159,6 +161,10 @@ class Task:
         assert not self.blocked, self
         self.blocked = True
         self.unblocker = (unblock_callback, unblock_args)
+
+    def unblock_if_alive(self):
+        if self.alive:
+            self.unblock()
 
     def unblock(self, unused=None):
         # Ignore optional argument so we can be a Future's done_callback.
@@ -245,9 +251,13 @@ def call_in_thread(func, *args, executor=None):
     task.block(future.cancel)
     # If the thread managed to complete before we get here,
     # add_done_callback() will call the callback right now.  Make sure
-    # the unblock() call doesn't happen until later.
-    # TODO: Make unblock() robust so this doesn't hurt?
-    future.add_done_callback(lambda _: eventloop.call_soon(task.unblock))
+    # the unblock() call doesn't happen until later.  But then, the
+    # task may already have been cancelled (and it may have been too
+    # late to cancel the Future) so it should be okay if this call
+    # finds the task deceased.  For that purpose we have
+    # unblock_if_alive().
+    future.add_done_callback(
+        lambda _: eventloop.call_soon(task.unblock_if_alive))
     yield
     assert future.done()
     return future.result()
@@ -302,3 +312,29 @@ def with_timeout(timeout, gen, name=None):
     assert timeout is not None
     task = Task(gen, name, timeout=timeout)
     return (yield from task.wait())
+
+
+def map_over(gen, *args, timeout=None):
+    """COROUTINE: map a generator over one or more iterables.
+
+    E.g. map_over(foo, xs, ys) runs
+
+      Task(foo(x, y) for x, y in zip(xs, ys)
+
+    and returns a list of all results (in that order).  However if any
+    task raises an exception, the remaining tasks are cancelled and
+    the exception is propagated.
+    """
+    # gen is a generator function.
+    tasks = [Task(gobj, timeout=timeout) for gobj in map(gen, *args)]
+    todo = set(tasks)
+    while todo:
+        ts = yield from wait_for(1, todo)
+        for t in ts:
+            assert not t.alive, t
+            todo.remove(t)
+            if t.exception is not None:
+                for other in todo:
+                    other.cancel()
+                raise t.exception
+    return [t.result for t in tasks]

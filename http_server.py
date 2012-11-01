@@ -46,7 +46,6 @@ def doit():
     while True:
         conn, addr = yield from listener.accept()
         t = scheduling.Task(handler(conn, addr))
-        t.start()
 
 
 def main():

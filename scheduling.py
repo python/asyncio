@@ -86,6 +86,8 @@ class Task:
         self.result = None
         self.exception = None
         self.done_callbacks = []
+        # Start the task immediately.
+        self.eventloop.call_soon(self.step)
 
     def add_done_callback(self, done_callback):
         # For better or for worse, the callback will always be called
@@ -151,10 +153,6 @@ class Task:
                 for callback in self.done_callbacks:
                     self.eventloop.call_soon(callback, self)
 
-    def start(self):
-        assert self.alive, self
-        self.eventloop.call_soon(self.step)
-
     def block(self, unblock_callback=None, *unblock_args):
         assert self is context.current_task, self
         assert self.alive, self
@@ -203,7 +201,7 @@ def run(arg=None):
     """Run the event loop until it's out of work.
 
     If you pass a generator, it will be spawned for you.
-    If you pass a Task, it will be started for you.
+    You can also pass a task (already started).
     Returns the task.
     """
     t = None
@@ -212,7 +210,6 @@ def run(arg=None):
             t = arg
         else:
             t = Task(arg)
-        t.start()
     context.eventloop.run()
     if t is not None and t.exception is not None:
             logging.error('Uncaught exception in startup task: %r',
@@ -304,5 +301,4 @@ def with_timeout(timeout, gen, name=None):
     """COROUTINE: Run generator synchronously with a timeout."""
     assert timeout is not None
     task = Task(gen, name, timeout=timeout)
-    task.start()
     return (yield from task.wait())

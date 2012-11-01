@@ -38,7 +38,6 @@ def doit():
     while True:
         conn, addr = yield from listener.accept()
         t = scheduling.Task(handler(conn, addr))
-        t.start()
 
 
 def main():
@@ -55,7 +54,6 @@ def main():
 
     # Start the task that starts the listener.
     t = scheduling.Task(doit())
-    t.start()
 
     # Run the main loop.
     scheduling.run()

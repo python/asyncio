@@ -36,7 +36,6 @@ def doit(n):
     tasks = set()
     for i in range(n):
         t = scheduling.Task(echoclient('127.0.0.1', 1111), 'client-%d' % i)
-        t.start()
         tasks.add(t)
     ok = 0
     bad = 0

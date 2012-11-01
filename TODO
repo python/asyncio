@@ -4,6 +4,12 @@ TO DO SMALLER TASKS
 
 - Make Task more like Future; getting result() should re-raise exception.
 
+- Add a decorator just for documenting a coroutine.  It should set a
+  flag on the function.  It should not interfere with methods,
+  staticmethod, classmethod and the like.  The Task constructor should
+  check the flag.  The decorator should notice if the wrapped function
+  is not a generator.
+
 
 TO DO LARGER TASKS
 
@@ -55,10 +61,6 @@ TO DO LATER
 - Do we need _async suffixes to all async APIs?
 
 - Do we need synchronous parallel APIs for all async APIs?
-
-- Add a decorator just for documenting a coroutine.  It should set a
-  flag on the function.  It should not interfere with methods,
-  staticmethod, classmethod and the like.
 
 - Could BufferedReader reuse the standard io module's readers???
 

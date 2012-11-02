@@ -1,0 +1,43 @@
+Tulip is the codename for my attempt at understanding PEP-380 style
+coroutines (i.e. those using generators and 'yield from').  
+
+*** This requires Python 3.3 or later! ***
+
+For reference, see many threads in python-ideas@python.org started in
+October 2012, especially those with "The async API of the Future" in
+their subject, and the various spin-off threads.
+
+A particularly influential tutorial by Greg Ewing:
+http://www.cosc.canterbury.ac.nz/greg.ewing/python/generators/yf_current/Examples/Scheduler/scheduler.txt
+
+A message I posted with some explanation of the design:
+http://mail.python.org/pipermail/python-ideas/2012-October/017501.html
+
+Essential files here (in top-to-bottom ordering):
+
+- main.py: the main program for testing
+- http_client.py: a rough HTTP/1.0 client
+- sockets.py: transports for sockets and (client) SSL, and a buffering layer
+- scheduling.py: a Task class and related stuff; this is where the PEP
+  380 scheduler is implemented
+- polling.py: an event loop and basic polling implementations for:
+  select(), poll(), epoll(), kqueue()
+
+Secondary files:
+
+- .hgignore: files I don't care about
+- Makefile: various quick shell commands
+- README: this file
+- TODO: longer list of TODO items and general thoughts
+- http_server.py: enough of an HTTP server to point 'ab' at
+- longlines.py: stupid style checker
+- p3time.py: benchmark yield from vs. plain functions
+- tulip_bench.py: yet another benchmark (like p3time.py and yyftime.py)
+- xkcd.py: *synchronous* ssl example
+- yyftime.py: benchmark yield from vs. yield <future>
+
+Copyright/license: Open source, Apache 2.0.  Enjoy.
+
+Master Mercurial repo: http://code.google.com/p/tulip/
+
+--Guido van Rossum <guido@python.org>

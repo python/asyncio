@@ -71,7 +71,7 @@ def main():
             n = int(arg)
             break
 
-    # Run the main loop.
+    # Run scheduler, starting it off with doit().
     scheduling.run(doit(n))
 
 

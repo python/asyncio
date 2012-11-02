@@ -52,11 +52,8 @@ def main():
         level = logging.WARN
     logging.basicConfig(level=level)
 
-    # Start the task that starts the listener.
-    t = scheduling.Task(doit())
-
-    # Run the main loop.
-    scheduling.run()
+    # Run scheduler, starting it off with doit().
+    scheduling.run(doit())
 
 
 if __name__ == '__main__':

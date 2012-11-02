@@ -27,5 +27,4 @@ def main():
 import logging
 logging.basicConfig(level=logging.DEBUG)
 
-scheduling.Task(main())
-scheduling.run()
+scheduling.run(main())

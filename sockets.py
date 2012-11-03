@@ -30,6 +30,7 @@ import ssl
 
 # Local imports.
 import scheduling
+from scheduling import context
 
 # Errno values indicating the connection was disconnected.
 _DISCONNECTED = frozenset((errno.ECONNRESET,
@@ -61,9 +62,13 @@ class SocketTransport:
         returns b''.
         """
         assert n >= 0, n
+
         while True:
             try:
-                return self.sock.recv(n)
+                f = context.eventloop.proactor.recv(self.sock, n)
+                if not f.done():
+                    yield from scheduling.block_future(f)
+                return f.result()
             except socket.error as err:
                 if err.errno in _TRYAGAIN:
                     pass
@@ -71,7 +76,6 @@ class SocketTransport:
                     return b''
                 else:
                     raise  # Unexpected, propagate.
-            yield from scheduling.block_r(self.sock.fileno())
 
     def send(self, data):
         """COROUTINE; Send data to the socket, blocking until all written.
@@ -80,7 +84,10 @@ class SocketTransport:
         """
         while data:
             try:
-                n = self.sock.send(data)
+                f = context.eventloop.proactor.send(self.sock, data)
+                if not f.done():
+                    yield from scheduling.block_future(f)
+                n = f.result()
             except socket.error as err:
                 if err.errno in _TRYAGAIN:
                     pass
@@ -93,8 +100,6 @@ class SocketTransport:
                 if n == len(data):
                     break
                 data = data[n:]
-                continue
-            yield from scheduling.block_w(self.sock.fileno())
 
         return True
 
@@ -122,9 +127,9 @@ class SslTransport:
             try:
                 self.sslsock.do_handshake()
             except ssl.SSLWantReadError:
-                yield from scheduling.block_r(self.sslsock.fileno())
+                yield from scheduling.block_r(self.sslsock)
             except ssl.SSLWantWriteError:
-                yield from scheduling.block_w(self.sslsock.fileno())
+                yield from scheduling.block_w(self.sslsock)
             else:
                 break
 
@@ -137,12 +142,12 @@ class SslTransport:
             try:
                 return self.sslsock.recv(n)
             except ssl.SSLWantReadError:
-                yield from scheduling.block_r(self.sslsock.fileno())
+                yield from scheduling.block_r(self.sslsock)
             except ssl.SSLWantWriteError:
-                yield from scheduling.block_w(self.sslsock.fileno())
+                yield from scheduling.block_w(self.sslsock)
             except socket.error as err:
                 if err.errno in _TRYAGAIN:
-                    yield from scheduling.block_r(self.sock.fileno())
+                    yield from scheduling.block_r(self.sslsock)
                 elif err.errno in _DISCONNECTED:
                     # Can this happen?
                     return b''
@@ -155,12 +160,12 @@ class SslTransport:
             try:
                 n = self.sslsock.send(data)
             except ssl.SSLWantReadError:
-                yield from scheduling.block_r(self.sslsock.fileno())
+                yield from scheduling.block_r(self.sslsock)
             except ssl.SSLWantWriteError:
-                yield from scheduling.block_w(self.sslsock.fileno())
+                yield from scheduling.block_w(self.sslsock)
             except socket.error as err:
                 if err.errno in _TRYAGAIN:
-                    yield from scheduling.block_w(self.sock.fileno())
+                    yield from scheduling.block_w(self.sslsock)
                 elif err.errno in _DISCONNECTED:
                     return False
                 else:
@@ -203,6 +208,8 @@ class BufferedReader:
         count = 0
         while n > count:
             block = yield from self.read(n - count)
+            if not block:
+                break
             blocks.append(block)
             count += len(block)
         return b''.join(blocks)
@@ -240,15 +247,10 @@ class BufferedReader:
 
 def connect(sock, address):
     """COROUTINE: Connect a socket to an address."""
-    try:
-        sock.connect(address)
-    except socket.error as err:
-        if err.errno != errno.EINPROGRESS:
-            raise
-    yield from scheduling.block_w(sock.fileno())
-    err = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
-    if err != 0:
-        raise IOError(err, 'Connection refused')
+    f = context.eventloop.proactor.connect(sock, address)
+    if not f.done():
+        yield from scheduling.block_future(f)
+    return f.result()
 
 
 def getaddrinfo(host, port, af=0, socktype=0, proto=0):
@@ -308,15 +310,13 @@ class Listener:
         """COROUTINE: Accept a connection."""
         while True:
             try:
-                conn, addr = self.sock.accept()
+                f = context.eventloop.proactor.accept(self.sock)
+                if not f.done():
+                    yield from scheduling.block_future(f)
+                return f.result()
             except socket.error as err:
-                if err.errno in _TRYAGAIN:
-                    yield from scheduling.block_r(self.sock.fileno())
-                else:
-                    raise  # Unexpected, propagate.
-            else:
-                conn.setblocking(False)
-                return conn, addr
+                if err.errno not in _TRYAGAIN:
+                    raise
 
 
 def create_listener(host, port, af=0, socktype=0, proto=0,

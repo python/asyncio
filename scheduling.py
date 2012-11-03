@@ -187,16 +187,6 @@ class Task:
                 self.unblocker = None
         self.eventloop.call_soon(self.step)
 
-    def block_io(self, fd, flag):
-        assert isinstance(fd, int), repr(fd)
-        assert flag in ('r', 'w'), repr(flag)
-        if flag == 'r':
-            self.block(self.eventloop.remove_reader, fd)
-            self.eventloop.add_reader(fd, self.unblock)
-        else:
-            self.block(self.eventloop.remove_writer, fd)
-            self.eventloop.add_writer(fd, self.unblock)
-
     def wait(self):
         """COROUTINE: Wait until this task is finished."""
         current_task = context.current_task
@@ -236,33 +226,46 @@ def sleep(secs):
     yield
 
 
-def block_r(fd):
-    """COROUTINE: Block until a file descriptor is ready for reading."""
-    context.current_task.block_io(fd, 'r')
+def block_future(future):
+    """COROUTINE: Block until future is set"""
+    task = context.current_task
+    future.add_done_callback(task.unblock)
+    task.block()
     yield
 
 
-def block_w(fd):
-    """COROUTINE: Block until a file descriptor is ready for writing."""
-    context.current_task.block_io(fd, 'w')
-    yield
+def block_r(obj):
+    """COROUTINE: Block until object is readable"""
+    # XXX not implemented for IOCP.
+    f = context.eventloop.proactor._readable(obj)
+    if not f.done():
+        yield from block_future(f)
+
+
+def block_w(obj):
+    """COROUTINE: Block until object is writable"""
+    # XXX not implemented for IOCP.
+    f = context.eventloop.proactor._writable(obj)
+    if not f.done():
+        yield from block_future(f)
 
 
 def call_in_thread(func, *args, executor=None):
     """COROUTINE: Run a function in a thread."""
     task = context.current_task
     eventloop = context.eventloop
-    future = context.threadrunner.submit(func, *args, executor=executor)
+    def reschedule(_):
+        eventloop.call_soon(task.unblock_if_alive)
+    future = context.threadrunner.submit(
+        func, *args, executor=executor, insert_callback=reschedule)
     task.block(future.cancel)
     # If the thread managed to complete before we get here,
-    # add_done_callback() will call the callback right now.  Make sure
-    # the unblock() call doesn't happen until later.  But then, the
-    # task may already have been cancelled (and it may have been too
-    # late to cancel the Future) so it should be okay if this call
-    # finds the task deceased.  For that purpose we have
-    # unblock_if_alive().
-    future.add_done_callback(
-        lambda _: eventloop.call_soon(task.unblock_if_alive))
+    # reschedule() have been called.  reschedule() must be the *first*
+    # callback added to future.  Otherwise the eventloop may exit
+    # before the current task is rescheduled.  The task may already
+    # have been cancelled (and it may have been too late to cancel the
+    # Future) so it should be okay if this call finds the task
+    # deceased.  For that purpose we use unblock_if_alive().
     yield
     assert future.done()
     return future.result()

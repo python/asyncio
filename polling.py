@@ -41,224 +41,10 @@ import logging
 import os
 import select
 import time
+import socket
 
-
-class PollsterBase:
-    """Base class for all polling implementations.
-
-    This defines an interface to register and unregister readers and
-    writers for specific file descriptors, and an interface to get a
-    list of events.  There's also an interface to check whether any
-    readers or writers are currently registered.
-    """
-
-    def __init__(self):
-        super().__init__()
-        self.readers = {}  # {fd: token, ...}.
-        self.writers = {}  # {fd: token, ...}.
-
-    def pollable(self):
-        """Return True if any readers or writers are currently registered."""
-        return bool(self.readers or self.writers)
-
-    # Subclasses are expected to extend the add/remove methods.
-
-    def register_reader(self, fd, token):
-        """Add or update a reader for a file descriptor."""
-        self.readers[fd] = token
-
-    def register_writer(self, fd, token):
-        """Add or update a writer for a file descriptor."""
-        self.writers[fd] = token
-
-    def unregister_reader(self, fd):
-        """Remove the reader for a file descriptor."""
-        del self.readers[fd]
-
-    def unregister_writer(self, fd):
-        """Remove the writer for a file descriptor."""
-        del self.writers[fd]
-
-    def poll(self, timeout=None):
-        """Poll for events.  A subclass must implement this.
-
-        If timeout is omitted or None, this blocks until at least one
-        event is ready.  Otherwise, timeout gives a maximum time to
-        wait (an int of float in seconds) -- the method returns as
-        soon as at least one event is ready or when the timeout is
-        expired.  For a non-blocking poll, pass 0.
-
-        The return value is a list of events; it is empty when the
-        timeout expired before any events were ready.  Each event
-        is a token previously passed to register_reader/writer().
-        """
-        raise NotImplementedError
-
-
-class SelectPollster(PollsterBase):
-    """Pollster implementation using select."""
-
-    def poll(self, timeout=None):
-        readable, writable, _ = select.select(self.readers, self.writers,
-                                              [], timeout)
-        events = []
-        events += (self.readers[fd] for fd in readable)
-        events += (self.writers[fd] for fd in writable)
-        return events
-
-
-class PollPollster(PollsterBase):
-    """Pollster implementation using poll."""
-
-    def __init__(self):
-        super().__init__()
-        self._poll = select.poll()
-
-    def _update(self, fd):
-        assert isinstance(fd, int), fd
-        flags = 0
-        if fd in self.readers:
-            flags |= select.POLLIN
-        if fd in self.writers:
-            flags |= select.POLLOUT
-        if flags:
-            self._poll.register(fd, flags)
-        else:
-            self._poll.unregister(fd)
-
-    def register_reader(self, fd, callback, *args):
-        super().register_reader(fd, callback, *args)
-        self._update(fd)
-
-    def register_writer(self, fd, callback, *args):
-        super().register_writer(fd, callback, *args)
-        self._update(fd)
-
-    def unregister_reader(self, fd):
-        super().unregister_reader(fd)
-        self._update(fd)
-
-    def unregister_writer(self, fd):
-        super().unregister_writer(fd)
-        self._update(fd)
-
-    def poll(self, timeout=None):
-        # Timeout is in seconds, but poll() takes milliseconds.
-        msecs = None if timeout is None else int(round(1000 * timeout))
-        events = []
-        for fd, flags in self._poll.poll(msecs):
-            if flags & (select.POLLIN | select.POLLHUP):
-                if fd in self.readers:
-                    events.append(self.readers[fd])
-            if flags & (select.POLLOUT | select.POLLHUP):
-                if fd in self.writers:
-                    events.append(self.writers[fd])
-        return events
-
-
-class EPollPollster(PollsterBase):
-    """Pollster implementation using epoll."""
-
-    def __init__(self):
-        super().__init__()
-        self._epoll = select.epoll()
-
-    def _update(self, fd):
-        assert isinstance(fd, int), fd
-        eventmask = 0
-        if fd in self.readers:
-            eventmask |= select.EPOLLIN
-        if fd in self.writers:
-            eventmask |= select.EPOLLOUT
-        if eventmask:
-            try:
-                self._epoll.register(fd, eventmask)
-            except IOError:
-                self._epoll.modify(fd, eventmask)
-        else:
-            self._epoll.unregister(fd)
-
-    def register_reader(self, fd, callback, *args):
-        super().register_reader(fd, callback, *args)
-        self._update(fd)
-
-    def register_writer(self, fd, callback, *args):
-        super().register_writer(fd, callback, *args)
-        self._update(fd)
-
-    def unregister_reader(self, fd):
-        super().unregister_reader(fd)
-        self._update(fd)
-
-    def unregister_writer(self, fd):
-        super().unregister_writer(fd)
-        self._update(fd)
-
-    def poll(self, timeout=None):
-        if timeout is None:
-            timeout = -1  # epoll.poll() uses -1 to mean "wait forever".
-        events = []
-        for fd, eventmask in self._epoll.poll(timeout):
-            if eventmask & select.EPOLLIN:
-                if fd in self.readers:
-                    events.append(self.readers[fd])
-            if eventmask & select.EPOLLOUT:
-                if fd in self.writers:
-                    events.append(self.writers[fd])
-        return events
-
-
-class KqueuePollster(PollsterBase):
-    """Pollster implementation using kqueue."""
-
-    def __init__(self):
-        super().__init__()
-        self._kqueue = select.kqueue()
-
-    def register_reader(self, fd, callback, *args):
-        if fd not in self.readers:
-            kev = select.kevent(fd, select.KQ_FILTER_READ, select.KQ_EV_ADD)
-            self._kqueue.control([kev], 0, 0)
-        return super().register_reader(fd, callback, *args)
-
-    def register_writer(self, fd, callback, *args):
-        if fd not in self.readers:
-            kev = select.kevent(fd, select.KQ_FILTER_WRITE, select.KQ_EV_ADD)
-            self._kqueue.control([kev], 0, 0)
-        return super().register_writer(fd, callback, *args)
-
-    def unregister_reader(self, fd):
-        super().unregister_reader(fd)
-        kev = select.kevent(fd, select.KQ_FILTER_READ, select.KQ_EV_DELETE)
-        self._kqueue.control([kev], 0, 0)
-
-    def unregister_writer(self, fd):
-        super().unregister_writer(fd)
-        kev = select.kevent(fd, select.KQ_FILTER_WRITE, select.KQ_EV_DELETE)
-        self._kqueue.control([kev], 0, 0)
-
-    def poll(self, timeout=None):
-        events = []
-        max_ev = len(self.readers) + len(self.writers)
-        for kev in self._kqueue.control(None, max_ev, timeout):
-            fd = kev.ident
-            flag = kev.filter
-            if flag == select.KQ_FILTER_READ and fd in self.readers:
-                events.append(self.readers[fd])
-            elif flag == select.KQ_FILTER_WRITE and fd in self.writers:
-                events.append(self.writers[fd])
-        return events
-
-
-# Pick the best pollster class for the platform.
-if hasattr(select, 'kqueue'):
-    best_pollster = KqueuePollster
-elif hasattr(select, 'epoll'):
-    best_pollster = EPollPollster
-elif hasattr(select, 'poll'):
-    best_pollster = PollPollster
-else:
-    best_pollster = SelectPollster
+# local imports
+from proactor import Proactor
 
 
 class DelayedCall:
@@ -295,34 +81,14 @@ class EventLoop:
     This class's instance variables are not part of its API.
     """
 
-    def __init__(self, pollster=None):
+    def __init__(self, proactor=None):
         super().__init__()
-        if pollster is None:
-            logging.info('Using pollster: %s', best_pollster.__name__)
-            pollster = best_pollster()
-        self.pollster = pollster
+        if proactor is None:
+            logging.info('Using proactor: %s', Proactor.__name__)
+            proactor = Proactor()
+        self.proactor = proactor
         self.ready = collections.deque()  # [(callback, args), ...]
         self.scheduled = []  # [(when, callback, args), ...]
-
-    def add_reader(self, fd, callback, *args):
-        """Add a reader callback.  Return a DelayedCall instance."""
-        dcall = DelayedCall(None, callback, args)
-        self.pollster.register_reader(fd, dcall)
-        return dcall
-
-    def remove_reader(self, fd):
-        """Remove a reader callback."""
-        self.pollster.unregister_reader(fd)
-
-    def add_writer(self, fd, callback, *args):
-        """Add a writer callback.  Return a DelayedCall instance."""
-        dcall = DelayedCall(None, callback, args)
-        self.pollster.register_writer(fd, dcall)
-        return dcall
-
-    def remove_writer(self, fd):
-        """Remove a writer callback."""
-        self.pollster.unregister_writer(fd)
 
     def add_callback(self, dcall):
         """Add a DelayedCall to ready or scheduled."""
@@ -408,14 +174,15 @@ class EventLoop:
             heapq.heappop(self.scheduled)
 
         # Inspect the poll queue.
-        if self.pollster.pollable():
+        if self.proactor.pollable():
             if self.scheduled:
                 when = self.scheduled[0].when
                 timeout = max(0, when - time.time())
             else:
                 timeout = None
             t0 = time.time()
-            events = self.pollster.poll(timeout)
+            # done callbacks added to ready futures get run by poll()
+            self.proactor.poll(timeout)
             t1 = time.time()
             argstr = '' if timeout is None else ' %.3f' % timeout
             if t1-t0 >= 1:
@@ -423,8 +190,6 @@ class EventLoop:
             else:
                 level = logging.DEBUG
             logging.log(level, 'poll%s took %.3f seconds', argstr, t1-t0)
-            for dcall in events:
-                self.add_callback(dcall)
 
         # Handle 'later' callbacks that are ready.
         while self.scheduled:
@@ -441,12 +206,24 @@ class EventLoop:
         writable file descriptors, or scheduled callbacks (of either
         variety).
         """
-        while self.ready or self.scheduled or self.pollster.pollable():
+        while self.ready or self.scheduled or self.proactor.pollable():
             self.run_once()
+
 
 
 MAX_WORKERS = 5  # Default max workers when creating an executor.
 
+try:
+    from socket import socketpair
+except ImportError:
+    def socketpair():
+        with socket.socket() as l:
+            l.bind(('127.0.0.1', 0))
+            l.listen(1)
+            c = socket.socket()
+            c.connect(l.getsockname())
+            a, _ = l.accept()
+            return a, c
 
 class ThreadRunner:
     """Helper to submit work to a thread pool and wait for it.
@@ -461,19 +238,23 @@ class ThreadRunner:
     def __init__(self, eventloop, executor=None):
         self.eventloop = eventloop
         self.executor = executor  # Will be constructed lazily.
-        self.pipe_read_fd, self.pipe_write_fd = os.pipe()
+        self.rsock, self.wsock = socketpair()
+        self.rsock.settimeout(0)
         self.active_count = 0
+        self.read_future = None
 
-    def read_callback(self):
-        """Semi-permanent callback while at least one future is active."""
+    def read_callback(self, read_future):
         assert self.active_count > 0, self.active_count
-        data = os.read(self.pipe_read_fd, 8192)  # Traditional buffer size.
-        self.active_count -= len(data)
-        if self.active_count == 0:
-            self.eventloop.remove_reader(self.pipe_read_fd)
+        try:
+            self.active_count -= len(read_future.result())
+        except OSError:
+            pass                # We will just restart read_future
         assert self.active_count >= 0, self.active_count
+        if self.active_count > 0:
+            self.read_future = self.eventloop.proactor.recv(self.rsock, 128)
+            self.read_future.add_done_callback(self.read_callback)
 
-    def submit(self, func, *args, executor=None):
+    def submit(self, func, *args, executor=None, insert_callback=None):
         """Submit a function to the thread pool.
 
         This returns a concurrent.futures.Future instance.  The caller
@@ -488,10 +269,13 @@ class ThreadRunner:
                 self.executor = executor
         assert self.active_count >= 0, self.active_count
         future = executor.submit(func, *args)
-        if self.active_count == 0:
-            self.eventloop.add_reader(self.pipe_read_fd, self.read_callback)
+        if self.read_future is None or self.read_future.done():
+            self.read_future = self.eventloop.proactor.recv(self.rsock, 128)
+            self.read_future.add_done_callback(self.read_callback)
         self.active_count += 1
+        if insert_callback is not None:
+            future.add_done_callback(insert_callback)
         def done_callback(future):
-            os.write(self.pipe_write_fd, b'x')
+            self.wsock.send(b'x')
         future.add_done_callback(done_callback)
         return future

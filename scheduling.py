@@ -92,6 +92,7 @@ class Task:
     def add_done_callback(self, done_callback):
         # For better or for worse, the callback will always be called
         # with the task as an argument, like concurrent.futures.Future.
+        # TODO: Call it right away if task is no longer alive.
         dcall = polling.DelayedCall(None, done_callback, (self,))
         self.done_callbacks.append(dcall)
         self.done_callbacks = [dc for dc in self.done_callbacks

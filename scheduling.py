@@ -92,7 +92,11 @@ class Task:
     def add_done_callback(self, done_callback):
         # For better or for worse, the callback will always be called
         # with the task as an argument, like concurrent.futures.Future.
-        self.done_callbacks.append(done_callback)
+        dcall = polling.DelayedCall(None, done_callback, (self,))
+        self.done_callbacks.append(dcall)
+        self.done_callbacks = [dc for dc in self.done_callbacks
+                               if not dc.cancelled]
+        return dcall
 
     def __repr__(self):
         parts = [self.name]
@@ -105,10 +109,10 @@ class Task:
             parts.append('must_cancel')
         if self.cancelled:
             parts.append('cancelled')
-        if self.exception:
+        if self.exception is not None:
             parts.append('exception=%r' % self.exception)
         elif not self.alive:
-            parts.append('result=%r' % self.result)
+            parts.append('result=%r' % (self.result,))
         if self.timeout is not None:
             parts.append('timeout=%.3f' % self.timeout)
         return 'Task<' + ', '.join(parts) + '>'
@@ -152,8 +156,8 @@ class Task:
                 if self.canceleer is not None:
                     self.canceleer.cancel()
                 # Schedule done_callbacks.
-                for callback in self.done_callbacks:
-                    self.eventloop.call_soon(callback, self)
+                for dcall in self.done_callbacks:
+                    self.eventloop.add_callback(dcall)
 
     def block(self, unblock_callback=None, *unblock_args):
         assert self is context.current_task, self
@@ -277,12 +281,15 @@ def wait_for(count, tasks):
     assert all(task is not current_task for task in tasks)
     todo = set()
     done = set()
+    dcalls = []
     def wait_for_callback(task):
-        nonlocal todo, done, current_task, count
+        nonlocal todo, done, current_task, count, dcalls
         todo.remove(task)
         if len(done) < count:
             done.add(task)
             if len(done) == count:
+                for dcall in dcalls:
+                    dcall.cancel()
                 current_task.unblock()
     for task in tasks:
         if task.alive:
@@ -291,7 +298,8 @@ def wait_for(count, tasks):
             done.add(task)
     if len(done) < count:
         for task in todo:
-            task.add_done_callback(wait_for_callback)
+            dcall = task.add_done_callback(wait_for_callback)
+            dcalls.append(dcall)
         current_task.block()
         yield
     return done

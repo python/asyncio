@@ -85,7 +85,7 @@ def doit():
 ##             tasks.add(t)
 
 ##     print(tasks)
-    yield from scheduling.with_timeout(0.2, scheduling.sleep(1))
+    yield from scheduling.Task(scheduling.sleep(1), timeout=0.2).wait()
     winners = yield from scheduling.wait_any(tasks)
     print('And the winners are:', [w.name for w in winners])
     tasks = yield from scheduling.wait_all(tasks)

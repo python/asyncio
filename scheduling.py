@@ -207,6 +207,26 @@ class Task:
         self.add_done_callback(current_task.unblock)
         yield
 
+    def __iter__(self):
+        """COROUTINE: Wait, then return result or raise exception.
+
+        This adds a little magic so you can say
+
+          x = yield from Task(gen())
+
+        and it is equivalent to
+
+          x = yield from gen()
+
+        but with the option to add a timeout (and only a tad slower).
+        """
+        if self.alive:
+            yield from self.wait()
+            assert not self.alive
+        if self.exception is not None:
+            raise self.exception
+        return self.result
+
 
 def run(arg=None):
     """Run the event loop until it's out of work.
@@ -314,13 +334,6 @@ def wait_any(tasks):
 def wait_all(tasks):
     """COROUTINE: Wait for all of a set of tasks to complete."""
     return wait_for(len(tasks), tasks)
-
-
-def with_timeout(timeout, gen, name=None):
-    """COROUTINE: Run generator synchronously with a timeout."""
-    assert timeout is not None
-    task = Task(gen, name, timeout=timeout)
-    return (yield from task.wait())
 
 
 def map_over(gen, *args, timeout=None):

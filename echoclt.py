@@ -40,12 +40,12 @@ def doit(n):
     ok = 0
     bad = 0
     for t in tasks:
-        yield from t.wait()
-        assert not t.alive
-        if t.result:
-            ok += 1
-        else:
+        try:
+            yield from t
+        except Exception:
             bad += 1
+        else:
+            ok += 1
     t1 = time.time()
     print('ok: ', ok)
     print('bad:', bad)

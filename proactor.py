@@ -11,6 +11,7 @@ import errno
 import socket
 import select
 import time
+import warnings
 
 
 __all__ = ['SelectProactor']
@@ -220,6 +221,7 @@ if hasattr(select, 'poll'):
     class PollProactor(ReadyBaseProactor):
         _connection_errors = {0, errno.EINPROGRESS}
         _make_poller = select.poll
+        _uses_msecs = True
 
         def __init__(self):
             super().__init__()
@@ -228,12 +230,12 @@ if hasattr(select, 'poll'):
 
         def _poll(self, timeout=None):
             if timeout is None:
-                ms = -1
+                timeout = -1
             elif timeout < 0:
                 raise ValueError('negative timeout')
-            else:
-                ms = int(timeout*1000 + 0.5)
-            ready = self._poller.poll(ms)
+            elif self._uses_msecs:
+                timeout = int(timeout*1000 + 0.5)
+            ready = self._poller.poll(timeout)
             for fd, flags in ready:
                 if fd in self._queue[READABLE] and flags & READ_EXTRA_FLAGS:
                     self._handle(fd, READABLE)
@@ -288,6 +290,8 @@ if hasattr(select, 'epoll'):
 
     class EpollProactor(PollProactor):
         _make_poller = select.epoll
+        _uses_msecs = False
+
 
 #
 # Proactor using overlapped IO and a completion port
@@ -297,7 +301,7 @@ try:
     from _overlapped import *
 except ImportError:
     if sys.platform == 'win32':
-        print('IOCP support not compiled', file=sys.sdterr)
+        warnings.warn('IOCP support not compiled')
 else:
     __all__.append('IocpProactor')
 

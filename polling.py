@@ -251,7 +251,7 @@ class ThreadRunner:
             pass                # We will just restart read_future
         assert self.active_count >= 0, self.active_count
         if self.active_count > 0:
-            self.read_future = self.eventloop.proactor.recv(self.rsock, 128)
+            self.read_future = self.eventloop.proactor.recv(self.rsock, 8192)
             self.read_future.add_done_callback(self.read_callback)
 
     def submit(self, func, *args, executor=None, insert_callback=None):
@@ -270,12 +270,12 @@ class ThreadRunner:
         assert self.active_count >= 0, self.active_count
         future = executor.submit(func, *args)
         if self.read_future is None or self.read_future.done():
-            self.read_future = self.eventloop.proactor.recv(self.rsock, 128)
+            self.read_future = self.eventloop.proactor.recv(self.rsock, 8192)
             self.read_future.add_done_callback(self.read_callback)
         self.active_count += 1
         if insert_callback is not None:
             future.add_done_callback(insert_callback)
         def done_callback(future):
-            self.wsock.send(b'x')
+            self.wsock.sendall(b'x')
         future.add_done_callback(done_callback)
         return future

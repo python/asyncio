@@ -197,6 +197,26 @@ class Task:
         self.add_done_callback(current_task.unblock)
         yield
 
+    def __iter__(self):
+        """COROUTINE: Wait, then return result or raise exception.
+
+        This adds a little magic so you can say
+
+          x = yield from Task(gen())
+
+        and it is equivalent to
+
+          x = yield from gen()
+
+        but with the option to add a timeout (and only a tad slower).
+        """
+        if self.alive:
+            yield from self.wait()
+            assert not self.alive
+        if self.exception is not None:
+            raise self.exception
+        return self.result
+
 
 def run(arg=None):
     """Run the event loop until it's out of work.
@@ -279,6 +299,7 @@ def wait_for(count, tasks):
     NOTE: Tasks that were cancelled or raised are also considered ready.
     """
     assert tasks
+    assert all(isinstance(task, Task) for task in tasks)
     tasks = set(tasks)
     assert 1 <= count <= len(tasks)
     current_task = context.current_task
@@ -319,19 +340,12 @@ def wait_all(tasks):
     return wait_for(len(tasks), tasks)
 
 
-def with_timeout(timeout, gen, name=None):
-    """COROUTINE: Run generator synchronously with a timeout."""
-    assert timeout is not None
-    task = Task(gen, name, timeout=timeout)
-    return (yield from task.wait())
-
-
 def map_over(gen, *args, timeout=None):
     """COROUTINE: map a generator over one or more iterables.
 
     E.g. map_over(foo, xs, ys) runs
 
-      Task(foo(x, y) for x, y in zip(xs, ys)
+      Task(foo(x, y)) for x, y in zip(xs, ys)
 
     and returns a list of all results (in that order).  However if any
     task raises an exception, the remaining tasks are cancelled and
@@ -339,9 +353,37 @@ def map_over(gen, *args, timeout=None):
     """
     # gen is a generator function.
     tasks = [Task(gobj, timeout=timeout) for gobj in map(gen, *args)]
+    return (yield from par_tasks(tasks))
+
+
+def par(*args):
+    """COROUTINE: Wait for generators, return a list of results.
+
+    Raises as soon as one of the tasks raises an exception (and then
+    remaining tasks are cancelled).
+
+    This differs from par_tasks() in two ways:
+    - takes *args instead of list of args
+    - each arg may be a generator or a task
+    """
+    tasks = []
+    for arg in args:
+        if not isinstance(arg, Task):
+            # TODO: assert arg is a generator or an iterator?
+            arg = Task(arg)
+        tasks.append(arg)
+    return (yield from par_tasks(tasks))
+
+
+def par_tasks(tasks):
+    """COROUTINE: Wait for a list of tasks, return a list of results.
+
+    Raises as soon as one of the tasks raises an exception (and then
+    remaining tasks are cancelled).
+    """
     todo = set(tasks)
     while todo:
-        ts = yield from wait_for(1, todo)
+        ts = yield from wait_any(todo)
         for t in ts:
             assert not t.alive, t
             todo.remove(t)

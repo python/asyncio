@@ -31,6 +31,7 @@ import ssl
 # Local imports.
 import scheduling
 from scheduling import context
+from proactor import Future
 
 # Errno values indicating the connection was disconnected.
 _DISCONNECTED = frozenset((errno.ECONNRESET,
@@ -65,10 +66,11 @@ class SocketTransport:
 
         while True:
             try:
-                f = context.eventloop.proactor.recv(self.sock, n)
-                if not f.done():
+                try:
+                    return context._eventloop.proactor.recv(self.sock, n)
+                except Future as f:
                     yield from scheduling.block_future(f)
-                return f.result()
+                    return f.result()
             except socket.error as err:
                 if err.errno in _TRYAGAIN:
                     pass
@@ -84,10 +86,11 @@ class SocketTransport:
         """
         while data:
             try:
-                f = context.eventloop.proactor.send(self.sock, data)
-                if not f.done():
+                try:
+                    n = context._eventloop.proactor.send(self.sock, data)
+                except Future as f:
                     yield from scheduling.block_future(f)
-                n = f.result()
+                    n = f.result()
             except socket.error as err:
                 if err.errno in _TRYAGAIN:
                     pass
@@ -247,10 +250,11 @@ class BufferedReader:
 
 def connect(sock, address):
     """COROUTINE: Connect a socket to an address."""
-    f = context.eventloop.proactor.connect(sock, address)
-    if not f.done():
+    try:
+        return context._eventloop.proactor.connect(sock, address)
+    except Future as f:
         yield from scheduling.block_future(f)
-    return f.result()
+        return f.result()
 
 
 def getaddrinfo(host, port, af=0, socktype=0, proto=0):
@@ -310,10 +314,11 @@ class Listener:
         """COROUTINE: Accept a connection."""
         while True:
             try:
-                f = context.eventloop.proactor.accept(self.sock)
-                if not f.done():
+                try:
+                    return context._eventloop.proactor.accept(self.sock)
+                except Future as f:
                     yield from scheduling.block_future(f)
-                return f.result()
+                    return f.result()
             except socket.error as err:
                 if err.errno not in _TRYAGAIN:
                     raise

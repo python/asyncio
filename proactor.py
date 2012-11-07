@@ -20,7 +20,7 @@ __all__ = ['SelectProactor']
 # Future class
 #
 
-class Future:
+class Future(Exception):
 
     def __init__(self):
         self._callbacks = []
@@ -108,8 +108,6 @@ READABLE = 0
 WRITABLE = 1
 
 class ReadyBaseProactor(BaseProactor):
-    eager = True
-
     def __init__(self):
         super().__init__()
         self._queue = [{}, {}]
@@ -118,19 +116,28 @@ class ReadyBaseProactor(BaseProactor):
         return any(self._queue)
 
     def recv(self, sock, nbytes, flags=0):
-        return self._register(self.eager, sock.fileno(), READABLE,
-                              sock.recv, nbytes, flags)
+        try:
+            return sock.recv(nbytes, flags)
+        except BlockingIOError:
+            raise self._register(sock.fileno(), READABLE,
+                                 sock.recv, nbytes, flags)
 
     def send(self, sock, buf, flags=0):
-        return self._register(self.eager, sock.fileno(), WRITABLE,
-                              sock.send, buf, flags)
+        try:
+            return sock.send(buf, flags)
+        except BlockingIOError:
+            raise self._register(sock.fileno(), WRITABLE,
+                                 sock.send, buf, flags)
 
     def accept(self, sock):
         def _accept():
             conn, addr = sock.accept()
             conn.settimeout(0)
             return conn, addr
-        return self._register(self.eager, sock.fileno(), READABLE, _accept)
+        try:
+            return _accept()
+        except BlockingIOError:
+            raise self._register(sock.fileno(), READABLE, _accept)
 
     def connect(self, sock, addr):
         assert sock.gettimeout() == 0
@@ -141,14 +148,14 @@ class ReadyBaseProactor(BaseProactor):
             err = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
             if err != 0:
                 raise OSError(err, os.strerror(err))
-        return self._register(False, sock.fileno(), WRITABLE, _connect)
+        raise self._register(sock.fileno(), WRITABLE, _connect)
 
     # hacks to support SSL
     def _readable(self, sock):
-        return self._register(False, sock.fileno(), READABLE, lambda:None)
+        return self._register(sock.fileno(), READABLE, lambda:None)
 
     def _writable(self, sock):
-        return self._register(False, sock.fileno(), WRITABLE, lambda:None)
+        return self._register(sock.fileno(), WRITABLE, lambda:None)
 
 #
 # Proactor using select()
@@ -178,14 +185,8 @@ class SelectProactor(ReadyBaseProactor):
         if not Q:
             del self._queue[kind][fd]
 
-    def _register(self, eager, fd, kind, callback, *args):
+    def _register(self, fd, kind, callback, *args):
         f = self._Future()
-        if eager:
-            try:
-                f.set_result(callback(*args))
-                return f
-            except BlockingIOError:
-                pass
         queue = self._queue[kind]
         if fd not in queue:
             queue[fd] = []
@@ -259,14 +260,8 @@ if hasattr(select, 'poll'):
                 else:
                     self._poller.modify(fd, flag)
 
-        def _register(self, eager, fd, kind, callback, *args):
+        def _register(self, fd, kind, callback, *args):
             f = self._Future()
-            if eager:
-                try:
-                    f.set_result(callback(*args))
-                    return f
-                except BlockingIOError:
-                    pass
             queue = self._queue[kind]
             if fd not in queue:
                 queue[fd] = []
@@ -323,13 +318,13 @@ else:
             self._register_obj(conn)
             ov = Overlapped(NULL)
             ov.WSARecv(conn.fileno(), nbytes, flags)
-            return self._register(ov, conn, ov.getresult)
+            raise self._register(ov, conn, ov.getresult)
 
         def send(self, conn, buf, flags=0):
             self._register_obj(conn)
             ov = Overlapped(NULL)
             ov.WSASend(conn.fileno(), buf, flags)
-            return self._register(ov, conn, ov.getresult)
+            raise self._register(ov, conn, ov.getresult)
 
         def accept(self, listener):
             self._register_obj(listener)
@@ -342,7 +337,7 @@ else:
                                 SO_UPDATE_ACCEPT_CONTEXT, listener.fileno())
                 conn.settimeout(listener.gettimeout())
                 return conn, conn.getpeername()
-            return self._register(ov, listener, finish_accept)
+            raise self._register(ov, listener, finish_accept)
 
         def connect(self, conn, address):
             self._register_obj(conn)
@@ -354,7 +349,7 @@ else:
                 conn.setsockopt(socket.SOL_SOCKET,
                                 SO_UPDATE_CONNECT_CONTEXT, 0)
                 return conn
-            return self._register(ov, conn, finish_connect)
+            raise self._register(ov, conn, finish_connect)
 
         def _readable(self, sock):
             raise NotImplementedError('IocpProactor._readable()')

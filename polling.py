@@ -44,7 +44,7 @@ import time
 import socket
 
 # local imports
-from proactor import Proactor
+from proactor import Proactor, Future
 
 
 class DelayedCall:
@@ -243,16 +243,29 @@ class ThreadRunner:
         self.active_count = 0
         self.read_future = None
 
-    def read_callback(self, read_future):
+    def start_read(self):
+        while self.active_count > 0:
+            try:
+                res = self.eventloop.proactor.recv(self.rsock, 8192)
+            except Future as f:
+                self.read_future = f
+                self.read_future.add_done_callback(self.read_callback)
+                break
+            else:
+                self.active_count -= len(res)
+
+    def read_callback(self, f):
         assert self.active_count > 0, self.active_count
+        assert f is self.read_future
         try:
-            self.active_count -= len(read_future.result())
+            self.active_count -= len(self.read_future.result())
         except OSError:
-            pass                # We will just restart read_future
+            pass
+        finally:
+            self.read_future = None
         assert self.active_count >= 0, self.active_count
         if self.active_count > 0:
-            self.read_future = self.eventloop.proactor.recv(self.rsock, 8192)
-            self.read_future.add_done_callback(self.read_callback)
+            self.start_read()
 
     def submit(self, func, *args, executor=None, insert_callback=None):
         """Submit a function to the thread pool.
@@ -268,11 +281,10 @@ class ThreadRunner:
                 executor = concurrent.futures.ThreadPoolExecutor(MAX_WORKERS)
                 self.executor = executor
         assert self.active_count >= 0, self.active_count
+        self.active_count += 1
         future = executor.submit(func, *args)
         if self.read_future is None or self.read_future.done():
-            self.read_future = self.eventloop.proactor.recv(self.rsock, 8192)
-            self.read_future.add_done_callback(self.read_callback)
-        self.active_count += 1
+            self.start_read()
         if insert_callback is not None:
             future.add_done_callback(insert_callback)
         def done_callback(future):

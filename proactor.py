@@ -318,13 +318,17 @@ else:
             self._register_obj(conn)
             ov = Overlapped(NULL)
             ov.WSARecv(conn.fileno(), nbytes, flags)
-            raise self._register(ov, conn, ov.getresult)
+            if ov.pending:
+                raise self._register(ov, conn, ov.getresult)
+            return ov.getresult()
 
         def send(self, conn, buf, flags=0):
             self._register_obj(conn)
             ov = Overlapped(NULL)
             ov.WSASend(conn.fileno(), buf, flags)
-            raise self._register(ov, conn, ov.getresult)
+            if ov.pending:
+                raise self._register(ov, conn, ov.getresult)
+            return ov.getresult()
 
         def accept(self, listener):
             self._register_obj(listener)
@@ -337,7 +341,9 @@ else:
                                 SO_UPDATE_ACCEPT_CONTEXT, listener.fileno())
                 conn.settimeout(listener.gettimeout())
                 return conn, conn.getpeername()
-            raise self._register(ov, listener, finish_accept)
+            if ov.pending:
+                raise self._register(ov, listener, finish_accept)
+            return ov.getresult()
 
         def connect(self, conn, address):
             self._register_obj(conn)
@@ -349,7 +355,9 @@ else:
                 conn.setsockopt(socket.SOL_SOCKET,
                                 SO_UPDATE_CONNECT_CONTEXT, 0)
                 return conn
-            raise self._register(ov, conn, finish_connect)
+            if ov.pending:
+                raise self._register(ov, conn, finish_connect)
+            return ov.getresult()
 
         def _readable(self, sock):
             raise NotImplementedError('IocpProactor._readable()')
@@ -361,6 +369,8 @@ else:
             if obj not in self._registered:
                 self._registered.add(obj)
                 CreateIoCompletionPort(obj.fileno(), self._iocp, 0, 0)
+                SetFileCompletionNotificationModes(obj.fileno(),
+                    FILE_SKIP_COMPLETION_PORT_ON_SUCCESS);
 
         def _register(self, ov, obj, callback, discard=False):
             # we prevent ov and obj from being garbage collected

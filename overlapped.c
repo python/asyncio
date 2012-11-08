@@ -59,12 +59,16 @@ initialize_function_pointers(void)
     DWORD dwBytes;
 
     s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (s == INVALID_SOCKET) {
+        PyErr_SetFromWindowsErr(WSAGetLastError());
+        return -1;
+    }
 
-    if (s == INVALID_SOCKET ||
-        !GET_WSA_POINTER(s, AcceptEx) ||
+    if (!GET_WSA_POINTER(s, AcceptEx) ||
         !GET_WSA_POINTER(s, ConnectEx) ||
         !GET_WSA_POINTER(s, DisconnectEx))
     {
+        closesocket(s);
         PyErr_SetFromWindowsErr(WSAGetLastError());
         return -1;
     }
@@ -181,27 +185,39 @@ overlapped_PostQueuedCompletionStatus(PyObject *self, PyObject *args)
 
 PyDoc_STRVAR(
     BindLocal_doc,
-    "BindLocal(handle) -> None\n\n"
-    "Bind a socket handle to arbitrary local port");
+    "BindLocal(handle, length_of_address_tuple) -> None\n\n"
+    "Bind a socket handle to an arbitrary local port.\n"
+    "If length_of_address_tuple is 2 then an AF_INET address is used.\n"
+    "If length_of_address_tuple is 4 then an AF_INET6 address is used.");
 
 static PyObject *
 overlapped_BindLocal(PyObject *self, PyObject *args)
 {
     SOCKET Socket;
-    struct sockaddr_in addr;
+    int TupleLength;
     BOOL ret;
 
-    if (!PyArg_ParseTuple(args, F_HANDLE, &Socket))
+    if (!PyArg_ParseTuple(args, F_HANDLE "i", &Socket, &TupleLength))
         return NULL;
 
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_port = 0;
-    addr.sin_addr.S_un.S_addr = INADDR_ANY;
-
-    Py_BEGIN_ALLOW_THREADS
-    ret = bind(Socket, (SOCKADDR*)&addr, sizeof(addr)) != SOCKET_ERROR;
-    Py_END_ALLOW_THREADS
+    if (TupleLength == 2) {
+        struct sockaddr_in addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_family = AF_INET;
+        addr.sin_port = 0;
+        addr.sin_addr.S_un.S_addr = INADDR_ANY;
+        ret = bind(Socket, (SOCKADDR*)&addr, sizeof(addr)) != SOCKET_ERROR;
+    } else if (TupleLength == 4) {
+        struct sockaddr_in6 addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sin6_family = AF_INET6;
+        addr.sin6_port = 0;
+        addr.sin6_addr = in6addr_any;
+        ret = bind(Socket, (SOCKADDR*)&addr, sizeof(addr)) != SOCKET_ERROR;
+    } else {
+        PyErr_SetString(PyExc_ValueError, "expected tuple of length 2 or 4");
+        return NULL;
+    }
 
     if (!ret)
         return PyErr_SetExcFromWindowsErr(PyExc_IOError, WSAGetLastError());
@@ -671,7 +687,7 @@ Overlapped_AcceptEx(OverlappedObject *self, PyObject *args)
         return NULL;
     }
 
-    size = sizeof(struct sockaddr_in) + 16;
+    size = sizeof(struct sockaddr_in6) + 16;
     buf = PyBytes_FromStringAndSize(NULL, size*2);
     if (!buf)
         return NULL;
@@ -696,6 +712,45 @@ Overlapped_AcceptEx(OverlappedObject *self, PyObject *args)
     }
 }
 
+
+static int
+parse_address(PyObject *obj, SOCKADDR *Address, int Length)
+{
+    char *Host;
+    unsigned short Port;
+    unsigned long FlowInfo;
+    unsigned long ScopeId;
+
+    memset(Address, 0, Length);
+
+    if (PyArg_ParseTuple(obj, "sH", &Host, &Port))
+    {
+        Address->sa_family = AF_INET;
+        if (WSAStringToAddressA(Host, AF_INET, NULL, Address, &Length) < 0) {
+            PyErr_SetExcFromWindowsErr(PyExc_IOError, WSAGetLastError());
+            return -1;
+        }
+        ((SOCKADDR_IN*)Address)->sin_port = htons(Port);
+        return Length;
+    }
+    else if (PyArg_ParseTuple(obj, "sHkk", &Host, &Port, &FlowInfo, &ScopeId))
+    {
+        PyErr_Clear();
+        Address->sa_family = AF_INET6;
+        if (WSAStringToAddressA(Host, AF_INET6, NULL, Address, &Length) < 0) {
+            PyErr_SetExcFromWindowsErr(PyExc_IOError, WSAGetLastError());
+            return -1;
+        }
+        ((SOCKADDR_IN6*)Address)->sin6_port = htons(Port);
+        ((SOCKADDR_IN6*)Address)->sin6_flowinfo = FlowInfo;
+        ((SOCKADDR_IN6*)Address)->sin6_scope_id = ScopeId;
+        return Length;
+    }
+
+    return -1;
+}
+
+
 PyDoc_STRVAR(
     Overlapped_ConnectEx_doc,
     "ConnectEx(client_handle, address_as_bytes) -> Overlapped[None]\n\n"
@@ -705,15 +760,14 @@ static PyObject *
 Overlapped_ConnectEx(OverlappedObject *self, PyObject *args)
 {
     SOCKET ConnectSocket;
-    struct sockaddr_in Address = {AF_INET};
-    char *HostString;
-    unsigned long Host;
-    unsigned short Port;
+    PyObject *AddressObj;
+    char AddressBuf[sizeof(struct sockaddr_in6)];
+    SOCKADDR *Address = (SOCKADDR*)AddressBuf;
+    int Length;
     BOOL ret;
     DWORD err;
 
-    if (!PyArg_ParseTuple(args, F_HANDLE "(sH)",
-                          &ConnectSocket, &HostString, &Port))
+    if (!PyArg_ParseTuple(args, F_HANDLE "O", &ConnectSocket, &AddressObj))
         return NULL;
 
     if (self->type != TYPE_NONE) {
@@ -721,20 +775,16 @@ Overlapped_ConnectEx(OverlappedObject *self, PyObject *args)
         return NULL;
     }
 
-    Host = inet_addr(HostString);
-    if (Host == INADDR_NONE) {
-        PyErr_SetString(PyExc_ValueError, "invalid host address");
+    Length = sizeof(AddressBuf);
+    Length = parse_address(AddressObj, Address, Length);
+    if (Length < 0)
         return NULL;
-    }
-
-    Address.sin_addr.s_addr = Host;
-    Address.sin_port = htons(Port);
 
     self->type = TYPE_CONNECT;
     self->handle = (HANDLE)ConnectSocket;
 
     Py_BEGIN_ALLOW_THREADS
-    ret = Py_ConnectEx(ConnectSocket, (SOCKADDR*)&Address, sizeof(Address),
+    ret = Py_ConnectEx(ConnectSocket, Address, Length,
                        NULL, 0, NULL, &self->overlapped);
     Py_END_ALLOW_THREADS
 

@@ -347,7 +347,7 @@ else:
 
         def connect(self, conn, address):
             self._register_obj(conn)
-            BindLocal(conn.fileno())
+            BindLocal(conn.fileno(), len(address))
             ov = Overlapped(NULL)
             ov.ConnectEx(conn.fileno(), address)
             def finish_connect():

@@ -4,6 +4,7 @@ This is not meant as an example of how to write a good client.
 """
 
 # Stdlib.
+import logging
 import re
 import time
 
@@ -13,14 +14,15 @@ import sockets
 
 def urlfetch(host, port=None, path='/', method='GET',
              body=None, hdrs=None, encoding='utf-8', ssl=None, af=0):
-    """COROUTINE: Make an HTTP 1.0 request."""
-    t0 = time.time()
-    if port is None:
-        if ssl:
-            port = 443
-        else:
-            port = 80
-    trans = yield from sockets.create_transport(host, port, ssl=ssl, af=af)
+  """COROUTINE: Make an HTTP 1.0 request."""
+  t0 = time.time()
+  if port is None:
+      if ssl:
+          port = 443
+      else:
+          port = 80
+  trans = yield from sockets.create_transport(host, port, ssl=ssl, af=af)
+  try:
     yield from trans.send(method.encode(encoding) + b' ' +
                           path.encode(encoding) + b' HTTP/1.0\r\n')
     if hdrs:
@@ -76,3 +78,6 @@ def urlfetch(host, port=None, path='/', method='GET',
     result = (host, port, path, int(status), len(data), round(t1-t0, 3))
 ##     print(result)
     return result
+  except:
+    logging.exception('********** Exception in urlfetch **********')
+    trans.close()

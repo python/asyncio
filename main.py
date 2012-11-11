@@ -56,24 +56,24 @@ def doit():
 
     # This references NDB's default test service.
     # (Sadly the service is single-threaded.)
-    task1 = scheduling.Task(http_client.urlfetch('localhost', 8080, path='/'),
-                            'root', timeout=TIMEOUT)
-    tasks.add(task1)
+##     task1 = scheduling.Task(http_client.urlfetch('localhost', 8080, path='/'),
+##                             'root', timeout=TIMEOUT)
+##     tasks.add(task1)
     task2 = scheduling.Task(http_client.urlfetch('127.0.0.1', 8080,
                                                  path='/home'),
                             'home', timeout=TIMEOUT)
     tasks.add(task2)
 
-    # Fetch python.org home page.
-    task3 = scheduling.Task(http_client.urlfetch('python.org', 80, path='/'),
-                            'python', timeout=TIMEOUT)
-    tasks.add(task3)
+##     # Fetch python.org home page.
+##     task3 = scheduling.Task(http_client.urlfetch('python.org', 80, path='/'),
+##                             'python', timeout=TIMEOUT)
+##     tasks.add(task3)
 
-    # Fetch XKCD home page using SSL.  (Doesn't like IPv6.)
-    task4 = scheduling.Task(http_client.urlfetch('xkcd.com', ssl=True, path='/',
-                                                 af=socket.AF_INET),
-                            'xkcd', timeout=TIMEOUT)
-    tasks.add(task4)
+##     # Fetch XKCD home page using SSL.  (Doesn't like IPv6.)
+##     task4 = scheduling.Task(http_client.urlfetch('xkcd.com', ssl=True, path='/',
+##                                                  af=socket.AF_INET),
+##                             'xkcd', timeout=TIMEOUT)
+##     tasks.add(task4)
 
 ##     # Fetch many links from python.org (/x.y.z).
 ##     for x in '123':
@@ -90,6 +90,8 @@ def doit():
     print('And the winners are:', [w.name for w in winners])
     tasks = yield from scheduling.wait_all(tasks)
     print('And the players were:', [t.name for t in tasks])
+    print('readers =', scheduling.context.eventloop.pollster.readers)
+    print('tasks =', tasks)
     return tasks
 
 

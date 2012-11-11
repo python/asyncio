@@ -78,6 +78,7 @@ class Task:
         self.canceleer = None
         if timeout is not None:
             self.canceleer = self.eventloop.call_later(timeout, self.cancel)
+        self.next_value = None
         self.blocked = False
         self.unblocker = None
         self.cancelled = False
@@ -132,9 +133,15 @@ class Task:
             if self.must_cancel:
                 self.must_cancel = False
                 self.cancelled = True
+                logging.debug('Throwing CancelledError into %s', self.gen)
                 self.gen.throw(CancelledError())
             else:
-                next(self.gen)
+                next_value = self.next_value
+                self.next_value = None
+                if next_value is None:
+                    next(self.gen)
+                else:
+                    self.gen.send(next_value)
         except StopIteration as exc:
             self.alive = False
             self.result = exc.value
@@ -167,15 +174,15 @@ class Task:
         self.blocked = True
         self.unblocker = (unblock_callback, unblock_args)
 
-    def unblock_if_alive(self):
+    def unblock_if_alive(self, value=None):
         if self.alive:
-            self.unblock()
+            self.unblock(value)
 
-    def unblock(self, unused=None):
-        # Ignore optional argument so we can be a Future's done_callback.
+    def unblock(self, value=None):
         assert self.alive, self
         assert self.blocked, self
         self.blocked = False
+        self.next_value = value
         unblock_callback, unblock_args = self.unblocker
         if unblock_callback is not None:
             try:
@@ -389,3 +396,47 @@ def par_tasks(tasks):
                     other.cancel()
                 raise t.exception
     return [t.result for t in tasks]
+
+
+################################################################################
+
+_DOC = """Pattern on how to use this:
+
+    def my_thing(sock):
+        "COROUTINE: ..."
+        blah blah blah
+        data = yield scheduling.recv(sock, n)
+
+    def my_other_thing(arg):
+        "COROUTINE: ..."
+        ...
+        conn = yield scheduling.make_connection(address, [family etc.])
+
+    def my_blah(arg):
+        "COROUTINE: ..."
+        ...
+        lsnr = yield scheduling.make_listener(address, [family etc.])
+        conn = yield scheduling.accept(lsnr)
+
+"""
+
+
+def recv(sock, n):
+    """COROUTINE"""
+    try:
+        task = context.current_task
+        # This can't be right.  The add_reader call isn't here,
+        # so why should the remove_reader call be here?
+        # However, without this here, if recv() is cancelled,
+        # the exception interrupts the yield below, and somehow
+        # EventLoop.recv() in polling.py never gets called.
+        # Hmmm... Maybe that's the bug: we need an errback
+        # or something.
+        task.block(context.eventloop.remove_reader, sock.fileno())
+        context.eventloop.recv(sock, n, task.unblock_if_alive)
+        value = yield
+        return value
+    except:
+        logging.exception('Exception in scheduling.recv(%r, %r)',
+                          sock, n)
+        raise

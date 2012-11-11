@@ -148,3 +148,17 @@ MISTAKES I MADE
 
 - readexactly() wasn't checking for EOF, so could be looping.
   (Worse, the first fix I attempted was wrong.)
+
+- Spent a day trying to understand why a tentative patch trying to
+  move the recv() implementation into the eventloop (or the pollster)
+  resulted in problems cancelling a recv() call.  Ultimately the
+  problem is that the cancellation mechanism is part of the coroutine
+  scheduler, which simply throws an exception into a task when it next
+  runs, and there isn't anything to be interrupted in the eventloop;
+  but the eventloop still has a reader registered (which will never
+  fire because I suspended the server -- that's my test case :-).
+  Then, the eventloop keeps running until the last file descriptor is
+  unregistered.  What contributed to this disaster?
+  * I didn't build the whole infrastructure, just played with recv()
+  * I don't have unittests
+  * I don't have good logging to see what is going

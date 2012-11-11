@@ -143,5 +143,8 @@ MISTAKES I MADE
   state.  Solution: wrap the callback in eventloop.call_later().
   Ironically, I had a comment stating there might be a race condition.
 
+- Another bug where I was calling unblock() for the current thread
+  immediately after calling block(), before yielding.
+
 - readexactly() wasn't checking for EOF, so could be looping.
   (Worse, the first fix I attempted was wrong.)

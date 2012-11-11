@@ -201,7 +201,7 @@ class BufferedReader:
         """COUROUTINE: Read exactly n bytes, or until EOF."""
         blocks = []
         count = 0
-        while n > count and not self.eof:
+        while count < n:
             block = yield from self.read(n - count)
             if not block:
                 break

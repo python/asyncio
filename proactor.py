@@ -420,7 +420,7 @@ else:
         __del__ = close
 
 #
-# Select default proactor (IOCP does not do SSL or ipv6)
+# Select default proactor (IocpReactor does not support SSL)
 #
 
 for _ in ('EpollProactor', 'IocpProactor', 'PollProactor', 'SelectProactor'):

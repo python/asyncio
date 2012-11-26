@@ -508,7 +508,7 @@ Overlapped_WSARecv(OverlappedObject *self, PyObject *args)
     DWORD nread;
     PyObject *buf;
     WSABUF wsabuf;
-    BOOL ret;
+    int ret;
     DWORD err;
 
     if (!PyArg_ParseTuple(args, F_HANDLE F_DWORD F_DWORD,
@@ -538,7 +538,7 @@ Overlapped_WSARecv(OverlappedObject *self, PyObject *args)
                   &self->overlapped, NULL);
     Py_END_ALLOW_THREADS
 
-    self->error = err = ret ? ERROR_SUCCESS : WSAGetLastError();
+    self->error = err = (ret < 0 ? WSAGetLastError() : ERROR_SUCCESS);
     switch (err) {
         case ERROR_SUCCESS:
         case ERROR_MORE_DATA:
@@ -617,7 +617,7 @@ Overlapped_WSASend(OverlappedObject *self, PyObject *args)
     DWORD flags;
     DWORD written;
     WSABUF wsabuf;
-    BOOL ret;
+    int ret;
     DWORD err;
 
     if (!PyArg_ParseTuple(args, F_HANDLE "O" F_DWORD,
@@ -650,7 +650,7 @@ Overlapped_WSASend(OverlappedObject *self, PyObject *args)
                   &self->overlapped, NULL);
     Py_END_ALLOW_THREADS
 
-    self->error = err = ret ? ERROR_SUCCESS : WSAGetLastError();
+    self->error = err = (ret < 0 ? WSAGetLastError() : ERROR_SUCCESS);
     switch (err) {
         case ERROR_SUCCESS:
         case ERROR_MORE_DATA:

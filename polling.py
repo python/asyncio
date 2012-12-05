@@ -36,24 +36,11 @@ TODO:
 
 import collections
 import concurrent.futures
-import errno
 import heapq
 import logging
 import os
 import select
 import time
-
-# Errno values indicating the connection was disconnected.
-_DISCONNECTED = frozenset((errno.ECONNRESET,
-                           errno.ENOTCONN,
-                           errno.ESHUTDOWN,
-                           errno.ECONNABORTED,
-                           errno.EPIPE,
-                           errno.EBADF,
-                           ))
-
-# Errno values indicating the socket isn't ready for I/O just yet.
-_TRYAGAIN = frozenset((errno.EAGAIN, errno.EWOULDBLOCK))
 
 
 class PollsterBase:
@@ -424,16 +411,11 @@ class EventLoop:
         if self.pollster.pollable():
             if self.scheduled:
                 when = self.scheduled[0].when
-                timeout = when - time.time()
+                timeout = max(0, when - time.time())
             else:
-                timeout = 10
-            timeout = max(0, min(1, timeout))
+                timeout = None
             t0 = time.time()
-            events = []
-            try:
-                events = self.pollster.poll(timeout)
-            except KeyboardInterrupt:
-                import pdb; pdb.set_trace()
+            events = self.pollster.poll(timeout)
             t1 = time.time()
             argstr = '' if timeout is None else ' %.3f' % timeout
             if t1-t0 >= 1:
@@ -441,11 +423,6 @@ class EventLoop:
             else:
                 level = logging.DEBUG
             logging.log(level, 'poll%s took %.3f seconds', argstr, t1-t0)
-            if level == logging.INFO:
-                logging.info('  ready     = %r', self.ready)
-                logging.info('  scheduled = %r', self.scheduled)
-                logging.info('  readers   = %r', self.pollster.readers)
-                logging.info('  writers   = %r', self.pollster.writers)
             for dcall in events:
                 self.add_callback(dcall)
 
@@ -466,68 +443,6 @@ class EventLoop:
         """
         while self.ready or self.scheduled or self.pollster.pollable():
             self.run_once()
-
-    # Experiment with I/O in the event loop.
-    def recv(self, sock, n, callback):
-        """Receive up to n bytes from a socket.
-
-        Call callback(data) when we have some data; 1 <= len(data) <= n.
-        Call callback(b'') when the connection is dropped/closed.
-
-        If data is available (or the connection is dropped/closed)
-        immediately the callback is called before this function
-        returns.
-
-        Otherwise, register the socket's fd for reading with a helper
-        callback that ensures that eventually the callback is called
-        and the registration removed.
-        """
-        def try_recv(direct=True):
-            # Helper: Either call the callback and return True, or
-            # else return False.  On errors call the callback with b''
-            # and return True.
-            try:
-                value = sock.recv(n)
-            except IOError as err:
-                if err.errno in _TRYAGAIN:
-                    return False
-                elif err.errno in _DISCONNECTED:
-                    value = b''
-                else:
-                    logging.exception('[a] Unexpected error from recv()')
-                    raise
-            except Exception:
-                logging.exception('[b] Unexpected error from recv()')
-                raise
-            logging.info('recv(%s, %s) returned %d bytes',
-                         sock, n, len(value))
-            if direct:
-                try:
-                    callback(value)
-                except Exception:
-                    logging.exception('Error in callback for recv()')
-            else:
-                self.call_soon(callback, value)
-            return True
-
-        if try_recv(direct=False):
-            logging.info('Early return from recv()')
-            return
-
-        fd = sock.fileno()
-
-        def read_callback():
-            # Helper: Callback for add_reader.
-            done = True
-            try:
-                done = try_recv()
-            finally:
-                logging.info('recv(%d, %d): done=%s', fd, n, done)
-                if done:
-                    logging.info('!!!!!!!!!!!!! removing reader %d', fd)
-                    self.remove_reader(fd)
-
-        self.add_reader(fd, read_callback)
 
 
 MAX_WORKERS = 5  # Default max workers when creating an executor.

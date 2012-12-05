@@ -61,7 +61,17 @@ class SocketTransport:
         returns b''.
         """
         assert n >= 0, n
-        return (yield from scheduling.recv(self.sock, n))
+        while True:
+            try:
+                return self.sock.recv(n)
+            except socket.error as err:
+                if err.errno in _TRYAGAIN:
+                    pass
+                elif err.errno in _DISCONNECTED:
+                    return b''
+                else:
+                    raise  # Unexpected, propagate.
+            yield from scheduling.block_r(self.sock.fileno())
 
     def send(self, data):
         """COROUTINE; Send data to the socket, blocking until all written.

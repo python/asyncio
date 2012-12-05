@@ -1,7 +1,7 @@
 PYTHON=python3.3
 
 test:
-	$(PYTHON) main.py -d
+	$(PYTHON) main.py -v
 
 echo:
 	$(PYTHON) echosvr.py -v

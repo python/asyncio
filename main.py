@@ -51,7 +51,7 @@ def doit2():
 
 
 def doit():
-    TIMEOUT = 2
+    TIMEOUT = 5
     tasks = set()
 
     # This references NDB's default test service.

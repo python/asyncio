@@ -1,5 +1,5 @@
 # -*- Mode: text -*-
-   
+
 TO DO SMALLER TASKS
 
 - Make Task more like Future; getting result() should re-raise exception.
@@ -87,7 +87,7 @@ TO DO LATER
 - Support ZeroMQ "sockets" which are user objects.  Though possibly
   this can be supported by getting the underlying fd?  See
   http://mail.python.org/pipermail/python-ideas/2012-October/017532.html
-  OTOH see 
+  OTOH see
   https://github.com/zeromq/pyzmq/blob/master/zmq/eventloop/ioloop.py
 
 - Study goroutines (again).

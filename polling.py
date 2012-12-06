@@ -40,6 +40,7 @@ import heapq
 import logging
 import os
 import select
+import threading
 import time
 
 
@@ -495,3 +496,36 @@ class ThreadRunner:
             os.write(self.pipe_write_fd, b'x')
         future.add_done_callback(done_callback)
         return future
+
+
+class Context(threading.local):
+    """Thread-local context.
+
+    We use this to avoid having to explicitly pass around an event loop
+    or something to hold the current task.
+
+    TODO: Add an API so frameworks can substitute a different notion
+    of context more easily.
+    """
+
+    def __init__(self, eventloop=None, threadrunner=None):
+        # Default event loop and thread runner are lazily constructed
+        # when first accessed.
+        self._eventloop = eventloop
+        self._threadrunner = threadrunner
+        self.current_task = None  # For the benefit of scheduling.py.
+
+    @property
+    def eventloop(self):
+        if self._eventloop is None:
+            self._eventloop = EventLoop()
+        return self._eventloop
+
+    @property
+    def threadrunner(self):
+        if self._threadrunner is None:
+            self._threadrunner = ThreadRunner(self.eventloop)
+        return self._threadrunner
+
+
+context = Context()  # Thread-local!

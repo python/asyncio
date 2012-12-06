@@ -19,7 +19,6 @@ __author__ = 'Guido van Rossum <guido@python.org>'
 # Standard library imports (keep in alphabetic order).
 from concurrent.futures import CancelledError, TimeoutError
 import logging
-import threading
 import time
 import types
 
@@ -27,37 +26,7 @@ import types
 import polling
 
 
-class Context(threading.local):
-    """Thread-local context.
-
-    We use this to avoid having to explicitly pass around an event loop
-    or something to hold the current task.
-
-    TODO: Add an API so frameworks can substitute a different notion
-    of context more easily.
-    """
-
-    def __init__(self, eventloop=None, threadrunner=None):
-        # Default event loop and thread runner are lazily constructed
-        # when first accessed.
-        self._eventloop = eventloop
-        self._threadrunner = threadrunner
-        self.current_task = None
-
-    @property
-    def eventloop(self):
-        if self._eventloop is None:
-            self._eventloop = polling.EventLoop()
-        return self._eventloop
-
-    @property
-    def threadrunner(self):
-        if self._threadrunner is None:
-            self._threadrunner = polling.ThreadRunner(self.eventloop)
-        return self._threadrunner
-
-
-context = Context()  # Thread-local!
+context = polling.context
 
 
 class Task:

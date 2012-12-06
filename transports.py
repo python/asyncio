@@ -9,7 +9,7 @@ import socket
 import ssl
 
 # Local imports.
-import scheduling
+import polling
 
 # Errno values indicating the connection was disconnected.
 _DISCONNECTED = frozenset((errno.ECONNRESET,
@@ -89,7 +89,7 @@ def make_connection(protocol, host, port=None, af=0, socktype=0, proto=0,
         port = 443 if use_ssl else 80
     if use_ssl is None:
         use_ssl = (port == 443)
-    eventloop = scheduling.context.eventloop
+    eventloop = polling.context.eventloop
 
     # XXX Move all this to private methods on SocketTransport.
 

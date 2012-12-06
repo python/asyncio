@@ -1,5 +1,5 @@
 # -*- Mode: text -*-
-   
+
 TO DO SMALLER TASKS
 
 - Make Task more like Future; getting result() should re-raise exception.
@@ -25,6 +25,26 @@ TO DO LARGER TASKS
   heavy-duty logging, tracking essentially all task state changes?
 
 - Restructure directory, move demos and benchmarks to subdirectories.
+
+
+FROM BEN DARNELL (Tornado)
+
+- The waker pipe in ThreadRunner should really be in EventLoop itself
+  - we need to be able to call call_soon (or some equivalent) from
+  threads that were not created by ThreadRunner.  In Tornado I ended
+  up needing two functions, add_callback (usable from any thread) and
+  add_callback_from_signal (usable only from signal handlers).
+
+- Timeouts should ideally be based on time.monotonic, although this
+  requires some extra complexity to deal with the cases where you
+  actually do want time.time.  (in tornado, the clock used is
+  configurable on a per-ioloop basis, which is not ideal but is
+  workable)
+
+- I'm sure you've heard this from the twisted guys by now, but to
+  properly support completion-based event loops like IOCP you need to
+  be able to swap out most of sockets.py (the layers below
+  BufferedReader) for an alternative implementation.
 
 
 TO DO LATER
@@ -67,7 +87,7 @@ TO DO LATER
 - Support ZeroMQ "sockets" which are user objects.  Though possibly
   this can be supported by getting the underlying fd?  See
   http://mail.python.org/pipermail/python-ideas/2012-October/017532.html
-  OTOH see 
+  OTOH see
   https://github.com/zeromq/pyzmq/blob/master/zmq/eventloop/ioloop.py
 
 - Study goroutines (again).

@@ -90,6 +90,7 @@ def make_connection(protocol, host, port=None, af=0, socktype=0, proto=0,
     if use_ssl is None:
         use_ssl = (port == 443)
     eventloop = polling.context.eventloop
+    threadrunner = polling.context.threadrunner
 
     # XXX Move all this to private methods on SocketTransport.
 
@@ -132,7 +133,13 @@ def make_connection(protocol, host, port=None, af=0, socktype=0, proto=0,
 
         eventloop.add_writer(sock.fileno(), on_writable)
 
-    # XXX Implement EventLoop.call_in_thread().
-    eventloop.call_in_thread(socket.getaddrinfo,
-                             host, port, af, socktype, proto,
-                             callback=on_addrinfo)
+    future = threadrunner.submit(socket.getaddrinfo,
+                                 host, port, af, socktype, proto)
+    def on_future_done(fut):
+        exc = fut.exception()
+        if exc is None:
+            infos = fut.result()
+        else:
+            infos = None
+        on_addrinfo(infos, exc)
+    future.add_done_callback(on_future_done)

@@ -5,8 +5,10 @@ Inspired by Twisted, PEP 3153 and github.com/lvh/async-pep.
 
 # Stdlib imports.
 import errno
+import logging
 import socket
 import ssl
+import sys
 
 # Local imports.
 import polling
@@ -65,7 +67,7 @@ class Protocol:
 class SocketTransport(Transport):
 
     def __init__(self, eventloop, protocol, sock):
-        self._eventloop = None
+        self._eventloop = eventloop
         self._protocol = protocol
         self._sock = sock
 
@@ -78,9 +80,16 @@ class SocketTransport(Transport):
                 sock.close()
                 self._protocol.connection_lost(exc)  # XXX calL_soon()?
         else:
-            self._protocol.data_received(data)  # XXX call_soon()?
+            if not data:
+                self._eventloop.remove_reader(self._sock.fileno())
+                self._sock.close()
+                self._protocol.connection_lost(None)
+            else:
+                self._protocol.data_received(data)  # XXX call_soon()?
 
-    # XXX implement write buffering.
+    def write(self, data):
+        # XXX implement write buffering.
+        self._sock.sendall(data)
 
 
 def make_connection(protocol, host, port=None, af=0, socktype=0, proto=0,
@@ -95,6 +104,7 @@ def make_connection(protocol, host, port=None, af=0, socktype=0, proto=0,
     # XXX Move all this to private methods on SocketTransport.
 
     def on_addrinfo(infos, exc):
+        logging.debug('on_addrinfo(<list of %d>, %r)', len(infos), exc)
         # XXX Make infos into an iterator, to avoid pop()?
         if not infos:
             if exc is not None:
@@ -136,10 +146,47 @@ def make_connection(protocol, host, port=None, af=0, socktype=0, proto=0,
     future = threadrunner.submit(socket.getaddrinfo,
                                  host, port, af, socktype, proto)
     def on_future_done(fut):
+        logging.debug('Future done.')
         exc = fut.exception()
         if exc is None:
             infos = fut.result()
         else:
             infos = None
-        on_addrinfo(infos, exc)
-    future.add_done_callback(on_future_done)
+        eventloop.call_soon(on_addrinfo, infos, exc)
+    future.add_done_callback(lambda fut: eventloop.call_soon(on_future_done, fut))
+
+
+def main():  # Testing...
+
+    # Initialize logging.
+    if '-d' in sys.argv:
+        level = logging.DEBUG
+    elif '-v' in sys.argv:
+        level = logging.INFO
+    elif '-q' in sys.argv:
+        level = logging.ERROR
+    else:
+        level = logging.WARN
+    logging.basicConfig(level=level)
+
+    class TestProtocol(Protocol):
+        def connection_made(self, transport):
+            logging.debug('Connection made.')
+            self.transport = transport
+            self.transport.write(b'GET / HTTP/1.0\r\n\r\n')
+            ## self.transport.half_close()
+        def data_received(self, data):
+            logging.info('Received %d bytes: %r', len(data), data)
+        def connection_lost(self, exc):
+            logging.debug('Connection lost: %r', exc)
+
+    tp = TestProtocol()
+    logging.info('tp = %r', tp)
+    make_connection(tp, 'python.org')
+    logging.info('Running...')
+    polling.context.eventloop.run()
+    logging.info('Done.')
+
+
+if __name__ == '__main__':
+    main()

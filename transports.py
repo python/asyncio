@@ -76,8 +76,8 @@ class SocketTransport(Transport):
             data = self._sock.recv(8192)
         except socket.error as exc:
             if exc.errno not in _TRYAGAIN:
-                self._eventloop.remove_reader(sock.fileno())
-                sock.close()
+                self._eventloop.remove_reader(self._sock.fileno())
+                self._sock.close()
                 self._protocol.connection_lost(exc)  # XXX calL_soon()?
         else:
             if not data:
@@ -98,6 +98,8 @@ def make_connection(protocol, host, port=None, af=0, socktype=0, proto=0,
         port = 443 if use_ssl else 80
     if use_ssl is None:
         use_ssl = (port == 443)
+    if not socktype:
+        socktype = socket.SOCK_STREAM
     eventloop = polling.context.eventloop
     threadrunner = polling.context.threadrunner
 
@@ -173,7 +175,7 @@ def main():  # Testing...
         def connection_made(self, transport):
             logging.debug('Connection made.')
             self.transport = transport
-            self.transport.write(b'GET / HTTP/1.0\r\n\r\n')
+            self.transport.write(b'GET / HTTP/1.0\r\nHost: python.org\r\n\r\n')
             ## self.transport.half_close()
         def data_received(self, data):
             logging.info('Received %d bytes: %r', len(data), data)

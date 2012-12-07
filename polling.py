@@ -474,11 +474,11 @@ class ThreadRunner:
             self.eventloop.remove_reader(self.pipe_read_fd)
         assert self.active_count >= 0, self.active_count
 
-    def submit(self, func, *args, executor=None):
+    def submit(self, func, *args, executor=None, callback=None):
         """Submit a function to the thread pool.
 
         This returns a concurrent.futures.Future instance.  The caller
-        should not wait for that, but rather add a callback to it.
+        should not wait for that, but rather use the callback argument..
         """
         if executor is None:
             executor = self.executor
@@ -492,7 +492,10 @@ class ThreadRunner:
         if self.active_count == 0:
             self.eventloop.add_reader(self.pipe_read_fd, self.read_callback)
         self.active_count += 1
-        def done_callback(future):
+        def done_callback(fut):
+            if callback is not None:
+                self.eventloop.call_soon(callback, fut)
+            # TODO: Wake up the pipe in call_soon()?
             os.write(self.pipe_write_fd, b'x')
         future.add_done_callback(done_callback)
         return future

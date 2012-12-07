@@ -145,8 +145,6 @@ def make_connection(protocol, host, port=None, af=0, socktype=0, proto=0,
 
         eventloop.add_writer(sock.fileno(), on_writable)
 
-    future = threadrunner.submit(socket.getaddrinfo,
-                                 host, port, af, socktype, proto)
     def on_future_done(fut):
         logging.debug('Future done.')
         exc = fut.exception()
@@ -155,7 +153,10 @@ def make_connection(protocol, host, port=None, af=0, socktype=0, proto=0,
         else:
             infos = None
         eventloop.call_soon(on_addrinfo, infos, exc)
-    future.add_done_callback(lambda fut: eventloop.call_soon(on_future_done, fut))
+
+    future = threadrunner.submit(socket.getaddrinfo,
+                                 host, port, af, socktype, proto,
+                                 callback=on_future_done)
 
 
 def main():  # Testing...
@@ -178,12 +179,12 @@ def main():  # Testing...
             self.transport.write(b'GET / HTTP/1.0\r\nHost: python.org\r\n\r\n')
             ## self.transport.half_close()
         def data_received(self, data):
-            logging.info('Received %d bytes: %r', len(data), data)
+            logging.debug('Received %d bytes: %r', len(data), data)
         def connection_lost(self, exc):
             logging.debug('Connection lost: %r', exc)
 
     tp = TestProtocol()
-    logging.info('tp = %r', tp)
+    logging.debug('tp = %r', tp)
     make_connection(tp, 'python.org')
     logging.info('Running...')
     polling.context.eventloop.run()

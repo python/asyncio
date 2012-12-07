@@ -136,7 +136,8 @@ class Task:
         self.blocked = True
         self.unblocker = (unblock_callback, unblock_args)
 
-    def unblock_if_alive(self):
+    def unblock_if_alive(self, unused=None):
+        # Ignore optional argument so we can be a Future's done_callback.
         if self.alive:
             self.unblock()
 
@@ -241,17 +242,10 @@ def call_in_thread(func, *args, executor=None):
     """COROUTINE: Run a function in a thread."""
     task = context.current_task
     eventloop = context.eventloop
-    future = context.threadrunner.submit(func, *args, executor=executor)
+    future = context.threadrunner.submit(func, *args,
+                                         executor=executor,
+                                         callback=task.unblock_if_alive)
     task.block(future.cancel)
-    # If the thread managed to complete before we get here,
-    # add_done_callback() will call the callback right now.  Make sure
-    # the unblock() call doesn't happen until later.  But then, the
-    # task may already have been cancelled (and it may have been too
-    # late to cancel the Future) so it should be okay if this call
-    # finds the task deceased.  For that purpose we have
-    # unblock_if_alive().
-    future.add_done_callback(
-        lambda _: eventloop.call_soon(task.unblock_if_alive))
     yield
     assert future.done()
     return future.result()

@@ -6,11 +6,13 @@ THIS IS NOT REAL CODE!  IT IS JUST AN EXPERIMENT.
 """
 
 # Stdlib imports.
+import collections
 import errno
 import logging
 import socket
 import ssl
 import sys
+import time
 
 # Local imports.
 import polling
@@ -37,6 +39,9 @@ class Transport:
     connection_made() method with a transport (or it will call
     connection_lost() with an exception if it fails to create the
     desired transport).
+
+    The implementation here raises NotImplemented for every method
+    except writelines(), which calls write() in a loop.
     """
 
     def write(self, data):
@@ -47,7 +52,7 @@ class Transport:
         """
         raise NotImplemented
 
-    def writelines(self, list_of_data):  # Not just for lines.
+    def writelines(self, list_of_data):
         """Write a list (or any iterable) of data (bytes) to the transport.
 
         The default implementation just calls write() for each item in
@@ -63,6 +68,7 @@ class Transport:
         be received.  When all buffered data is flushed, the protocol's
         connection_lost() method is called with None as its argument.
         """
+        raise NotImplemented
 
     def abort(self):
         """Closes the transport immediately.
@@ -71,32 +77,42 @@ class Transport:
         The protocol's connection_lost() method is called with None as
         its argument.
         """
+        raise NotImplemented
 
-    def half_close(self):  # Closes the write end after flushing.
+    def half_close(self):
         """Closes the write end after flushing buffered data.
 
         Data may still be received.
+
+        TODO: What's the use case for this?  How to implement it?
+        Should it call shutdown(SHUT_WR) after all the data is flushed?
+        Is there no use case for closing the other half first?
         """
+        raise NotImplemented
 
     def pause(self):
         """Pause the receiving end.
         
-        No data will be received until resume end is called.
+        No data will be received until resume() is called.
         """
+        raise NotImplemented
 
     def resume(self):
         """Resume the receiving end.
 
-        Cancels a pause() call.
+        Cancels a pause() call, resumes receiving data.
         """
+        raise NotImplemented
 
 
 class Protocol:
     """ABC representing a protocol.
 
-    The user should implement this interface.
+    The user should implement this interface.  They can inherit from
+    this class but don't need to.  The implementations here do
+    nothing.
 
-    When the user requests a transport, they pass it a protocol
+    When the user wants to requests a transport, they pass a protocol
     instance to a utility function.
 
     When the connection is made successfully, connection_made() is
@@ -134,30 +150,32 @@ class Protocol:
     def connection_lost(self, exc):
         """Called when the connection is lost or closed.
 
-        Also called when we fail to make a connection at all.
+        Also called when we fail to make a connection at all (in that
+        case connection_made() will not be called).
 
-        The argument is an exception object or None (the latter meaning
-        a regular EOF is received or the connection was aborted).
+        The argument is an exception object or None (the latter
+        meaning a regular EOF is received or the connection was
+        aborted or closed).
         """
 
 
-# XXX The rest is platform specific and should move elsewhere.
+# TODO: The rest is platform specific and should move elsewhere.
 
-class SocketTransport(Transport):
+class UnixSocketTransport(Transport):
 
     def __init__(self, eventloop, protocol, sock):
         self._eventloop = eventloop
         self._protocol = protocol
         self._sock = sock
+        self._buffer = collections.deque()  # For write().
+        self._write_closed = False
 
     def _on_readable(self):
         try:
             data = self._sock.recv(8192)
         except socket.error as exc:
             if exc.errno not in _TRYAGAIN:
-                self._eventloop.remove_reader(self._sock.fileno())
-                self._sock.close()
-                self._protocol.connection_lost(exc)  # XXX calL_soon()?
+                self._bad_error(exc)
         else:
             if not data:
                 self._eventloop.remove_reader(self._sock.fileno())
@@ -167,8 +185,88 @@ class SocketTransport(Transport):
                 self._protocol.data_received(data)  # XXX call_soon()?
 
     def write(self, data):
-        # XXX implement write buffering.
-        self._sock.sendall(data)
+        assert isinstance(data, bytes)
+        assert not self._write_closed
+        if not data:
+            # Silly, but it happens.
+            return
+        if self._buffer:
+            # We've already registered a callback, just buffer the data.
+            self._buffer.append(data)
+            # Consider pausing if the total length of the buffer is
+            # truly huge.
+            return
+
+        # TODO: Refactor so there's more sharing between this and
+        # _on_writable().
+
+        # There's no callback registered yet.  It's quite possible
+        # that the kernel has buffer space for our data, so try to
+        # write now.  Since the socket is non-blocking it will
+        # give us an error in _TRYAGAIN if it doesn't have enough
+        # space for even one more byte; it will return the number
+        # of bytes written if it can write at least one byte.
+        try:
+            n = self._sock.send(data)
+        except socket.error as exc:
+            # An error.
+            if exc.errno not in _TRYAGAIN:
+                self._bad_error(exc)
+                return
+            # The kernel doesn't have room for more data right now.
+            n = 0
+        else:
+            # Wrote at least one byte.
+            if n == len(data):
+                # Wrote it all.  Done!
+                if self._write_closed:
+                    self._sock.shutdown(socket.SHUT_WR)
+                return
+            # Throw away the data that was already written.
+            # TODO: Do this without copying the data?
+            data = data[n:]
+        self._buffer.append(data)
+        self._eventloop.add_writer(self._sock.fileno(), self._on_writable)
+
+    def _on_writable(self):
+        while self._buffer:
+            data = self._buffer[0]
+            # TODO: Join small amounts of data?
+            try:
+                n = self._sock.send(data)
+            except socket.error as exc:
+                # Error handling is the same as in write().
+                if exc.errno not in _TRYAGAIN:
+                    self._bad_error(exc)
+                return
+            if n < len(data):
+                self._buffer[0] = data[n:]
+                return
+            self._buffer.popleft()
+        self._eventloop.remove_writer(self._sock.fileno())
+        if self._write_closed:
+            self._sock.shutdown(socket.SHUT_WR)
+
+    def abort(self):
+        self._bad_error(None)
+
+    def _bad_error(self, exc):
+        # A serious error.  Close the socket etc.
+        fd = self._sock.fileno()
+        # TODO: Record whether we have a writer and/or reader registered.
+        try:
+            self._eventloop.remove_writer(fd)
+        except Exception:
+            pass
+        try:
+            self._eventloop.remove_reader(fd)
+        except Exception:
+            pass
+        self._sock.close()
+        self._protocol.connection_lost(exc)  # XXX call_soon()?
+
+    def half_close(self):
+        self._write_closed = True
 
 
 def make_connection(protocol, host, port=None, af=0, socktype=0, proto=0,
@@ -182,11 +280,18 @@ def make_connection(protocol, host, port=None, af=0, socktype=0, proto=0,
     eventloop = polling.context.eventloop
     threadrunner = polling.context.threadrunner
 
-    # XXX Move all this to private methods on SocketTransport.
+    # TODO: Maybe use scheduling.Task(sockets.create_connection()).
+    # (That sounds insane, but it's purely an internal detail.  Once
+    # we have a socket, we can switch to the coroutine-free
+    # transport+protocol API.)
+
+    # TODO: Move this to private methods on UnixSocketTransport?
+    # (But then how to handle sharing code between socket and ssl
+    # transports?)
 
     def on_addrinfo(infos, exc):
         logging.debug('on_addrinfo(<list of %d>, %r)', len(infos), exc)
-        # XXX Make infos into an iterator, to avoid pop()?
+        # TODO: Make infos into an iterator, to avoid pop()?
         if not infos:
             if exc is not None:
                 protocol.connection_lost(exc)
@@ -203,7 +308,7 @@ def make_connection(protocol, host, port=None, af=0, socktype=0, proto=0,
         except socket.error as exc:
             if exc.errno != errno.EINPROGRESS:
                 sock.close()
-                on_addrinfo(infos, exc)  # XXX Use eventloop.call_soon()?
+                on_addrinfo(infos, exc)  # XXX call_soon()?
                 return
 
         def on_writable():
@@ -218,7 +323,7 @@ def make_connection(protocol, host, port=None, af=0, socktype=0, proto=0,
             if use_ssl:
                 XXX
             else:
-                transport = SocketTransport(eventloop, protocol, sock)
+                transport = UnixSocketTransport(eventloop, protocol, sock)
                 protocol.connection_made(transport)  # XXX call_soon()?
                 eventloop.add_reader(sock.fileno(), transport._on_readable)
 
@@ -251,20 +356,32 @@ def main():  # Testing...
         level = logging.WARN
     logging.basicConfig(level=level)
 
+    host = 'xkcd.com'
+    if '.' in sys.argv[-1]:
+        host = sys.argv[-1]
+
+    t0 = time.time()
+
     class TestProtocol(Protocol):
         def connection_made(self, transport):
-            logging.debug('Connection made.')
+            logging.info('Connection made at %.3f secs', time.time() - t0)
             self.transport = transport
-            self.transport.write(b'GET / HTTP/1.0\r\nHost: python.org\r\n\r\n')
-            ## self.transport.half_close()
+            self.transport.write(b'GET / HTTP/1.0\r\nHost: ' +
+                                 host.encode('ascii') +
+                                 b'\r\n\r\n')
+            self.transport.half_close()
         def data_received(self, data):
-            logging.debug('Received %d bytes: %r', len(data), data)
+            logging.info('Received %d bytes at t=%.3f',
+                         len(data), time.time() - t0)
+            logging.debug('Receved %r', data)
         def connection_lost(self, exc):
             logging.debug('Connection lost: %r', exc)
+            self.t1 = time.time()
+            logging.info('Total time %.3f secs', self.t1 - t0)
 
     tp = TestProtocol()
     logging.debug('tp = %r', tp)
-    make_connection(tp, 'python.org')
+    make_connection(tp, host)
     logging.info('Running...')
     polling.context.eventloop.run()
     logging.info('Done.')

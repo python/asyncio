@@ -1,6 +1,8 @@
 """Transports and Protocols, actually.
 
 Inspired by Twisted, PEP 3153 and github.com/lvh/async-pep.
+
+THIS IS NOT REAL CODE!  IT IS JUST AN EXPERIMENT.
 """
 
 # Stdlib imports.
@@ -27,39 +29,116 @@ _TRYAGAIN = frozenset((errno.EAGAIN, errno.EWOULDBLOCK))
 
 
 class Transport:
+    """ABC representing a transport.
+
+    There may be many implementations.  The user never instantiates
+    this directly; they call some utility function, passing it a
+    protocol, and the utility function will call the protocol's
+    connection_made() method with a transport (or it will call
+    connection_lost() with an exception if it fails to create the
+    desired transport).
+    """
 
     def write(self, data):
-        XXX
+        """Write some data (bytes) to the transport.
+
+        This does not block; it buffers the data and arranges for it
+        to be sent out asynchronously.
+        """
+        raise NotImplemented
 
     def writelines(self, list_of_data):  # Not just for lines.
-        XXX
+        """Write a list (or any iterable) of data (bytes) to the transport.
+
+        The default implementation just calls write() for each item in
+        the list/iterable.
+        """
+        for data in list_of_data:
+            self.write(data)
 
     def close(self):
-        XXX
+        """Closes the transport.
+
+        Buffered data will be flushed asynchronously.  No more data will
+        be received.  When all buffered data is flushed, the protocol's
+        connection_lost() method is called with None as its argument.
+        """
 
     def abort(self):
-        XXX
+        """Closes the transport immediately.
+
+        Buffered data will be lost.  No more data will be received.
+        The protocol's connection_lost() method is called with None as
+        its argument.
+        """
 
     def half_close(self):  # Closes the write end after flushing.
-        XXX
+        """Closes the write end after flushing buffered data.
+
+        Data may still be received.
+        """
 
     def pause(self):
-        XXX
+        """Pause the receiving end.
+        
+        No data will be received until resume end is called.
+        """
 
     def resume(self):
-        XXX
+        """Resume the receiving end.
+
+        Cancels a pause() call.
+        """
 
 
 class Protocol:
+    """ABC representing a protocol.
+
+    The user should implement this interface.
+
+    When the user requests a transport, they pass it a protocol
+    instance to a utility function.
+
+    When the connection is made successfully, connection_made() is
+    called with a suitable transport object.  Then data_received()
+    will be called 0 or more times with data (bytes) received from the
+    transport; finally, connection_list() will be called exactly once
+    with either an exception object or None as an argument.
+
+    If the utility function does not succeed in creating a transport,
+    it will call connection_lost() with an exception object.
+
+    State machine of calls:
+
+      start -> [CM -> DR*] -> CL -> end
+    """
 
     def connection_made(self, transport):
-        XXX
+        """Called when a connection is made.
+
+        The argument is the transport representing the connection.
+        To send data, call its write() or writelines() method.
+        To receive data, wait for data_received() calls.
+        When the connection is closed, connection_lost() is called.
+        """
 
     def data_received(self, data):
-        XXX
+        """Called when some data is received.
 
-    def connection_lost(self, exc):  # Also when connect() failed.
-        XXX
+        The argument is a bytes object.
+
+        TODO: Should we allow it to be a bytesarray or some other
+        memory buffer?
+        """
+
+    def connection_lost(self, exc):
+        """Called when the connection is lost or closed.
+
+        Also called when we fail to make a connection at all.
+
+        The argument is an exception object or None (the latter meaning
+        a regular EOF is received or the connection was aborted).
+        """
 
 
 # XXX The rest is platform specific and should move elsewhere.

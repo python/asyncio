@@ -402,7 +402,10 @@ def make_connection(protocol, host, port=None, af=0, socktype=0, proto=0,
     # transports?)
 
     def on_addrinfo(infos, exc):
-        logging.debug('on_addrinfo(<list of %d>, %r)', len(infos), exc)
+        if infos is None:
+            logging.debug('on_addrinfo(None, %r)', exc)
+        else:
+            logging.debug('on_addrinfo(<list of %d>, %r)', len(infos), exc)
         # TODO: Make infos into an iterator, to avoid pop()?
         if not infos:
             if exc is not None:

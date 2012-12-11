@@ -50,7 +50,7 @@ class Transport:
         This does not block; it buffers the data and arranges for it
         to be sent out asynchronously.
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def writelines(self, list_of_data):
         """Write a list (or any iterable) of data (bytes) to the transport.
@@ -68,7 +68,7 @@ class Transport:
         be received.  When all buffered data is flushed, the protocol's
         connection_lost() method is called with None as its argument.
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def abort(self):
         """Closes the transport immediately.
@@ -77,7 +77,7 @@ class Transport:
         The protocol's connection_lost() method is called with None as
         its argument.
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def half_close(self):
         """Closes the write end after flushing buffered data.
@@ -88,21 +88,21 @@ class Transport:
         Should it call shutdown(SHUT_WR) after all the data is flushed?
         Is there no use case for closing the other half first?
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def pause(self):
         """Pause the receiving end.
         
         No data will be received until resume() is called.
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def resume(self):
         """Resume the receiving end.
 
         Cancels a pause() call, resumes receiving data.
         """
-        raise NotImplemented
+        raise NotImplementedError
 
 
 class Protocol:
@@ -269,6 +269,116 @@ class UnixSocketTransport(Transport):
         self._write_closed = True
 
 
+class UnixSslTransport(Transport):
+
+    # TODO: Refactor Socket and Ssl transport to share some code.
+    # (E.g. buffering.)
+
+    # TODO: Consider using coroutines instead of callbacks, it seems
+    # much easier that way.
+
+    def __init__(self, eventloop, protocol, rawsock, sslcontext=None):
+        self._eventloop = eventloop
+        self._protocol = protocol
+        self._rawsock = rawsock
+        self._sslcontext = sslcontext or ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+        self._sslsock = self._sslcontext.wrap_socket(
+            self._rawsock, do_handshake_on_connect=False)
+
+        self._buffer = collections.deque()  # For write().
+        self._write_closed = False
+
+        # Try the handshake now.  Likely it will raise EAGAIN, then it
+        # will take care of registering the appropriate callback.
+        self._on_handshake()
+
+    def _on_handshake(self):
+        fd = self._sslsock.fileno()
+        try:
+            self._sslsock.do_handshake()
+        except ssl.SSLWantReadError:
+            self._eventloop.add_reader(fd, self._on_handshake)
+            return
+        except ssl.SSLWantWriteError:
+            self._eventloop.add_writable(fd, self._on_handshake)
+            return
+        # TODO: What if it raises another error?
+        try:
+            self._eventloop.remove_reader(fd)
+        except Exception:
+            pass
+        try:
+            self._eventloop.remove_writer(fd)
+        except Exception:
+            pass
+        self._protocol.connection_made(self)
+        self._eventloop.add_reader(fd, self._on_ready)
+        self._eventloop.add_writer(fd, self._on_ready)
+
+    def _on_ready(self):
+        import pdb; pdb.set_trace()
+        # Because of renegotiations (?), there's no difference between
+        # readable and writable.  We just try both.  XXX This may be
+        # incorrect; we probably need to keep state about what we
+        # should do next.
+
+        # First try reading.
+        try:
+            data = self._sslsock.recv(8192)
+        except ssl.SSLWantReadError:
+            pass
+        except ssl.SSLWantWriteError:
+            pass
+        except socket.error as exc:
+            if exc.errno not in _TRYAGAIN:
+                self._bad_error(exc)
+                return
+        else:
+            if data:
+                self._protocol.data_received(data)
+            else:
+                fd = self._sslsock.fileno()
+                self._eventloop.remove_reader(fd)
+                self._eventloop.remove_writer(fd)
+                self._sslsock.close()
+                self._protocol.connection_lost(None)
+
+        # Now try writing, if there's anything to write.
+        if not self._buffer:
+            return
+
+        data = self._buffer[0]
+        try:
+            n = self._sslsock.send(data)
+        except ssl.SSLWantReadError:
+            pass
+        except ssl.SSLWantWriteError:
+            pass
+        except socket.error as exc:
+            if exc.errno not in _TRYAGAIN:
+                self._bad_error(exc)
+                return
+        else:
+            if n == len(data):
+                self._buffer.popleft()
+                # Could try again, but let's just have the next callback do it.
+                if not self._buffer:
+                    self._sslsock.shutdown(socket.SHUT_WR)
+            else:
+                self._buffer[0] = data[n:]
+
+    def write(self, data):
+        assert isinstance(data, bytes)
+        assert not self._write_closed
+        if not data:
+            return
+        self._buffer.append(data)
+        # We could optimize, but the callback can do this for now.
+
+    def half_close(self):
+        self._write_closed = True
+
+
 def make_connection(protocol, host, port=None, af=0, socktype=0, proto=0,
                     use_ssl=None):
     if port is None:
@@ -312,6 +422,7 @@ def make_connection(protocol, host, port=None, af=0, socktype=0, proto=0,
                 return
 
         def on_writable():
+            # connect() makes the socket writable when it is connected.
             eventloop.remove_writer(sock.fileno())
             err = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
             if err != 0:
@@ -321,9 +432,17 @@ def make_connection(protocol, host, port=None, af=0, socktype=0, proto=0,
                 return
 
             if use_ssl:
-                XXX
+                # You can pass an ssl.SSLContext object as use_ssl,
+                # or a bool.
+                if isinstance(use_ssl, bool):
+                    sslcontext = None
+                else:
+                    sslcontext = use_ssl
+                transport = UnixSslTransport(eventloop, protocol, sock,
+                                             sslcontext)
             else:
                 transport = UnixSocketTransport(eventloop, protocol, sock)
+                # TODO: Should the ransport make the following calls?
                 protocol.connection_made(transport)  # XXX call_soon()?
                 eventloop.add_reader(sock.fileno(), transport._on_readable)
 
@@ -381,7 +500,7 @@ def main():  # Testing...
 
     tp = TestProtocol()
     logging.debug('tp = %r', tp)
-    make_connection(tp, host)
+    make_connection(tp, host, use_ssl=('-S' in sys.argv))
     logging.info('Running...')
     polling.context.eventloop.run()
     logging.info('Done.')

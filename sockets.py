@@ -142,7 +142,7 @@ class SslTransport:
                 yield from scheduling.block_w(self.sslsock.fileno())
             except socket.error as err:
                 if err.errno in _TRYAGAIN:
-                    yield from scheduling.block_r(self.sock.fileno())
+                    yield from scheduling.block_r(self.sslsock.fileno())
                 elif err.errno in _DISCONNECTED:
                     # Can this happen?
                     return b''
@@ -160,7 +160,7 @@ class SslTransport:
                 yield from scheduling.block_w(self.sslsock.fileno())
             except socket.error as err:
                 if err.errno in _TRYAGAIN:
-                    yield from scheduling.block_w(self.sock.fileno())
+                    yield from scheduling.block_w(self.sslsock.fileno())
                 elif err.errno in _DISCONNECTED:
                     return False
                 else:

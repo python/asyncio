@@ -223,7 +223,7 @@ class KqueuePollster(PollsterBase):
         return super().register_reader(fd, callback, *args)
 
     def register_writer(self, fd, callback, *args):
-        if fd not in self.readers:
+        if fd not in self.writers:
             kev = select.kevent(fd, select.KQ_FILTER_WRITE, select.KQ_EV_ADD)
             self._kqueue.control([kev], 0, 0)
         return super().register_writer(fd, callback, *args)

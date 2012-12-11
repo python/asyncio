@@ -316,7 +316,6 @@ class UnixSslTransport(Transport):
         self._eventloop.add_writer(fd, self._on_ready)
 
     def _on_ready(self):
-        import pdb; pdb.set_trace()
         # Because of renegotiations (?), there's no difference between
         # readable and writable.  We just try both.  XXX This may be
         # incorrect; we probably need to keep state about what we
@@ -337,11 +336,14 @@ class UnixSslTransport(Transport):
             if data:
                 self._protocol.data_received(data)
             else:
+                # TODO: Don't close when self._buffer is non-empty.
+                assert not self._buffer
                 fd = self._sslsock.fileno()
                 self._eventloop.remove_reader(fd)
                 self._eventloop.remove_writer(fd)
                 self._sslsock.close()
                 self._protocol.connection_lost(None)
+                return
 
         # Now try writing, if there's anything to write.
         if not self._buffer:
@@ -362,8 +364,6 @@ class UnixSslTransport(Transport):
             if n == len(data):
                 self._buffer.popleft()
                 # Could try again, but let's just have the next callback do it.
-                if not self._buffer:
-                    self._sslsock.shutdown(socket.SHUT_WR)
             else:
                 self._buffer[0] = data[n:]
 
@@ -377,6 +377,8 @@ class UnixSslTransport(Transport):
 
     def half_close(self):
         self._write_closed = True
+        # Just set the flag.  Calling shutdown() on the ssl socket
+        # breaks something, causing recv() to return binary data.
 
 
 def make_connection(protocol, host, port=None, af=0, socktype=0, proto=0,

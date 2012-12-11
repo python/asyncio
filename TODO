@@ -193,3 +193,7 @@ MISTAKES I MADE
 
 - Submitted some changes prematurely (forgot to pass the filename on
   hg ci).
+
+- Forgot again that shutdown(SHUT_WR) on an ssl socket does not work
+  as I expected.  I ran into this with the origininal sockets.py and
+  again in transport.py.

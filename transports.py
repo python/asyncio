@@ -92,7 +92,7 @@ class Transport:
 
     def pause(self):
         """Pause the receiving end.
-        
+
         No data will be received until resume() is called.
         """
         raise NotImplementedError

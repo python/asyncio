@@ -182,3 +182,14 @@ MISTAKES I MADE
   * I didn't build the whole infrastructure, just played with recv()
   * I don't have unittests
   * I don't have good logging to see what is going
+
+- In sockets.py, in some SSL error handling code, used the wrong
+  variable (sock instead of sslsock).  A linter would have found this.
+
+- In polling.py, in KqueuePollster.register_writer(), a copy/paste
+  error where I was testing for "if fd not in self.readers" instead of
+  writers.  This only came out when I had both a reader and a writer
+  for the same fd.
+
+- Submitted some changes prematurely (forgot to pass the filename on
+  hg ci).

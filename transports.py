@@ -16,6 +16,8 @@ import time
 
 # Local imports.
 import polling
+import scheduling
+import sockets
 
 # Errno values indicating the connection was disconnected.
 _DISCONNECTED = frozenset((errno.ECONNRESET,
@@ -391,6 +393,14 @@ class UnixSslTransport(Transport):
 
 def make_connection(protocol, host, port=None, af=0, socktype=0, proto=0,
                     use_ssl=None):
+    # TODO: Pass in a protocol factory, not a protocol.
+    # What should be the exact sequence of events?
+    #   - socket
+    #   - transport
+    #   - protocol
+    #   - tell transport about protocol
+    #   - tell protocol about transport
+    # Or should the latter two be reversed?  Does it matter?
     if port is None:
         port = 443 if use_ssl else 80
     if use_ssl is None:
@@ -398,81 +408,33 @@ def make_connection(protocol, host, port=None, af=0, socktype=0, proto=0,
     if not socktype:
         socktype = socket.SOCK_STREAM
     eventloop = polling.context.eventloop
-    threadrunner = polling.context.threadrunner
 
-    # TODO: Maybe use scheduling.Task(sockets.create_connection()).
-    # (That sounds insane, but it's purely an internal detail.  Once
-    # we have a socket, we can switch to the coroutine-free
-    # transport+protocol API.)
-
-    # TODO: Move this to private methods on UnixSocketTransport?
-    # (But then how to handle sharing code between socket and ssl
-    # transports?)
-
-    def on_addrinfo(infos, exc):
-        if infos is None:
-            logging.debug('on_addrinfo(None, %r)', exc)
-        else:
-            logging.debug('on_addrinfo(<list of %d>, %r)', len(infos), exc)
-        # TODO: Make infos into an iterator, to avoid pop()?
-        if not infos:
-            if exc is not None:
-                protocol.connection_lost(exc)
-                return
-            protocol.connection_lost(IOError(0, 'No more infos to try'))
-            return
-
-        af, socktype, proto, cname, address = infos.pop(0)
-        sock = socket.socket(af, socktype, proto)
-        sock.setblocking(False)
-
-        try:
-            sock.connect(address)
-        except socket.error as exc:
-            if exc.errno != errno.EINPROGRESS:
-                sock.close()
-                on_addrinfo(infos, exc)  # XXX call_soon()?
-                return
-
-        def on_writable():
-            # connect() makes the socket writable when it is connected.
-            eventloop.remove_writer(sock.fileno())
-            err = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
-            if err != 0:
-                sock.close()
-                # Try the next getaddrinfo() return value.
-                on_addrinfo(infos, None)
-                return
-
-            if use_ssl:
-                # You can pass an ssl.SSLContext object as use_ssl,
-                # or a bool.
-                if isinstance(use_ssl, bool):
-                    sslcontext = None
-                else:
-                    sslcontext = use_ssl
-                transport = UnixSslTransport(eventloop, protocol, sock,
-                                             sslcontext)
+    def on_socket_connected(task):
+        assert not task.alive
+        if task.exception is not None:
+            # TODO: Call some callback.
+            raise task.exception
+        sock = task.result
+        assert sock is not None
+        logging.debug('on_socket_connected')
+        if use_ssl:
+            # You can pass an ssl.SSLContext object as use_ssl,
+            # or a bool.
+            if isinstance(use_ssl, bool):
+                sslcontext = None
             else:
-                transport = UnixSocketTransport(eventloop, protocol, sock)
-                # TODO: Should the ransport make the following calls?
-                protocol.connection_made(transport)  # XXX call_soon()?
-                eventloop.add_reader(sock.fileno(), transport._on_readable)
-
-        eventloop.add_writer(sock.fileno(), on_writable)
-
-    def on_future_done(fut):
-        logging.debug('Future done.')
-        exc = fut.exception()
-        if exc is None:
-            infos = fut.result()
+                sslcontext = use_ssl
+            transport = UnixSslTransport(eventloop, protocol, sock, sslcontext)
         else:
-            infos = None
-        eventloop.call_soon(on_addrinfo, infos, exc)
+            transport = UnixSocketTransport(eventloop, protocol, sock)
+            # TODO: Should the ransport make the following calls?
+            protocol.connection_made(transport)  # XXX call_soon()?
+            # Don't do this before connection_made() is called.
+            eventloop.add_reader(sock.fileno(), transport._on_readable)
 
-    future = threadrunner.submit(socket.getaddrinfo,
-                                 host, port, af, socktype, proto,
-                                 callback=on_future_done)
+    coro = sockets.create_connection(host, port, af, socktype, proto)
+    task = scheduling.Task(coro)
+    task.add_done_callback(on_socket_connected)
 
 
 def main():  # Testing...

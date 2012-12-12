@@ -292,6 +292,10 @@ class UnixSslTransport(Transport):
         # will take care of registering the appropriate callback.
         self._on_handshake()
 
+    def _bad_error(self, exc):
+        import pdb; pdb.set_trace()
+        logging.error('Exception: %s', exc)
+
     def _on_handshake(self):
         fd = self._sslsock.fileno()
         try:
@@ -321,6 +325,11 @@ class UnixSslTransport(Transport):
         # incorrect; we probably need to keep state about what we
         # should do next.
 
+        # Maybe we're already closed...
+        fd = self._sslsock.fileno()
+        if fd < 0:
+            return
+
         # First try reading.
         try:
             data = self._sslsock.recv(8192)
@@ -338,7 +347,6 @@ class UnixSslTransport(Transport):
             else:
                 # TODO: Don't close when self._buffer is non-empty.
                 assert not self._buffer
-                fd = self._sslsock.fileno()
                 self._eventloop.remove_reader(fd)
                 self._eventloop.remove_writer(fd)
                 self._sslsock.close()

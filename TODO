@@ -197,3 +197,7 @@ MISTAKES I MADE
 - Forgot again that shutdown(SHUT_WR) on an ssl socket does not work
   as I expected.  I ran into this with the origininal sockets.py and
   again in transport.py.
+
+- Having the same callback for both reading and writing has a problem:
+  it may be scheduled twice, and if the first call closes the socket,
+  the second runs into trouble.

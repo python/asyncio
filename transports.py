@@ -295,8 +295,19 @@ class UnixSslTransport(Transport):
         self._on_handshake()
 
     def _bad_error(self, exc):
-        import pdb; pdb.set_trace()
-        logging.error('Exception: %s', exc)
+        # A serious error.  Close the socket etc.
+        fd = self._sslsock.fileno()
+        # TODO: Record whether we have a writer and/or reader registered.
+        try:
+            self._eventloop.remove_writer(fd)
+        except Exception:
+            pass
+        try:
+            self._eventloop.remove_reader(fd)
+        except Exception:
+            pass
+        self._sslsock.close()
+        self._protocol.connection_lost(exc)  # XXX call_soon()?
 
     def _on_handshake(self):
         fd = self._sslsock.fileno()

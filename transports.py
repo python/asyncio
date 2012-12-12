@@ -481,7 +481,7 @@ def main():  # Testing...
     logging.basicConfig(level=level)
 
     host = 'xkcd.com'
-    if '.' in sys.argv[-1]:
+    if sys.argv[1:] and '.' in sys.argv[-1]:
         host = sys.argv[-1]
 
     t0 = time.time()
@@ -497,7 +497,7 @@ def main():  # Testing...
         def data_received(self, data):
             logging.info('Received %d bytes at t=%.3f',
                          len(data), time.time() - t0)
-            logging.debug('Receved %r', data)
+            logging.debug('Received %r', data)
         def connection_lost(self, exc):
             logging.debug('Connection lost: %r', exc)
             self.t1 = time.time()

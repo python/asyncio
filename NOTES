@@ -103,7 +103,25 @@ Futures
 
 - This means revisiting the Tulip proactor branch (IOCP).
 
-What else?
-----------
+- The semantics of add_done_callback() are fuzzy about in which thread
+  the callback will be called.  (It may be the current thread or
+  another one.)  We don't like that.  But always inserting a
+  call_soon() indirection may be expensive?  Glyph suggested changing
+  the add_done_callback() method name to something else to indicate
+  the changed promise.
 
-- I think we discussed some other topics but I've forgotten these.
+- Separately, I've been thinking about having two versions of
+  call_soon() -- a more heavy-weight one to be called from other
+  threads that also writes a byte to the self-pipe.
+
+Signals
+-------
+
+- There was a side conversation about signals.  A signal handler is
+  similar to another thread, so probably should use (the heavy-weight
+  version of) call_soon() to schedule the real callback and not do
+  anything else.
+
+- Glyph vaguely recalled some trickiness with the self-pipe.  We
+  should be able to fix this afterwards if necessary, it shouldn't
+  affect the API design.

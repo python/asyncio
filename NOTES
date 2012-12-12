@@ -101,6 +101,9 @@ Futures
 - For the basics, however, (recv/send, mostly), don't use Futures but use
   basic callbacks, transport/protocol style.
 
+- make_connection() (by any name) can return a Future, it makes it
+  easier to check for errors.
+
 - This means revisiting the Tulip proactor branch (IOCP).
 
 - The semantics of add_done_callback() are fuzzy about in which thread

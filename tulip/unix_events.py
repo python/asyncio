@@ -1,5 +1,7 @@
 """UNIX event loop and related classes.
 
+NOTE: The Pollster classes are not part of the published API.
+
 The event loop can be broken up into a pollster (the part responsible
 for telling us when file descriptors are ready) and the event loop
 proper, which wraps a pollster with functionality for scheduling
@@ -27,10 +29,6 @@ descriptors goes up.  The ranking is roughly:
   1. kqueue, epoll, IOCP (best for each platform)
   2. poll (linear in number of file descriptors polled)
   3. select (linear in max number of file descriptors supported)
-
-TODO:
-- Optimize the various pollsters.
-- Unittests.
 """
 
 import collections
@@ -39,12 +37,14 @@ import heapq
 import logging
 import os
 import select
+import socket
 import threading
 import time
 
 from . import events
+from . import futures
 
-DelayedCall = events.DelayedCall  # TODO: Use the module name.
+_MAX_WORKERS = 5
 
 
 class PollsterBase:
@@ -62,8 +62,10 @@ class PollsterBase:
         self.writers = {}  # {fd: token, ...}.
 
     def pollable(self):
-        """Return True if any readers or writers are currently registered."""
-        return bool(self.readers or self.writers)
+        """Return the number readers and writers currently registered."""
+        # The event loop needs the number since it must subtract one for
+        # the self-pipe.
+        return len(self.readers) + len(self.writers)
 
     # Subclasses are expected to extend the add/remove methods.
 
@@ -130,12 +132,12 @@ class PollPollster(PollsterBase):
         else:
             self._poll.unregister(fd)
 
-    def register_reader(self, fd, callback, *args):
-        super().register_reader(fd, callback, *args)
+    def register_reader(self, fd, token):
+        super().register_reader(fd, token)
         self._update(fd)
 
-    def register_writer(self, fd, callback, *args):
-        super().register_writer(fd, callback, *args)
+    def register_writer(self, fd, token):
+        super().register_writer(fd, token)
         self._update(fd)
 
     def unregister_reader(self, fd):
@@ -182,12 +184,12 @@ class EPollPollster(PollsterBase):
         else:
             self._epoll.unregister(fd)
 
-    def register_reader(self, fd, callback, *args):
-        super().register_reader(fd, callback, *args)
+    def register_reader(self, fd, token):
+        super().register_reader(fd, token)
         self._update(fd)
 
-    def register_writer(self, fd, callback, *args):
-        super().register_writer(fd, callback, *args)
+    def register_writer(self, fd, token):
+        super().register_writer(fd, token)
         self._update(fd)
 
     def unregister_reader(self, fd):
@@ -219,17 +221,17 @@ class KqueuePollster(PollsterBase):
         super().__init__()
         self._kqueue = select.kqueue()
 
-    def register_reader(self, fd, callback, *args):
+    def register_reader(self, fd, token):
         if fd not in self.readers:
             kev = select.kevent(fd, select.KQ_FILTER_READ, select.KQ_EV_ADD)
             self._kqueue.control([kev], 0, 0)
-        return super().register_reader(fd, callback, *args)
+        return super().register_reader(fd, token)
 
-    def register_writer(self, fd, callback, *args):
+    def register_writer(self, fd, token):
         if fd not in self.writers:
             kev = select.kevent(fd, select.KQ_FILTER_WRITE, select.KQ_EV_ADD)
             self._kqueue.control([kev], 0, 0)
-        return super().register_writer(fd, callback, *args)
+        return super().register_writer(fd, token)
 
     def unregister_reader(self, fd):
         super().unregister_reader(fd)
@@ -268,12 +270,7 @@ else:
 class UnixEventLoop(events.EventLoop):
     """Unix event loop.
 
-    This defines public APIs call_soon(), call_later(), run_once() and
-    run().  It also wraps Pollster APIs register_reader(),
-    register_writer(), remove_reader(), remove_writer() with
-    add_reader() etc.
-
-    This class's instance variables are not part of its API.
+    See events.EventLoop for API specification.
     """
 
     def __init__(self, pollster=None):
@@ -281,52 +278,28 @@ class UnixEventLoop(events.EventLoop):
         if pollster is None:
             logging.info('Using pollster: %s', best_pollster.__name__)
             pollster = best_pollster()
-        self.pollster = pollster
-        self.ready = collections.deque()  # [(callback, args), ...]
-        self.scheduled = []  # [(when, callback, args), ...]
+        self._pollster = pollster
+        self._ready = collections.deque()  # [(callback, args), ...]
+        self._scheduled = []  # [(when, callback, args), ...]
+        self._pipe_read_fd, self._pipe_write_fd = os.pipe()  # Self-pipe.
+        self._pollster.register_reader(self._pipe_read_fd,
+                                       self._read_from_pipe)
+        self._default_executor = None
 
-    def add_reader(self, fd, callback, *args):
-        """Add a reader callback.  Return a DelayedCall instance."""
-        dcall = DelayedCall(None, callback, args)
-        self.pollster.register_reader(fd, dcall)
-        return dcall
+    def _read_from_pipe(self):
+        os.read(self._pipe_read_fd, 1)
 
-    def remove_reader(self, fd):
-        """Remove a reader callback."""
-        self.pollster.unregister_reader(fd)
+    def run(self):
+        """Run the event loop until there is no work left to do.
 
-    def add_writer(self, fd, callback, *args):
-        """Add a writer callback.  Return a DelayedCall instance."""
-        dcall = DelayedCall(None, callback, args)
-        self.pollster.register_writer(fd, dcall)
-        return dcall
-
-    def remove_writer(self, fd):
-        """Remove a writer callback."""
-        self.pollster.unregister_writer(fd)
-
-    def add_callback(self, dcall):
-        """Add a DelayedCall to ready or scheduled."""
-        if dcall.cancelled:
-            return
-        if dcall.when is None:
-            self.ready.append(dcall)
-        else:
-            heapq.heappush(self.scheduled, dcall)
-
-    def call_soon(self, callback, *args):
-        """Arrange for a callback to be called as soon as possible.
-
-        This operates as a FIFO queue, callbacks are called in the
-        order in which they are registered.  Each callback will be
-        called exactly once.
-
-        Any positional arguments after the callback will be passed to
-        the callback when it is called.
+        This keeps going as long as there are either readable and
+        writable file descriptors, or scheduled callbacks (of either
+        variety).
         """
-        dcall = DelayedCall(None, callback, args)
-        self.ready.append(dcall)
-        return dcall
+        while self._ready or self._scheduled or self._pollster.pollable() > 1:
+            self._run_once()
+
+    # TODO: stop()?
 
     def call_later(self, when, callback, *args):
         """Arrange for a callback to be called at a given time.
@@ -345,16 +318,114 @@ class UnixEventLoop(events.EventLoop):
         are scheduled for exactly the same time, it undefined which
         will be called first.
 
+        Events scheduled in the past are passed on to call_soon(), so
+        these will be called in the order in which they were
+        registered rather than by time due.  This is so you can't
+        cheat and insert yourself at the front of the ready queue by
+        using a negative time.
+
         Any positional arguments after the callback will be passed to
         the callback when it is called.
         """
+        if when <= 0:
+            return self.call_soon(callback, *args)
         if when < 10000000:
             when += time.time()
-        dcall = DelayedCall(when, callback, args)
-        heapq.heappush(self.scheduled, dcall)
+        dcall = events.DelayedCall(when, callback, args)
+        heapq.heappush(self._scheduled, dcall)
         return dcall
 
-    def run_once(self):
+    def call_soon(self, callback, *args):
+        """Arrange for a callback to be called as soon as possible.
+
+        This operates as a FIFO queue, callbacks are called in the
+        order in which they are registered.  Each callback will be
+        called exactly once.
+
+        Any positional arguments after the callback will be passed to
+        the callback when it is called.
+        """
+        dcall = events.DelayedCall(None, callback, args)
+        self._ready.append(dcall)
+        return dcall
+
+    def call_soon_threadsafe(self, callback, *args):
+        """XXX"""
+        dcall = self.call_soon(callback, *args)
+        os.write(self._pipe_write_fd, b'x')
+        return dcall
+
+    def wrap_future(self, future):
+        """XXX"""
+        if isinstance(future, futures.Future):
+            return future  # Don't wrap our own type of Future.
+        new_future = futures.Future()
+        future.add_done_callback(
+            lambda future:
+                self.call_soon_threadsafe(new_future._copy_state, future))
+        return new_future
+
+    def run_in_executor(self, executor, function, *args):
+        if executor is None:
+            executor = self._default_executor
+            if executor is None:
+                executor = concurrent.futures.ThreadPoolExecutor(_MAX_WORKERS)
+                self._default_executor = executor
+        return self.wrap_future(executor.submit(function, *args))
+
+    def set_default_executor(self, executor):
+        self._default_executor = executor
+
+    def getaddrinfo(self, host, port, *,
+                    family=0, type=0, proto=0, flags=0):
+        return self.run_in_executor(None, socket.getaddrinfo,
+                                    host, port, family, type, proto, flags)
+
+    def getnameinfo(self, sockaddr, flags=0):
+        return self.run_in_executor(None, socket.getnameinfo, sockaddr, flags)
+
+    # XXX create_transport()
+
+    # XXX start_serving()
+
+    def add_reader(self, fd, callback, *args):
+        """Add a reader callback.  Return a DelayedCall instance."""
+        dcall = events.DelayedCall(None, callback, args)
+        self._pollster.register_reader(fd, dcall)
+        return dcall
+
+    def remove_reader(self, fd):
+        """Remove a reader callback."""
+        self._pollster.unregister_reader(fd)
+
+    def add_writer(self, fd, callback, *args):
+        """Add a writer callback.  Return a DelayedCall instance."""
+        dcall = events.DelayedCall(None, callback, args)
+        self._pollster.register_writer(fd, dcall)
+        return dcall
+
+    def remove_writer(self, fd):
+        """Remove a writer callback."""
+        self._pollster.unregister_writer(fd)
+
+    # XXX sock_recv()
+
+    # XXX sock_send[all]()
+
+    # XXX sock_connect()
+
+    # XXX sock_accept()
+
+    def _add_callback(self, dcall):
+        """Add a DelayedCall to ready or scheduled."""
+        if dcall.cancelled:
+            return
+        if dcall.when is None:
+            self._ready.append(dcall)
+        else:
+            heapq.heappush(self._scheduled, dcall)
+
+    def _run_once(self):
         """Run one full iteration of the event loop.
 
         This calls all currently ready callbacks, polls for I/O,
@@ -372,8 +443,8 @@ class UnixEventLoop(events.EventLoop):
         # All other places just add them to ready.
         # TODO: Ensure this loop always finishes, even if some
         # callbacks keeps registering more callbacks.
-        while self.ready:
-            dcall = self.ready.popleft()
+        while self._ready:
+            dcall = self._ready.popleft()
             if not dcall.cancelled:
                 try:
                     if dcall.kwds:
@@ -385,18 +456,18 @@ class UnixEventLoop(events.EventLoop):
                                       dcall.callback, dcall.args)
 
         # Remove delayed calls that were cancelled from head of queue.
-        while self.scheduled and self.scheduled[0].cancelled:
-            heapq.heappop(self.scheduled)
+        while self._scheduled and self._scheduled[0].cancelled:
+            heapq.heappop(self._scheduled)
 
         # Inspect the poll queue.
-        if self.pollster.pollable():
-            if self.scheduled:
-                when = self.scheduled[0].when
+        if self._pollster.pollable() > 1:
+            if self._scheduled:
+                when = self._scheduled[0].when
                 timeout = max(0, when - time.time())
             else:
                 timeout = None
             t0 = time.time()
-            events = self.pollster.poll(timeout)
+            events = self._pollster.poll(timeout)
             t1 = time.time()
             argstr = '' if timeout is None else ' %.3f' % timeout
             if t1-t0 >= 1:
@@ -405,110 +476,12 @@ class UnixEventLoop(events.EventLoop):
                 level = logging.DEBUG
             logging.log(level, 'poll%s took %.3f seconds', argstr, t1-t0)
             for dcall in events:
-                self.add_callback(dcall)
+                self._add_callback(dcall)
 
         # Handle 'later' callbacks that are ready.
-        while self.scheduled:
-            dcall = self.scheduled[0]
+        while self._scheduled:
+            dcall = self._scheduled[0]
             if dcall.when > time.time():
                 break
-            dcall = heapq.heappop(self.scheduled)
+            dcall = heapq.heappop(self._scheduled)
             self.call_soon(dcall.callback, *dcall.args)
-
-    def run(self):
-        """Run the event loop until there is no work left to do.
-
-        This keeps going as long as there are either readable and
-        writable file descriptors, or scheduled callbacks (of either
-        variety).
-        """
-        while self.ready or self.scheduled or self.pollster.pollable():
-            self.run_once()
-
-
-MAX_WORKERS = 5  # Default max workers when creating an executor.
-
-
-class ThreadRunner:
-    """Helper to submit work to a thread pool and wait for it.
-
-    This is the glue between the single-threaded callback-based async
-    world and the threaded world.  Use it to call functions that must
-    block and don't have an async alternative (e.g. getaddrinfo()).
-
-    The only public API is submit().
-    """
-
-    def __init__(self, eventloop, executor=None):
-        self.eventloop = eventloop
-        self.executor = executor  # Will be constructed lazily.
-        self.pipe_read_fd, self.pipe_write_fd = os.pipe()
-        self.active_count = 0
-
-    def read_callback(self):
-        """Semi-permanent callback while at least one future is active."""
-        assert self.active_count > 0, self.active_count
-        data = os.read(self.pipe_read_fd, 8192)  # Traditional buffer size.
-        self.active_count -= len(data)
-        if self.active_count == 0:
-            self.eventloop.remove_reader(self.pipe_read_fd)
-        assert self.active_count >= 0, self.active_count
-
-    def submit(self, func, *args, executor=None, callback=None):
-        """Submit a function to the thread pool.
-
-        This returns a concurrent.futures.Future instance.  The caller
-        should not wait for that, but rather use the callback argument..
-        """
-        if executor is None:
-            executor = self.executor
-            if executor is None:
-                # Lazily construct a default executor.
-                # TODO: Should this be shared between threads?
-                executor = concurrent.futures.ThreadPoolExecutor(MAX_WORKERS)
-                self.executor = executor
-        assert self.active_count >= 0, self.active_count
-        future = executor.submit(func, *args)
-        if self.active_count == 0:
-            self.eventloop.add_reader(self.pipe_read_fd, self.read_callback)
-        self.active_count += 1
-        def done_callback(fut):
-            if callback is not None:
-                self.eventloop.call_soon(callback, fut)
-            # TODO: Wake up the pipe in call_soon()?
-            os.write(self.pipe_write_fd, b'x')
-        future.add_done_callback(done_callback)
-        return future
-
-
-class Context(threading.local):
-    """Thread-local context.
-
-    We use this to avoid having to explicitly pass around an event loop
-    or something to hold the current task.
-
-    TODO: Add an API so frameworks can substitute a different notion
-    of context more easily.
-    """
-
-    def __init__(self, eventloop=None, threadrunner=None):
-        # Default event loop and thread runner are lazily constructed
-        # when first accessed.
-        self._eventloop = eventloop
-        self._threadrunner = threadrunner
-        self.current_task = None  # For the benefit of scheduling.py.
-
-    @property
-    def eventloop(self):
-        if self._eventloop is None:
-            self._eventloop = EventLoop()
-        return self._eventloop
-
-    @property
-    def threadrunner(self):
-        if self._threadrunner is None:
-            self._threadrunner = ThreadRunner(self.eventloop)
-        return self._threadrunner
-
-
-context = Context()  # Thread-local!

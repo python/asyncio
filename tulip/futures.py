@@ -120,12 +120,12 @@ class Future:
             raise InvalidStateError
         return self._exception
 
-    def add_done_callback(self, function):
+    def add_done_callback(self, fn):
         """XXX"""
         if self._state in _DONE_STATES:
-            events.get_event_loop().call_soon(function, self)
+            events.get_event_loop().call_soon(fn, self)
         else:
-            self._callbacks.append(function)
+            self._callbacks.append(fn)
 
     # So-called internal methods.
 
@@ -154,6 +154,23 @@ class Future:
         self._state = _FINISHED
         self._schedule_callbacks()
 
+    def _copy_state(self, other):
+        """Internal helper to copy state from another Future.
+
+        The other Future may be a concurrent.futures.Future.
+        """
+        assert other.done()
+        assert not self.done()
+        if other.cancelled():
+            self.cancel()
+        elif self.set_running_or_notify_cancel():
+            exception = other.exception()
+            if exception is not None:
+                self.set_exception(exception)
+            else:
+                result = other.result()
+                self.set_result(result)
+
 
 # TODO: Is this the right module for sleep()?
 def sleep(when, result=None):
@@ -170,6 +187,6 @@ def sleep(when, result=None):
 
 
 def _done_sleeping(future, result=None):
-    """Helper for sleep() to set the result."""
+    """Internal helper for sleep() to set the result."""
     if future.set_running_or_notify_cancel():
         future.set_result(result)

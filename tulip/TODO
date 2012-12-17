@@ -7,6 +7,8 @@ TODO in tulip v2 (tulip/ package directory)
 
 - Unittests
 
+- Use time.monotonic(); don't allow absolute times
+
 - stop()?
 
 - create_transport()

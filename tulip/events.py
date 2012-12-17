@@ -88,7 +88,7 @@ class EventLoop:
 
     # Methods returning DelayedCalls for scheduling callbacks.
 
-    def call_later(self, when, callback, *args):
+    def call_later(self, delay, callback, *args):
         raise NotImplementedError
 
     def call_soon(self, callback, *args):

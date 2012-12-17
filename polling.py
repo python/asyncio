@@ -428,9 +428,10 @@ class EventLoop:
                 self.add_callback(dcall)
 
         # Handle 'later' callbacks that are ready.
+        now = time.time()
         while self.scheduled:
             dcall = self.scheduled[0]
-            if dcall.when > time.time():
+            if dcall.when > now:
                 break
             dcall = heapq.heappop(self.scheduled)
             self.call_soon(dcall.callback, *dcall.args)

@@ -301,18 +301,14 @@ class UnixEventLoop(events.EventLoop):
 
     # TODO: stop()?
 
-    def call_later(self, when, callback, *args):
+    def call_later(self, delay, callback, *args):
         """Arrange for a callback to be called at a given time.
 
         Return an object with a cancel() method that can be used to
         cancel the call.
 
-        The time can be an int or float, expressed in seconds.
-
-        If when is small enough (~11 days), it's assumed to be a
-        relative time, meaning the call will be scheduled that many
-        seconds in the future; otherwise it's assumed to be a posix
-        timestamp as returned by time.time().
+        The delay can be an int or float, expressed in seconds.  It is
+        always a relative time.
 
         Each callback will be called exactly once.  If two callbacks
         are scheduled for exactly the same time, it undefined which
@@ -327,11 +323,9 @@ class UnixEventLoop(events.EventLoop):
         Any positional arguments after the callback will be passed to
         the callback when it is called.
         """
-        if when <= 0:
+        if delay <= 0:
             return self.call_soon(callback, *args)
-        if when < 10000000:
-            when += time.time()
-        dcall = events.DelayedCall(when, callback, args)
+        dcall = events.DelayedCall(time.monotonic() + delay, callback, args)
         heapq.heappush(self._scheduled, dcall)
         return dcall
 
@@ -425,6 +419,8 @@ class UnixEventLoop(events.EventLoop):
         else:
             heapq.heappush(self._scheduled, dcall)
 
+    # TODO: Make this public?
+    # TODO: Guarantee ready queue is empty on exit?
     def _run_once(self):
         """Run one full iteration of the event loop.
 
@@ -463,12 +459,12 @@ class UnixEventLoop(events.EventLoop):
         if self._pollster.pollable() > 1:
             if self._scheduled:
                 when = self._scheduled[0].when
-                timeout = max(0, when - time.time())
+                timeout = max(0, when - time.monotonic())
             else:
                 timeout = None
-            t0 = time.time()
+            t0 = time.monotonic()
             events = self._pollster.poll(timeout)
-            t1 = time.time()
+            t1 = time.monotonic()
             argstr = '' if timeout is None else ' %.3f' % timeout
             if t1-t0 >= 1:
                 level = logging.INFO
@@ -479,7 +475,7 @@ class UnixEventLoop(events.EventLoop):
                 self._add_callback(dcall)
 
         # Handle 'later' callbacks that are ready.
-        now = time.time()
+        now = time.monotonic()
         while self._scheduled:
             dcall = self._scheduled[0]
             if dcall.when > now:

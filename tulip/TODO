@@ -7,9 +7,9 @@ TODO in tulip v2 (tulip/ package directory)
 
 - Unittests
 
-- Use time.monotonic(); don't allow absolute times
-
 - stop()?
+
+- better run_once() behavior?
 
 - create_transport()
 
@@ -18,14 +18,6 @@ TODO in tulip v2 (tulip/ package directory)
 - Make DelayedCall() callable?
 
 - Recognize DelayedCall passed to add_reader(), call_soon(), etc.?
-
-- sock_recv()
-
-- sock_send[all]()
-
-- sock_connect()
-
-- sock_accept()
 
 - Transports
 

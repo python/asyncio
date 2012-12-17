@@ -33,6 +33,7 @@ descriptors goes up.  The ranking is roughly:
 
 import collections
 import concurrent.futures
+import errno
 import heapq
 import logging
 import os
@@ -44,6 +45,19 @@ import time
 from . import events
 from . import futures
 
+# Errno values indicating the connection was disconnected.
+_DISCONNECTED = frozenset((errno.ECONNRESET,
+                           errno.ENOTCONN,
+                           errno.ESHUTDOWN,
+                           errno.ECONNABORTED,
+                           errno.EPIPE,
+                           errno.EBADF,
+                           ))
+
+# Errno values indicating the socket isn't ready for I/O just yet.
+_TRYAGAIN = frozenset((errno.EAGAIN, errno.EWOULDBLOCK, errno.EINPROGRESS))
+
+# Argument for default thread pool executor creation.
 _MAX_WORKERS = 5
 
 
@@ -390,7 +404,8 @@ class UnixEventLoop(events.EventLoop):
 
     def remove_reader(self, fd):
         """Remove a reader callback."""
-        self._pollster.unregister_reader(fd)
+        if fd in self._pollster.readers:
+            self._pollster.unregister_reader(fd)
 
     def add_writer(self, fd, callback, *args):
         """Add a writer callback.  Return a DelayedCall instance."""
@@ -400,15 +415,125 @@ class UnixEventLoop(events.EventLoop):
 
     def remove_writer(self, fd):
         """Remove a writer callback."""
-        self._pollster.unregister_writer(fd)
+        if fd in self._pollster.writers:
+            self._pollster.unregister_writer(fd)
 
-    # XXX sock_recv()
+    def sock_recv(self, sock, n):
+        """XXX"""
+        fut = futures.Future()
+        self._sock_recv(fut, False, sock, n)
+        return fut
 
-    # XXX sock_send[all]()
+    def _sock_recv(self, fut, registered, sock, n):
+        fd = sock.fileno()
+        if registered:
+            # Remove the callback early.  It should be rare that the
+            # pollster says the fd is ready but the call still returns
+            # EAGAIN, and I am willing to take a hit in that case in
+            # order to simplify the common case.
+            self.remove_reader(fd)
+        if fut.cancelled():
+            return
+        try:
+            data = sock.recv(n)
+            if fut.set_running_or_notify_cancel():
+                fut.set_result(data)
+        except socket.error as exc:
+            if exc.errno not in _TRYAGAIN:
+                if fut.set_running_or_notify_cancel():
+                    fut.set_exception(exc)
+            else:
+                self.add_reader(fd, self._sock_recv, fut, True, sock, n)
 
-    # XXX sock_connect()
+    def sock_sendall(self, sock, data):
+        """XXX"""
+        fut = futures.Future()
+        self._sock_sendall(fut, False, sock, data)
+        return fut
 
-    # XXX sock_accept()
+    def _sock_sendall(self, fut, registered, sock, data):
+        fd = sock.fileno()
+        if registered:
+            self.remove_writer(fd)
+        if fut.cancelled():
+            return
+        n = 0
+        try:
+            if data:
+                n = sock.send(data)
+        except socket.error as exc:
+            if exc.errno not in _TRYAGAIN:
+                if fut.set_running_or_notify_cancel():
+                    fut.set_exception(exc)
+                return
+        if n == len(data):
+            if fut.set_running_or_notify_cancel():
+                fut.set_result(None)
+        else:
+            if n:
+                data = data[n:]
+            self.add_writer(fd, self._sock_sendall, fut, True, sock, data)
+
+    def sock_connect(self, sock, address):
+        """XXX"""
+        # That address better not require a lookup!  We're not calling
+        # self.getaddrinfo() for you here.  But verifying this is
+        # complicated; the socket module doesn't have a pattern for
+        # IPv6 addresses (there are too many forms, apparently).
+        fut = futures.Future()
+        self._sock_connect(fut, False, sock, address)
+        return fut
+
+    def _sock_connect(self, fut, registered, sock, address):
+        fd = sock.fileno()
+        if registered:
+            self.remove_writer(fd)
+        if fut.cancelled():
+            return
+        try:
+            if not registered:
+                # First time around.
+                sock.connect(address)
+            else:
+                err = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+                if err != 0:
+                    # Jump to the except clause below.
+                    raise socket.error(err, 'Connect call failed')
+            if fut.set_running_or_notify_cancel():
+                fut.set_result(None)
+        except socket.error as exc:
+            if exc.errno not in _TRYAGAIN:
+                if fut.set_running_or_notify_cancel():
+                    fut.set_exception(exc)
+            else:
+                self.add_writer(fd, self._sock_connect,
+                                fut, True, sock, address)
+
+    def sock_accept(self, sock):
+        """XXX"""
+        fut = futures.Future()
+        self._sock_accept(fut, False, sock)
+        return fut
+
+    def _sock_accept(self, fut, registered, sock):
+        fd = sock.fileno()
+        if registered:
+            self.remove_reader(fd)
+        if fut.cancelled():
+            return
+        try:
+            conn, address = sock.accept()
+            if fut.set_running_or_notify_cancel():
+                conn.setblocking(False)
+                fut.set_result((conn, address))
+            else:
+                conn.close()
+        except socket.error as exc:
+            if exc.errno not in _TRYAGAIN:
+                if fut.set_running_or_notify_cancel():
+                    fut.set_exception(exc)
+            else:
+                self.add_reader(fd, self._sock_accept, fut, True, sock)
 
     def _add_callback(self, dcall):
         """Add a DelayedCall to ready or scheduled."""

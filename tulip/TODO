@@ -19,8 +19,11 @@ TODO in tulip v2 (tulip/ package directory)
 
 - Recognize DelayedCall passed to add_reader(), call_soon(), etc.?
 
-- Transports
+- Transport implementations
 
-- Protocols
+- Protocol implementations
 
 - Task class
+
+- Change Future to get rid of set_running_or_notify_cancel().
+  We can just do "if not f.cancelled(): f.set_result(x)"

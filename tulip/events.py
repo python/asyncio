@@ -8,8 +8,7 @@ Beyond the PEP:
 __all__ = ['EventLoopPolicy', 'DefaultEventLoopPolicy',
            'EventLoop', 'DelayedCall',
            'get_event_loop_policy', 'set_event_loop_policy',
-           'get_event_loop', 'set_event_loop',
-           'init_event_loop',
+           'get_event_loop', 'set_event_loop', 'init_event_loop',
            ]
 
 import threading
@@ -19,23 +18,63 @@ class DelayedCall:
     """Object returned by callback registration methods."""
 
     def __init__(self, when, callback, args, kwds=None):
-        self.when = when
-        self.callback = callback
-        self.args = args
-        self.kwds = kwds
-        self.cancelled = False
+        self._when = when
+        self._callback = callback
+        self._args = args
+        self._kwds = kwds
+        self._cancelled = False
+
+    def __repr__(self):
+        if self.kwds:
+            res = 'DelayedCall({}, {}, {}, kwds={})'.format(self._when,
+                                                            self._callback,
+                                                            self._args,
+                                                            self._kwds)
+        else:
+            res = 'DelayedCall({}, {}, {})'.format(self._when,
+                                                   self._callback,
+                                                   self._args)
+        if self._cancelled:
+            res += '<cancelled>'
+        return res
+
+    @property
+    def when(self):
+        return self._when
+
+    @property
+    def callback(self):
+        return self._callback
+
+    @property
+    def args(self):
+        return self._args
+
+    @property
+    def kwds(self):
+        return self._kwds
+
+    @property
+    def cancelled(self):
+        return self._cancelled
 
     def cancel(self):
-        self.cancelled = True
+        self._cancelled = True
 
     def __lt__(self, other):
-        return self.when < other.when
+        return self._when < other._when
 
     def __le__(self, other):
-        return self.when <= other.when
+        return self._when <= other._when
+
+    def __gt__(self, other):
+        return self._when > other._when
+
+    def __ge__(self, other):
+        return self._when >= other._when
 
     def __eq__(self, other):
-        return self.when == other.when
+        return self._when == other._when
 
 
 class EventLoop:

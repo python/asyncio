@@ -60,9 +60,19 @@ class Future:
 
     def __repr__(self):
         """XXX"""
-        if self._callbacks:
-            # TODO: Maybe limit the list of callbacks if there are many?
-            return 'Future<{}, {}>'.format(self._state, self._callbacks)
+        if self._state == _FINISHED:
+            if self._exception is not None:
+                return 'Future<exception={}>'.format(self._exception)
+            else:
+                return 'Future<result={}>'.format(self._result)
+        elif self._callbacks:
+            size = len(self._callbacks)
+            if size > 2:
+                return 'Future<{}, [{}, <{} more>, {}]>'.format(
+                    self._state, self._callbacks[0],
+                    size-2, self._callbacks[-1])
+            else:
+                return 'Future<{}, {}>'.format(self._state, self._callbacks)
         else:
             return 'Future<{}>'.format(self._state)
 
@@ -128,6 +138,10 @@ class Future:
             self._callbacks.append(fn)
 
     # So-called internal methods.
+
+    # TODO: set_running_or_notify_cancel() is not really needed since
+    # we're not in a threaded environment.  Consider allowing
+    # transitions directly from PENDING to FINISHED.
 
     def set_running_or_notify_cancel(self):
         """XXX"""

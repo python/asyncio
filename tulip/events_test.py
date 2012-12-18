@@ -7,8 +7,9 @@ from . import events
 
 class EventLoopTests(unittest.TestCase):
 
-    def testEventLoop(self):
-        pass
+    def testRun(self):
+        el = events.get_event_loop()
+        el.run()  # Returns immediately.
 
 
 class DelayedCallTests(unittest.TestCase):

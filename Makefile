@@ -11,21 +11,14 @@ cov coverage:
 	$(COVERAGE) report -m $(NONTESTS)
 	echo "open file://`pwd`/htmlcov/index.html"
 
-
-main:
-	$(PYTHON) main.py -v
-
-echo:
-	$(PYTHON) echosvr.py -v
-
-profile:
-	$(PYTHON) -m profile -s time main.py
-
-time:
-	$(PYTHON) p3time.py
-
-ytime:
-	$(PYTHON) yyftime.py
-
 check:
-	$(PYTHON) longlines.py
+	$(PYTHON) check.py
+
+clean:
+	rm -f *.py[co] */*.py[co]
+	rm -f *~ */*~
+	rm -f .*~ */.*~
+	rm -f @* */@*
+	rm -f '#'*'#' */'#'*'#'
+	rm -f .coverage
+	rm -rf htmlcov

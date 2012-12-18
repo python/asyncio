@@ -417,7 +417,6 @@ class UnixEventLoop(events.EventLoop):
     def create_transport(self, protocol_factory, host, port, *,
                          family=0, type=0, proto=0, flags=0):
         """XXX"""
-        
 
     def start_serving(self, protocol_factory, host, port, *,
                       family=0, type=0, proto=0, flags=0):

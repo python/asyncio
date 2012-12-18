@@ -392,9 +392,15 @@ class UnixEventLoop(events.EventLoop):
     def getnameinfo(self, sockaddr, flags=0):
         return self.run_in_executor(None, socket.getnameinfo, sockaddr, flags)
 
-    # XXX create_transport()
+    # TODO: Or create_connection()?
+    def create_transport(self, protocol_factory, host, port, *,
+                         family=0, type=0, proto=0, flags=0):
+        """XXX"""
+        
 
-    # XXX start_serving()
+    def start_serving(self, protocol_factory, host, port, *,
+                      family=0, type=0, proto=0, flags=0):
+        """XXX"""
 
     def add_reader(self, fd, callback, *args):
         """Add a reader callback.  Return a DelayedCall instance."""
@@ -436,12 +442,10 @@ class UnixEventLoop(events.EventLoop):
             return
         try:
             data = sock.recv(n)
-            if fut.set_running_or_notify_cancel():
-                fut.set_result(data)
+            fut.set_result(data)
         except socket.error as exc:
             if exc.errno not in _TRYAGAIN:
-                if fut.set_running_or_notify_cancel():
-                    fut.set_exception(exc)
+                fut.set_exception(exc)
             else:
                 self.add_reader(fd, self._sock_recv, fut, True, sock, n)
 
@@ -463,12 +467,10 @@ class UnixEventLoop(events.EventLoop):
                 n = sock.send(data)
         except socket.error as exc:
             if exc.errno not in _TRYAGAIN:
-                if fut.set_running_or_notify_cancel():
-                    fut.set_exception(exc)
+                fut.set_exception(exc)
                 return
         if n == len(data):
-            if fut.set_running_or_notify_cancel():
-                fut.set_result(None)
+            fut.set_result(None)
         else:
             if n:
                 data = data[n:]
@@ -499,12 +501,10 @@ class UnixEventLoop(events.EventLoop):
                 if err != 0:
                     # Jump to the except clause below.
                     raise socket.error(err, 'Connect call failed')
-            if fut.set_running_or_notify_cancel():
-                fut.set_result(None)
+            fut.set_result(None)
         except socket.error as exc:
             if exc.errno not in _TRYAGAIN:
-                if fut.set_running_or_notify_cancel():
-                    fut.set_exception(exc)
+                fut.set_exception(exc)
             else:
                 self.add_writer(fd, self._sock_connect,
                                 fut, True, sock, address)
@@ -523,15 +523,11 @@ class UnixEventLoop(events.EventLoop):
             return
         try:
             conn, address = sock.accept()
-            if fut.set_running_or_notify_cancel():
-                conn.setblocking(False)
-                fut.set_result((conn, address))
-            else:
-                conn.close()
+            conn.setblocking(False)
+            fut.set_result((conn, address))
         except socket.error as exc:
             if exc.errno not in _TRYAGAIN:
-                if fut.set_running_or_notify_cancel():
-                    fut.set_exception(exc)
+                fut.set_exception(exc)
             else:
                 self.add_reader(fd, self._sock_accept, fut, True, sock)
 

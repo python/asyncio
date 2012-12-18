@@ -120,6 +120,8 @@ class SelectPollster(PollsterBase):
     """Pollster implementation using select."""
 
     def poll(self, timeout=None):
+        # TODO: Add connections to the third list since "connection
+        # failed" doesn't make the socket writable on Windows.
         readable, writable, _ = select.select(self.readers, self.writers,
                                               [], timeout)
         events = []
@@ -300,6 +302,7 @@ class UnixEventLoop(events.EventLoop):
         self._make_self_pipe_or_sock()
 
     def _make_self_pipe_or_sock(self):
+        # TODO: Just always use socketpair().  See proactor branch.
         if sys.platform == 'win32':
             from . import winsocketpair
             self._ssock, self._csock = winsocketpair.socketpair()

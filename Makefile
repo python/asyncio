@@ -5,6 +5,9 @@ NONTESTS=`find tulip -name [a-z]\*.py ! -name \*_test.py`
 test:
 	$(PYTHON) runtests.py -v
 
+testloop:
+	while sleep 1; do $(PYTHON) runtests.py -v; done
+
 cov coverage:
 	$(COVERAGE) run runtests.py -v
 	$(COVERAGE) html $(NONTESTS)

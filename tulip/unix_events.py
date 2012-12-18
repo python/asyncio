@@ -39,6 +39,7 @@ import logging
 import os
 import select
 import socket
+import sys
 import threading
 import time
 
@@ -295,13 +296,33 @@ class UnixEventLoop(events.EventLoop):
         self._pollster = pollster
         self._ready = collections.deque()  # [(callback, args), ...]
         self._scheduled = []  # [(when, callback, args), ...]
-        self._pipe_read_fd, self._pipe_write_fd = os.pipe()  # Self-pipe.
-        self._pollster.register_reader(self._pipe_read_fd,
-                                       self._read_from_pipe)
         self._default_executor = None
+        self._make_self_pipe_or_sock()
 
-    def _read_from_pipe(self):
+    def _make_self_pipe_or_sock(self):
+        if sys.platform == 'win32':
+            from . import winsocketpair
+            self._ssock, self._csock = winsocketpair.socketpair()
+            self._pollster.register_reader(self._ssock.fileno(),
+                                           self._read_from_self_sock)
+            self._write_to_self = self._write_to_self_sock
+        else:
+            self._pipe_read_fd, self._pipe_write_fd = os.pipe()  # Self-pipe.
+            self._pollster.register_reader(self._pipe_read_fd,
+                                           self._read_from_self_pipe)
+            self._write_to_self = self._write_to_self_pipe
+
+    def _read_from_self_sock(self):
+        self._ssock.recv(1)
+
+    def _write_to_self_sock(self):
+        self._csock.send(b'x')
+
+    def _read_from_self_pipe(self):
         os.read(self._pipe_read_fd, 1)
+
+    def _write_to_self_pipe(self):
+        os.write(self._pipe_write_fd, b'x')
 
     def run(self):
         """Run the event loop until there is no work left to do.
@@ -360,7 +381,7 @@ class UnixEventLoop(events.EventLoop):
     def call_soon_threadsafe(self, callback, *args):
         """XXX"""
         dcall = self.call_soon(callback, *args)
-        os.write(self._pipe_write_fd, b'x')
+        self._write_to_self()
         return dcall
 
     def wrap_future(self, future):

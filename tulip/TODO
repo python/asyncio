@@ -15,6 +15,8 @@ TODO in tulip v2 (tulip/ package directory)
 
 - start_serving()
 
+- Rename DelayedCall to Handler?
+
 - Make DelayedCall() callable?
 
 - Recognize DelayedCall passed to add_reader(), call_soon(), etc.?
@@ -23,7 +25,6 @@ TODO in tulip v2 (tulip/ package directory)
 
 - Protocol implementations
 
-- Task class
+- Task class: I/O blocking
 
-- Change Future to get rid of set_running_or_notify_cancel().
-  We can just do "if not f.cancelled(): f.set_result(x)"
+- Primitives like par() and wait_one()

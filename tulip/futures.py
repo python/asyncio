@@ -7,14 +7,13 @@ import concurrent.futures._base
 from . import events
 
 # States for Future.
-_PENDING = 'PENDING'  # Next states: _CANCELLED, _RUNNING.
-_CANCELLED = 'CANCELLED'  # End state.
-_RUNNING = 'RUNNING'  # Next state: _FINISHED.
-_FINISHED = 'FINISHED'  # End state.
-_DONE_STATES = (_CANCELLED, _FINISHED)
+_PENDING = 'PENDING'
+_CANCELLED = 'CANCELLED'
+_FINISHED = 'FINISHED'
 
-
+# TODO: Do we really want to depend on concurrent.futures internals?
 Error = concurrent.futures._base.Error
+CancelledError = concurrent.futures.CancelledError
 
 
 class InvalidStateError(Error):
@@ -47,7 +46,7 @@ class Future:
     # TODO: PEP 3148 seems to say that cancel() does not call the
     # callbacks, but set_running_or_notify_cancel() does (if cancel()
     # was called).  Here, cancel() schedules the callbacks, and
-    # set_running_or_notify_cancel() just sets the state.
+    # set_running_or_notify_cancel() is not supported.
 
     # Class variables serving to as defaults for instance variables.
     _state = _PENDING
@@ -102,11 +101,11 @@ class Future:
 
     def running(self):
         """XXX"""
-        return self._state == _RUNNING
+        return False  # We don't have a running state.
 
     def done(self):
         """XXX"""
-        return self._state in _DONE_STATES
+        return self._state != _PENDING
 
     def result(self, timeout=0):
         """XXX"""
@@ -132,29 +131,16 @@ class Future:
 
     def add_done_callback(self, fn):
         """XXX"""
-        if self._state in _DONE_STATES:
+        if self._state != _PENDING:
             events.get_event_loop().call_soon(fn, self)
         else:
             self._callbacks.append(fn)
 
     # So-called internal methods.
 
-    # TODO: set_running_or_notify_cancel() is not really needed since
-    # we're not in a threaded environment.  Consider allowing
-    # transitions directly from PENDING to FINISHED.
-
-    def set_running_or_notify_cancel(self):
-        """XXX"""
-        if self._state == _CANCELLED:
-            return False
-        if self._state != _PENDING:
-            raise InvalidStateError
-        self._state = _RUNNING
-        return True
-
     def set_result(self, result):
         """XXX"""
-        if self._state != _RUNNING:
+        if self._state != _PENDING:
             raise InvalidStateError
         self._result = result
         self._state = _FINISHED
@@ -162,7 +148,7 @@ class Future:
 
     def set_exception(self, exception):
         """XXX"""
-        if self._state != _RUNNING:
+        if self._state != _PENDING:
             raise InvalidStateError
         self._exception = exception
         self._state = _FINISHED
@@ -177,7 +163,7 @@ class Future:
         assert not self.done()
         if other.cancelled():
             self.cancel()
-        elif self.set_running_or_notify_cancel():
+        else:
             exception = other.exception()
             if exception is not None:
                 self.set_exception(exception)
@@ -196,11 +182,5 @@ def sleep(when, result=None):
     """
     event_loop = events.get_event_loop()
     future = Future()
-    event_loop.call_later(when, _done_sleeping, future, result)
+    event_loop.call_later(when, future.set_result, result)
     return future
-
-
-def _done_sleeping(future, result=None):
-    """Internal helper for sleep() to set the result."""
-    if future.set_running_or_notify_cancel():
-        future.set_result(result)

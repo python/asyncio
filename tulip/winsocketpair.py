@@ -19,7 +19,7 @@ def socketpair(family=socket.AF_INET, type=socket.SOCK_STREAM, proto=0):
     csock.setblocking(False)
     try:
         csock.connect((addr, port))
-    except socket.error, e:
+    except socket.error as e:
         if e.errno != errno.WSAEWOULDBLOCK:
             lsock.close()
             csock.close()

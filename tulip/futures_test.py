@@ -1,5 +1,6 @@
-import unittest
+"""Tests for futures.py."""
 
+import unittest
 
 from . import futures
 

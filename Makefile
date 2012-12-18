@@ -1,6 +1,9 @@
 PYTHON=python3.3
 
 test:
+	$(PYTHON) runtests.py -v
+
+main:
 	$(PYTHON) main.py -v
 
 echo:

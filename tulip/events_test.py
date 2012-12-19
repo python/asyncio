@@ -2,6 +2,7 @@
 
 import concurrent.futures
 import os
+import socket
 import threading
 import time
 import unittest
@@ -10,6 +11,7 @@ from . import events
 
 
 def run_while_future(event_loop, future):
+    # TODO: Use socketpair().
     r, w = os.pipe()
     def cleanup():
         event_loop.remove_reader(r)
@@ -18,6 +20,7 @@ def run_while_future(event_loop, future):
     # Closing the write end makes the read end readable.
     future.add_done_callback(lambda _: os.close(w))
     event_loop.run()
+    return future.result()  # May raise.
 
 
 class EventLoopTests(unittest.TestCase):
@@ -91,6 +94,7 @@ class EventLoopTests(unittest.TestCase):
 
     def test_reader_callback(self):
         el = events.get_event_loop()
+        # TODO: Use socketpair().
         r, w = os.pipe()
         bytes_read = []
         def reader():
@@ -109,6 +113,7 @@ class EventLoopTests(unittest.TestCase):
 
     def test_writer_callback(self):
         el = events.get_event_loop()
+        # TODO: Use socketpair().
         r, w = os.pipe()
         el.add_writer(w, os.write, w, b'x'*100)
         el.call_later(0.1, el.remove_writer, w)
@@ -117,6 +122,17 @@ class EventLoopTests(unittest.TestCase):
         data = os.read(r, 32*1024)
         os.close(r)
         self.assertTrue(len(data) >= 200)
+
+    def test_sock_client_ops(self):
+        el = events.get_event_loop()
+        sock = socket.socket()
+        sock.setblocking(False)
+        # TODO: This depends on python.org behavior!
+        run_while_future(el, el.sock_connect(sock, ('python.org', 80)))
+        run_while_future(el, el.sock_sendall(sock, b'GET / HTTP/1.0\r\n\r\n'))
+        data = run_while_future(el, el.sock_recv(sock, 1024))
+        sock.close()
+        self.assertTrue(data.startswith(b'HTTP/1.1 302 Found\r\n'))
 
 
 class DelayedCallTests(unittest.TestCase):

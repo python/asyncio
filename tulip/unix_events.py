@@ -187,10 +187,10 @@ class PollPollster(PollsterBase):
         msecs = None if timeout is None else int(round(1000 * timeout))
         events = []
         for fd, flags in self._poll.poll(msecs):
-            if flags & (select.POLLIN | select.POLLHUP):
+            if flags & ~select.POLLOUT:
                 if fd in self.readers:
                     events.append(self.readers[fd])
-            if flags & (select.POLLOUT | select.POLLHUP):
+            if flags & ~select.POLLIN:
                 if fd in self.writers:
                     events.append(self.writers[fd])
         return events
@@ -239,10 +239,10 @@ class EPollPollster(PollsterBase):
             timeout = -1  # epoll.poll() uses -1 to mean "wait forever".
         events = []
         for fd, eventmask in self._epoll.poll(timeout):
-            if eventmask & select.EPOLLIN:
+            if eventmask & ~select.EPOLLOUT:
                 if fd in self.readers:
                     events.append(self.readers[fd])
-            if eventmask & select.EPOLLOUT:
+            if eventmask & ~select.EPOLLIN:
                 if fd in self.writers:
                     events.append(self.writers[fd])
         return events

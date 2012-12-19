@@ -137,7 +137,7 @@ else:
         """Pollster implementation using select."""
 
         def poll(self, timeout=None):
-            # failed connections are reported as exceptional but not writable
+            # Failed connections are reported as exceptional but not writable.
             readable, writable, exceptional = select.select(
                 self.readers, self.writers, self.writers, timeout)
             writable = set(writable).union(exceptional)

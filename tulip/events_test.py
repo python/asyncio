@@ -23,7 +23,7 @@ class EventLoopTests(unittest.TestCase):
         el.run()
         t1 = time.monotonic()
         self.assertEqual(results, ['hello world'])
-        self.assertTrue(t1-t0 >= 0.1)
+        self.assertTrue(t1-t0 >= 0.09)
 
     def testCallSoon(self):
         el = events.get_event_loop()

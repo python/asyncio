@@ -7,7 +7,7 @@ import unittest
 
 
 def load_tests():
-  mods = ['events', 'futures']
+  mods = ['events', 'futures', 'tasks']
   test_mods = ['%s_test' % name for name in mods]
   tulip = __import__('tulip', fromlist=test_mods)
 

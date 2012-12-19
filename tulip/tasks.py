@@ -2,6 +2,7 @@
 
 __all__ = ['coroutine', 'Task']
 
+import concurrent.futures
 import inspect
 
 from . import events
@@ -34,11 +35,18 @@ class Task(futures.Future):
 
     def __init__(self, coro):
         assert inspect.isgenerator(coro)  # Must be a coroutine *object*.
-        super().__init__()
-        self._event_loop = events.get_event_loop()
+        super().__init__()  # Sets self._event_loop.
         self._coro = coro
         self._must_cancel = False
         self._event_loop.call_soon(self._step)
+
+    def __repr__(self):
+        res = super().__repr__()
+        i = res.find('<')
+        if i < 0:
+            i = len(res)
+        res = res[:i] + '(<{}>)'.format(self._coro.__name__) + res[i:]
+        return res
 
     def cancel(self):
         if self.done():
@@ -50,23 +58,21 @@ class Task(futures.Future):
     def cancelled(self):
         return self._must_cancel or super().cancelled()
 
-    def _step(self):
+    def _step(self, value=None, exc=None):
         if self.done():
+            logging.warn('_step(): already done: %r, %r, %r', self, value, exc)
             return
         # We'll call either coro.throw(exc) or coro.send(value).
-        # TODO: Set these from the result of the Future on which we waited.
-        exc = None
-        value = None
         if self._must_cancel:
             exc = futures.CancelledError
         coro = self._coro
         try:
             if exc is not None:
-                coro.throw(exc)
+                result = coro.throw(exc)
             elif value is not None:
-                coro.send(value)
+                result = coro.send(value)
             else:
-                next(coro)
+                result = next(coro)
         except StopIteration as exc:
             if self._must_cancel:
                 super().cancel()
@@ -84,5 +90,21 @@ class Task(futures.Future):
                 self.set_exception(exc)
             raise
         else:
-            # XXX What if blocked for I/O?
-            self._event_loop.call_soon(self._step)
+            def _wakeup(future):
+                value = None
+                exc = future.exception()
+                if exc is None:
+                    value = future.result()
+                self._step(value, exc)
+            if isinstance(result, futures.Future):
+                result.add_done_callback(_wakeup)
+            elif isinstance(result, concurrent.futures.Future):
+                # This ought to be more efficient than wrap_future(),
+                # because we don't create an extra Future.
+                result.add_done_callback(
+                    lambda future:
+                        self._event_loop.call_soon_threadsafe(_wakeup, future))
+            else:
+                if result is not None:
+                    logging.warn('_step(): bad yield: %r', result)
+                self._event_loop.call_soon(self._step)

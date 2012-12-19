@@ -25,6 +25,4 @@ TODO in tulip v2 (tulip/ package directory)
 
 - Protocol implementations
 
-- Task class: I/O blocking
-
 - Primitives like par() and wait_one()

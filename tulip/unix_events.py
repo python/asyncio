@@ -323,13 +323,11 @@ class UnixEventLoop(events.EventLoop):
         if sys.platform == 'win32':
             from . import winsocketpair
             self._ssock, self._csock = winsocketpair.socketpair()
-            self._pollster.register_reader(self._ssock.fileno(),
-                                           self._read_from_self_sock)
+            self.add_reader(self._ssock.fileno(), self._read_from_self_sock)
             self._write_to_self = self._write_to_self_sock
         else:
             self._pipe_read_fd, self._pipe_write_fd = os.pipe()  # Self-pipe.
-            self._pollster.register_reader(self._pipe_read_fd,
-                                           self._read_from_self_pipe)
+            self.add_reader(self._pipe_read_fd, self._read_from_self_pipe)
             self._write_to_self = self._write_to_self_pipe
 
     def _read_from_self_sock(self):

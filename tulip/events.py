@@ -6,7 +6,7 @@ Beyond the PEP:
 """
 
 __all__ = ['EventLoopPolicy', 'DefaultEventLoopPolicy',
-           'EventLoop', 'DelayedCall',
+           'EventLoop', 'Handler',
            'get_event_loop_policy', 'set_event_loop_policy',
            'get_event_loop', 'set_event_loop', 'init_event_loop',
            ]
@@ -14,7 +14,7 @@ __all__ = ['EventLoopPolicy', 'DefaultEventLoopPolicy',
 import threading
 
 
-class DelayedCall:
+class Handler:
     """Object returned by callback registration methods."""
 
     def __init__(self, when, callback, args, kwds=None):
@@ -26,14 +26,14 @@ class DelayedCall:
 
     def __repr__(self):
         if self.kwds:
-            res = 'DelayedCall({}, {}, {}, kwds={})'.format(self._when,
-                                                            self._callback,
-                                                            self._args,
-                                                            self._kwds)
+            res = 'Handler({}, {}, {}, kwds={})'.format(self._when,
+                                                        self._callback,
+                                                        self._args,
+                                                        self._kwds)
         else:
-            res = 'DelayedCall({}, {}, {})'.format(self._when,
-                                                   self._callback,
-                                                   self._args)
+            res = 'Handler({}, {}, {})'.format(self._when,
+                                               self._callback,
+                                               self._args)
         if self._cancelled:
             res += '<cancelled>'
         return res
@@ -84,12 +84,31 @@ class EventLoop:
         """Run the event loop.  Block until there is nothing left to do."""
         raise NotImplementedError
 
-    # TODO: stop()?
+    def run_until_complete(self, future, timeout=None):
+        """Run the event loop until a Future is done.
 
-    # Methods returning DelayedCalls for scheduling callbacks.
+        Return the Future's result, or raise its exception.
+
+        If timeout is not None, run it for at most that long;
+        if the Future is still not done, raise TimeoutError
+        (but don't cancel the Future).
+        """
+        raise NotImplementedError
+
+    def stop(self):  # NEW!
+        """Stop the event loop as soon as reasonable.
+
+        Exactly how soon that is may depend on the implementation, but
+        no more I/O callbacks should be scheduled.
+        """
+
+    # Methods returning Handlers for scheduling callbacks.
 
     def call_later(self, delay, callback, *args):
         raise NotImplementedError
+
+    def call_repeatedly(self, interval, callback, *args):  # NEW!
+        raise NotImplementdError
 
     def call_soon(self, callback, *args):
         return self.call_later(0, callback, *args)
@@ -122,7 +141,7 @@ class EventLoop:
         raise NotImplementedError
 
     # Ready-based callback registration methods.
-    # The add_*() methods return a DelayedCall.
+    # The add_*() methods return a Handler.
     # The remove_*() methods return True if something was removed,
     # False if there was nothing to delete.
 

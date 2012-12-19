@@ -216,3 +216,8 @@ MISTAKES I MADE IN TULIP V2
 
   The good news is that I found it with a unittest (albeit not the
   unittest intended to exercise this particular method :-( ).
+
+- In _make_self_pipe_or_sock(), called _pollster.register_reader()
+  instead of add_reader(), trying to optimize something but breaking
+  things instead (since the -- internal -- API of register_reader()
+  had changed).

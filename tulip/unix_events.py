@@ -57,6 +57,8 @@ _DISCONNECTED = frozenset((errno.ECONNRESET,
 
 # Errno values indicating the socket isn't ready for I/O just yet.
 _TRYAGAIN = frozenset((errno.EAGAIN, errno.EWOULDBLOCK, errno.EINPROGRESS))
+if sys.platform == 'win32':
+    _TRYAGAIN = frozenset(list(_TRYAGAIN) + [errno.WSAEWOULDBLOCK])
 
 # Argument for default thread pool executor creation.
 _MAX_WORKERS = 5
@@ -116,18 +118,33 @@ class PollsterBase:
         raise NotImplementedError
 
 
-class SelectPollster(PollsterBase):
-    """Pollster implementation using select."""
+if sys.platform != 'win32':
 
-    def poll(self, timeout=None):
-        # TODO: Add connections to the third list since "connection
-        # failed" doesn't make the socket writable on Windows.
-        readable, writable, _ = select.select(self.readers, self.writers,
-                                              [], timeout)
-        events = []
-        events += (self.readers[fd] for fd in readable)
-        events += (self.writers[fd] for fd in writable)
-        return events
+    class SelectPollster(PollsterBase):
+        """Pollster implementation using select."""
+
+        def poll(self, timeout=None):
+            readable, writable, _ = select.select(self.readers, self.writers,
+                                                  [], timeout)
+            events = []
+            events += (self.readers[fd] for fd in readable)
+            events += (self.writers[fd] for fd in writable)
+            return events
+
+else:
+
+    class SelectPollster(PollsterBase):
+        """Pollster implementation using select."""
+
+        def poll(self, timeout=None):
+            # failed connections are reported as exceptional but not writable
+            readable, writable, exceptional = select.select(
+                self.readers, self.writers, self.writers, timeout)
+            writable = set(writable).union(exceptional)
+            events = []
+            events += (self.readers[fd] for fd in readable)
+            events += (self.writers[fd] for fd in writable)
+            return events
 
 
 class PollPollster(PollsterBase):

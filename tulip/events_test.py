@@ -13,11 +13,10 @@ def run_while_future(event_loop, future):
     r, w = os.pipe()
     def cleanup():
         event_loop.remove_reader(r)
-        os.close(w)
         os.close(r)
     event_loop.add_reader(r, cleanup)
     # Closing the write end makes the read end readable.
-    future.add_done_callback(lambda _: os.write(w, b'x'))
+    future.add_done_callback(lambda _: os.close(w))
     event_loop.run()
 
 

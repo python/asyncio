@@ -78,9 +78,8 @@ class EventLoopTests(unittest.TestCase):
         ex = concurrent.futures.ThreadPoolExecutor(1)
         f1 = ex.submit(run, 'oi')
         f2 = el.wrap_future(f1)
-        run_while_future(el, f2)
-        self.assertTrue(f2.done())
-        self.assertEqual(f2.result(), 'oi')
+        res = run_while_future(el, f2)
+        self.assertEqual(res, 'oi')
 
     def testRunInExecutor(self):
         el = events.get_event_loop()
@@ -88,9 +87,8 @@ class EventLoopTests(unittest.TestCase):
             time.sleep(0.1)
             return arg
         f2 = el.run_in_executor(None, run, 'yo')
-        run_while_future(el, f2)
-        self.assertTrue(f2.done())
-        self.assertEqual(f2.result(), 'yo')
+        res = run_while_future(el, f2)
+        self.assertEqual(res, 'yo')
 
     def test_reader_callback(self):
         el = events.get_event_loop()
@@ -133,6 +131,23 @@ class EventLoopTests(unittest.TestCase):
         data = run_while_future(el, el.sock_recv(sock, 1024))
         sock.close()
         self.assertTrue(data.startswith(b'HTTP/1.1 302 Found\r\n'))
+
+    def test_sock_accept(self):
+        listener = socket.socket()
+        listener.setblocking(False)
+        listener.bind(('127.0.0.1', 0))
+        listener.listen(1)
+        client = socket.socket()
+        client.connect(listener.getsockname())
+        el = events.get_event_loop()
+        f = el.sock_accept(listener)
+        conn, addr = run_while_future(el, f)
+        self.assertEqual(conn.gettimeout(), 0)
+        self.assertEqual(addr, client.getsockname())
+        self.assertEqual(client.getpeername(), listener.getsockname())
+        client.close()
+        conn.close()
+        listener.close()
 
 
 class DelayedCallTests(unittest.TestCase):

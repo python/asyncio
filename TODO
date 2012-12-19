@@ -201,3 +201,18 @@ MISTAKES I MADE
 - Having the same callback for both reading and writing has a problem:
   it may be scheduled twice, and if the first call closes the socket,
   the second runs into trouble.
+
+
+MISTAKES I MADE IN TULIP V2
+
+- Nice one: Future._schedule_callbacks() wasn't scheduling any callbacks.
+  Spot the bug in these four lines:
+
+    def _schedule_callbacks(self):
+      callbacks = self._callbacks[:]
+      self._callbacks[:] = []
+      for callback in self._callbacks:
+          self._event_loop.call_soon(callback, self)
+
+  The good news is that I found it with a unittest (albeit not the
+  unittest intended to exercise this particular method :-( ).

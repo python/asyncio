@@ -55,25 +55,28 @@ class Future:
 
     def __init__(self):
         """XXX"""
+        self._event_loop = events.get_event_loop()
         self._callbacks = []
 
     def __repr__(self):
         """XXX"""
+        res = self.__class__.__name__
         if self._state == _FINISHED:
             if self._exception is not None:
-                return 'Future<exception={}>'.format(self._exception)
+                res += '<exception={}>'.format(self._exception)
             else:
-                return 'Future<result={}>'.format(self._result)
+                res += '<result={}>'.format(self._result)
         elif self._callbacks:
             size = len(self._callbacks)
             if size > 2:
-                return 'Future<{}, [{}, <{} more>, {}]>'.format(
+                res += '<{}, [{}, <{} more>, {}]>'.format(
                     self._state, self._callbacks[0],
                     size-2, self._callbacks[-1])
             else:
-                return 'Future<{}, {}>'.format(self._state, self._callbacks)
+                res += '<{}, {}>'.format(self._state, self._callbacks)
         else:
-            return 'Future<{}>'.format(self._state)
+            res +='<{}>'.format(self._state)
+        return res
 
     def cancel(self):
         """XXX"""
@@ -91,9 +94,8 @@ class Future:
         # Is it worth emptying the callbacks?  It may reduce the
         # usefulness of repr().
         self._callbacks[:] = []
-        event_loop = events.get_event_loop()
-        for callback in self._callbacks:
-            event_loop.call_soon(callback, self)
+        for callback in callbacks:
+            self._event_loop.call_soon(callback, self)
 
     def cancelled(self):
         """XXX"""
@@ -132,11 +134,11 @@ class Future:
     def add_done_callback(self, fn):
         """XXX"""
         if self._state != _PENDING:
-            events.get_event_loop().call_soon(fn, self)
+            self._event_loop.call_soon(fn, self)
         else:
             self._callbacks.append(fn)
 
-    # So-called internal methods.
+    # So-called internal methods (note: no set_running_or_notify_cancel()).
 
     def set_result(self, result):
         """XXX"""
@@ -153,6 +155,8 @@ class Future:
         self._exception = exception
         self._state = _FINISHED
         self._schedule_callbacks()
+
+    # Truly internal methods.
 
     def _copy_state(self, other):
         """Internal helper to copy state from another Future.
@@ -171,6 +175,10 @@ class Future:
                 result = other.result()
                 self.set_result(result)
 
+    def __iter__(self):
+        yield self  # This tells Task to wait for completion.
+        return self.result()  # May raise too.
+
 
 # TODO: Is this the right module for sleep()?
 def sleep(when, result=None):
@@ -180,7 +188,6 @@ def sleep(when, result=None):
 
     Undocumented feature: sleep(when, x) sets the Future's result to x.
     """
-    event_loop = events.get_event_loop()
     future = Future()
-    event_loop.call_later(when, future.set_result, result)
+    future._event_loop.call_later(when, future.set_result, result)
     return future

@@ -378,7 +378,7 @@ class UnixEventLoop(events.EventLoop):
         """
         if delay <= 0:
             return self.call_soon(callback, *args)
-        dcall = events.DelayedCall(time.monotonic() + delay, callback, args)
+        dcall = events.Handler(time.monotonic() + delay, callback, args)
         heapq.heappush(self._scheduled, dcall)
         return dcall
 
@@ -392,7 +392,7 @@ class UnixEventLoop(events.EventLoop):
         Any positional arguments after the callback will be passed to
         the callback when it is called.
         """
-        dcall = events.DelayedCall(None, callback, args)
+        dcall = events.Handler(None, callback, args)
         self._ready.append(dcall)
         return dcall
 
@@ -441,8 +441,8 @@ class UnixEventLoop(events.EventLoop):
         """XXX"""
 
     def add_reader(self, fd, callback, *args):
-        """Add a reader callback.  Return a DelayedCall instance."""
-        dcall = events.DelayedCall(None, callback, args)
+        """Add a reader callback.  Return a Handler instance."""
+        dcall = events.Handler(None, callback, args)
         self._pollster.register_reader(fd, dcall)
         return dcall
 
@@ -452,8 +452,8 @@ class UnixEventLoop(events.EventLoop):
             self._pollster.unregister_reader(fd)
 
     def add_writer(self, fd, callback, *args):
-        """Add a writer callback.  Return a DelayedCall instance."""
-        dcall = events.DelayedCall(None, callback, args)
+        """Add a writer callback.  Return a Handler instance."""
+        dcall = events.Handler(None, callback, args)
         self._pollster.register_writer(fd, dcall)
         return dcall
 
@@ -570,7 +570,7 @@ class UnixEventLoop(events.EventLoop):
                 self.add_reader(fd, self._sock_accept, fut, True, sock)
 
     def _add_callback(self, dcall):
-        """Add a DelayedCall to ready or scheduled."""
+        """Add a Handler to ready or scheduled."""
         if dcall.cancelled:
             return
         if dcall.when is None:

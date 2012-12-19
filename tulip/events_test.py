@@ -150,9 +150,9 @@ class EventLoopTests(unittest.TestCase):
         listener.close()
 
 
-class DelayedCallTests(unittest.TestCase):
+class HandlerTests(unittest.TestCase):
 
-    def testDelayedCall(self):
+    def testHandler(self):
         pass
 
 

@@ -9,6 +9,8 @@ TODO in tulip v2 (tulip/ package directory)
 
 - stop()?
 
+- repeated callback
+
 - better run_once() behavior?
 
 - create_transport()

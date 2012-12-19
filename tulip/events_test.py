@@ -89,6 +89,35 @@ class EventLoopTests(unittest.TestCase):
         self.assertTrue(f2.done())
         self.assertEqual(f2.result(), 'yo')
 
+    def test_reader_callback(self):
+        el = events.get_event_loop()
+        r, w = os.pipe()
+        bytes_read = []
+        def reader():
+            data = os.read(r, 1024)
+            if data:
+                bytes_read.append(data)
+            else:
+                el.remove_reader(r)
+                os.close(r)
+        el.add_reader(r, reader)
+        el.call_later(0.05, os.write, w, b'abc')
+        el.call_later(0.1, os.write, w, b'def')
+        el.call_later(0.15, os.close, w)
+        el.run()
+        self.assertEqual(b''.join(bytes_read), b'abcdef')
+
+    def test_writer_callback(self):
+        el = events.get_event_loop()
+        r, w = os.pipe()
+        el.add_writer(w, os.write, w, b'x'*100)
+        el.call_later(0.1, el.remove_writer, w)
+        el.run()
+        os.close(w)
+        data = os.read(r, 32*1024)
+        os.close(r)
+        self.assertTrue(len(data) >= 200)
+
 
 class DelayedCallTests(unittest.TestCase):
 

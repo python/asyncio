@@ -44,6 +44,9 @@ import time
 
 from . import events
 from . import futures
+from . import protocols
+from . import tasks
+from . import transports
 
 try:
     from socket import socketpair
@@ -118,7 +121,7 @@ class PollsterBase:
         self.unregister_writer(fd)
 
     def poll(self, timeout=None):
-        """Poll for events.  A subclass must implement this.
+        """Poll for I/O events.  A subclass must implement this.
 
         If timeout is omitted or None, this blocks until at least one
         event is ready.  Otherwise, timeout gives a maximum time to
@@ -466,8 +469,23 @@ class UnixEventLoop(events.EventLoop):
             except _StopError:
                 break
 
+    def run_forever(self):
+        """Run until stop() is called.
+
+        This only makes sense over run() if you have another thread
+        scheduling callbacks using call_soon_threadsafe().
+        """
+        handler = self.call_repeatedly(24*3600, lambda: None)
+        try:
+            self.run()
+        finally:
+            handler.cancel()
+
     def run_once(self, timeout=None):
-        """Run through all callbacks and all I/O polls once."""
+        """Run through all callbacks and all I/O polls once.
+
+        Calling stop() will break out of this too.
+        """
         try:
             self._run_once(timeout)
         except _StopError:
@@ -512,8 +530,8 @@ class UnixEventLoop(events.EventLoop):
         are scheduled for exactly the same time, it undefined which
         will be called first.
 
-        Events scheduled in the past are passed on to call_soon(), so
-        these will be called in the order in which they were
+        Callbacks scheduled in the past are passed on to call_soon(),
+        so these will be called in the order in which they were
         registered rather than by time due.  This is so you can't
         cheat and insert yourself at the front of the ready queue by
         using a negative time.
@@ -588,11 +606,37 @@ class UnixEventLoop(events.EventLoop):
     def getnameinfo(self, sockaddr, flags=0):
         return self.run_in_executor(None, socket.getnameinfo, sockaddr, flags)
 
-    # TODO: Or create_connection()?
+    # TODO: Or create_connection()?  Or create_client()?
+    @tasks.task
     def create_transport(self, protocol_factory, host, port, *,
-                         family=0, type=0, proto=0, flags=0):
+                         family=0, type=socket.SOCK_STREAM, proto=0, flags=0):
         """XXX"""
+        infos = yield from self.getaddrinfo(host, port,
+                                            family=family, type=type,
+                                            proto=proto, flags=flags)
+        if not infos:
+            raise socket.error('getaddrinfo() returned empty list')
+        exceptions = []
+        for family, type, proto, cname, address in infos:
+            sock = socket.socket(family=family, type=type, proto=proto)
+            sock.setblocking(False)
+            # TODO: Use a small timeout here and overlap connect attempts.
+            try:
+                yield self.sock_connect(sock, address)
+            except socket.error as exc:
+                sock.close()
+                exceptions.append(exc)
+            else:
+                break
+        else:
+            raise exceptions[0]
+        protocol = protocol_factory()
+        # TODO: SSL.
+        transport = UnixSocketTransport(self, sock, protocol)
+        self.call_soon(protocol.connection_made, transport)
+        return transport, protocol
 
+    # TODO: Or create_server()?
     def start_serving(self, protocol_factory, host, port, *,
                       family=0, type=0, proto=0, flags=0):
         """XXX"""
@@ -780,11 +824,19 @@ class UnixEventLoop(events.EventLoop):
         while self._scheduled and self._scheduled[0].cancelled:
             heapq.heappop(self._scheduled)
 
-        # Inspect the poll queue.
-        if self._pollster.pollable() > 1:
+        # Inspect the poll queue.  If there's exactly one pollable
+        # file descriptor, it's the self-pipe, and if there's nothing
+        # scheduled, we should ignore it.
+        if self._pollster.pollable() > 1 or self._scheduled:
             if self._scheduled:
+                # Compute the desired timeout.
                 when = self._scheduled[0].when
-                timeout = max(0, when - time.monotonic())
+                deadline = max(0, when - time.monotonic())
+                if timeout is None:
+                    timeout = deadline
+                else:
+                    timeout = min(timeout, deadline)
+
             t0 = time.monotonic()
             events = self._pollster.poll(timeout)
             t1 = time.monotonic()
@@ -805,3 +857,92 @@ class UnixEventLoop(events.EventLoop):
                 break
             handler = heapq.heappop(self._scheduled)
             self.call_soon(handler.callback, *handler.args)
+
+
+class UnixSocketTransport(transports.Transport):
+
+    def __init__(self, event_loop, sock, protocol):
+        self._event_loop = event_loop
+        self._sock = sock
+        self._protocol = protocol
+        self._buffer = []
+        self._closing = False  # Set when closed() called.
+        self._event_loop.add_reader(self._sock.fileno(), self._read_ready)
+
+    def _read_ready(self):
+        try:
+            data = self._sock.recv(16*1024)
+        except socket.error as exc:
+            if exc.errno not in _TRYAGAIN:
+                self._fatal_error(exc)
+        else:
+            if data:
+                self._event_loop.call_soon(self._protocol.data_received, data)
+            else:
+                self._event_loop.remove_reader(self._sock.fileno())
+                self._event_loop.call_soon(self._protocol.eof_received)
+            
+
+    def write(self, data):
+        assert isinstance(data, bytes)
+        assert not self._closing
+        if not data:
+            return
+        if not self._buffer:
+            # Attempt to send it right away first.
+            try:
+                n = self._sock.send(data)
+            except socket.error as exc:
+                if exc.errno in _TRYAGAIN:
+                    n = 0
+                else:
+                    self._fatal_error(exc)
+                    return
+            if n == len(data):
+                return
+            if n:
+                data = data[n:]
+            self.add_writer(self._sock.fileno(), self._write_ready)
+        self._buffer.append(data)
+
+    def _write_ready(self):
+        data = b''.join(self._buffer)
+        self._buffer = []
+        try:
+            if data:
+                n = self._sock.send(data)
+            else:
+                n = 0
+        except socket.error as exc:
+            if exc.errno in _TRYAGAIN:
+                n = 0
+            else:
+                self._fatal_error(exc)
+                return
+        if n == len(data):
+            self._event_loop.remove_writer(self._sock.fileno())
+            if self._closing:
+                self._event_loop.call_soon(self._protocol.connection_lost,
+                                           None)
+            return
+        if n:
+            data = data[n:]
+        self._buffer.append(data)  # Try again later.
+
+    # TODO: write_eof(), can_write_eof().
+
+    def abort(self):
+        self._fatal_error(None)
+
+    def close(self):
+        self._closing = True
+        self._event_loop.remove_reader(self._sock.fileno())
+        if not self._buffer:
+            self._event_loop.call_soon(self._protocol.connection_lost, None)
+
+    def _fatal_error(self, exc):
+        logging.exception('Fatal error for %s', self)
+        self._event_loop.remove_writer(self._sock.fileno())
+        self._event_loop.remove_reader(self._sock.fileno())
+        self._buffer = []
+        self._event_loop.call_soon(self._protocol.connection_lost, exc)

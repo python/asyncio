@@ -7,6 +7,8 @@ import time
 import unittest
 
 from . import events
+from . import transports
+from . import protocols
 from . import unix_events
 
 
@@ -152,6 +154,36 @@ class EventLoopTests(unittest.TestCase):
         client.close()
         conn.close()
         listener.close()
+
+    def testCreateTransport(self):
+        el = events.get_event_loop()
+        # TODO: This depends on xkcd.com behavior!
+        class MyProto(protocols.Protocol):
+            def __init__(self):
+                self.state = 'INITIAL'
+                self.nbytes = 0
+            def connection_made(self, transport):
+                self.transport = transport
+                assert self.state == 'INITIAL', self.state
+                self.state = 'CONNECTED'
+                transport.write(b'GET / HTTP/1.0\r\nHost: xkcd.com\r\n\r\n')
+            def data_received(self, data):
+                assert self.state == 'CONNECTED', self.state
+                self.nbytes += len(data)
+            def eof_received(self):
+                assert self.state == 'CONNECTED', self.state
+                self.state = 'EOF'
+                self.transport.close()
+            def connection_lost(self, exc):
+                assert self.state in ('CONNECTED', 'EOF'), self.state
+                self.state = 'CLOSED'
+                el.stop()
+        f = el.create_transport(MyProto, 'xkcd.com', 80)
+        tr, pr = el.run_until_complete(f)
+        self.assertTrue(isinstance(tr, transports.Transport))
+        self.assertTrue(isinstance(pr, protocols.Protocol))
+        el.run_forever()  # Really, until connection_lost() calls el.stop().
+        self.assertTrue(pr.nbytes > 0)
 
 
 class HandlerTests(unittest.TestCase):

@@ -127,6 +127,15 @@ class EventLoopTests(unittest.TestCase):
         sock.close()
         self.assertTrue(data.startswith(b'HTTP/1.1 302 Found\r\n'))
 
+    def test_sock_client_fail(self):
+        el = events.get_event_loop()
+        sock = socket.socket()
+        sock.setblocking(False)
+        # TODO: This depends on python.org behavior!
+        with self.assertRaises(ConnectionRefusedError):
+            el.run_until_complete(el.sock_connect(sock, ('python.org', 12345)))
+        sock.close()
+
     def test_sock_accept(self):
         listener = socket.socket()
         listener.setblocking(False)

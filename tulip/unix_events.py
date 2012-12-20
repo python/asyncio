@@ -373,7 +373,7 @@ class UnixEventLoop(events.EventLoop):
         if timeout is None:
             timeout = 1e8  # Over 3 years; kqueue doesn't like it larger.
         future.add_done_callback(lambda _: self.stop())
-        handler = self.call_later(timeout, self.stop)
+        handler = self.call_later(timeout, _raise_stop_error)
         self.run()
         handler.cancel()
         if future.done():

@@ -75,8 +75,8 @@ class PollsterBase:
 
     def __init__(self):
         super().__init__()
-        self.readers = {}  # {fd: token, ...}.
-        self.writers = {}  # {fd: token, ...}.
+        self.readers = {}  # {fd: handler, ...}.
+        self.writers = {}  # {fd: handler, ...}.
 
     def pollable(self):
         """Return the number readers and writers currently registered."""
@@ -86,13 +86,13 @@ class PollsterBase:
 
     # Subclasses are expected to extend the add/remove methods.
 
-    def register_reader(self, fd, token):
+    def register_reader(self, fd, handler):
         """Add or update a reader for a file descriptor."""
-        self.readers[fd] = token
+        self.readers[fd] = handler
 
-    def register_writer(self, fd, token):
+    def register_writer(self, fd, handler):
         """Add or update a writer for a file descriptor."""
-        self.writers[fd] = token
+        self.writers[fd] = handler
 
     def unregister_reader(self, fd):
         """Remove the reader for a file descriptor."""
@@ -113,7 +113,7 @@ class PollsterBase:
 
         The return value is a list of events; it is empty when the
         timeout expired before any events were ready.  Each event
-        is a token previously passed to register_reader/writer().
+        is a handler previously passed to register_reader/writer().
         """
         raise NotImplementedError
 
@@ -166,12 +166,12 @@ class PollPollster(PollsterBase):
         else:
             self._poll.unregister(fd)
 
-    def register_reader(self, fd, token):
-        super().register_reader(fd, token)
+    def register_reader(self, fd, handler):
+        super().register_reader(fd, handler)
         self._update(fd)
 
-    def register_writer(self, fd, token):
-        super().register_writer(fd, token)
+    def register_writer(self, fd, handler):
+        super().register_writer(fd, handler)
         self._update(fd)
 
     def unregister_reader(self, fd):
@@ -218,12 +218,12 @@ class EPollPollster(PollsterBase):
         else:
             self._epoll.unregister(fd)
 
-    def register_reader(self, fd, token):
-        super().register_reader(fd, token)
+    def register_reader(self, fd, handler):
+        super().register_reader(fd, handler)
         self._update(fd)
 
-    def register_writer(self, fd, token):
-        super().register_writer(fd, token)
+    def register_writer(self, fd, handler):
+        super().register_writer(fd, handler)
         self._update(fd)
 
     def unregister_reader(self, fd):
@@ -255,17 +255,17 @@ class KqueuePollster(PollsterBase):
         super().__init__()
         self._kqueue = select.kqueue()
 
-    def register_reader(self, fd, token):
+    def register_reader(self, fd, handler):
         if fd not in self.readers:
             kev = select.kevent(fd, select.KQ_FILTER_READ, select.KQ_EV_ADD)
             self._kqueue.control([kev], 0, 0)
-        return super().register_reader(fd, token)
+        return super().register_reader(fd, handler)
 
-    def register_writer(self, fd, token):
+    def register_writer(self, fd, handler):
         if fd not in self.writers:
             kev = select.kevent(fd, select.KQ_FILTER_WRITE, select.KQ_EV_ADD)
             self._kqueue.control([kev], 0, 0)
-        return super().register_writer(fd, token)
+        return super().register_writer(fd, handler)
 
     def unregister_reader(self, fd):
         super().unregister_reader(fd)
@@ -299,6 +299,14 @@ elif hasattr(select, 'poll'):
     best_pollster = PollPollster
 else:
     best_pollster = SelectPollster
+
+
+class _StopError(BaseException):
+    """Raised to stop the event loop."""
+
+
+def _raise_stop_error():
+    raise _StopError
 
 
 class UnixEventLoop(events.EventLoop):
@@ -343,16 +351,52 @@ class UnixEventLoop(events.EventLoop):
         os.write(self._pipe_write_fd, b'x')
 
     def run(self):
-        """Run the event loop until there is no work left to do.
+        """Run the event loop until nothing left to do or stop() called.
 
         This keeps going as long as there are either readable and
         writable file descriptors, or scheduled callbacks (of either
         variety).
+
+        TODO: Give this a timeout too?
         """
         while self._ready or self._scheduled or self._pollster.pollable() > 1:
-            self._run_once()
+            try:
+                self._run_once()
+            except _StopError:
+                break
 
-    # TODO: stop()?
+    def run_once(self, timeout=None):
+        """Run through all callbacks and all I/O polls once."""
+        try:
+            self._run_once(timeout)
+        except _StopError:
+            pass
+
+    def run_until_complete(self, future, timeout=None):
+        """Run until the Future is done, or until a timeout.
+
+        Return the Future's result, or raise its exception.  If the
+        timeout is reached or stop() is called, raise TimeoutError.
+        """
+        if timeout is None:
+            timeout = 1e8  # Over 3 years; kqueue doesn't like it larger.
+        future.add_done_callback(lambda _: self.stop())
+        handler = self.call_later(timeout, self.stop)
+        self.run()
+        handler.cancel()
+        if future.done():
+            return future.result()  # May raise future.exception().
+        else:
+            raise futures.TimeoutError
+
+    def stop(self):
+        """Stop running the event loop.
+
+        Every callback scheduled before stop() is called will run.
+        Callback scheduled after stop() is called won't.  However,
+        those callbacks will run if run() is called again later.
+        """
+        self.call_soon(_raise_stop_error)
 
     def call_later(self, delay, callback, *args):
         """Arrange for a callback to be called at a given time.
@@ -375,12 +419,14 @@ class UnixEventLoop(events.EventLoop):
 
         Any positional arguments after the callback will be passed to
         the callback when it is called.
+
+        # TODO: Should delay is None be interpreted as Infinity?
         """
         if delay <= 0:
             return self.call_soon(callback, *args)
-        dcall = events.Handler(time.monotonic() + delay, callback, args)
-        heapq.heappush(self._scheduled, dcall)
-        return dcall
+        handler = events.Handler(time.monotonic() + delay, callback, args)
+        heapq.heappush(self._scheduled, handler)
+        return handler
 
     def call_soon(self, callback, *args):
         """Arrange for a callback to be called as soon as possible.
@@ -392,15 +438,15 @@ class UnixEventLoop(events.EventLoop):
         Any positional arguments after the callback will be passed to
         the callback when it is called.
         """
-        dcall = events.Handler(None, callback, args)
-        self._ready.append(dcall)
-        return dcall
+        handler = events.Handler(None, callback, args)
+        self._ready.append(handler)
+        return handler
 
     def call_soon_threadsafe(self, callback, *args):
         """XXX"""
-        dcall = self.call_soon(callback, *args)
+        handler = self.call_soon(callback, *args)
         self._write_to_self()
-        return dcall
+        return handler
 
     def wrap_future(self, future):
         """XXX"""
@@ -442,9 +488,9 @@ class UnixEventLoop(events.EventLoop):
 
     def add_reader(self, fd, callback, *args):
         """Add a reader callback.  Return a Handler instance."""
-        dcall = events.Handler(None, callback, args)
-        self._pollster.register_reader(fd, dcall)
-        return dcall
+        handler = events.Handler(None, callback, args)
+        self._pollster.register_reader(fd, handler)
+        return handler
 
     def remove_reader(self, fd):
         """Remove a reader callback."""
@@ -453,9 +499,9 @@ class UnixEventLoop(events.EventLoop):
 
     def add_writer(self, fd, callback, *args):
         """Add a writer callback.  Return a Handler instance."""
-        dcall = events.Handler(None, callback, args)
-        self._pollster.register_writer(fd, dcall)
-        return dcall
+        handler = events.Handler(None, callback, args)
+        self._pollster.register_writer(fd, handler)
+        return handler
 
     def remove_writer(self, fd):
         """Remove a writer callback."""
@@ -569,18 +615,16 @@ class UnixEventLoop(events.EventLoop):
             else:
                 self.add_reader(fd, self._sock_accept, fut, True, sock)
 
-    def _add_callback(self, dcall):
+    def _add_callback(self, handler):
         """Add a Handler to ready or scheduled."""
-        if dcall.cancelled:
+        if handler.cancelled:
             return
-        if dcall.when is None:
-            self._ready.append(dcall)
+        if handler.when is None:
+            self._ready.append(handler)
         else:
-            heapq.heappush(self._scheduled, dcall)
+            heapq.heappush(self._scheduled, handler)
 
-    # TODO: Make this public?
-    # TODO: Guarantee ready queue is empty on exit?
-    def _run_once(self):
+    def _run_once(self, timeout=None):
         """Run one full iteration of the event loop.
 
         This calls all currently ready callbacks, polls for I/O,
@@ -588,7 +632,6 @@ class UnixEventLoop(events.EventLoop):
         'call_later' callbacks.
         """
         # TODO: Break each of these into smaller pieces.
-        # TODO: Pass in a timeout or deadline or something.
         # TODO: Refactor to separate the callbacks from the readers/writers.
         # TODO: As step 4, run everything scheduled by steps 1-3.
         # TODO: An alternative API would be to do the *minimal* amount
@@ -599,16 +642,16 @@ class UnixEventLoop(events.EventLoop):
         # TODO: Ensure this loop always finishes, even if some
         # callbacks keeps registering more callbacks.
         while self._ready:
-            dcall = self._ready.popleft()
-            if not dcall.cancelled:
+            handler = self._ready.popleft()
+            if not handler.cancelled:
                 try:
-                    if dcall.kwds:
-                        dcall.callback(*dcall.args, **dcall.kwds)
+                    if handler.kwds:
+                        handler.callback(*handler.args, **handler.kwds)
                     else:
-                        dcall.callback(*dcall.args)
+                        handler.callback(*handler.args)
                 except Exception:
                     logging.exception('Exception in callback %s %r',
-                                      dcall.callback, dcall.args)
+                                      handler.callback, handler.args)
 
         # Remove delayed calls that were cancelled from head of queue.
         while self._scheduled and self._scheduled[0].cancelled:
@@ -619,8 +662,6 @@ class UnixEventLoop(events.EventLoop):
             if self._scheduled:
                 when = self._scheduled[0].when
                 timeout = max(0, when - time.monotonic())
-            else:
-                timeout = None
             t0 = time.monotonic()
             events = self._pollster.poll(timeout)
             t1 = time.monotonic()
@@ -630,14 +671,14 @@ class UnixEventLoop(events.EventLoop):
             else:
                 level = logging.DEBUG
             logging.log(level, 'poll%s took %.3f seconds', argstr, t1-t0)
-            for dcall in events:
-                self._add_callback(dcall)
+            for handler in events:
+                self._add_callback(handler)
 
         # Handle 'later' callbacks that are ready.
         now = time.monotonic()
         while self._scheduled:
-            dcall = self._scheduled[0]
-            if dcall.when > now:
+            handler = self._scheduled[0]
+            if handler.when > now:
                 break
-            dcall = heapq.heappop(self._scheduled)
-            self.call_soon(dcall.callback, *dcall.args)
+            handler = heapq.heappop(self._scheduled)
+            self.call_soon(handler.callback, *handler.args)

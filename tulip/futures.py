@@ -1,6 +1,9 @@
 """A Future class similar to the one in PEP 3148."""
 
-__all__ = ['Future', 'InvalidStateError', 'InvalidTimeoutError', 'sleep']
+__all__ = ['CancelledError', 'TimeoutError',
+           'InvalidStateError', 'InvalidTimeoutError',
+           'Future', 'sleep',
+           ]
 
 import concurrent.futures._base
 
@@ -14,6 +17,7 @@ _FINISHED = 'FINISHED'
 # TODO: Do we really want to depend on concurrent.futures internals?
 Error = concurrent.futures._base.Error
 CancelledError = concurrent.futures.CancelledError
+TimeoutError = concurrent.futures.CancelledError
 
 
 class InvalidStateError(Error):

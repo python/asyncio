@@ -36,7 +36,6 @@ import concurrent.futures
 import errno
 import heapq
 import logging
-import os
 import select
 import socket
 import sys
@@ -45,6 +44,12 @@ import time
 
 from . import events
 from . import futures
+
+try:
+    from socket import socketpair
+except ImportError:
+    assert sys.platform == 'win32'
+    from winsocketpair import socketpair
 
 # Errno values indicating the connection was disconnected.
 _DISCONNECTED = frozenset((errno.ECONNRESET,
@@ -324,31 +329,18 @@ class UnixEventLoop(events.EventLoop):
         self._ready = collections.deque()  # [(callback, args), ...]
         self._scheduled = []  # [(when, callback, args), ...]
         self._default_executor = None
-        self._make_self_pipe_or_sock()
+        self._make_self_pipe()
 
-    def _make_self_pipe_or_sock(self):
-        # TODO: Just always use socketpair().  See proactor branch.
-        if sys.platform == 'win32':
-            from . import winsocketpair
-            self._ssock, self._csock = winsocketpair.socketpair()
-            self.add_reader(self._ssock.fileno(), self._read_from_self_sock)
-            self._write_to_self = self._write_to_self_sock
-        else:
-            self._pipe_read_fd, self._pipe_write_fd = os.pipe()  # Self-pipe.
-            self.add_reader(self._pipe_read_fd, self._read_from_self_pipe)
-            self._write_to_self = self._write_to_self_pipe
+    def _make_self_pipe(self):
+        # A self-socket, really. :-)
+        self._ssock, self._csock = socketpair()
+        self.add_reader(self._ssock.fileno(), self._read_from_self)
 
-    def _read_from_self_sock(self):
+    def _read_from_self(self):
         self._ssock.recv(1)
 
-    def _write_to_self_sock(self):
+    def _write_to_self(self):
         self._csock.send(b'x')
-
-    def _read_from_self_pipe(self):
-        os.read(self._pipe_read_fd, 1)
-
-    def _write_to_self_pipe(self):
-        os.write(self._pipe_write_fd, b'x')
 
     def run(self):
         """Run the event loop until nothing left to do or stop() called.

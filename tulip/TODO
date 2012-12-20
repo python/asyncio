@@ -7,21 +7,15 @@ TODO in tulip v2 (tulip/ package directory)
 
 - Unittests
 
-- stop()?
-
-- repeated callback
-
 - better run_once() behavior?
 
 - create_transport()
 
 - start_serving()
 
-- Rename DelayedCall to Handler?
+- Make Handler() callable?
 
-- Make DelayedCall() callable?
-
-- Recognize DelayedCall passed to add_reader(), call_soon(), etc.?
+- Recognize Handler passed to add_reader(), call_soon(), etc.?
 
 - Transport implementations
 

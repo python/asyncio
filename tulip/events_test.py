@@ -1,13 +1,13 @@
 """Tests for events.py."""
 
 import concurrent.futures
-import os
 import socket
 import threading
 import time
 import unittest
 
 from . import events
+from . import unix_events
 
 
 class EventLoopTests(unittest.TestCase):
@@ -89,33 +89,31 @@ class EventLoopTests(unittest.TestCase):
 
     def test_reader_callback(self):
         el = events.get_event_loop()
-        # TODO: Use socketpair().
-        r, w = os.pipe()
+        r, w = unix_events.socketpair()
         bytes_read = []
         def reader():
-            data = os.read(r, 1024)
+            data = r.recv(1024)
             if data:
                 bytes_read.append(data)
             else:
-                el.remove_reader(r)
-                os.close(r)
-        el.add_reader(r, reader)
-        el.call_later(0.05, os.write, w, b'abc')
-        el.call_later(0.1, os.write, w, b'def')
-        el.call_later(0.15, os.close, w)
+                el.remove_reader(r.fileno())
+                r.close()
+        el.add_reader(r.fileno(), reader)
+        el.call_later(0.05, w.send, b'abc')
+        el.call_later(0.1, w.send, b'def')
+        el.call_later(0.15, w.close)
         el.run()
         self.assertEqual(b''.join(bytes_read), b'abcdef')
 
     def test_writer_callback(self):
         el = events.get_event_loop()
-        # TODO: Use socketpair().
-        r, w = os.pipe()
-        el.add_writer(w, os.write, w, b'x'*100)
-        el.call_later(0.1, el.remove_writer, w)
+        r, w = unix_events.socketpair()
+        el.add_writer(w.fileno(), w.send, b'x'*100)
+        el.call_later(0.1, el.remove_writer, w.fileno())
         el.run()
-        os.close(w)
-        data = os.read(r, 32*1024)
-        os.close(r)
+        w.close()
+        data = r.recv(32*1024)
+        r.close()
         self.assertTrue(len(data) >= 200)
 
     def test_sock_client_ops(self):

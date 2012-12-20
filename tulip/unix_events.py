@@ -107,6 +107,16 @@ class PollsterBase:
         """Remove the writer for a file descriptor."""
         del self.writers[fd]
 
+    def register_connector(self, fd, handler):
+        """Add or update a connector for a file descriptor."""
+        # On Unix a connector is the same as a writer.
+        self.register_writer(fd, handler)
+
+    def unregister_connector(self, fd):
+        """Remove the connector for a file descriptor."""
+        # On Unix a connector is the same as a writer.
+        self.unregister_writer(fd)
+
     def poll(self, timeout=None):
         """Poll for events.  A subclass must implement this.
 
@@ -141,15 +151,31 @@ else:
     class SelectPollster(PollsterBase):
         """Pollster implementation using select."""
 
+        def __init__(self):
+            super().__init__()
+            self.exceptionals = {}
+
         def poll(self, timeout=None):
             # Failed connections are reported as exceptional but not writable.
             readable, writable, exceptional = select.select(
-                self.readers, self.writers, self.writers, timeout)
+                self.readers, self.writers, self.exceptionals, timeout)
             writable = set(writable).union(exceptional)
             events = []
             events += (self.readers[fd] for fd in readable)
             events += (self.writers[fd] for fd in writable)
             return events
+
+        def register_connector(self, fd, token):
+            self.register_writer(fd, token)
+            self.exceptionals[fd] = token
+
+        def unregister_connector(self, fd):
+            self.unregister_writer(fd)
+            try:
+                del self.exceptionals[fd]
+            except KeyError:
+                # remove_connector() does not check fd in self.exceptionals.
+                pass
 
 
 class PollPollster(PollsterBase):
@@ -199,6 +225,89 @@ class PollPollster(PollsterBase):
                 if fd in self.writers:
                     events.append(self.writers[fd])
         return events
+
+
+if sys.platform == 'win32':
+
+    class WindowsPollPollster(PollPollster):
+        """Pollster implementation using WSAPoll.
+
+        WSAPoll is only available on Windows Vista and later.  Python
+        does not currently support WSAPoll, but there is a patch
+        available at http://bugs.python.org/issue16507.
+        """
+
+        # REAP_PERIOD is the maximum wait before checking for failed
+        # connections.  This is necessary because WSAPoll() does notify us
+        # of failed connections.  See
+        #     daniel.haxx.se/blog/2012/10/10/wsapoll-is-broken/
+        REAP_PERIOD = 5.0
+
+        # FD_SETSIZE is maximum number of sockets in an fd_set
+        FD_SETSIZE = 512
+
+        def __init__(self):
+            super().__init__()
+            self.exceptionals = {}
+
+        def register_connector(self, fd, token):
+            self.register_writer(fd, token)
+            self.exceptionals[fd] = token
+
+        def unregister_connector(self, fd):
+            self.unregister_writer(fd)
+            try:
+                del self.exceptionals[fd]
+            except KeyError:
+                # remove_connector() does not check fd in self.exceptionals.
+                pass
+
+        def _get_failed_connector_events(self):
+            fds = []
+            remaining = list(self.exceptionals)
+            while remaining:
+                fds += select.select([], [], remaining[:self.FD_SETSIZE], 0)[2]
+                del remaining[:self.FD_SETSIZE]
+            return [(fd, select.POLLOUT) for fd in fds]
+
+        def poll(self, timeout=None):
+            if not self.exceptionals:
+                msecs = None if timeout is None else int(round(1000 * timeout))
+                polled = self._poll.poll(msecs)
+
+            elif timeout is None:
+                polled = None
+                while not polled:
+                    polled = (self._get_failed_connector_events() or
+                              self._poll.poll(self.REAP_PERIOD))
+
+            elif timeout == 0:
+                polled = (self._get_failed_connector_events() or
+                          self._poll.poll(0))
+
+            else:
+                start = time.monotonic()
+                deadline = start + timeout
+                polled = None
+                while timeout >= 0:
+                    msecs = int(round(1000 * min(self.REAP_PERIOD, timeout)))
+                    polled = (self._get_failed_connector_events() or
+                              self._poll.poll(self.REAP_PERIOD))
+                    if polled:
+                        break
+                    timemout = deadline - time.monotonic()
+
+            events = []
+            for fd, flags in polled:
+                if flags & ~select.POLLOUT:
+                    if fd in self.readers:
+                        events.append(self.readers[fd])
+                if flags & ~select.POLLIN:
+                    if fd in self.writers:
+                        events.append(self.writers[fd])
+            return events
+
+    PollPollster = WindowsPollPollster
 
 
 class EPollPollster(PollsterBase):
@@ -510,6 +619,18 @@ class UnixEventLoop(events.EventLoop):
         if fd in self._pollster.writers:
             self._pollster.unregister_writer(fd)
 
+    def add_connector(self, fd, callback, *args):
+        """Add a connector callback.  Return a Handler instance."""
+        dcall = events.Handler(None, callback, args)
+        self._pollster.register_connector(fd, dcall)
+        return dcall
+
+    def remove_connector(self, fd):
+        """Remove a connector callback."""
+        # Every connector fd is in self._pollsters.writers.
+        if fd in self._pollster.writers:
+            self._pollster.unregister_connector(fd)
+
     def sock_recv(self, sock, n):
         """XXX"""
         fut = futures.Future()
@@ -575,7 +696,7 @@ class UnixEventLoop(events.EventLoop):
     def _sock_connect(self, fut, registered, sock, address):
         fd = sock.fileno()
         if registered:
-            self.remove_writer(fd)
+            self.remove_connector(fd)
         if fut.cancelled():
             return
         try:
@@ -592,8 +713,8 @@ class UnixEventLoop(events.EventLoop):
             if exc.errno not in _TRYAGAIN:
                 fut.set_exception(exc)
             else:
-                self.add_writer(fd, self._sock_connect,
-                                fut, True, sock, address)
+                self.add_connector(fd, self._sock_connect,
+                                   fut, True, sock, address)
 
     def sock_accept(self, sock):
         """XXX"""

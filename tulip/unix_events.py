@@ -38,6 +38,7 @@ import heapq
 import logging
 import select
 import socket
+import ssl
 import sys
 import threading
 import time
@@ -608,7 +609,7 @@ class UnixEventLoop(events.EventLoop):
 
     # TODO: Or create_connection()?  Or create_client()?
     @tasks.task
-    def create_transport(self, protocol_factory, host, port, *,
+    def create_transport(self, protocol_factory, host, port, *, ssl=False,
                          family=0, type=socket.SOCK_STREAM, proto=0, flags=0):
         """XXX"""
         infos = yield from self.getaddrinfo(host, port,
@@ -631,9 +632,11 @@ class UnixEventLoop(events.EventLoop):
         else:
             raise exceptions[0]
         protocol = protocol_factory()
-        # TODO: SSL.
-        transport = UnixSocketTransport(self, sock, protocol)
-        self.call_soon(protocol.connection_made, transport)
+        if ssl:
+            sslcontext = None if isinstance(ssl, bool) else ssl
+            transport = _UnixSslTransport(self, sock, protocol, sslcontext)
+        else:
+            transport = _UnixSocketTransport(self, sock, protocol)
         return transport, protocol
 
     # TODO: Or create_server()?
@@ -859,15 +862,16 @@ class UnixEventLoop(events.EventLoop):
             self.call_soon(handler.callback, *handler.args)
 
 
-class UnixSocketTransport(transports.Transport):
+class _UnixSocketTransport(transports.Transport):
 
     def __init__(self, event_loop, sock, protocol):
         self._event_loop = event_loop
         self._sock = sock
         self._protocol = protocol
         self._buffer = []
-        self._closing = False  # Set when closed() called.
+        self._closing = False  # Set when close() called.
         self._event_loop.add_reader(self._sock.fileno(), self._read_ready)
+        self._event_loop.call_soon(self._protocol.connection_made, self)
 
     def _read_ready(self):
         try:
@@ -944,5 +948,118 @@ class UnixSocketTransport(transports.Transport):
         logging.exception('Fatal error for %s', self)
         self._event_loop.remove_writer(self._sock.fileno())
         self._event_loop.remove_reader(self._sock.fileno())
+        self._buffer = []
+        self._event_loop.call_soon(self._protocol.connection_lost, exc)
+
+
+class _UnixSslTransport(transports.Transport):
+
+    def __init__(self, event_loop, rawsock, protocol, sslcontext):
+        self._event_loop = event_loop
+        self._rawsock = rawsock
+        self._protocol = protocol
+        sslcontext = sslcontext or ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+        self._sslcontext = sslcontext
+        sslsock = sslcontext.wrap_socket(rawsock,
+                                         do_handshake_on_connect=False)
+        self._sslsock = sslsock
+        self._buffer = []
+        self._closing = False  # Set when close() called.
+        self._on_handshake()
+
+    def _on_handshake(self):
+        fd = self._sslsock.fileno()
+        try:
+            self._sslsock.do_handshake()
+        except ssl.SSLWantReadError:
+            self._event_loop.add_reader(fd, self._on_handshake)
+            return
+        except ssl.SSLWantWriteError:
+            self._event_loop.add_writable(fd, self._on_handshake)
+            return
+        # TODO: What if it raises another error?
+        self._event_loop.remove_reader(fd)
+        self._event_loop.remove_writer(fd)
+        self._event_loop.add_reader(fd, self._on_ready)
+        self._event_loop.add_writer(fd, self._on_ready)
+        self._event_loop.call_soon(self._protocol.connection_made, self)
+
+    def _on_ready(self):
+        # Because of renegotiations (?), there's no difference between
+        # readable and writable.  We just try both.  XXX This may be
+        # incorrect; we probably need to keep state about what we
+        # should do next.
+
+        # Maybe we're already closed...
+        fd = self._sslsock.fileno()
+        if fd < 0:
+            return
+
+        # First try reading.
+        try:
+            data = self._sslsock.recv(8192)
+        except ssl.SSLWantReadError:
+            pass
+        except ssl.SSLWantWriteError:
+            pass
+        except socket.error as exc:
+            if exc.errno not in _TRYAGAIN:
+                self._fatal_error(exc)
+                return
+        else:
+            if data:
+                self._protocol.data_received(data)
+            else:
+                # TODO: Don't close when self._buffer is non-empty.
+                assert not self._buffer
+                self._event_loop.remove_reader(fd)
+                self._event_loop.remove_writer(fd)
+                self._sslsock.close()
+                self._protocol.connection_lost(None)
+                return
+
+        # Now try writing, if there's anything to write.
+        if not self._buffer:
+            return
+
+        data = b''.join(self._buffer)
+        self._buffer = []
+        try:
+            n = self._sslsock.send(data)
+        except ssl.SSLWantReadError:
+            pass
+        except ssl.SSLWantWriteError:
+            pass
+        except socket.error as exc:
+            if exc.errno not in _TRYAGAIN:
+                self._fatal_error(exc)
+                return
+        else:
+            if n < len(data):
+                self._buffer.append(data[n:])
+
+    def write(self, data):
+        assert isinstance(data, bytes)
+        assert not self._closing
+        if not data:
+            return
+        self._buffer.append(data)
+        # We could optimize, but the callback can do this for now.
+
+    # TODO: write_eof(), can_write_eof().
+
+    def abort(self):
+        self._fatal_error(None)
+
+    def close(self):
+        self._closing = True
+        self._event_loop.remove_reader(self._sslsock.fileno())
+        if not self._buffer:
+            self._event_loop.call_soon(self._protocol.connection_lost, None)
+
+    def _fatal_error(self, exc):
+        logging.exception('Fatal error for %s', self)
+        self._event_loop.remove_writer(self._sslsock.fileno())
+        self._event_loop.remove_reader(self._sslsock.fileno())
         self._buffer = []
         self._event_loop.call_soon(self._protocol.connection_lost, exc)

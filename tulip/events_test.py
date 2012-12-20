@@ -31,6 +31,16 @@ class EventLoopTests(unittest.TestCase):
         self.assertEqual(results, ['hello world'])
         self.assertTrue(t1-t0 >= 0.09)
 
+    def testCallRepeatedly(self):
+        el = events.get_event_loop()
+        results = []
+        def callback(arg):
+            results.append(arg)
+        el.call_repeatedly(0.03, callback, 'ho')
+        el.call_later(0.1, el.stop)
+        el.run()
+        self.assertEqual(results, ['ho', 'ho', 'ho'])
+
     def testCallSoon(self):
         el = events.get_event_loop()
         results = []

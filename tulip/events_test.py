@@ -10,19 +10,6 @@ import unittest
 from . import events
 
 
-def run_while_future(event_loop, future):
-    # TODO: Use socketpair().
-    r, w = os.pipe()
-    def cleanup():
-        event_loop.remove_reader(r)
-        os.close(r)
-    event_loop.add_reader(r, cleanup)
-    # Closing the write end makes the read end readable.
-    future.add_done_callback(lambda _: os.close(w))
-    event_loop.run()
-    return future.result()  # May raise.
-
-
 class EventLoopTests(unittest.TestCase):
 
     def setUp(self):
@@ -78,7 +65,7 @@ class EventLoopTests(unittest.TestCase):
         ex = concurrent.futures.ThreadPoolExecutor(1)
         f1 = ex.submit(run, 'oi')
         f2 = el.wrap_future(f1)
-        res = run_while_future(el, f2)
+        res = el.run_until_complete(f2)
         self.assertEqual(res, 'oi')
 
     def testRunInExecutor(self):
@@ -87,7 +74,7 @@ class EventLoopTests(unittest.TestCase):
             time.sleep(0.1)
             return arg
         f2 = el.run_in_executor(None, run, 'yo')
-        res = run_while_future(el, f2)
+        res = el.run_until_complete(f2)
         self.assertEqual(res, 'yo')
 
     def test_reader_callback(self):
@@ -126,9 +113,9 @@ class EventLoopTests(unittest.TestCase):
         sock = socket.socket()
         sock.setblocking(False)
         # TODO: This depends on python.org behavior!
-        run_while_future(el, el.sock_connect(sock, ('python.org', 80)))
-        run_while_future(el, el.sock_sendall(sock, b'GET / HTTP/1.0\r\n\r\n'))
-        data = run_while_future(el, el.sock_recv(sock, 1024))
+        el.run_until_complete(el.sock_connect(sock, ('python.org', 80)))
+        el.run_until_complete(el.sock_sendall(sock, b'GET / HTTP/1.0\r\n\r\n'))
+        data = el.run_until_complete(el.sock_recv(sock, 1024))
         sock.close()
         self.assertTrue(data.startswith(b'HTTP/1.1 302 Found\r\n'))
 
@@ -141,7 +128,7 @@ class EventLoopTests(unittest.TestCase):
         client.connect(listener.getsockname())
         el = events.get_event_loop()
         f = el.sock_accept(listener)
-        conn, addr = run_while_future(el, f)
+        conn, addr = el.run_until_complete(f)
         self.assertEqual(conn.gettimeout(), 0)
         self.assertEqual(addr, client.getsockname())
         self.assertEqual(client.getpeername(), listener.getsockname())

@@ -84,7 +84,11 @@ class EventLoop:
         """Run the event loop.  Block until there is nothing left to do."""
         raise NotImplementedError
 
-    def run_until_complete(self, future, timeout=None):
+    def run_once(self, timeout=None):  # NEW!
+        """Run one complete cycle of the event loop."""
+        raise NotImplementedError
+
+    def run_until_complete(self, future, timeout=None):  # NEW!
         """Run the event loop until a Future is done.
 
         Return the Future's result, or raise its exception.
@@ -101,6 +105,7 @@ class EventLoop:
         Exactly how soon that is may depend on the implementation, but
         no more I/O callbacks should be scheduled.
         """
+        raise NotImplementedError
 
     # Methods returning Handlers for scheduling callbacks.
 

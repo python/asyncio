@@ -9,7 +9,7 @@ from . import tasks
 
 class TaskTests(unittest.TestCase):
 
-    def testTask(self):
+    def testTaskClass(self):
         @tasks.coroutine
         def notmuch():
             yield from []
@@ -18,6 +18,16 @@ class TaskTests(unittest.TestCase):
         t._event_loop.run()
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'ok')
+
+    def testTaskDecorator(self):
+        @tasks.task
+        def notmuch():
+            yield from []
+            return 'ko'
+        t = notmuch()
+        t._event_loop.run()
+        self.assertTrue(t.done())
+        self.assertEqual(t.result(), 'ko')
 
     def testSleep(self):
         @tasks.coroutine

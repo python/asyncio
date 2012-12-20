@@ -1,6 +1,6 @@
 """Support for tasks, coroutines and the scheduler."""
 
-__all__ = ['coroutine', 'Task']
+__all__ = ['coroutine', 'task', 'Task']
 
 import concurrent.futures
 import inspect
@@ -28,6 +28,14 @@ def iscoroutinefunction(func):
 def iscoroutine(obj):
     """Return True if obj is a coroutine object."""
     return inspect.isgenerator(obj)  # TODO: And what?
+
+
+def task(func):
+    """Decorator for a coroutine to be wrapped in a Task."""
+    def task_wrapper(*args, **kwds):
+        coro = func(*args, **kwds)
+        return Task(coro)
+    return task_wrapper
 
 
 class Task(futures.Future):

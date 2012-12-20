@@ -49,7 +49,7 @@ try:
     from socket import socketpair
 except ImportError:
     assert sys.platform == 'win32'
-    from winsocketpair import socketpair
+    from .winsocketpair import socketpair
 
 # Errno values indicating the connection was disconnected.
 _DISCONNECTED = frozenset((errno.ECONNRESET,

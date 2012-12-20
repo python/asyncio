@@ -371,7 +371,7 @@ class UnixEventLoop(events.EventLoop):
         timeout is reached or stop() is called, raise TimeoutError.
         """
         if timeout is None:
-            timeout = 1e8  # Over 3 years; kqueue doesn't like it larger.
+            timeout = 0x7fffffff/1000.0  # 24 days
         future.add_done_callback(lambda _: self.stop())
         handler = self.call_later(timeout, _raise_stop_error)
         self.run()

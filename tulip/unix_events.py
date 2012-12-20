@@ -428,6 +428,16 @@ class UnixEventLoop(events.EventLoop):
         heapq.heappush(self._scheduled, handler)
         return handler
 
+    def call_repeatedly(self, interval, callback, *args):
+        """Call a callback every 'interval' seconds."""
+        def wrapper():
+            callback(*args)  # If this fails, the chain is broken.
+            handler._when = time.monotonic() + interval
+            heapq.heappush(self._scheduled, handler)
+        handler = events.Handler(time.monotonic() + interval, wrapper, ())
+        heapq.heappush(self._scheduled, handler)
+        return handler
+
     def call_soon(self, callback, *args):
         """Arrange for a callback to be called as soon as possible.
 

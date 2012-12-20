@@ -177,12 +177,11 @@ class EventLoopTests(unittest.TestCase):
             def connection_lost(self, exc):
                 assert self.state in ('CONNECTED', 'EOF'), self.state
                 self.state = 'CLOSED'
-                el.stop()
         f = el.create_transport(MyProto, 'xkcd.com', 80)
         tr, pr = el.run_until_complete(f)
         self.assertTrue(isinstance(tr, transports.Transport))
         self.assertTrue(isinstance(pr, protocols.Protocol))
-        el.run_forever()  # Really, until connection_lost() calls el.stop().
+        el.run()
         self.assertTrue(pr.nbytes > 0)
 
 

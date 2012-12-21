@@ -113,7 +113,7 @@ class EventLoop:
         raise NotImplementedError
 
     def call_repeatedly(self, interval, callback, *args):  # NEW!
-        raise NotImplementdError
+        raise NotImplementedError
 
     def call_soon(self, callback, *args):
         return self.call_later(0, callback, *args)

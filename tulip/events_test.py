@@ -93,6 +93,21 @@ class EventLoopTestsMixin:
         self.assertEqual(results, ['hello', 'world'])
         self.assertTrue(t1-t0 >= 0.09)
 
+    def testCallEveryIteration(self):
+        el = events.get_event_loop()
+        results = []
+        def callback(arg):
+            results.append(arg)
+        handle = el.call_every_iteration(callback, 'ho')
+        el.run_once()
+        self.assertEqual(results, ['ho'])
+        el.run_once()
+        el.run_once()
+        self.assertEqual(results, ['ho', 'ho', 'ho'])
+        handle.cancel()
+        el.run_once()
+        self.assertEqual(results, ['ho', 'ho', 'ho'])
+
     def testWrapFuture(self):
         el = events.get_event_loop()
         def run(arg):

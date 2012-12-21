@@ -1,6 +1,7 @@
 """Tests for events.py."""
 
 import concurrent.futures
+import select
 import socket
 import threading
 import time
@@ -33,10 +34,12 @@ class MyProto(protocols.Protocol):
         self.state = 'CLOSED'
 
 
-class EventLoopTests(unittest.TestCase):
+class EventLoopTestsMixin:
 
     def setUp(self):
-        events.init_event_loop()
+        pollster = self.POLLSTER_CLASS()
+        event_loop = unix_events.UnixEventLoop(pollster)
+        events.set_event_loop(event_loop)
 
     def testRun(self):
         el = events.get_event_loop()
@@ -196,6 +199,26 @@ class EventLoopTests(unittest.TestCase):
         self.assertTrue('ssl' in tr.__class__.__name__.lower())
         el.run()
         self.assertTrue(pr.nbytes > 0)
+
+
+if hasattr(select, 'kqueue'):
+    class KqueueEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
+        POLLSTER_CLASS = unix_events.KqueuePollster
+
+
+if hasattr(select, 'epoll'):
+    class EPollEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
+        POLLSTER_CLASS = unix_events.EPollPollster
+
+
+if hasattr(select, 'poll'):
+    class PollEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
+        POLLSTER_CLASS = unix_events.PollPollster
+
+
+# Should always exist.
+class SelectEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
+    POLLSTER_CLASS = unix_events.SelectPollster
 
 
 class HandlerTests(unittest.TestCase):

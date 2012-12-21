@@ -441,6 +441,7 @@ class UnixEventLoop(events.EventLoop):
         self._pollster = pollster
         self._ready = collections.deque()
         self._scheduled = []
+        self._everytime = []
         self._default_executor = None
         self._make_self_pipe()
 
@@ -576,6 +577,15 @@ class UnixEventLoop(events.EventLoop):
         """XXX"""
         handler = self.call_soon(callback, *args)
         self._write_to_self()
+        return handler
+
+    def call_every_iteration(self, callback, *args):
+        """Call a callback just before the loop blocks.
+
+        The callback is called for every iteration of the loop.
+        """
+        handler = events.Handler(None, callback, args)
+        self._everytime.append(handler)
         return handler
 
     def wrap_future(self, future):
@@ -850,6 +860,17 @@ class UnixEventLoop(events.EventLoop):
         # TODO: Refactor to separate the callbacks from the readers/writers.
         # TODO: An alternative API would be to do the *minimal* amount
         # of work, e.g. one callback or one I/O poll.
+
+        # Add everytime handlers.
+        any_cancelled = False
+        for handler in self._everytime:
+            self._add_callback(handler)
+            any_cancelled = any_cancelled or handler.cancelled
+
+        # Remove cancelled handlers if there are any.
+        if any_cancelled:
+            self._everytime = [handler for handler in self._everytime
+                               if not handler.cancelled]
 
         # Remove delayed calls that were cancelled from head of queue.
         while self._scheduled and self._scheduled[0].cancelled:

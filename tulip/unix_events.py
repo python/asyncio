@@ -439,8 +439,8 @@ class UnixEventLoop(events.EventLoop):
             logging.info('Using pollster: %s', best_pollster.__name__)
             pollster = best_pollster()
         self._pollster = pollster
-        self._ready = collections.deque()  # [(callback, args), ...]
-        self._scheduled = []  # [(when, callback, args), ...]
+        self._ready = collections.deque()
+        self._scheduled = []
         self._default_executor = None
         self._make_self_pipe()
 

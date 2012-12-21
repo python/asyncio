@@ -848,25 +848,8 @@ class UnixEventLoop(events.EventLoop):
         """
         # TODO: Break each of these into smaller pieces.
         # TODO: Refactor to separate the callbacks from the readers/writers.
-        # TODO: As step 4, run everything scheduled by steps 1-3.
         # TODO: An alternative API would be to do the *minimal* amount
         # of work, e.g. one callback or one I/O poll.
-
-        # This is the only place where callbacks are actually *called*.
-        # All other places just add them to ready.
-        # TODO: Ensure this loop always finishes, even if some
-        # callbacks keeps registering more callbacks.
-        while self._ready:
-            handler = self._ready.popleft()
-            if not handler.cancelled:
-                try:
-                    if handler.kwds:
-                        handler.callback(*handler.args, **handler.kwds)
-                    else:
-                        handler.callback(*handler.args)
-                except Exception:
-                    logging.exception('Exception in callback %s %r',
-                                      handler.callback, handler.args)
 
         # Remove delayed calls that were cancelled from head of queue.
         while self._scheduled and self._scheduled[0].cancelled:
@@ -876,7 +859,9 @@ class UnixEventLoop(events.EventLoop):
         # file descriptor, it's the self-pipe, and if there's nothing
         # scheduled, we should ignore it.
         if self._pollster.pollable() > 1 or self._scheduled:
-            if self._scheduled:
+            if self._ready:
+                timeout = 0
+            elif self._scheduled:
                 # Compute the desired timeout.
                 when = self._scheduled[0].when
                 deadline = max(0, when - time.monotonic())
@@ -905,6 +890,22 @@ class UnixEventLoop(events.EventLoop):
                 break
             handler = heapq.heappop(self._scheduled)
             self.call_soon(handler.callback, *handler.args)
+
+        # This is the only place where callbacks are actually *called*.
+        # All other places just add them to ready.
+        # TODO: Ensure this loop always finishes, even if some
+        # callbacks keeps registering more callbacks.
+        while self._ready:
+            handler = self._ready.popleft()
+            if not handler.cancelled:
+                try:
+                    if handler.kwds:
+                        handler.callback(*handler.args, **handler.kwds)
+                    else:
+                        handler.callback(*handler.args)
+                except Exception:
+                    logging.exception('Exception in callback %s %r',
+                                      handler.callback, handler.args)
 
 
 class _UnixSocketTransport(transports.Transport):

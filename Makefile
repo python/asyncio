@@ -18,10 +18,12 @@ check:
 	$(PYTHON) check.py
 
 clean:
+	rm -rf __pycache__ */__pycache__
 	rm -f *.py[co] */*.py[co]
 	rm -f *~ */*~
 	rm -f .*~ */.*~
 	rm -f @* */@*
 	rm -f '#'*'#' */'#'*'#'
+	rm -f *.orig */*.orig
 	rm -f .coverage
 	rm -rf htmlcov

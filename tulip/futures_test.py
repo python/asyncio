@@ -41,6 +41,22 @@ class FutureTests(unittest.TestCase):
         self.assertRaises(RuntimeError, f.result)
         self.assertEqual(f.exception(), exc)
 
+    def testYieldFromTwice(self):
+        f = futures.Future()
+        def fixture():
+            yield 'A'
+            x = yield from f
+            yield 'B', x
+            y = yield from f
+            yield 'C', y
+        g = fixture()
+        self.assertEqual(next(g), 'A')  # yield 'A'.
+        self.assertEqual(next(g), f)  # First yield from f.
+        f.set_result(42)
+        self.assertEqual(next(g), ('B', 42))  # yield 'B', x.
+        # The second "yield from f" does not yield f.
+        self.assertEqual(next(g), ('C', 42))  # yield 'C', y.
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -180,7 +180,8 @@ class Future:
                 self.set_result(result)
 
     def __iter__(self):
-        yield self  # This tells Task to wait for completion.
+        if not self.done():
+            yield self  # This tells Task to wait for completion.
         return self.result()  # May raise too.
 
 

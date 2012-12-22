@@ -200,6 +200,13 @@ class EventLoopTestsMixin:
         el.run()
         self.assertTrue(pr.nbytes > 0)
 
+    def testStartServing(self):
+        el = events.get_event_loop()
+        f = el.start_serving(MyProto, '0.0.0.0', 0)
+        sock = el.run_until_complete(f)
+        host, port = sock.getsockname()
+        self.assertEqual(host, '0.0.0.0')
+
 
 if hasattr(select, 'kqueue'):
     class KqueueEventLoopTests(EventLoopTestsMixin, unittest.TestCase):

@@ -630,6 +630,8 @@ class UnixEventLoop(events.EventLoop):
             else:
                 break
         else:
+            # TODO: What to do if there are multiple exceptions?  We
+            # can't raise them all.  Arbitrarily pick the first one.
             raise exceptions[0]
         protocol = protocol_factory()
         if ssl:
@@ -640,9 +642,52 @@ class UnixEventLoop(events.EventLoop):
         return transport, protocol
 
     # TODO: Or create_server()?
+    @tasks.task
     def start_serving(self, protocol_factory, host, port, *,
-                      family=0, type=0, proto=0, flags=0):
+                      family=0, type=socket.SOCK_STREAM, proto=0, flags=0,
+                      backlog=100):
         """XXX"""
+        infos = yield from self.getaddrinfo(host, port,
+                                            family=family, type=type,
+                                            proto=proto, flags=flags)
+        if not infos:
+            raise socket.error('getaddrinfo() returned empty list')
+        # TODO: Maybe we want to bind every address in the list
+        # instead of the first one that works?
+        exceptions = []
+        for family, type, proto, cname, address in infos:
+            sock = socket.socket(family=family, type=type, proto=proto)
+            try:
+                sock.bind(address)
+            except socket.error as exc:
+                sock.close()
+                exceptions.append(exc)
+            else:
+                break
+        else:
+            raise exceptions[0]
+        sock.listen(backlog)
+        sock.setblocking(False)
+        self.add_reader(sock.fileno(), self._accept_connection,
+                        protocol_factory, sock)
+        return sock
+
+    def _accept_connection(self, protocol_factory, sock):
+        try:
+            conn, addr = sock.accept()
+        except socket.error as exc:
+            if exc in _TRYAGAIN:
+                return  # False alarm.
+            # Bad error.  Stop serving.
+            self.remove_reader(sock.fileno())
+            sock.close()
+            # There's nowhere to send the error, so just log it.
+            # TODO: Someone will want an error handler for this.
+            logging.exception('Accept failed')
+            return
+        protocol = protocol_factory()
+        transport = _UnixSocketTransport(self, conn, protocol)
+        # It's now up to the protocol to handle the connection.
 
     def add_reader(self, fd, callback, *args):
         """Add a reader callback.  Return a Handler instance."""

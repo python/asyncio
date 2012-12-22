@@ -206,6 +206,12 @@ class EventLoopTestsMixin:
         sock = el.run_until_complete(f)
         host, port = sock.getsockname()
         self.assertEqual(host, '0.0.0.0')
+        client = socket.socket()
+        client.connect((host, port))
+        client.send(b'xxx')
+        client.close()
+        el.run_once()
+        el.run_once()
 
 
 if hasattr(select, 'kqueue'):

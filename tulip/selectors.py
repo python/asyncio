@@ -80,6 +80,9 @@ class _BaseSelector:
         fileobj -- file object
         events  -- events to monitor (bitwise mask of SELECT_IN|SELECT_OUT)
         data    -- attached data
+
+        Returns:
+        _Key instance
         """
         if (not events) or (events & ~(SELECT_IN|SELECT_OUT)):
             raise ValueError("Invalid events: {}".format(events))
@@ -97,6 +100,9 @@ class _BaseSelector:
 
         Parameters:
         fileobj -- file object
+
+        Returns:
+        _Key instance
         """
         try:
             key = self._fileobj_to_key[fileobj]
@@ -200,11 +206,13 @@ class SelectSelector(_BaseSelector):
             self._readers.add(key.fd)
         if events & SELECT_OUT:
             self._writers.add(key.fd)
+        return key
 
     def unregister(self, fileobj):
         key = super().unregister(fileobj)
         self._readers.discard(key.fd)
         self._writers.discard(key.fd)
+        return key
 
     def select(self, timeout=None):
         r, w, _ = select(self._readers, self._writers, [], timeout)
@@ -240,10 +248,12 @@ if 'poll' in globals():
             if events & SELECT_OUT:
                 poll_events |= POLLOUT
             self._poll.register(key.fd, poll_events)
+            return key
     
         def unregister(self, fileobj):
             key = super().unregister(fileobj)
             self._poll.unregister(key.fd)
+            return key
     
         def select(self, timeout=None):
             timeout = None if timeout is None else int(1000 * timeout)
@@ -277,10 +287,12 @@ if 'epoll' in globals():
             if events & SELECT_OUT:
                 epoll_events |= EPOLLOUT
             self._epoll.register(key.fd, epoll_events)
+            return key
     
         def unregister(self, fileobj):
             key = super().unregister(fileobj)
             self._epoll.unregister(key.fd)
+            return key
     
         def select(self, timeout=None):
             timeout = -1 if timeout is None else timeout
@@ -320,6 +332,7 @@ if 'kqueue' in globals():
                 mask |= KQ_FILTER_WRITE
             kev = kevent(key.fd, mask, KQ_EV_DELETE)
             self._kqueue.control([kev], 0, 0)
+            return key
     
         def register(self, fileobj, events, data=None):
             key = super().register(fileobj, events, data)
@@ -329,6 +342,7 @@ if 'kqueue' in globals():
             if events & SELECT_OUT:
                 kev = kevent(key.fd, KQ_FILTER_WRITE, KQ_EV_ADD)
                 self._kqueue.control([kev], 0, 0)
+            return key
     
         def select(self, timeout=None):
             max_ev = self.registered_count()

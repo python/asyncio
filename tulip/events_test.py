@@ -10,6 +10,7 @@ import unittest
 from . import events
 from . import transports
 from . import protocols
+from . import selectors
 from . import unix_events
 
 
@@ -37,8 +38,8 @@ class MyProto(protocols.Protocol):
 class EventLoopTestsMixin:
 
     def setUp(self):
-        pollster = self.POLLSTER_CLASS()
-        event_loop = unix_events.UnixEventLoop(pollster)
+        selector = self.SELECTOR_CLASS()
+        event_loop = unix_events.UnixEventLoop(selector)
         events.set_event_loop(event_loop)
 
     def testRun(self):
@@ -230,24 +231,24 @@ class EventLoopTestsMixin:
         el.run_once()
 
 
-if hasattr(select, 'kqueue'):
+if hasattr(selectors, 'KqueueSelector'):
     class KqueueEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
-        POLLSTER_CLASS = unix_events.KqueuePollster
+        SELECTOR_CLASS = selectors.KqueueSelector
 
 
-if hasattr(select, 'epoll'):
+if hasattr(selectors, 'EpollSelector'):
     class EPollEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
-        POLLSTER_CLASS = unix_events.EPollPollster
+        SELECTOR_CLASS = selectors.EpollSelector
 
 
-if hasattr(select, 'poll'):
+if hasattr(selectors, 'PollSelector'):
     class PollEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
-        POLLSTER_CLASS = unix_events.PollPollster
+        SELECTOR_CLASS = selectors.PollSelector
 
 
 # Should always exist.
 class SelectEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
-    POLLSTER_CLASS = unix_events.SelectPollster
+    SELECTOR_CLASS = selectors.SelectSelector
 
 
 class HandlerTests(unittest.TestCase):

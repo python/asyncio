@@ -149,11 +149,12 @@ class EventLoopTestsMixin:
     def test_writer_callback(self):
         el = events.get_event_loop()
         r, w = unix_events.socketpair()
-        el.add_writer(w.fileno(), w.send, b'x'*100)
+        w.setblocking(False)
+        el.add_writer(w.fileno(), w.send, b'x'*(256*1024))
         el.call_later(0.1, el.remove_writer, w.fileno())
         el.run()
         w.close()
-        data = r.recv(32*1024)
+        data = r.recv(256*1024)
         r.close()
         self.assertTrue(len(data) >= 200)
 

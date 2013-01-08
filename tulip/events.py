@@ -2,13 +2,12 @@
 
 Beyond the PEP:
 - Only the main thread has a default event loop.
-- init_event_loop() (re-)initializes the event loop.
 """
 
 __all__ = ['EventLoopPolicy', 'DefaultEventLoopPolicy',
            'EventLoop', 'Handler',
            'get_event_loop_policy', 'set_event_loop_policy',
-           'get_event_loop', 'set_event_loop', 'init_event_loop',
+           'get_event_loop', 'set_event_loop', 'new_event_loop',
            ]
 
 import threading
@@ -194,7 +193,7 @@ class EventLoopPolicy:
         """XXX"""
         raise NotImplementedError
 
-    def init_event_loop(self):
+    def new_event_loop(self):
         """XXX"""
         raise NotImplementedError
 
@@ -221,7 +220,7 @@ class DefaultEventLoopPolicy(threading.local, EventLoopPolicy):
         """
         if (self._event_loop is None and
             threading.current_thread().name == 'MainThread'):
-            self.init_event_loop()
+            self._event_loop = self.new_event_loop()
         return self._event_loop
 
     def set_event_loop(self, event_loop):
@@ -229,15 +228,15 @@ class DefaultEventLoopPolicy(threading.local, EventLoopPolicy):
         assert event_loop is None or isinstance(event_loop, EventLoop)
         self._event_loop = event_loop
 
-    def init_event_loop(self):
-        """(Re-)initialize the event loop.
+    def new_event_loop(self):
+        """Create a new event loop.
 
-        This is calls set_event_loop() with a freshly created event
-        loop suitable for the platform.
+        You must call set_event_loop() to make this the current event
+        loop.
         """
         # TODO: Do something else for Windows.
         from . import unix_events
-        self.set_event_loop(unix_events.UnixEventLoop())
+        return unix_events.UnixEventLoop()
 
 
 # Event loop policy.  The policy itself is always global, even if the
@@ -272,6 +271,6 @@ def set_event_loop(event_loop):
     get_event_loop_policy().set_event_loop(event_loop)
 
 
-def init_event_loop():
+def new_event_loop():
     """XXX"""
-    get_event_loop_policy().init_event_loop()
+    return get_event_loop_policy().new_event_loop()

@@ -40,7 +40,8 @@ class TaskTests(unittest.TestCase):
     def testSleep(self):
         @tasks.coroutine
         def sleeper(dt, arg):
-            res = yield from futures.sleep(dt, arg)
+            yield from futures.sleep(dt/2)
+            res = yield from futures.sleep(dt/2, arg)
             return res
         t = tasks.Task(sleeper(0.1, 'yeah'))
         t0 = time.monotonic()

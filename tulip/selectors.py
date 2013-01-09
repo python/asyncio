@@ -327,11 +327,11 @@ if 'kqueue' in globals():
             key = super().unregister(fileobj)
             mask = 0
             if key.events & SELECT_IN:
-                mask |= KQ_FILTER_READ
+                kev = kevent(key.fd, KQ_FILTER_READ, KQ_EV_DELETE)
+                self._kqueue.control([kev], 0, 0)
             if key.events & SELECT_OUT:
-                mask |= KQ_FILTER_WRITE
-            kev = kevent(key.fd, mask, KQ_EV_DELETE)
-            self._kqueue.control([kev], 0, 0)
+                kev = kevent(key.fd, KQ_FILTER_WRITE, KQ_EV_DELETE)
+                self._kqueue.control([kev], 0, 0)
             return key
     
         def register(self, fileobj, events, data=None):

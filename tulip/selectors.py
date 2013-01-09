@@ -36,7 +36,7 @@ def _fileobj_to_fd(fileobj):
     return fd
 
 
-class Key:
+class SelectorKey:
     """Object used internally to associate a file object to its backing file
     descriptor, selected event mask and attached data."""
 
@@ -82,7 +82,7 @@ class _BaseSelector:
         data    -- attached data
 
         Returns:
-        Key instance
+        SelectorKey instance
         """
         if (not events) or (events & ~(SELECT_IN|SELECT_OUT)):
             raise ValueError("Invalid events: {}".format(events))
@@ -90,7 +90,7 @@ class _BaseSelector:
         if fileobj in self._fileobj_to_key:
             raise ValueError("{!r} is already registered".format(fileobj))
 
-        key = Key(fileobj, events, data)
+        key = SelectorKey(fileobj, events, data)
         self._fd_to_key[key.fd] = key
         self._fileobj_to_key[fileobj] = key
         return key
@@ -102,7 +102,7 @@ class _BaseSelector:
         fileobj -- file object
 
         Returns:
-        Key instance
+        SelectorKey instance
         """
         try:
             key = self._fileobj_to_key[fileobj]

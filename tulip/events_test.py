@@ -1,6 +1,7 @@
 """Tests for events.py."""
 
 import concurrent.futures
+import gc
 import os
 import select
 import signal
@@ -46,6 +47,7 @@ class EventLoopTestsMixin:
 
     def tearDown(self):
         self.event_loop.close()
+        gc.collect()
 
     def testRun(self):
         el = events.get_event_loop()
@@ -363,9 +365,11 @@ class EventLoopTestsMixin:
         client = socket.socket()
         client.connect((host, port))
         client.send(b'xxx')
+        el.run_once()  # This is quite mysterious, but necessary.
         client.close()
         el.run_once()
         el.run_once()
+        sock.close()
 
 
 if hasattr(selectors, 'KqueueSelector'):

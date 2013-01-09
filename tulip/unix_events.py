@@ -766,8 +766,7 @@ class _UnixSocketTransport(transports.Transport):
         if n == len(data):
             self._event_loop.remove_writer(self._sock.fileno())
             if self._closing:
-                self._event_loop.call_soon(self._protocol.connection_lost,
-                                           None)
+                self._event_loop.call_soon(self._call_connection_lost, None)
             return
         if n:
             data = data[n:]
@@ -782,14 +781,20 @@ class _UnixSocketTransport(transports.Transport):
         self._closing = True
         self._event_loop.remove_reader(self._sock.fileno())
         if not self._buffer:
-            self._event_loop.call_soon(self._protocol.connection_lost, None)
+            self._event_loop.call_soon(self._call_connection_lost, None)
 
     def _fatal_error(self, exc):
         logging.exception('Fatal error for %s', self)
         self._event_loop.remove_writer(self._sock.fileno())
         self._event_loop.remove_reader(self._sock.fileno())
         self._buffer = []
-        self._event_loop.call_soon(self._protocol.connection_lost, exc)
+        self._event_loop.call_soon(self._call_connection_lost, exc)
+
+    def _call_connection_lost(self, exc):
+        try:
+            self._protocol.connection_lost(exc)
+        finally:
+            self._sock.close()
 
 
 class _UnixSslTransport(transports.Transport):

@@ -5,7 +5,7 @@ Beyond the PEP:
 """
 
 __all__ = ['EventLoopPolicy', 'DefaultEventLoopPolicy',
-           'EventLoop', 'Handler',
+           'EventLoop', 'Handler', 'make_handler',
            'get_event_loop_policy', 'set_event_loop_policy',
            'get_event_loop', 'set_event_loop', 'new_event_loop',
            ]
@@ -16,23 +16,16 @@ import threading
 class Handler:
     """Object returned by callback registration methods."""
 
-    def __init__(self, when, callback, args, kwds=None):
+    def __init__(self, when, callback, args):
         self._when = when
         self._callback = callback
         self._args = args
-        self._kwds = kwds
         self._cancelled = False
 
     def __repr__(self):
-        if self.kwds:
-            res = 'Handler({}, {}, {}, kwds={})'.format(self._when,
-                                                        self._callback,
-                                                        self._args,
-                                                        self._kwds)
-        else:
-            res = 'Handler({}, {}, {})'.format(self._when,
-                                               self._callback,
-                                               self._args)
+        res = 'Handler({}, {}, {})'.format(self._when,
+                                           self._callback,
+                                           self._args)
         if self._cancelled:
             res += '<cancelled>'
         return res
@@ -48,10 +41,6 @@ class Handler:
     @property
     def args(self):
         return self._args
-
-    @property
-    def kwds(self):
-        return self._kwds
 
     @property
     def cancelled(self):
@@ -74,6 +63,14 @@ class Handler:
 
     def __eq__(self, other):
         return self._when == other._when
+
+
+def make_handler(when, callback, args):
+    if isinstance(callback, Handler):
+        assert not args
+        assert when is None
+        return callback
+    return Handler(when, callback, args)
 
 
 class EventLoop:
@@ -131,7 +128,7 @@ class EventLoop:
     def wrap_future(self, future):
         raise NotImplementedError
 
-    def run_in_executor(self, executor, function, *args):
+    def run_in_executor(self, executor, callback, *args):
         raise NotImplementedError
 
     # Network I/O methods returning Futures.

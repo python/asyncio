@@ -81,6 +81,16 @@ class EventLoopTestsMixin:
         el.run()
         self.assertEqual(results, [('hello', 'world')])
 
+    def testCallSoonWithHandler(self):
+        el = events.get_event_loop()
+        results = []
+        def callback():
+            results.append('yeah')
+        handler = events.Handler(None, callback, ())
+        self.assertEqual(el.call_soon(handler), handler)
+        el.run()
+        self.assertEqual(results, ['yeah'])
+
     def testCallSoonThreadsafe(self):
         el = events.get_event_loop()
         results = []
@@ -98,18 +108,52 @@ class EventLoopTestsMixin:
         self.assertEqual(results, ['hello', 'world'])
         self.assertTrue(t1-t0 >= 0.09)
 
+    def testCallSoonThreadsafeWithHandler(self):
+        el = events.get_event_loop()
+        results = []
+        def callback(arg):
+            results.append(arg)
+        handler = events.Handler(None, callback, ('hello',))
+        def run():
+            self.assertEqual(el.call_soon_threadsafe(handler), handler)
+        t = threading.Thread(target=run)
+        el.call_later(0.1, callback, 'world')
+        t0 = time.monotonic()
+        t.start()
+        el.run()
+        t1 = time.monotonic()
+        t.join()
+        self.assertEqual(results, ['hello', 'world'])
+        self.assertTrue(t1-t0 >= 0.09)
+
     def testCallEveryIteration(self):
         el = events.get_event_loop()
         results = []
         def callback(arg):
             results.append(arg)
-        handle = el.call_every_iteration(callback, 'ho')
+        handler = el.call_every_iteration(callback, 'ho')
         el.run_once()
         self.assertEqual(results, ['ho'])
         el.run_once()
         el.run_once()
         self.assertEqual(results, ['ho', 'ho', 'ho'])
-        handle.cancel()
+        handler.cancel()
+        el.run_once()
+        self.assertEqual(results, ['ho', 'ho', 'ho'])
+
+    def testCallEveryIterationWithHandler(self):
+        el = events.get_event_loop()
+        results = []
+        def callback(arg):
+            results.append(arg)
+        handler = events.Handler(None, callback, ('ho',))
+        self.assertEqual(el.call_every_iteration(handler), handler)
+        el.run_once()
+        self.assertEqual(results, ['ho'])
+        el.run_once()
+        el.run_once()
+        self.assertEqual(results, ['ho', 'ho', 'ho'])
+        handler.cancel()
         el.run_once()
         self.assertEqual(results, ['ho', 'ho', 'ho'])
 
@@ -133,7 +177,17 @@ class EventLoopTestsMixin:
         res = el.run_until_complete(f2)
         self.assertEqual(res, 'yo')
 
-    def test_reader_callback(self):
+    def testRunInExecutorWithHandler(self):
+        el = events.get_event_loop()
+        def run(arg):
+            time.sleep(0.1)
+            return arg
+        handler = events.Handler(None, run, ('yo',))
+        f2 = el.run_in_executor(None, handler)
+        res = el.run_until_complete(f2)
+        self.assertEqual(res, 'yo')
+
+    def testReaderCallback(self):
         el = events.get_event_loop()
         r, w = unix_events.socketpair()
         bytes_read = []
@@ -151,7 +205,26 @@ class EventLoopTestsMixin:
         el.run()
         self.assertEqual(b''.join(bytes_read), b'abcdef')
 
-    def test_writer_callback(self):
+    def testReaderCallbackWithHandler(self):
+        el = events.get_event_loop()
+        r, w = unix_events.socketpair()
+        bytes_read = []
+        def reader():
+            data = r.recv(1024)
+            if data:
+                bytes_read.append(data)
+            else:
+                el.remove_reader(r.fileno())
+                r.close()
+        handler = events.Handler(None, reader, ())
+        self.assertEqual(el.add_reader(r.fileno(), handler), handler)
+        el.call_later(0.05, w.send, b'abc')
+        el.call_later(0.1, w.send, b'def')
+        el.call_later(0.15, w.close)
+        el.run()
+        self.assertEqual(b''.join(bytes_read), b'abcdef')
+
+    def testWriterCallback(self):
         el = events.get_event_loop()
         r, w = unix_events.socketpair()
         w.setblocking(False)
@@ -163,7 +236,20 @@ class EventLoopTestsMixin:
         r.close()
         self.assertTrue(len(data) >= 200)
 
-    def test_sock_client_ops(self):
+    def testWriterCallbackWithHandler(self):
+        el = events.get_event_loop()
+        r, w = unix_events.socketpair()
+        w.setblocking(False)
+        handler = events.Handler(None, w.send, (b'x'*(256*1024),))
+        self.assertEqual(el.add_writer(w.fileno(), handler), handler)
+        el.call_later(0.1, el.remove_writer, w.fileno())
+        el.run()
+        w.close()
+        data = r.recv(256*1024)
+        r.close()
+        self.assertTrue(len(data) >= 200)
+
+    def testSockClientOps(self):
         el = events.get_event_loop()
         sock = socket.socket()
         sock.setblocking(False)
@@ -174,7 +260,7 @@ class EventLoopTestsMixin:
         sock.close()
         self.assertTrue(data.startswith(b'HTTP/1.1 302 Found\r\n'))
 
-    def test_sock_client_fail(self):
+    def testSockClientFail(self):
         el = events.get_event_loop()
         sock = socket.socket()
         sock.setblocking(False)
@@ -183,7 +269,7 @@ class EventLoopTestsMixin:
             el.run_until_complete(el.sock_connect(sock, ('python.org', 12345)))
         sock.close()
 
-    def test_sock_accept(self):
+    def testSockAccept(self):
         listener = socket.socket()
         listener.setblocking(False)
         listener.bind(('127.0.0.1', 0))
@@ -305,6 +391,13 @@ class HandlerTests(unittest.TestCase):
 
     def testHandler(self):
         pass
+
+    def testMakeHandler(self):
+        def callback(*args):
+            return args
+        h1 = events.Handler(None, callback, ())
+        h2 = events.make_handler(None, h1, ())
+        self.assertEqual(h1, h2)
 
 
 class PolicyTests(unittest.TestCase):

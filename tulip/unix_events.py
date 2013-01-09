@@ -80,7 +80,7 @@ class UnixEventLoop(events.EventLoop):
         if selector is None:
             # pick the best selector class for the platform
             selector = selectors.Selector()
-            logging.info('Using selector: %s', selector.__name__)
+            logging.info('Using selector: %s', selector.__class__.__name__)
         self._selector = selector
         self._ready = collections.deque()
         self._scheduled = []
@@ -88,6 +88,11 @@ class UnixEventLoop(events.EventLoop):
         self._default_executor = None
         self._signal_handlers = {}
         self._make_self_pipe()
+
+    def close(self):
+        if self._selector is not None:
+            self._selector.close()
+            self._selector = None
 
     def _make_self_pipe(self):
         # A self-socket, really. :-)

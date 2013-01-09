@@ -97,13 +97,25 @@ class UnixEventLoop(events.EventLoop):
     def _make_self_pipe(self):
         # A self-socket, really. :-)
         self._ssock, self._csock = socketpair()
+        self._ssock.setblocking(False)
+        self._csock.setblocking(False)
         self.add_reader(self._ssock.fileno(), self._read_from_self)
 
     def _read_from_self(self):
-        self._ssock.recv(1)
+        try:
+            self._ssock.recv(1)
+        except socket.error as exc:
+            if exc in _TRYAGAIN:
+                return
+            raise  # Halp!
 
     def _write_to_self(self):
-        self._csock.send(b'x')
+        try:
+            self._csock.send(b'x')
+        except socket.error as exc:
+            if exc in _TRYAGAIN:
+                return
+            raise  # Halp!
 
     def run(self):
         """Run the event loop until nothing left to do or stop() called.
@@ -553,12 +565,25 @@ class UnixEventLoop(events.EventLoop):
         Raise RuntimeError if there is a problem setting up the handler.
         """
         self._check_signal(sig)
+        try:
+            # set_wakeup_fd() raises ValueError if this is not the
+            # main thread.  By calling it early we ensure that an
+            # event loop running in another thread cannot add a signal
+            # handler.
+            signal.set_wakeup_fd(self._csock.fileno())
+        except ValueError as exc:
+            raise RuntimeError(str(exc))
         handler = events.make_handler(None, callback, args)
         self._signal_handlers[sig] = handler
         try:
             signal.signal(sig, self._handle_signal)
         except OSError as exc:
             del self._signal_handlers[sig]
+            if not self._signal_handlers:
+                try:
+                    signal.set_wakeup_fd(-1)
+                except ValueError as nexc:
+                    logging.info('set_wakeup_fd(-1) failed: %s', nexc)
             if exc.errno == errno.EINVAL:
                 raise RuntimeError('sig {} cannot be caught'.format(sig))
             else:
@@ -595,6 +620,11 @@ class UnixEventLoop(events.EventLoop):
                 raise RuntimeError('sig {} cannot be caught'.format(sig))
             else:
                 raise
+        if not self._signal_handlers:
+            try:
+                signal.set_wakeup_fd(-1)
+            except ValueError as exc:
+                logging.info('set_wakeup_fd(-1) failed: %s', exc)
         return True
 
     def _check_signal(self, sig):

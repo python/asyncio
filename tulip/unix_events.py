@@ -191,7 +191,7 @@ class UnixEventLoop(events.EventLoop):
         """
         if delay <= 0:
             return self.call_soon(callback, *args)
-        handler = events.Handler(time.monotonic() + delay, callback, args)
+        handler = events.make_handler(time.monotonic() + delay, callback, args)
         heapq.heappush(self._scheduled, handler)
         return handler
 
@@ -201,7 +201,7 @@ class UnixEventLoop(events.EventLoop):
             callback(*args)  # If this fails, the chain is broken.
             handler._when = time.monotonic() + interval
             heapq.heappush(self._scheduled, handler)
-        handler = events.Handler(time.monotonic() + interval, wrapper, ())
+        handler = events.make_handler(time.monotonic() + interval, wrapper, ())
         heapq.heappush(self._scheduled, handler)
         return handler
 
@@ -215,7 +215,7 @@ class UnixEventLoop(events.EventLoop):
         Any positional arguments after the callback will be passed to
         the callback when it is called.
         """
-        handler = events.Handler(None, callback, args)
+        handler = events.make_handler(None, callback, args)
         self._ready.append(handler)
         return handler
 
@@ -230,7 +230,7 @@ class UnixEventLoop(events.EventLoop):
 
         The callback is called for every iteration of the loop.
         """
-        handler = events.Handler(None, callback, args)
+        handler = events.make_handler(None, callback, args)
         self._everytime.append(handler)
         return handler
 
@@ -244,13 +244,21 @@ class UnixEventLoop(events.EventLoop):
                 self.call_soon_threadsafe(new_future._copy_state, future))
         return new_future
 
-    def run_in_executor(self, executor, function, *args):
+    def run_in_executor(self, executor, callback, *args):
+        if isinstance(callback, events.Handler):
+            assert not args
+            assert callback.when is None
+            if callback.cancelled:
+                f = futures.Future()
+                f.set_result(None)
+                return f
+            callback, args = callback.callback, callback.args
         if executor is None:
             executor = self._default_executor
             if executor is None:
                 executor = concurrent.futures.ThreadPoolExecutor(_MAX_WORKERS)
                 self._default_executor = executor
-        return self.wrap_future(executor.submit(function, *args))
+        return self.wrap_future(executor.submit(callback, *args))
 
     def set_default_executor(self, executor):
         self._default_executor = executor
@@ -347,7 +355,7 @@ class UnixEventLoop(events.EventLoop):
 
     def add_reader(self, fd, callback, *args):
         """Add a reader callback.  Return a Handler instance."""
-        handler = events.Handler(None, callback, args)
+        handler = events.make_handler(None, callback, args)
         try:
             mask, (reader, writer, connector) = self._selector.get_info(fd)
         except KeyError:
@@ -374,7 +382,7 @@ class UnixEventLoop(events.EventLoop):
 
     def add_writer(self, fd, callback, *args):
         """Add a writer callback.  Return a Handler instance."""
-        handler = events.Handler(None, callback, args)
+        handler = events.make_handler(None, callback, args)
         try:
             mask, (reader, writer, connector) = self._selector.get_info(fd)
         except KeyError:
@@ -402,7 +410,7 @@ class UnixEventLoop(events.EventLoop):
         """Add a connector callback.  Return a Handler instance."""
         # XXX As long as SELECT_CONNECT == SELECT_OUT, set the handler
         # as both writer and connector.
-        handler = events.Handler(None, callback, args)
+        handler = events.make_handler(None, callback, args)
         try:
             mask, (reader, writer, connector) = self._selector.get_info(fd)
         except KeyError:
@@ -540,7 +548,7 @@ class UnixEventLoop(events.EventLoop):
         Raise RuntimeError if there is a problem setting up the handler.
         """
         self._check_signal(sig)
-        handler = events.Handler(None, callback, args)
+        handler = events.make_handler(None, callback, args)
         self._signal_handlers[sig] = handler
         try:
             signal.signal(sig, self._handle_signal)
@@ -683,10 +691,7 @@ class UnixEventLoop(events.EventLoop):
             handler = self._ready.popleft()
             if not handler.cancelled:
                 try:
-                    if handler.kwds:
-                        handler.callback(*handler.args, **handler.kwds)
-                    else:
-                        handler.callback(*handler.args)
+                    handler.callback(*handler.args)
                 except Exception:
                     logging.exception('Exception in callback %s %r',
                                       handler.callback, handler.args)

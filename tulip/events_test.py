@@ -335,6 +335,19 @@ class EventLoopTestsMixin:
         el.run_once()
         self.assertEqual(caught, 0)
 
+    def testSignalHandlingWhileSelecting(self):
+        # Test with a signal actually arriving during a select() call.
+        caught = 0
+        def my_handler():
+            nonlocal caught
+            caught += 1
+        el = events.get_event_loop()
+        handler = el.add_signal_handler(signal.SIGALRM, my_handler)
+        signal.setitimer(signal.ITIMER_REAL, 0.1, 0)  # Send SIGALRM once.
+        el.call_later(0.15, el.stop)
+        el.run_forever()
+        self.assertEqual(caught, 1)
+
     def testCreateTransport(self):
         el = events.get_event_loop()
         # TODO: This depends on xkcd.com behavior!

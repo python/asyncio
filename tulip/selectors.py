@@ -215,7 +215,11 @@ class SelectSelector(_BaseSelector):
         return key
 
     def select(self, timeout=None):
-        r, w, _ = select(self._readers, self._writers, [], timeout)
+        try:
+            r, w, _ = select(self._readers, self._writers, [], timeout)
+        except InterruptedError:
+            # A signal arrived.  Don't die, just return no events.
+            return []
         r = set(r)
         w = set(w)
         ready = []
@@ -258,7 +262,12 @@ if 'poll' in globals():
         def select(self, timeout=None):
             timeout = None if timeout is None else int(1000 * timeout)
             ready = []
-            for fd, event in self._poll.poll(timeout):
+            try:
+                fd_event_list = self._poll.poll(timeout)
+            except InterruptedError:
+                # A signal arrived.  Don't die, just return no events.
+                return []
+            for fd, event in fd_event_list:
                 events = 0
                 if event & ~POLLIN:
                     events |= SELECT_OUT
@@ -298,7 +307,12 @@ if 'epoll' in globals():
             timeout = -1 if timeout is None else timeout
             max_ev = self.registered_count()
             ready = []
-            for fd, event in self._epoll.poll(timeout, max_ev):
+            try:
+                fd_event_list = self._epoll.poll(timeout, max_ev)
+            except InterruptedError:
+                # A signal arrived.  Don't die, just return no events.
+                return []
+            for fd, event in fd_event_list:
                 events = 0
                 if event & ~EPOLLIN:
                     events |= SELECT_OUT
@@ -347,7 +361,12 @@ if 'kqueue' in globals():
         def select(self, timeout=None):
             max_ev = self.registered_count()
             ready = []
-            for kev in self._kqueue.control(None, max_ev, timeout):
+            try:
+                kev_list = self._kqueue.control(None, max_ev, timeout)
+            except InterruptedError:
+                # A signal arrived.  Don't die, just return no events.
+                return []
+            for kev in kev_list:
                 fd = kev.ident
                 flag = kev.filter
                 events = 0

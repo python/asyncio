@@ -233,6 +233,19 @@ class EventLoopTestsMixin:
         # Removing again returns False.
         self.assertFalse(el.remove_signal_handler(signal.SIGINT))
 
+    def testCancelSignalHandler(self):
+        # Cancelling the handler should remove it (eventually).
+        caught = 0
+        def my_handler():
+            nonlocal caught
+            caught += 1
+        el = events.get_event_loop()
+        handler = el.add_signal_handler(signal.SIGINT, my_handler)
+        handler.cancel()
+        os.kill(os.getpid(), signal.SIGINT)
+        el.run_once()
+        self.assertEqual(caught, 0)
+
     def testCreateTransport(self):
         el = events.get_event_loop()
         # TODO: This depends on xkcd.com behavior!

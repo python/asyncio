@@ -17,7 +17,7 @@ _FINISHED = 'FINISHED'
 # TODO: Do we really want to depend on concurrent.futures internals?
 Error = concurrent.futures._base.Error
 CancelledError = concurrent.futures.CancelledError
-TimeoutError = concurrent.futures.CancelledError
+TimeoutError = concurrent.futures.TimeoutError
 
 
 class InvalidStateError(Error):

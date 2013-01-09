@@ -3,11 +3,19 @@
 import time
 import unittest
 
+from . import events
 from . import futures
 from . import tasks
 
 
 class TaskTests(unittest.TestCase):
+
+    def setUp(self):
+        self.event_loop = events.new_event_loop()
+        events.set_event_loop(self.event_loop)
+
+    def tearDown(self):
+        self.event_loop.close()
 
     def testTaskClass(self):
         @tasks.coroutine

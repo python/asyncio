@@ -40,11 +40,12 @@ class MyProto(protocols.Protocol):
 class EventLoopTestsMixin:
 
     def setUp(self):
-        selector = self.SELECTOR_CLASS()
-        event_loop = unix_events.UnixEventLoop(selector)
-        events.set_event_loop(event_loop)
+        self.selector = self.SELECTOR_CLASS()
+        self.event_loop = unix_events.UnixEventLoop(self.selector)
+        events.set_event_loop(self.event_loop)
 
-    # TODO: Add tearDown() which closes the selector and event loop.
+    def tearDown(self):
+        self.event_loop.close()
 
     def testRun(self):
         el = events.get_event_loop()

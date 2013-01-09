@@ -1,7 +1,9 @@
 """Tests for events.py."""
 
 import concurrent.futures
+import os
 import select
+import signal
 import socket
 import threading
 import time
@@ -41,6 +43,8 @@ class EventLoopTestsMixin:
         selector = self.SELECTOR_CLASS()
         event_loop = unix_events.UnixEventLoop(selector)
         events.set_event_loop(event_loop)
+
+    # TODO: Add tearDown() which closes the selector and event loop.
 
     def testRun(self):
         el = events.get_event_loop()
@@ -195,6 +199,39 @@ class EventLoopTestsMixin:
         client.close()
         conn.close()
         listener.close()
+
+    def testAddSignalHandler(self):
+        caught = 0
+        def my_handler():
+            nonlocal caught
+            caught += 1
+        el = events.get_event_loop()
+        # Check error behavior first.
+        self.assertRaises(TypeError, el.add_signal_handler, 'boom', my_handler)
+        self.assertRaises(TypeError, el.remove_signal_handler, 'boom')
+        self.assertRaises(ValueError, el.add_signal_handler, signal.NSIG+1,
+                          my_handler)
+        self.assertRaises(ValueError, el.remove_signal_handler, signal.NSIG+1)
+        self.assertRaises(ValueError, el.add_signal_handler, 0, my_handler)
+        self.assertRaises(ValueError, el.remove_signal_handler, 0)
+        self.assertRaises(ValueError, el.add_signal_handler, -1, my_handler)
+        self.assertRaises(ValueError, el.remove_signal_handler, -1)
+        self.assertRaises(RuntimeError, el.add_signal_handler, signal.SIGKILL,
+                          my_handler)
+        # Removing SIGKILL doesn't raise, since we don't call signal().
+        self.assertFalse(el.remove_signal_handler(signal.SIGKILL))
+        # Now set a handler and handle it.
+        el.add_signal_handler(signal.SIGINT, my_handler)
+        el.run_once()
+        os.kill(os.getpid(), signal.SIGINT)
+        el.run_once()
+        self.assertEqual(caught, 1)
+        # Removing it should restore the default handler.
+        self.assertTrue(el.remove_signal_handler(signal.SIGINT))
+        self.assertEqual(signal.getsignal(signal.SIGINT),
+                         signal.default_int_handler)
+        # Removing again returns False.
+        self.assertFalse(el.remove_signal_handler(signal.SIGINT))
 
     def testCreateTransport(self):
         el = events.get_event_loop()

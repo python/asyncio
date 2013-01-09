@@ -79,8 +79,14 @@ class Handler:
 class EventLoop:
     """Abstract event loop."""
 
+    # TODO: Rename run() -> run_until_idle(), run_forever() -> run().
+
     def run(self):
         """Run the event loop.  Block until there is nothing left to do."""
+        raise NotImplementedError
+
+    def run_forever(self):
+        """Run the event loop.  Block until stop() is called."""
         raise NotImplementedError
 
     def run_once(self, timeout=None):  # NEW!
@@ -179,6 +185,14 @@ class EventLoop:
         raise NotImplementedError
 
     def sock_accept(self, sock):
+        raise NotImplementedError
+
+    # Signal handling.
+
+    def add_signal_handler(self, sig, callback, *args):
+        raise NotImplementedError
+
+    def remove_signal_handler(self, sig):
         raise NotImplementedError
 
 

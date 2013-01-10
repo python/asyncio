@@ -56,7 +56,42 @@ class TaskTests(unittest.TestCase):
         res = self.event_loop.run_until_complete(tasks.Task(foo()))
         t1 = time.monotonic()
         self.assertTrue(t1-t0, 0.01)
-        # TODO: Test with timeout.
+        # TODO: Test different return_when values.
+
+    def testWaitWithException(self):
+        a = tasks.sleep(0.1)
+        @tasks.coroutine
+        def sleeper():
+            yield from tasks.sleep(0.15)
+            raise ZeroDivisionError('really')
+        b = tasks.Task(sleeper())
+        def foo():
+            done, pending = yield from tasks.wait([b, a])
+            self.assertEqual(len(done), 2)
+            self.assertEqual(pending, set())
+            errors = set(f for f in done if f.exception() is not None)
+            self.assertEqual(len(errors), 1)
+        t0 = time.monotonic()
+        res = self.event_loop.run_until_complete(tasks.Task(foo()))
+        t1 = time.monotonic()
+        self.assertTrue(t1-t0 >= 0.14)
+        t0 = time.monotonic()
+        res = self.event_loop.run_until_complete(tasks.Task(foo()))
+        t1 = time.monotonic()
+        self.assertTrue(t1-t0 <= 0.01)
+
+    def testWaitWithTimeout(self):
+        a = tasks.sleep(0.1)
+        b = tasks.sleep(0.15)
+        def foo():
+            done, pending = yield from tasks.wait([b, a], timeout=0.11)
+            self.assertEqual(done, set([a]))
+            self.assertEqual(pending, set([b]))
+        t0 = time.monotonic()
+        res = self.event_loop.run_until_complete(tasks.Task(foo()))
+        t1 = time.monotonic()
+        self.assertTrue(t1-t0 >= 0.1)
+        self.assertTrue(t1-t0 <= 0.12)
 
     def testAsCompleted(self):
         @tasks.coroutine

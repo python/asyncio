@@ -126,7 +126,7 @@ class _BaseSelector:
     def select(self, timeout=None):
         """Perform the actual selection, until some monitored file objects are
         ready or a timeout expires.
-        
+
         Parameters:
         timeout -- if timeout > 0, this specifies the maximum wait time, in
                    seconds
@@ -239,11 +239,11 @@ if 'poll' in globals():
 
     class PollSelector(_BaseSelector):
         """Poll-based selector."""
-    
+
         def __init__(self):
             super().__init__()
             self._poll = poll()
-    
+
         def register(self, fileobj, events, data=None):
             key = super().register(fileobj, events, data)
             poll_events = 0
@@ -253,12 +253,12 @@ if 'poll' in globals():
                 poll_events |= POLLOUT
             self._poll.register(key.fd, poll_events)
             return key
-    
+
         def unregister(self, fileobj):
             key = super().unregister(fileobj)
             self._poll.unregister(key.fd)
             return key
-    
+
         def select(self, timeout=None):
             timeout = None if timeout is None else int(1000 * timeout)
             ready = []
@@ -273,7 +273,7 @@ if 'poll' in globals():
                     events |= SELECT_OUT
                 if event & ~POLLOUT:
                     events |= SELECT_IN
-    
+
                 key = self._key_from_fd(fd)
                 ready.append((key.fileobj, events, key.data))
             return ready
@@ -283,11 +283,11 @@ if 'epoll' in globals():
 
     class EpollSelector(_BaseSelector):
         """Epoll-based selector."""
-    
+
         def __init__(self):
             super().__init__()
             self._epoll = epoll()
-    
+
         def register(self, fileobj, events, data=None):
             key = super().register(fileobj, events, data)
             epoll_events = 0
@@ -297,12 +297,12 @@ if 'epoll' in globals():
                 epoll_events |= EPOLLOUT
             self._epoll.register(key.fd, epoll_events)
             return key
-    
+
         def unregister(self, fileobj):
             key = super().unregister(fileobj)
             self._epoll.unregister(key.fd)
             return key
-    
+
         def select(self, timeout=None):
             timeout = -1 if timeout is None else timeout
             max_ev = self.registered_count()
@@ -318,11 +318,11 @@ if 'epoll' in globals():
                     events |= SELECT_OUT
                 if event & ~EPOLLOUT:
                     events |= SELECT_IN
-    
+
                 key = self._key_from_fd(fd)
                 ready.append((key.fileobj, events, key.data))
             return ready
-    
+
         def close(self):
             super().close()
             self._epoll.close()
@@ -332,7 +332,7 @@ if 'kqueue' in globals():
 
     class KqueueSelector(_BaseSelector):
         """Kqueue-based selector."""
-    
+
         def __init__(self):
             super().__init__()
             self._kqueue = kqueue()
@@ -347,7 +347,7 @@ if 'kqueue' in globals():
                 kev = kevent(key.fd, KQ_FILTER_WRITE, KQ_EV_DELETE)
                 self._kqueue.control([kev], 0, 0)
             return key
-    
+
         def register(self, fileobj, events, data=None):
             key = super().register(fileobj, events, data)
             if events & SELECT_IN:
@@ -357,7 +357,7 @@ if 'kqueue' in globals():
                 kev = kevent(key.fd, KQ_FILTER_WRITE, KQ_EV_ADD)
                 self._kqueue.control([kev], 0, 0)
             return key
-    
+
         def select(self, timeout=None):
             max_ev = self.registered_count()
             ready = []
@@ -378,7 +378,7 @@ if 'kqueue' in globals():
                 key = self._key_from_fd(fd)
                 ready.append((key.fileobj, events, key.data))
             return ready
-    
+
         def close(self):
             super().close()
             self._kqueue.close()

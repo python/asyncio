@@ -662,13 +662,15 @@ class UnixEventLoop(events.EventLoop):
         # TODO: An alternative API would be to do the *minimal* amount
         # of work, e.g. one callback or one I/O poll.
 
-        # Add everytime handlers.
+        # Add everytime handlers, skipping cancelled ones.
         any_cancelled = False
         for handler in self._everytime:
-            self._add_callback(handler)
-            any_cancelled = any_cancelled or handler.cancelled
+            if handler.cancelled:
+                any_cancelled = True
+            else:
+                self._ready.append(handler)
 
-        # Remove cancelled handlers if there are any.
+        # Remove cancelled everytime handlers if there are any.
         if any_cancelled:
             self._everytime = [handler for handler in self._everytime
                                if not handler.cancelled]
@@ -716,7 +718,7 @@ class UnixEventLoop(events.EventLoop):
             if handler.when > now:
                 break
             handler = heapq.heappop(self._scheduled)
-            self.call_soon(handler.callback, *handler.args)
+            self._ready.append(handler)
 
         # This is the only place where callbacks are actually *called*.
         # All other places just add them to ready.

@@ -37,6 +37,39 @@ class TaskTests(unittest.TestCase):
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'ko')
 
+    def testTaskRepr(self):
+        @tasks.task
+        def notmuch():
+            yield from []
+            return 'abc'
+        t = notmuch()
+        self.assertEqual(repr(t), 'Task(<notmuch>)<PENDING>')
+        t.cancel()  # Does not take immediate effect!
+        self.assertEqual(repr(t), 'Task(<notmuch>)<CANCELLING>')
+        self.assertRaises(futures.CancelledError,
+                          self.event_loop.run_until_complete, t)
+        self.assertEqual(repr(t), 'Task(<notmuch>)<CANCELLED>')
+        t = notmuch()
+        self.event_loop.run_until_complete(t)
+        self.assertEqual(repr(t), "Task(<notmuch>)<result='abc'>")
+
+    def testTaskWaiting(self):
+        @tasks.task
+        def outer():
+            a = yield from inner1()
+            b = yield from inner2()
+            return a+b
+        @tasks.task
+        def inner1():
+            yield from []
+            return 42
+        @tasks.task
+        def inner2():
+            yield from []
+            return 1000
+        t = outer()
+        self.assertEqual(self.event_loop.run_until_complete(t), 1042)
+
     def testWait(self):
         a = tasks.sleep(0.1)
         b = tasks.sleep(0.15)

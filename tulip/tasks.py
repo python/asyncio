@@ -54,6 +54,8 @@ class Task(futures.Future):
 
     def __repr__(self):
         res = super().__repr__()
+        if self._must_cancel and res.endswith('<PENDING>'):
+            res = res[:-len('<PENDING>')] + '<CANCELLING>'
         i = res.find('<')
         if i < 0:
             i = len(res)
@@ -103,11 +105,12 @@ class Task(futures.Future):
             raise
         else:
             def _wakeup(future):
-                value = None
-                exc = future.exception()
-                if exc is None:
+                try:
                     value = future.result()
-                self._step(value, exc)
+                except Exception as exc:
+                    self._step(None, exc)
+                else:
+                    self._step(value, None)
             if isinstance(result, futures.Future):
                 result.add_done_callback(_wakeup)
             elif isinstance(result, concurrent.futures.Future):
@@ -165,19 +168,12 @@ def _wait(fs, timeout=None, return_when=ALL_COMPLETED):
         return_when == FIRST_COMPLETED and done or
         return_when == FIRST_EXCEPTION and errors):
         return done, pending
-    bail = futures.Future()
+    bail = futures.Future()  # Will always be cancelled eventually.
     timeout_handler = None
+    debugstuff = locals()
     if timeout is not None:
         loop = events.get_event_loop()
-        # We need a helper to check that bail isn't already done,
-        # because somehow it is possible that this gets called after
-        # bail is already complete.  (I tried using bail.cancel() and
-        # catching CancelledError, but that didn't work out.  Maybe
-        # there's a bug with cancellation?)
-        def _bail_out():
-            if not bail.done():
-                bail.set_result(None)
-        timeout_handler = loop.call_later(timeout, _bail_out)
+        timeout_handler = loop.call_later(timeout, bail.cancel)
     def _on_completion(f):
         pending.remove(f)
         done.add(f)
@@ -186,12 +182,14 @@ def _wait(fs, timeout=None, return_when=ALL_COMPLETED):
             (return_when == FIRST_EXCEPTION and
              not f.cancelled() and
              f.exception() is not None)):
-            if not bail.done():
-                bail.set_result(None)
+            bail.cancel()
     try:
         for f in pending:
             f.add_done_callback(_on_completion)
-        yield from bail
+        try:
+            yield from bail
+        except futures.CancelledError:
+            pass
     finally:
         for f in pending:
             f.remove_done_callback(_on_completion)
@@ -199,6 +197,7 @@ def _wait(fs, timeout=None, return_when=ALL_COMPLETED):
             timeout_handler.cancel()
     really_done = set(f for f in pending if f.done())
     if really_done:
+        # We don't expect this to ever happen.  Or do we?
         done.update(really_done)
         pending.difference_update(really_done)
     return done, pending

@@ -54,8 +54,10 @@ class Task(futures.Future):
 
     def __repr__(self):
         res = super().__repr__()
-        if self._must_cancel and res.endswith('<PENDING>'):
-            res = res[:-len('<PENDING>')] + '<CANCELLING>'
+        if (self._must_cancel and
+            self._state == futures._PENDING and
+            '<PENDING' in res):
+            res = res.replace('<PENDING', '<CANCELLING', 1)
         i = res.find('<')
         if i < 0:
             i = len(res)

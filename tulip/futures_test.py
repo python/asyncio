@@ -15,12 +15,15 @@ class FutureTests(unittest.TestCase):
 
     def testCancel(self):
         f = futures.Future()
-        f.cancel()
+        self.assertTrue(f.cancel())
         self.assertTrue(f.cancelled())
         self.assertFalse(f.running())
         self.assertTrue(f.done())
         self.assertRaises(futures.CancelledError, f.result)
         self.assertRaises(futures.CancelledError, f.exception)
+        self.assertRaises(futures.InvalidStateError, f.set_result, None)
+        self.assertRaises(futures.InvalidStateError, f.set_exception, None)
+        self.assertFalse(f.cancel())
 
     def testResult(self):
         f = futures.Future()
@@ -30,6 +33,9 @@ class FutureTests(unittest.TestCase):
         self.assertTrue(f.done())
         self.assertEqual(f.result(), 42)
         self.assertEqual(f.exception(), None)
+        self.assertRaises(futures.InvalidStateError, f.set_result, None)
+        self.assertRaises(futures.InvalidStateError, f.set_exception, None)
+        self.assertFalse(f.cancel())
 
     def testException(self):
         exc = RuntimeError()
@@ -40,6 +46,9 @@ class FutureTests(unittest.TestCase):
         self.assertTrue(f.done())
         self.assertRaises(RuntimeError, f.result)
         self.assertEqual(f.exception(), exc)
+        self.assertRaises(futures.InvalidStateError, f.set_result, None)
+        self.assertRaises(futures.InvalidStateError, f.set_exception, None)
+        self.assertFalse(f.cancel())
 
     def testYieldFromTwice(self):
         f = futures.Future()

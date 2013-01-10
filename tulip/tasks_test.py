@@ -199,6 +199,35 @@ class TaskTests(unittest.TestCase):
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'yeah')
 
+    def testTaskCancelSleepingTask(self):
+        sleepfut = None
+        @tasks.task
+        def sleep(dt):
+            nonlocal sleepfut
+            sleepfut = tasks.sleep(dt)
+            try:
+                t0 = time.monotonic()
+                yield from sleepfut
+            finally:
+                t1 = time.monotonic()
+        @tasks.task
+        def doit():
+            sleeper = sleep(5000)
+            self.event_loop.call_later(0.1, sleeper.cancel)
+            try:
+                t0 = time.monotonic()
+                yield from sleeper
+            except futures.CancelledError:
+                t1 = time.monotonic()
+                return 'cancelled'
+            else:
+                return 'slept in'
+        t0 = time.monotonic()
+        doer = doit()
+        self.assertEqual(self.event_loop.run_until_complete(doer), 'cancelled')
+        t1 = time.monotonic()
+        self.assertTrue(0.09 <= t1-t0 <= 0.11, (t1-t0, sleepfut, doer))
+
 
 if __name__ == '__main__':
     unittest.main()

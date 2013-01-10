@@ -1,6 +1,9 @@
 """Support for tasks, coroutines and the scheduler."""
 
-__all__ = ['coroutine', 'task', 'Task']
+__all__ = ['coroutine', 'task', 'Task',
+           'FIRST_COMPLETED', 'FIRST_EXCEPTION', 'ALL_COMPLETED',
+           'wait', 'as_completed', 'sleep',
+           ]
 
 import concurrent.futures
 import inspect
@@ -116,3 +119,132 @@ class Task(futures.Future):
                 if result is not None:
                     logging.warn('_step(): bad yield: %r', result)
                 self._event_loop.call_soon(self._step)
+
+
+# wait() and as_completed() similar to those in PEP 3148.
+
+FIRST_COMPLETED = concurrent.futures.FIRST_COMPLETED
+FIRST_EXCEPTION = concurrent.futures.FIRST_EXCEPTION
+ALL_COMPLETED = concurrent.futures.ALL_COMPLETED
+
+
+# Even though this *is* a @coroutine, we don't mark it as such!
+def wait(fs, timeout=None, return_when=ALL_COMPLETED):
+    """Wait for the Futures and and coroutines given by fs to complete.
+
+    Coroutines will be wrapped in Tasks.
+
+    Returns two sets of Future: (done, pending).
+
+    Usage:
+
+        done, pending = yield from tulip.wait(fs)
+
+    Note: This does not raise TimeoutError!  Futures that aren't done
+    when the timeout occurs are returned in the second set.
+    """
+    fs = _wrap_coroutines(fs)
+    return _wait(fs, timeout, return_when)
+
+
+@coroutine
+def _wait(fs, timeout=None, return_when=ALL_COMPLETED):
+    """Internal helper: _wait() but does not wrap coroutines."""
+    done, pending = set(), set()
+    errors = 0
+    for f in fs:
+        if f.done():
+            done.add(f)
+            if not f.cancelled() and f.exception() is not None:
+                errors += 1
+        else:
+            pending.add(f)
+    if (not pending or
+        timeout != None and timeout <= 0 or
+        return_when == FIRST_COMPLETED and done or
+        return_when == FIRST_EXCEPTION and errors):
+        return done, pending
+    bail = futures.Future()
+    timeout_handler = None
+    if timeout is not None:
+        loop = events.get_event_loop()
+        timeout_handler = loop.call_later(timeout, bail.set_result, None)
+    def _on_completion(f):
+        pending.remove(f)
+        done.add(f)
+        if (not pending or
+            return_when == FIRST_COMPLETED or
+            (return_when == FIRST_EXCEPTION and
+             not f.cancelled() and
+             f.exception() is not None)):
+            if not bail.done():
+                bail.set_result(None)
+    try:
+        for f in pending:
+            f.add_done_callback(_on_completion)
+        yield from bail
+    finally:
+        for f in pending:
+            f.remove_done_callback(_on_completion)
+        if timeout_handler is not None:
+            timeout_handler.cancel()
+    really_done = set(f for f in pending if f.done())
+    if really_done:
+        done.update(really_done)
+        pending.difference_update(really_done)
+    return done, pending
+
+
+# This is *not* a @coroutine!  It is just an iterator (yielding Futures).
+def as_completed(fs, timeout=None):
+    """Return an iterator whose values, when waited for, are Futures.
+
+    This differs from PEP 3148; the proper way to use this is:
+
+        for f in as_completed(fs):
+            result = yield from f  # The 'yield from' may raise.
+            # Use result.
+
+    Raises TimeoutError if the timeout occurs before all Futures are
+    done.
+
+    Note: The futures 'f' are not necessarily members of fs.
+    """
+    assert timeout is None, 'timeout not yet supported'
+    done = None  # Make nonlocal happy.
+    fs = _wrap_coroutines(fs)
+    while fs:
+        @coroutine
+        def _wait_for_some():
+            nonlocal done, fs
+            done, fs = yield from _wait(fs, return_when=FIRST_COMPLETED)
+            return done.pop().result()  # May raise.
+        yield Task(_wait_for_some())
+        for f in done:
+            yield f
+
+
+def _wrap_coroutines(fs):
+    """Internal helper to process an iterator of Futures and coroutines.
+
+    Returns a set of Futures.
+    """
+    wrapped = set()
+    for f in fs:
+        if not isinstance(f, futures.Future):
+            assert iscoroutine(f)
+            f = Task(f)
+        wrapped.add(f)
+    return wrapped
+
+
+def sleep(when, result=None):
+    """Return a Future that completes after a given time (in seconds).
+
+    It's okay to cancel the Future.
+
+    Undocumented feature: sleep(when, x) sets the Future's result to x.
+    """
+    future = futures.Future()
+    future._event_loop.call_later(when, future.set_result, result)
+    return future

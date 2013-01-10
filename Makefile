@@ -10,7 +10,7 @@ testloop:
 	while sleep 1; do $(PYTHON) runtests.py -v $(FLAGS); done
 
 cov coverage:
-	$(COVERAGE) run runtests.py -v $(FLAGS)
+	$(COVERAGE) run --branch runtests.py -v $(FLAGS)
 	$(COVERAGE) html $(NONTESTS)
 	$(COVERAGE) report -m $(NONTESTS)
 	echo "open file://`pwd`/htmlcov/index.html"

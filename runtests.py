@@ -19,7 +19,7 @@ import re
 import sys
 import unittest
 
-assert sys.version.startswith('3'), 'Please use Python 3.3 or higher.'
+assert sys.version >= '3.3', 'Please use Python 3.3 or higher.'
 
 def load_tests(patterns=()):
   mods = ['events', 'futures', 'tasks']

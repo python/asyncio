@@ -7,6 +7,7 @@ __all__ = ['coroutine', 'task', 'Task',
 
 import concurrent.futures
 import inspect
+import logging
 import time
 
 from . import events
@@ -60,7 +61,7 @@ class Task(futures.Future):
             res = res.replace('<PENDING', '<CANCELLING', 1)
         i = res.find('<')
         if i < 0:
-            i = len(res)
+            i = len(res)  # pragma: no cover
         res = res[:i] + '(<{}>)'.format(self._coro.__name__) + res[i:]
         return res
 
@@ -69,13 +70,19 @@ class Task(futures.Future):
             return False
         self._must_cancel = True
         # _step() will call super().cancel() to call the callbacks.
+        self._event_loop.call_soon(self._step_maybe)
         return True
 
     def cancelled(self):
         return self._must_cancel or super().cancelled()
 
+    def _step_maybe(self):
+        # Helper for cancel().
+        if not self.done():
+            return self._step()
+
     def _step(self, value=None, exc=None):
-        if self.done():
+        if self.done():  # pragma: no cover
             logging.warn('_step(): already done: %r, %r, %r', self, value, exc)
             return
         # We'll call either coro.throw(exc) or coro.send(value).
@@ -106,15 +113,9 @@ class Task(futures.Future):
                 self.set_exception(exc)
             raise
         else:
-            def _wakeup(future):
-                try:
-                    value = future.result()
-                except Exception as exc:
-                    self._step(None, exc)
-                else:
-                    self._step(value, None)
+            # XXX No check for self._must_cancel here?
             if isinstance(result, futures.Future):
-                result.add_done_callback(_wakeup)
+                result.add_done_callback(self._wakeup)
             elif isinstance(result, concurrent.futures.Future):
                 # This ought to be more efficient than wrap_future(),
                 # because we don't create an extra Future.
@@ -125,6 +126,14 @@ class Task(futures.Future):
                 if result is not None:
                     logging.warn('_step(): bad yield: %r', result)
                 self._event_loop.call_soon(self._step)
+
+    def _wakeup(self, future):
+        try:
+            value = future.result()
+        except Exception as exc:
+            self._step(None, exc)
+        else:
+            self._step(value, None)
 
 
 # wait() and as_completed() similar to those in PEP 3148.
@@ -198,7 +207,7 @@ def _wait(fs, timeout=None, return_when=ALL_COMPLETED):
         if timeout_handler is not None:
             timeout_handler.cancel()
     really_done = set(f for f in pending if f.done())
-    if really_done:
+    if really_done:  # pragma: no cover
         # We don't expect this to ever happen.  Or do we?
         done.update(really_done)
         pending.difference_update(really_done)

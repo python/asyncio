@@ -85,7 +85,7 @@ class PollsterBase:
 
         If timeout is omitted or None, this blocks until at least one
         event is ready.  Otherwise, timeout gives a maximum time to
-        wait (an int of float in seconds) -- the method returns as
+        wait (in seconds as an int or float) -- the method returns as
         soon as at least one event is ready or when the timeout is
         expired.  For a non-blocking poll, pass 0.
 

@@ -326,7 +326,7 @@ class UnixEventLoop(events.EventLoop):
     @tasks.task
     def start_serving(self, protocol_factory, host, port, *,
                       family=0, type=socket.SOCK_STREAM, proto=0, flags=0,
-                      backlog=100):
+                      backlog=100, fastopen=5):
         """XXX"""
         infos = yield from self.getaddrinfo(host, port,
                                             family=family, type=type,
@@ -347,6 +347,13 @@ class UnixEventLoop(events.EventLoop):
                 break
         else:
             raise exceptions[0]
+        if fastopen and hasattr(socket, 'TCP_FASTOPEN'):
+            try:
+                sock.setsockopt(socket.SOL_TCP, socket.TCP_FASTOPEN, fastopen)
+            except socket.error:
+                # Even if TCP_FASTOPEN is defined by glibc, it may
+                # still not be supported by the kernel.
+                logging.info('TCP_FASTOPEN(%r) failed', fastopen)
         sock.listen(backlog)
         sock.setblocking(False)
         self.add_reader(sock.fileno(), self._accept_connection,

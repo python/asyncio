@@ -65,6 +65,7 @@ class TaskTests(unittest.TestCase):
             yield from tasks.sleep(0.15)
             raise ZeroDivisionError('really')
         b = tasks.Task(sleeper())
+        @tasks.coroutine
         def foo():
             done, pending = yield from tasks.wait([b, a])
             self.assertEqual(len(done), 2)
@@ -83,6 +84,7 @@ class TaskTests(unittest.TestCase):
     def testWaitWithTimeout(self):
         a = tasks.sleep(0.1)
         b = tasks.sleep(0.15)
+        @tasks.coroutine
         def foo():
             done, pending = yield from tasks.wait([b, a], timeout=0.11)
             self.assertEqual(done, set([a]))
@@ -101,6 +103,7 @@ class TaskTests(unittest.TestCase):
         a = sleeper(0.1, 'a')
         b = sleeper(0.1, 'b')
         c = sleeper(0.15, 'c')
+        @tasks.coroutine
         def foo():
             values = []
             for f in tasks.as_completed([b, c, a]):
@@ -118,7 +121,28 @@ class TaskTests(unittest.TestCase):
         res = self.event_loop.run_until_complete(tasks.Task(foo()))
         t1 = time.monotonic()
         self.assertTrue(t1-t0, 0.01)
-        # TODO: Test with timeout.
+
+    def testAsCompletedWithTimeout(self):
+        a = tasks.sleep(0.1, 'a')
+        b = tasks.sleep(0.15, 'b')
+        @tasks.coroutine
+        def foo():
+            values = []
+            for f in tasks.as_completed([a, b], timeout=0.12):
+                try:
+                    v = yield from f
+                    values.append((1, v))
+                except futures.TimeoutError as exc:
+                    values.append((2, exc))
+            return values
+        t0 = time.monotonic()
+        res = self.event_loop.run_until_complete(tasks.Task(foo()))
+        t1 = time.monotonic()
+        self.assertTrue(t1-t0 >= 0.11)
+        self.assertEqual(len(res), 2, res)
+        self.assertEqual(res[0], (1, 'a'))
+        self.assertEqual(res[1][0], 2)
+        self.assertTrue(isinstance(res[1][1], futures.TimeoutError))
 
     def testSleep(self):
         @tasks.coroutine

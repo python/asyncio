@@ -7,6 +7,7 @@ __all__ = ['coroutine', 'task', 'Task',
 
 import concurrent.futures
 import inspect
+import time
 
 from . import events
 from . import futures
@@ -149,7 +150,7 @@ def wait(fs, timeout=None, return_when=ALL_COMPLETED):
 
 @coroutine
 def _wait(fs, timeout=None, return_when=ALL_COMPLETED):
-    """Internal helper: _wait() but does not wrap coroutines."""
+    """Internal helper: Like wait() but does not wrap coroutines."""
     done, pending = set(), set()
     errors = 0
     for f in fs:
@@ -168,7 +169,15 @@ def _wait(fs, timeout=None, return_when=ALL_COMPLETED):
     timeout_handler = None
     if timeout is not None:
         loop = events.get_event_loop()
-        timeout_handler = loop.call_later(timeout, bail.set_result, None)
+        # We need a helper to check that bail isn't already done,
+        # because somehow it is possible that this gets called after
+        # bail is already complete.  (I tried using bail.cancel() and
+        # catching CancelledError, but that didn't work out.  Maybe
+        # there's a bug with cancellation?)
+        def _bail_out():
+            if not bail.done():
+                bail.set_result(None)
+        timeout_handler = loop.call_later(timeout, _bail_out)
     def _on_completion(f):
         pending.remove(f)
         done.add(f)
@@ -210,14 +219,22 @@ def as_completed(fs, timeout=None):
 
     Note: The futures 'f' are not necessarily members of fs.
     """
-    assert timeout is None, 'timeout not yet supported'
+    deadline = None
+    if timeout is not None:
+        deadline = time.monotonic() + timeout
     done = None  # Make nonlocal happy.
     fs = _wrap_coroutines(fs)
     while fs:
+        if deadline is not None:
+            timeout = deadline - time.monotonic()
         @coroutine
         def _wait_for_some():
             nonlocal done, fs
-            done, fs = yield from _wait(fs, return_when=FIRST_COMPLETED)
+            done, fs = yield from _wait(fs, timeout=timeout,
+                                        return_when=FIRST_COMPLETED)
+            if not done:
+                fs = set()
+                raise futures.TimeoutError()
             return done.pop().result()  # May raise.
         yield Task(_wait_for_some())
         for f in done:

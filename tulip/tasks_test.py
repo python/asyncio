@@ -8,6 +8,13 @@ from . import futures
 from . import tasks
 
 
+class Dummy:
+    def __repr__(self):
+        return 'Dummy()'
+    def __call__(self, *args):
+        pass
+
+
 class TaskTests(unittest.TestCase):
 
     def setUp(self):
@@ -43,9 +50,10 @@ class TaskTests(unittest.TestCase):
             yield from []
             return 'abc'
         t = notmuch()
-        self.assertEqual(repr(t), 'Task(<notmuch>)<PENDING>')
+        t.add_done_callback(Dummy())
+        self.assertEqual(repr(t), 'Task(<notmuch>)<PENDING, [Dummy()]>')
         t.cancel()  # Does not take immediate effect!
-        self.assertEqual(repr(t), 'Task(<notmuch>)<CANCELLING>')
+        self.assertEqual(repr(t), 'Task(<notmuch>)<CANCELLING, [Dummy()]>')
         self.assertRaises(futures.CancelledError,
                           self.event_loop.run_until_complete, t)
         self.assertEqual(repr(t), 'Task(<notmuch>)<CANCELLED>')
@@ -53,7 +61,7 @@ class TaskTests(unittest.TestCase):
         self.event_loop.run_until_complete(t)
         self.assertEqual(repr(t), "Task(<notmuch>)<result='abc'>")
 
-    def testTaskWaiting(self):
+    def testTaskBasics(self):
         @tasks.task
         def outer():
             a = yield from inner1()

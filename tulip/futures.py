@@ -2,7 +2,7 @@
 
 __all__ = ['CancelledError', 'TimeoutError',
            'InvalidStateError', 'InvalidTimeoutError',
-           'Future', 'sleep',
+           'Future',
            ]
 
 import concurrent.futures._base
@@ -52,7 +52,7 @@ class Future:
     # was called).  Here, cancel() schedules the callbacks, and
     # set_running_or_notify_cancel() is not supported.
 
-    # Class variables serving to as defaults for instance variables.
+    # Class variables serving as defaults for instance variables.
     _state = _PENDING
     _result = None
     _exception = None
@@ -95,8 +95,6 @@ class Future:
         callbacks = self._callbacks[:]
         if not callbacks:
             return
-        # Is it worth emptying the callbacks?  It may reduce the
-        # usefulness of repr().
         self._callbacks[:] = []
         for callback in callbacks:
             self._event_loop.call_soon(callback, self)
@@ -142,6 +140,16 @@ class Future:
         else:
             self._callbacks.append(fn)
 
+    # New method not in PPE 3148.
+
+    def remove_done_callback(self, fn):
+        """XXX"""
+        filtered_callbacks = [f for f in self._callbacks if f != fn]
+        removed_count = len(self._callbacks) - len(filtered_callbacks)
+        if removed_count:
+            self._callbacks[:] = filtered_callbacks
+        return removed_count
+
     # So-called internal methods (note: no set_running_or_notify_cancel()).
 
     def set_result(self, result):
@@ -183,16 +191,3 @@ class Future:
         if not self.done():
             yield self  # This tells Task to wait for completion.
         return self.result()  # May raise too.
-
-
-# TODO: Is this the right module for sleep()?
-def sleep(when, result=None):
-    """Return a Future that completes after a given time (in seconds).
-
-    It's okay to cancel the Future.
-
-    Undocumented feature: sleep(when, x) sets the Future's result to x.
-    """
-    future = Future()
-    future._event_loop.call_later(when, future.set_result, result)
-    return future

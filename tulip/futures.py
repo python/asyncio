@@ -67,9 +67,9 @@ class Future:
         res = self.__class__.__name__
         if self._state == _FINISHED:
             if self._exception is not None:
-                res += '<exception={}>'.format(self._exception)
+                res += '<exception={!r}>'.format(self._exception)
             else:
-                res += '<result={}>'.format(self._result)
+                res += '<result={!r}>'.format(self._result)
         elif self._callbacks:
             size = len(self._callbacks)
             if size > 2:

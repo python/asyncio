@@ -105,7 +105,7 @@ class UnixEventLoop(events.EventLoop):
         try:
             self._ssock.recv(1)
         except socket.error as exc:
-            if exc in _TRYAGAIN:
+            if exc.errno in _TRYAGAIN:
                 return
             raise  # Halp!
 
@@ -113,7 +113,7 @@ class UnixEventLoop(events.EventLoop):
         try:
             self._csock.send(b'x')
         except socket.error as exc:
-            if exc in _TRYAGAIN:
+            if exc.errno in _TRYAGAIN:
                 return
             raise  # Halp!
 
@@ -376,7 +376,7 @@ class UnixEventLoop(events.EventLoop):
         try:
             conn, addr = sock.accept()
         except socket.error as exc:
-            if exc in _TRYAGAIN:
+            if exc.errno in _TRYAGAIN:
                 return  # False alarm.
             # Bad error.  Stop serving.
             self.remove_reader(sock.fileno())

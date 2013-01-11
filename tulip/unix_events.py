@@ -317,7 +317,10 @@ class UnixEventLoop(events.EventLoop):
         protocol = protocol_factory()
         if ssl:
             sslcontext = None if isinstance(ssl, bool) else ssl
-            transport = _UnixSslTransport(self, sock, protocol, sslcontext)
+            waiter = futures.Future()
+            transport = _UnixSslTransport(self, sock, protocol, sslcontext,
+                                          waiter)
+            yield from waiter
         else:
             transport = _UnixSocketTransport(self, sock, protocol)
         return transport, protocol
@@ -838,12 +841,13 @@ class _UnixSocketTransport(transports.Transport):
 
 class _UnixSslTransport(transports.Transport):
 
-    def __init__(self, event_loop, rawsock, protocol, sslcontext):
+    def __init__(self, event_loop, rawsock, protocol, sslcontext, waiter):
         self._event_loop = event_loop
         self._rawsock = rawsock
         self._protocol = protocol
         sslcontext = sslcontext or ssl.SSLContext(ssl.PROTOCOL_SSLv23)
         self._sslcontext = sslcontext
+        self._waiter = waiter
         sslsock = sslcontext.wrap_socket(rawsock,
                                          do_handshake_on_connect=False)
         self._sslsock = sslsock
@@ -861,12 +865,20 @@ class _UnixSslTransport(transports.Transport):
         except ssl.SSLWantWriteError:
             self._event_loop.add_writable(fd, self._on_handshake)
             return
-        # TODO: What if it raises another error?
+        except Exception as exc:
+            self._sslsock.close()
+            self._waiter.set_exception(exc)
+            return
+        except BaseException as exc:
+            self._sslsock.close()
+            self._waiter.set_exception(exc)
+            raise
         self._event_loop.remove_reader(fd)
         self._event_loop.remove_writer(fd)
         self._event_loop.add_reader(fd, self._on_ready)
         self._event_loop.add_writer(fd, self._on_ready)
         self._event_loop.call_soon(self._protocol.connection_made, self)
+        self._waiter.set_result(None)
 
     def _on_ready(self):
         # Because of renegotiations (?), there's no difference between

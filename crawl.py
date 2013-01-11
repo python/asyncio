@@ -91,7 +91,7 @@ class Crawler:
                         line = yield from stream.readline()
                         if not line:
                             break
-                        line = line.decode('utf-8')
+                        line = line.decode('utf-8', 'replace')
                         urls = re.findall(r'(?i)href=["\']?([^\s"\'<>]+)',
                                           line)
                         for u in urls:

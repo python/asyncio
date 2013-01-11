@@ -10,9 +10,7 @@ def main():
     url = sys.argv[1]
     p = http_client.HttpClientProtocol(url)
     f = p.connect()
-    t = p.event_loop.run_until_complete(tulip.Task(f))
-    print('transport =', t)
-    p.event_loop.run()
+    p.event_loop.run_until_complete(tulip.Task(f))
 
 
 if __name__ == '__main__':

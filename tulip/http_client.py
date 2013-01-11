@@ -197,10 +197,11 @@ class HttpClientProtocol:
         assert parts, '{} should not be empty'.format(name)
         if embedded_spaces_okay:
             assert ' '.join(parts) == value, \
-                   '{} can only contain embedded single spaces'.format(name)
+                   '{} can only contain embedded single spaces ({!r})'.format(
+                       name, value)
         else:
             assert parts == [value], \
-                   '{} cannot contain whitespace'.format(name)
+                   '{} cannot contain whitespace ({!r})'.format(name, value)
         return value
 
     @tulip.coroutine

@@ -1,15 +1,4 @@
 # -*- Mode: text -*-
-   
-TO DO SMALLER TASKS
-
-- Make Task more like Future; getting result() should re-raise exception.
-
-- Add a decorator just for documenting a coroutine.  It should set a
-  flag on the function.  It should not interfere with methods,
-  staticmethod, classmethod and the like.  The Task constructor should
-  check the flag.  The decorator should notice if the wrapped function
-  is not a generator.
-
 
 TO DO LARGER TASKS
 
@@ -27,33 +16,7 @@ TO DO LARGER TASKS
 - Restructure directory, move demos and benchmarks to subdirectories.
 
 
-FROM BEN DARNELL (Tornado)
-
-- The waker pipe in ThreadRunner should really be in EventLoop itself
-  - we need to be able to call call_soon (or some equivalent) from
-  threads that were not created by ThreadRunner.  In Tornado I ended
-  up needing two functions, add_callback (usable from any thread) and
-  add_callback_from_signal (usable only from signal handlers).
-
-- Timeouts should ideally be based on time.monotonic, although this
-  requires some extra complexity to deal with the cases where you
-  actually do want time.time.  (in tornado, the clock used is
-  configurable on a per-ioloop basis, which is not ideal but is
-  workable)
-
-- I'm sure you've heard this from the twisted guys by now, but to
-  properly support completion-based event loops like IOCP you need to
-  be able to swap out most of sockets.py (the layers below
-  BufferedReader) for an alternative implementation.
-
-
 TO DO LATER
-
-- Wrap select(), epoll() etc. in try/except checking for EINTR.
-
-- Move accept loop into Listener class?  (Windows is said to work
-  better if you make many AcceptEx() calls in parallel.)  OTOH we can
-  already accept many incoming connections without suspending.
 
 - When multiple tasks are accessing the same socket, they should
   either get interleaved I/O or an immediate exception; it should not
@@ -63,8 +26,6 @@ TO DO LATER
 - For epoll you probably want to check/(log?) EPOLLHUP and EPOLLERR errors.
 
 - Add the simplest API possible to run a generator with a timeout.
-
-- Do we need call_every()?  (Easily emulated with a loop and sleep().)
 
 - Ensure multiple tasks can do atomic writes to the same pipe (since
   UNIX guarantees that short writes to pipes are atomic).
@@ -77,10 +38,6 @@ TO DO LATER
   works (i.e. without monkey-patching).
 
 - See how much of asyncore I've already replaced.
-
-- Do we need _async suffixes to all async APIs?
-
-- Do we need synchronous parallel APIs for all async APIs?
 
 - Could BufferedReader reuse the standard io module's readers???
 
@@ -97,9 +54,6 @@ TO DO LATER
 
 FROM OLDER LIST
 
-- Is it better to have separate add_{reader,writer} methods, vs. one
-  add_thingie method taking a fd and a r/w flag?
-
 - Multiple readers/writers per socket?  (At which level? pollster,
   eventloop, or scheduler?)
 
@@ -109,22 +63,10 @@ FROM OLDER LIST
 
 - Optimize register/unregister calls away if they cancel each other out?
 
-- Should block() use a queue?
-
 - Add explicit wait queue to wait for Task's completion, instead of
   callbacks?
 
-- Global functions vs. Task methods?
-
-- Is the Task design good?
-
-- Make Task more like Future?  (Or less???)
-
 - Implement various lock styles a la threading.py.
-
-- Add write() calls that don't require yield from.
-
-- Add simple non-async APIs, for simple apps?
 
 - Look at pyfdpdlib's ioloop.py:
   http://code.google.com/p/pyftpdlib/source/browse/trunk/pyftpdlib/lib/ioloop.py

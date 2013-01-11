@@ -23,11 +23,112 @@ TODO: Reuse email.Message class (or its subclass, http.client.HTTPMessage).
 TODO: How do we do connection keep alive?  Pooling?
 """
 
+import collections
 import urllib.parse  # For urlparse().
 
 import tulip
 from . import events
+from . import futures
+from . import tasks
 
+
+# TODO: Move to another module.
+class StreamReader:
+
+    def __init__(self, limit=2**16):
+        self.limit = limit  # Max line length.  (Security feature.)
+        self.buffer = collections.deque()  # Deque of bytes objects.
+        self.byte_count = 0  # Bytes in buffer.
+        self.line_count = 0  # Number of complete lines in buffer.
+        self.eof = False  # Whether we're done.
+        self.waiter = None  # A future.
+
+    def feed_eof(self):
+        self.eof = True
+        waiter = self.waiter
+        if waiter is not None:
+            self.waiter = None
+            waiter.set_result(True)
+
+    def feed_data(self, data):
+        assert data
+        self.buffer.append(data)
+        self.line_count += data.count(b'\n')
+        self.byte_count += len(data)
+        waiter = self.waiter
+        if waiter is not None:
+            self.waiter = None
+            waiter.set_result(False)
+
+    @tasks.coroutine
+    def readline(self):
+        # TODO: Limit line length for security.
+        while not self.line_count and not self.eof:
+            assert self.waiter is None
+            self.waiter = futures.Future()
+            yield from self.waiter
+            continue
+        parts = []
+        while self.buffer:
+            data = self.buffer.popleft()
+            ichar = data.find(b'\n')
+            if ichar < 0:
+                parts.append(data)
+            else:
+                ichar += 1
+                head, tail = data[:ichar], data[ichar:]
+                parts.append(head)
+                if tail:
+                    self.buffer.appendleft(tail)
+                self.line_count -= 1
+                break
+        return b''.join(parts)
+
+    @tasks.coroutine
+    def read(self, n=-1):
+        if not n:
+            return b''
+        if n < 0:
+            while not self.eof:
+                assert not self.waiter
+                self.waiter = futures.Future()
+                yield from self.waiter
+        else:
+            if not self.byte_count and not self.eof:
+                assert not self.waiter
+                self.waiter = futures.Future()
+                yield from self.waiter
+        if n < 0 or self.byte_count <= n:
+            data = b''.join(self.buffer)
+            self.buffer.clear()
+            self.byte_count = 0
+            self.line_count = 0
+            return data
+        parts = []
+        parts_bytes = 0
+        while self.buffer and parts_bytes < n:
+            data = self.buffer.popleft()
+            data_bytes = len(data)
+            if n < parts_bytes + data_bytes:
+                data_bytes = n - parts_bytes
+                data, rest = data[:data_bytes], data[data_bytes:]
+                self.buffer.appendleft(rest)
+            parts.append(data)
+            parts_bytes += data_bytes
+            self.byte_count -= data_bytes
+            if self.line_count:
+                self.line_count -= data.count(b'\n')
+        return b''.join(parts)
+
+    @tasks.coroutine
+    def readexactly(self, n):
+        if n <= 0:
+            return b''
+        while self.byte_count < n and not self.eof:
+            assert not self.waiter
+            self.waiter = futures.Future()
+            yield from self.waiter
+        return (yield from self.read(n))
 
 class HttpClientProtocol:
     """This Protocol class is also used to initiate the connection.
@@ -102,11 +203,32 @@ class HttpClientProtocol:
 
     @tulip.coroutine
     def connect(self):
-        t, p = yield from self.event_loop.create_transport(lambda: self,
-                                                           self.host,
-                                                           self.port,
-                                                           ssl=self.ssl)
-        return t  # Since p is self.
+        yield from self.event_loop.create_transport(lambda: self,
+                                                    self.host,
+                                                    self.port,
+                                                    ssl=self.ssl)
+        status_line = yield from self.stream.readline()
+        print('status line:', status_line)
+        headers = []
+        content_length = None
+        while True:
+            header = yield from self.stream.readline()
+            if not header.strip():
+                break
+            headers.append(header)
+            if header.lower().startswith(b'content-length:'):
+                parts = header.split(None, 1)
+                if len(parts) == 2:
+                    try:
+                        content_length = int(parts[1])
+                    except ValueError:
+                        pass
+        print('headers:', repr(headers).replace(', ', ',\n '))
+        if content_length is None:
+            body = yield from self.stream.read()
+        else:
+            body = yield from self.stream.readexactly(content_length)
+        print('body:', body)
 
     def encode(self, s):
         if isinstance(s, bytes):
@@ -141,45 +263,18 @@ class HttpClientProtocol:
         for key, value in self.headers.items():
             self.write_str('{}: {}\r\n'.format(key, value))
         self.transport.write(b'\r\n')
+        self.stream = StreamReader()
         if self.make_body is not None:
             if self.chunked:
                 self.make_body(self.write_chunked, self.write_chunked_eof)
             else:
                 self.make_body(self.write_str, self.transport.write_eof)
-        self.lines_received = []
-        self.incomplete_line = b''
-        self.body_bytes_received = None
 
     def data_received(self, data):
-        if self.body_bytes_received is not None:  # State: reading body.
-            print('body data received:', data)
-            self.body_bytes_received.append(data)
-            self.body_byte_count += len(data)
-            return
-        self.incomplete_line += data
-        parts = self.incomplete_line.splitlines(True)
-        self.incomplete_line = b''
-        done = False
-        for part in parts:
-            if not done:
-                if not part.endswith(b'\n'):
-                    self.incomplete_line = part
-                    break
-                self.lines_received.append(part)
-                if part in (b'\r\n', b'\n'):
-                    done = True
-                    self.body_bytes_received = []
-                    self.body_byte_count = 0
-            else:
-                self.body_bytes_received.append(part)
-                self.body_byte_count += len(part)
-        if done:
-            print('headers received:', str(self.lines_received).replace(', ', ',\n '))
-            for data in self.body_bytes_received:
-                print('more data received:', data)
+        self.stream.feed_data(data)
 
     def eof_received(self):
-        print('received EOF')
+        self.stream.feed_eof()
 
     def connection_lost(self, exc):
         print('connection lost:', exc)

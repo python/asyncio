@@ -20,8 +20,11 @@ def main():
     f = p.connect()
     sts, headers, stream = p.event_loop.run_until_complete(tulip.Task(f))
     print(sts)
+    for k, v in headers.items():
+        print('{}: {}'.format(k, v))
+    print()
     data = p.event_loop.run_until_complete(tulip.Task(stream.read(1000)))
-    print(data)
+    print(data.decode('utf-8'))
 
 
 if __name__ == '__main__':

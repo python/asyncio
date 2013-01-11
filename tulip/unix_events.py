@@ -300,20 +300,29 @@ class UnixEventLoop(events.EventLoop):
             raise socket.error('getaddrinfo() returned empty list')
         exceptions = []
         for family, type, proto, cname, address in infos:
-            sock = socket.socket(family=family, type=type, proto=proto)
-            sock.setblocking(False)
-            # TODO: Use a small timeout here and overlap connect attempts.
+            sock = None
             try:
+                sock = socket.socket(family=family, type=type, proto=proto)
+                sock.setblocking(False)
                 yield self.sock_connect(sock, address)
             except socket.error as exc:
-                sock.close()
+                if sock is not None:
+                    sock.close()
                 exceptions.append(exc)
             else:
                 break
         else:
-            # TODO: What to do if there are multiple exceptions?  We
-            # can't raise them all.  Arbitrarily pick the first one.
-            raise exceptions[0]
+            if len(exceptions) == 1:
+                raise exceptions[0]
+            else:
+                # If they all have the same str(), raise one.
+                model = str(exceptions[0])
+                if all(str(exc) == model for exc in exceptions):
+                    raise exceptions[0]
+                # Raise a combined exception so the user can see all
+                # the various error messages.
+                raise socket.error('Multiple exceptions: {}'.format(
+                    ', '.join(str(exc) for exc in exceptions)))
         protocol = protocol_factory()
         if ssl:
             sslcontext = None if isinstance(ssl, bool) else ssl

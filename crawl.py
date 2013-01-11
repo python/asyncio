@@ -3,6 +3,7 @@
 import logging
 import re
 import signal
+import socket
 import sys
 import urllib.parse
 
@@ -62,7 +63,18 @@ class Crawler:
                 path = '?'.join([path, query])
             p = http_client.HttpClientProtocol(netloc, path=path,
                                                ssl=(scheme=='https'))
-            status, headers, stream = yield from p.connect()
+            delay = 1
+            while True:
+                try:
+                    status, headers, stream = yield from p.connect()
+                    break
+                except socket.error as exc:
+                    if delay >= 60:
+                        raise
+                    print('...', url, 'has error', repr(str(exc)),
+                          'retrying after sleep', delay, '...')
+                    yield from tulip.sleep(delay)
+                    delay *= 2
             if status.startswith('200'):
                 ctype = headers.get_content_type()
                 if ctype == 'text/html':

@@ -24,7 +24,6 @@ TODO: How do we do connection keep alive?  Pooling?
 """
 
 import collections
-import urllib.parse  # For urlparse().
 
 import tulip
 from . import events
@@ -139,9 +138,24 @@ class HttpClientProtocol:
       ...now what?...
     """
 
-    def __init__(self, url, method='GET', headers=None, make_body=None,
-                 encoding='utf-8', version='1.1', chunked=False):
-        self.url = self.validate(url, 'url')
+    def __init__(self, host, port=None, *,
+                 path='/', method='GET', headers=None, ssl=None,
+                 make_body=None, encoding='utf-8', version='1.1',
+                 chunked=False):
+        host = self.validate(host, 'host')
+        if ':' in host:
+            assert port is None
+            host, port_s = host.split(':', 1)
+            port = int(port_s)
+        self.host = host
+        if port is None:
+            if ssl:
+                port = 443
+            else:
+                port = 80
+        assert isinstance(port, int)
+        self.port = port
+        self.path = self.validate(path, 'path')
         self.method = self.validate(method, 'method')
         self.headers = {}
         if headers:
@@ -155,12 +169,7 @@ class HttpClientProtocol:
         self.version = self.validate(version, 'version')
         self.make_body = make_body
         self.chunked = chunked
-        self.split_url = urllib.parse.urlsplit(url)
-        (self.scheme, self.netloc, self.path,
-         self.query, self.fragment) = self.split_url
-        if not self.path:
-            self.path = '/'
-        self.ssl = self.scheme == 'https'
+        self.ssl = ssl
         if 'content-length' not in self.headers:
             if self.make_body is None:
                 self.headers['content-length'] = '0'
@@ -170,16 +179,7 @@ class HttpClientProtocol:
             if 'transfer-encoding' not in self.headers:
                 self.headers['transfer-encoding'] = 'chunked'
             else:
-                assert self.headers['transfer-encoding'] == 'chunked'
-        if ':' in self.netloc:
-            self.host, port_str = self.netloc.split(':', 1)
-            self.port = int(port_str)
-        else:
-            self.host = self.netloc
-            if self.ssl:
-                self.port = 443
-            else:
-                self.port = 80
+                assert self.headers['transfer-encoding'].lower() == 'chunked'
         if 'host' not in self.headers:
             self.headers['host'] = self.host
         self.event_loop = events.get_event_loop()

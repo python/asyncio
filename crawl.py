@@ -24,6 +24,10 @@ class Crawler:
         self.run()  # Kick off work.
 
     def add(self, url):
+        url = urllib.parse.urljoin(self.rooturl, url)
+        url, frag = urllib.parse.urldefrag(url)
+        if not url.startswith(self.rooturl):
+            return False
         if url in self.busy or url in self.done or url in self.todo:
             return False
         self.todo.add(url)
@@ -75,7 +79,12 @@ class Crawler:
                           'retrying after sleep', delay, '...')
                     yield from tulip.sleep(delay)
                     delay *= 2
-            if status.startswith('200'):
+            if status[:3] in ('301', '302'):
+                # Redirect.
+                u = headers.get('location') or headers.get('uri')
+                if self.add(u):
+                    print('  ', url, status[:3], 'redirect to', u)
+            elif status.startswith('200'):
                 ctype = headers.get_content_type()
                 if ctype == 'text/html':
                     while True:
@@ -86,11 +95,8 @@ class Crawler:
                         urls = re.findall(r'(?i)href=["\']?([^\s"\'<>]+)',
                                           line)
                         for u in urls:
-                            u, frag = urllib.parse.urldefrag(u)
-                            u = urllib.parse.urljoin(self.rooturl, u)
-                            if u.startswith(self.rooturl):
-                                if self.add(u):
-                                    print(' ', url, '->', u)
+                            if self.add(u):
+                                print('  ', url, 'href to', u)
             ok = True
         finally:
             self.done[url] = ok

@@ -24,6 +24,7 @@ TODO: How do we do connection keep alive?  Pooling?
 """
 
 import collections
+import email.message
 
 import tulip
 from . import events
@@ -157,14 +158,12 @@ class HttpClientProtocol:
         self.port = port
         self.path = self.validate(path, 'path')
         self.method = self.validate(method, 'method')
-        self.headers = {}
+        self.headers = email.message.Message()
         if headers:
             for key, value in headers.items():
                 self.validate(key, 'header key')
                 self.validate(value, 'header value', True)
-                assert key not in self.headers, \
-                       '{} header is a duplicate'.format(key)
-                self.headers[key.lower()] = value
+                self.headers[key] = value
         self.encoding = self.validate(encoding, 'encoding')
         self.version = self.validate(version, 'version')
         self.make_body = make_body
@@ -172,16 +171,16 @@ class HttpClientProtocol:
         self.ssl = ssl
         if 'content-length' not in self.headers:
             if self.make_body is None:
-                self.headers['content-length'] = '0'
+                self.headers['Content-Length'] = '0'
             else:
                 self.chunked = True
         if self.chunked:
-            if 'transfer-encoding' not in self.headers:
-                self.headers['transfer-encoding'] = 'chunked'
+            if 'Transfer-Encoding' not in self.headers:
+                self.headers['Transfer-Encoding'] = 'chunked'
             else:
-                assert self.headers['transfer-encoding'].lower() == 'chunked'
+                assert self.headers['Transfer-Encoding'].lower() == 'chunked'
         if 'host' not in self.headers:
-            self.headers['host'] = self.host
+            self.headers['Host'] = self.host
         self.event_loop = events.get_event_loop()
         self.transport = None
 
@@ -229,6 +228,7 @@ class HttpClientProtocol:
         else:
             body = yield from self.stream.readexactly(content_length)
         print('body:', body)
+        self.transport.close()
 
     def encode(self, s):
         if isinstance(s, bytes):

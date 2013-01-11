@@ -25,6 +25,8 @@ TODO: How do we do connection keep alive?  Pooling?
 
 import collections
 import email.message
+import email.parser
+import re
 
 import tulip
 from . import events
@@ -51,7 +53,8 @@ class StreamReader:
             waiter.set_result(True)
 
     def feed_data(self, data):
-        assert data
+        if not data:
+            return
         self.buffer.append(data)
         self.line_count += data.count(b'\n')
         self.byte_count += len(data)
@@ -206,29 +209,37 @@ class HttpClientProtocol:
                                                     self.host,
                                                     self.port,
                                                     ssl=self.ssl)
+        # TODO: A better mechanism to return all info from the
+        # status line, all headers, and the buffer, without having
+        # an N-tuple return value.
         status_line = yield from self.stream.readline()
-        print('status line:', status_line)
-        headers = []
-        content_length = None
+        m = re.match(rb'HTTP/(\d\.\d)\s+(\d\d\d)\s+([^\r\n]+)\r?\n\Z',
+                     status_line)
+        if not m:
+            raise 'Invalid HTTP status line ({!r})'.format(status_line)
+        version, status, message = m.groups()
+        raw_headers = []
         while True:
             header = yield from self.stream.readline()
             if not header.strip():
                 break
-            headers.append(header)
-            if header.lower().startswith(b'content-length:'):
-                parts = header.split(None, 1)
-                if len(parts) == 2:
-                    try:
-                        content_length = int(parts[1])
-                    except ValueError:
-                        pass
-        print('headers:', repr(headers).replace(', ', ',\n '))
+            raw_headers.append(header)
+        parser = email.parser.BytesHeaderParser()
+        headers = parser.parsebytes(b''.join(raw_headers))
+        content_length = headers.get('content-length')
+        if content_length:
+            content_length = int(content_length)  # May raise.
         if content_length is None:
-            body = yield from self.stream.read()
+            stream = self.stream
         else:
+            # TODO: A wrapping stream that limits how much it can read
+            # without reading it all into memory at once.
             body = yield from self.stream.readexactly(content_length)
-        print('body:', body)
-        self.transport.close()
+            stream = StreamReader()
+            stream.feed_data(body)
+            stream.feed_eof()
+        sts = '{} {}'.format(self.decode(status), self.decode(message))
+        return (sts, headers, stream)
 
     def encode(self, s):
         if isinstance(s, bytes):

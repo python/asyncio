@@ -18,7 +18,10 @@ def main():
     p = http_client.HttpClientProtocol(netloc, path=path,
                                        ssl=(scheme=='https'))
     f = p.connect()
-    p.event_loop.run_until_complete(tulip.Task(f))
+    sts, headers, stream = p.event_loop.run_until_complete(tulip.Task(f))
+    print(sts)
+    data = p.event_loop.run_until_complete(tulip.Task(stream.read(1000)))
+    print(data)
 
 
 if __name__ == '__main__':

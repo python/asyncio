@@ -58,6 +58,7 @@ class Crawler:
     @tulip.task
     def process(self, url):
         ok = False
+        p = None
         try:
             print('processing', url)
             scheme, netloc, path, query, fragment = urllib.parse.urlsplit(url)
@@ -99,6 +100,8 @@ class Crawler:
                                 print('  ', url, 'href to', u)
             ok = True
         finally:
+            if p is not None:
+                p.transport.close()
             self.done[url] = ok
             self.busy.remove(url)
             if not ok:

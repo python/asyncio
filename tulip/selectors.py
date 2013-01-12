@@ -47,7 +47,7 @@ class SelectorKey:
         self.data = data
 
     def __repr__(self):
-        return '{}<fileobje={}, fd={}, events={:#x}, data={}>'.format(
+        return '{}<fileobj={}, fd={}, events={:#x}, data={}>'.format(
             self.__class__.__name__,
             self.fileobj, self.fd, self.events, self.data)
 

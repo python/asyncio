@@ -734,9 +734,12 @@ class UnixEventLoop(events.EventLoop):
 
         # This is the only place where callbacks are actually *called*.
         # All other places just add them to ready.
-        # TODO: Ensure this loop always finishes, even if some
-        # callbacks keeps registering more callbacks.
-        while self._ready:
+        # Note: We run all currently scheduled callbacks, but not any
+        # callbacks scheduled by callbacks run this time around --
+        # they will be run the next time (after another I/O poll).
+        # Use an idiom that is threadsafe without using locks.
+        ntodo = len(self._ready)
+        for i in range(ntodo):
             handler = self._ready.popleft()
             if not handler.cancelled:
                 try:
@@ -762,6 +765,7 @@ class _UnixSocketTransport(transports.Transport):
             data = self._sock.recv(16*1024)
         except socket.error as exc:
             if exc.errno not in _TRYAGAIN:
+                import pdb; pdb.set_trace()
                 self._fatal_error(exc)
         else:
             if data:

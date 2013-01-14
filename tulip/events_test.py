@@ -379,10 +379,10 @@ class EventLoopTestsMixin:
         client.connect((host, port))
         client.send(b'xxx')
         el.run_once()  # This is quite mysterious, but necessary.
-        client.close()
         el.run_once()
         el.run_once()
         sock.close()
+        client.close()
 
 
 if hasattr(selectors, 'KqueueSelector'):

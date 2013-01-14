@@ -10,6 +10,9 @@ import urllib.parse
 import tulip
 from tulip import http_client
 
+END = '\n'
+MAXTASKS = 100
+
 
 class Crawler:
 
@@ -41,12 +44,14 @@ class Crawler:
     def run(self):
         while self.todo or self.busy or self.tasks:
             complete, self.tasks = yield from tulip.wait(self.tasks, timeout=0)
+            print(len(complete), 'completed tasks,', len(self.tasks),
+                  'still pending   ', end=END)
             for task in complete:
                 try:
                     yield from task
                 except Exception as exc:
-                    logging.warn('Exception in task: %s', exc)
-            while self.todo:
+                    print('Exception in task:', exc, end=END)
+            while self.todo and len(self.tasks) < MAXTASKS:
                 url = self.todo.pop()
                 self.busy.add(url)
                 self.tasks.add(self.process(url))  # Async task.
@@ -58,8 +63,9 @@ class Crawler:
     @tulip.task
     def process(self, url):
         ok = False
+        p = None
         try:
-            print('processing', url)
+            print('processing', url, end=END)
             scheme, netloc, path, query, fragment = urllib.parse.urlsplit(url)
             if not path:
                 path = '/'
@@ -76,14 +82,14 @@ class Crawler:
                     if delay >= 60:
                         raise
                     print('...', url, 'has error', repr(str(exc)),
-                          'retrying after sleep', delay, '...')
+                          'retrying after sleep', delay, '...', end=END)
                     yield from tulip.sleep(delay)
                     delay *= 2
             if status[:3] in ('301', '302'):
                 # Redirect.
                 u = headers.get('location') or headers.get('uri')
                 if self.add(u):
-                    print('  ', url, status[:3], 'redirect to', u)
+                    print('  ', url, status[:3], 'redirect to', u, end=END)
             elif status.startswith('200'):
                 ctype = headers.get_content_type()
                 if ctype == 'text/html':
@@ -96,13 +102,15 @@ class Crawler:
                                           line)
                         for u in urls:
                             if self.add(u):
-                                print('  ', url, 'href to', u)
+                                print('  ', url, 'href to', u, end=END)
             ok = True
         finally:
+            if p is not None:
+                p.transport.close()
             self.done[url] = ok
             self.busy.remove(url)
             if not ok:
-                print('failure for', url, sys.exc_info())
+                print('failure for', url, sys.exc_info(), end=END)
             waiter = self.waiter
             if waiter is not None:
                 self.waiter = None

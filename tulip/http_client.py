@@ -289,4 +289,4 @@ class HttpClientProtocol:
         self.stream.feed_eof()
 
     def connection_lost(self, exc):
-        print('connection lost:', exc)
+        pass

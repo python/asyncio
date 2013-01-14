@@ -765,7 +765,6 @@ class _UnixSocketTransport(transports.Transport):
             data = self._sock.recv(16*1024)
         except socket.error as exc:
             if exc.errno not in _TRYAGAIN:
-                import pdb; pdb.set_trace()
                 self._fatal_error(exc)
         else:
             if data:

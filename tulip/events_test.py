@@ -227,6 +227,25 @@ class EventLoopTestsMixin:
         el.run()
         self.assertEqual(b''.join(bytes_read), b'abcdef')
 
+    def testReaderCallbackCancel(self):
+        el = events.get_event_loop()
+        r, w = unix_events.socketpair()
+        bytes_read = []
+        def reader():
+            data = r.recv(1024)
+            if data:
+                bytes_read.append(data)
+            if sum(len(b) for b in bytes_read) >= 6:
+                handler.cancel()
+            if not data:
+                r.close()
+        handler = el.add_reader(r.fileno(), reader)
+        el.call_later(0.05, w.send, b'abc')
+        el.call_later(0.1, w.send, b'def')
+        el.call_later(0.15, w.close)
+        el.run()
+        self.assertEqual(b''.join(bytes_read), b'abcdef')
+
     def testWriterCallback(self):
         el = events.get_event_loop()
         r, w = unix_events.socketpair()
@@ -251,6 +270,20 @@ class EventLoopTestsMixin:
         data = r.recv(256*1024)
         r.close()
         self.assertTrue(len(data) >= 200)
+
+    def testWriterCallbackCancel(self):
+        el = events.get_event_loop()
+        r, w = unix_events.socketpair()
+        w.setblocking(False)
+        def sender():
+            w.send(b'x'*256)
+            handler.cancel()
+        handler = el.add_writer(w.fileno(), sender)
+        el.run()
+        w.close()
+        data = r.recv(1024)
+        r.close()
+        self.assertTrue(data == b'x'*256)
 
     def testSockClientOps(self):
         el = events.get_event_loop()

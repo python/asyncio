@@ -401,13 +401,14 @@ class UnixEventLoop(events.EventLoop):
         try:
             mask, (reader, writer, connector) = self._selector.get_info(fd)
         except KeyError:
-            pass
+            return False
         else:
             mask &= ~selectors.SELECT_IN
             if not mask:
                 self._selector.unregister(fd)
             else:
                 self._selector.modify(fd, mask, (None, writer, connector))
+            return True
 
     def add_writer(self, fd, callback, *args):
         """Add a writer callback.  Return a Handler instance."""
@@ -427,13 +428,14 @@ class UnixEventLoop(events.EventLoop):
         try:
             mask, (reader, writer, connector) = self._selector.get_info(fd)
         except KeyError:
-            pass
+            return False
         else:
             mask &= ~selectors.SELECT_OUT
             if not mask:
                 self._selector.unregister(fd)
             else:
                 self._selector.modify(fd, mask, (reader, None, connector))
+            return True
 
     def add_connector(self, fd, callback, *args):
         """Add a connector callback.  Return a Handler instance."""
@@ -455,13 +457,14 @@ class UnixEventLoop(events.EventLoop):
         try:
             mask, (reader, writer, connector) = self._selector.get_info(fd)
         except KeyError:
-            pass
+            return False
         else:
             mask &= ~selectors.SELECT_CONNECT
             if not mask:
                 self._selector.unregister(fd)
             else:
                 self._selector.modify(fd, mask, (reader, None, None))
+            return True
 
     def sock_recv(self, sock, n):
         """XXX"""

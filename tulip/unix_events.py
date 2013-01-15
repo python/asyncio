@@ -717,11 +717,22 @@ class UnixEventLoop(events.EventLoop):
             logging.log(level, 'poll%s took %.3f seconds', argstr, t1-t0)
             for fileobj, mask, (reader, writer, connector) in event_list:
                 if mask & selectors.SELECT_IN and reader is not None:
-                    self._add_callback(reader)
+                    if reader.cancelled:
+                        self.remove_reader(fileobj)
+                    else:
+                        self._add_callback(reader)
                 if mask & selectors.SELECT_OUT and writer is not None:
-                    self._add_callback(writer)
+                    if writer.cancelled:
+                        self.remove_writer(fileobj)
+                    else:
+                        self._add_callback(writer)
+                # XXX The next elif is unreachable until selector.py
+                # changes to implement SELECT_CONNECT != SELECTOR_OUT.
                 elif mask & selectors.SELECT_CONNECT and connector is not None:
-                    self._add_callback(connector)
+                    if connector.cancelled:
+                        self.remove_connector(fileobj)
+                    else:
+                        self._add_callback(connector)
 
         # Handle 'later' callbacks that are ready.
         now = time.monotonic()

@@ -199,7 +199,7 @@ class EventLoopTestsMixin:
             if data:
                 bytes_read.append(data)
             else:
-                el.remove_reader(r.fileno())
+                self.assertTrue(el.remove_reader(r.fileno()))
                 r.close()
         el.add_reader(r.fileno(), reader)
         el.call_later(0.05, w.send, b'abc')
@@ -217,7 +217,7 @@ class EventLoopTestsMixin:
             if data:
                 bytes_read.append(data)
             else:
-                el.remove_reader(r.fileno())
+                self.assertTrue(el.remove_reader(r.fileno()))
                 r.close()
         handler = events.Handler(None, reader, ())
         self.assertEqual(el.add_reader(r.fileno(), handler), handler)
@@ -251,7 +251,9 @@ class EventLoopTestsMixin:
         r, w = unix_events.socketpair()
         w.setblocking(False)
         el.add_writer(w.fileno(), w.send, b'x'*(256*1024))
-        el.call_later(0.1, el.remove_writer, w.fileno())
+        def remove_writer():
+            self.assertTrue(el.remove_writer(w.fileno()))
+        el.call_later(0.1, remove_writer)
         el.run()
         w.close()
         data = r.recv(256*1024)
@@ -264,7 +266,9 @@ class EventLoopTestsMixin:
         w.setblocking(False)
         handler = events.Handler(None, w.send, (b'x'*(256*1024),))
         self.assertEqual(el.add_writer(w.fileno(), handler), handler)
-        el.call_later(0.1, el.remove_writer, w.fileno())
+        def remove_writer():
+            self.assertTrue(el.remove_writer(w.fileno()))
+        el.call_later(0.1, remove_writer)
         el.run()
         w.close()
         data = r.recv(256*1024)

@@ -206,10 +206,10 @@ class HttpClientProtocol:
 
     @tulip.coroutine
     def connect(self):
-        yield from self.event_loop.create_transport(lambda: self,
-                                                    self.host,
-                                                    self.port,
-                                                    ssl=self.ssl)
+        yield from self.event_loop.create_connection(lambda: self,
+                                                     self.host,
+                                                     self.port,
+                                                     ssl=self.ssl)
         # TODO: A better mechanism to return all info from the
         # status line, all headers, and the buffer, without having
         # an N-tuple return value.

@@ -139,12 +139,12 @@ class EventLoop:
     def getnameinfo(self, sockaddr, flags=0):
         raise NotImplementedError
 
-    def create_transport(self, protocol_factory, host, port, *,
-                         family=0, type=0, proto=0, flags=0):
+    def create_connection(self, protocol_factory, host, port, *,
+                          family=0, proto=0, flags=0):
         raise NotImplementedError
 
     def start_serving(self, protocol_factory, host, port, *,
-                      family=0, type=0, proto=0, flags=0):
+                      family=0, proto=0, flags=0):
         raise NotImplementedError
 
     # Ready-based callback registration methods.

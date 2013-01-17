@@ -388,7 +388,7 @@ class EventLoopTestsMixin:
     def testCreateTransport(self):
         el = events.get_event_loop()
         # TODO: This depends on xkcd.com behavior!
-        f = el.create_transport(MyProto, 'xkcd.com', 80)
+        f = el.create_connection(MyProto, 'xkcd.com', 80)
         tr, pr = el.run_until_complete(f)
         self.assertTrue(isinstance(tr, transports.Transport))
         self.assertTrue(isinstance(pr, protocols.Protocol))
@@ -398,7 +398,7 @@ class EventLoopTestsMixin:
     def testCreateSslTransport(self):
         el = events.get_event_loop()
         # TODO: This depends on xkcd.com behavior!
-        f = el.create_transport(MyProto, 'xkcd.com', 443, ssl=True)
+        f = el.create_connection(MyProto, 'xkcd.com', 443, ssl=True)
         tr, pr = el.run_until_complete(f)
         self.assertTrue(isinstance(tr, transports.Transport))
         self.assertTrue(isinstance(pr, protocols.Protocol))

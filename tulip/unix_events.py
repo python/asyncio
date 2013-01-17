@@ -290,11 +290,12 @@ class UnixEventLoop(events.EventLoop):
 
     # TODO: Or create_connection()?  Or create_client()?
     @tasks.task
-    def create_transport(self, protocol_factory, host, port, *, ssl=False,
-                         family=0, type=socket.SOCK_STREAM, proto=0, flags=0):
+    def create_connection(self, protocol_factory, host, port, *, ssl=False,
+                          family=0, proto=0, flags=0):
         """XXX"""
         infos = yield from self.getaddrinfo(host, port,
-                                            family=family, type=type,
+                                            family=family,
+                                            type=socket.SOCK_STREAM,
                                             proto=proto, flags=flags)
         if not infos:
             raise socket.error('getaddrinfo() returned empty list')
@@ -337,11 +338,12 @@ class UnixEventLoop(events.EventLoop):
     # TODO: Or create_server()?
     @tasks.task
     def start_serving(self, protocol_factory, host, port, *,
-                      family=0, type=socket.SOCK_STREAM, proto=0, flags=0,
+                      family=0, proto=0, flags=0,
                       backlog=100):
         """XXX"""
         infos = yield from self.getaddrinfo(host, port,
-                                            family=family, type=type,
+                                            family=family,
+                                            type=socket.SOCK_STREAM,
                                             proto=proto, flags=flags)
         if not infos:
             raise socket.error('getaddrinfo() returned empty list')

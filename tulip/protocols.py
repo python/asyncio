@@ -11,7 +11,7 @@ class Protocol:
     nothing (they don't raise exceptions).
 
     When the user wants to requests a transport, they pass a protocol
-    factory to a utility function (e.g., EventLoop.create_transport()).
+    factory to a utility function (e.g., EventLoop.create_connection()).
 
     When the connection is made successfully, connection_made() is
     called with a suitable transport object.  Then data_received()

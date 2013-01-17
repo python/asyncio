@@ -14,7 +14,7 @@ class Transport:
     The user never instantiates a transport directly; they call a
     utility function, passing it a protocol factory and other
     information necessary to create the transport and protocol.  (E.g.
-    EventLoop.create_transport() or EventLoop.start_serving().)
+    EventLoop.create_connection() or EventLoop.start_serving().)
 
     The utility function will asynchronously create a transport and a
     protocol and hook them up by calling the protocol's

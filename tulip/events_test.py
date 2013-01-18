@@ -6,6 +6,7 @@ import os
 import select
 import signal
 import socket
+import sys
 import threading
 import time
 import unittest
@@ -326,6 +327,7 @@ class EventLoopTestsMixin:
         conn.close()
         listener.close()
 
+    @unittest.skipUnless(hasattr(signal, 'SIGKILL'), 'No SIGKILL')
     def testAddSignalHandler(self):
         caught = 0
         def my_handler():
@@ -359,6 +361,7 @@ class EventLoopTestsMixin:
         # Removing again returns False.
         self.assertFalse(el.remove_signal_handler(signal.SIGINT))
 
+    @unittest.skipIf(sys.platform == 'win32', 'Unix only')
     def testCancelSignalHandler(self):
         # Cancelling the handler should remove it (eventually).
         caught = 0
@@ -372,6 +375,7 @@ class EventLoopTestsMixin:
         el.run_once()
         self.assertEqual(caught, 0)
 
+    @unittest.skipUnless(hasattr(signal, 'SIGALRM'), 'No SIGALRM')
     def testSignalHandlingWhileSelecting(self):
         # Test with a signal actually arriving during a select() call.
         caught = 0
@@ -413,7 +417,7 @@ class EventLoopTestsMixin:
         host, port = sock.getsockname()
         self.assertEqual(host, '0.0.0.0')
         client = socket.socket()
-        client.connect((host, port))
+        client.connect(('127.0.0.1', port))
         client.send(b'xxx')
         el.run_once()  # This is quite mysterious, but necessary.
         el.run_once()

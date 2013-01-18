@@ -134,7 +134,7 @@ class TaskTests(unittest.TestCase):
         res = self.event_loop.run_until_complete(tasks.Task(foo()))
         t1 = time.monotonic()
         self.assertTrue(t1-t0 >= 0.1)
-        self.assertTrue(t1-t0 <= 0.12)
+        self.assertTrue(t1-t0 <= 0.13)
 
     def testAsCompleted(self):
         @tasks.coroutine
@@ -226,7 +226,7 @@ class TaskTests(unittest.TestCase):
         doer = doit()
         self.assertEqual(self.event_loop.run_until_complete(doer), 'cancelled')
         t1 = time.monotonic()
-        self.assertTrue(0.09 <= t1-t0 <= 0.11, (t1-t0, sleepfut, doer))
+        self.assertTrue(0.09 <= t1-t0 <= 0.13, (t1-t0, sleepfut, doer))
 
 
 if __name__ == '__main__':

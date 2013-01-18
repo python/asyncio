@@ -20,7 +20,10 @@ import heapq
 import logging
 import select
 import socket
-import ssl
+try:
+    import ssl
+except ImportError:
+    ssl = None
 import sys
 import threading
 import time

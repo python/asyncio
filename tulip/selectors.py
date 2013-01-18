@@ -4,6 +4,7 @@ This module supports asynchronous I/O on multiple file descriptors.
 """
 
 import logging
+import sys
 
 from select import *
 
@@ -216,7 +217,7 @@ class SelectSelector(_BaseSelector):
 
     def select(self, timeout=None):
         try:
-            r, w, _ = select(self._readers, self._writers, [], timeout)
+            r, w, _ = self._select(self._readers, self._writers, [], timeout)
         except InterruptedError:
             # A signal arrived.  Don't die, just return no events.
             return []
@@ -233,6 +234,13 @@ class SelectSelector(_BaseSelector):
             key = self._key_from_fd(fd)
             ready.append((key.fileobj, events, key.data))
         return ready
+
+    if sys.platform == 'win32':
+        def _select(self, r, w, _, timeout=None):
+            r, w, x = select(r, w, w, timeout)
+            return r, w + x, []
+    else:
+        from select import select as _select
 
 
 if 'poll' in globals():

@@ -96,7 +96,7 @@ class TaskTests(unittest.TestCase):
         t0 = time.monotonic()
         res = self.event_loop.run_until_complete(tasks.Task(foo()))
         t1 = time.monotonic()
-        self.assertTrue(t1-t0, 0.01)
+        self.assertTrue(t1-t0 <= 0.01)
         # TODO: Test different return_when values.
 
     def testWaitWithException(self):
@@ -161,7 +161,7 @@ class TaskTests(unittest.TestCase):
         t0 = time.monotonic()
         res = self.event_loop.run_until_complete(tasks.Task(foo()))
         t1 = time.monotonic()
-        self.assertTrue(t1-t0, 0.01)
+        self.assertTrue(t1-t0 <= 0.01)
 
     def testAsCompletedWithTimeout(self):
         a = tasks.sleep(0.1, 'a')

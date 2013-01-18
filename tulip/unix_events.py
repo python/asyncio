@@ -812,7 +812,7 @@ class _UnixSocketTransport(transports.Transport):
                 return
             if n:
                 data = data[n:]
-            self.add_writer(self._sock.fileno(), self._write_ready)
+            self._event_loop.add_writer(self._sock.fileno(), self._write_ready)
         self._buffer.append(data)
 
     def _write_ready(self):

@@ -13,6 +13,10 @@ class FutureTests(unittest.TestCase):
         self.assertFalse(f.running())
         self.assertFalse(f.done())
 
+    def testInitEventLoopPositional(self):
+        # Make sure Future does't accept a positional argument
+        self.assertRaises(TypeError, futures.Future, 42)
+
     def testCancel(self):
         f = futures.Future()
         self.assertTrue(f.cancel())
@@ -49,6 +53,26 @@ class FutureTests(unittest.TestCase):
         self.assertRaises(futures.InvalidStateError, f.set_result, None)
         self.assertRaises(futures.InvalidStateError, f.set_exception, None)
         self.assertFalse(f.cancel())
+
+    def testDoneCallbacks(self):
+        class MyEventLoop:
+            def call_soon(self, fn, future):
+                fn(future)
+
+        bag = []
+        def make_callback(num):
+            def bag_appender(future):
+                bag.append(num)
+            return bag_appender
+
+        f = futures.Future(event_loop=MyEventLoop())
+        f.add_done_callback(make_callback(42))
+        f.add_done_callback(make_callback(17))
+
+        self.assertEquals(bag, [])
+        f.set_result('foo')
+        self.assertEqual(bag, [42, 17])
+        self.assertEqual(f.result(), 'foo')
 
     def testYieldFromTwice(self):
         f = futures.Future()

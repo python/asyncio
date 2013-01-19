@@ -6,6 +6,10 @@ import os
 import select
 import signal
 import socket
+try:
+    import ssl
+except ImportError:
+    ssl = None
 import sys
 import threading
 import time
@@ -399,6 +403,7 @@ class EventLoopTestsMixin:
         el.run()
         self.assertTrue(pr.nbytes > 0)
 
+    @unittest.skipIf(ssl is None, 'No ssl module')
     def testCreateSslTransport(self):
         el = events.get_event_loop()
         # TODO: This depends on xkcd.com behavior!

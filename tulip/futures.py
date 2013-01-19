@@ -57,13 +57,20 @@ class Future:
     _result = None
     _exception = None
 
-    def __init__(self):
-        """XXX"""
-        self._event_loop = events.get_event_loop()
+    def __init__(self, *, event_loop=None):
+        """Initialize the future.
+
+        The optional event_loop argument allows to explicitly set the event
+        loop object used by the future. If it's not provided, the future uses
+        the default event loop.
+        """
+        if event_loop is None:
+            self._event_loop = events.get_event_loop()
+        else:
+            self._event_loop = event_loop
         self._callbacks = []
 
     def __repr__(self):
-        """XXX"""
         res = self.__class__.__name__
         if self._state == _FINISHED:
             if self._exception is not None:
@@ -83,7 +90,12 @@ class Future:
         return res
 
     def cancel(self):
-        """XXX"""
+        """Cancel the future and schedule callbacks.
+
+        If the future is already done or cancelled, return False.  Otherwise,
+        change the future's state to cancelled, schedule the callbacks and
+        return True.
+        """
         if self._state != _PENDING:
             return False
         self._state = _CANCELLED
@@ -91,7 +103,11 @@ class Future:
         return True
 
     def _schedule_callbacks(self):
-        """XXX"""
+        """Internal: Ask the event loop to call all callbacks.
+
+        The callbacks are scheduled to be called as soon as possible. Also
+        clears the callback list.
+        """
         callbacks = self._callbacks[:]
         if not callbacks:
             return
@@ -100,19 +116,33 @@ class Future:
             self._event_loop.call_soon(callback, self)
 
     def cancelled(self):
-        """XXX"""
+        """Return True if the future was cancelled."""
         return self._state == _CANCELLED
 
     def running(self):
-        """XXX"""
+        """Always return False.
+
+        This method is for compatibility with concurrent.futures; we don't
+        have a running state.
+        """
         return False  # We don't have a running state.
 
     def done(self):
-        """XXX"""
+        """Return True if the future is done.
+
+        Done means either that a result / exception are available, or that the
+        future was cancelled.
+        """
         return self._state != _PENDING
 
     def result(self, timeout=0):
-        """XXX"""
+        """Return the result this future represents.
+
+        If the future has been cancelled, raises CancelledError.  If the
+        future's result isn't yet available, raises InvalidStateError.  If
+        the future is done and has an exception set, this exception is raised.
+        Timeout values other than 0 are not supported.
+        """
         if timeout != 0:
             raise InvalidTimeoutError
         if self._state == _CANCELLED:
@@ -124,7 +154,13 @@ class Future:
         return self._result
 
     def exception(self, timeout=0):
-        """XXX"""
+        """Return the exception that was set on this future.
+
+        The exception (or None if no exception was set) is returned only if
+        the future is done.  If the future has been cancelled, raises
+        CancelledError.  If the future isn't done yet, raises
+        InvalidStateError.  Timeout values other than 0 are not supported.
+        """
         if timeout != 0:
             raise InvalidTimeoutError
         if self._state == _CANCELLED:
@@ -134,16 +170,24 @@ class Future:
         return self._exception
 
     def add_done_callback(self, fn):
-        """XXX"""
+        """Add a callback to be run when the future becomes done.
+
+        The callback is called with a single argument - the future object. If
+        the future is already done when this is called, the callback is
+        scheduled with call_soon.
+        """
         if self._state != _PENDING:
             self._event_loop.call_soon(fn, self)
         else:
             self._callbacks.append(fn)
 
-    # New method not in PPE 3148.
+    # New method not in PEP 3148.
 
     def remove_done_callback(self, fn):
-        """XXX"""
+        """Remove all instances of a callback from the "call when done" list.
+
+        Returns the number of callbacks removed.
+        """
         filtered_callbacks = [f for f in self._callbacks if f != fn]
         removed_count = len(self._callbacks) - len(filtered_callbacks)
         if removed_count:
@@ -153,7 +197,11 @@ class Future:
     # So-called internal methods (note: no set_running_or_notify_cancel()).
 
     def set_result(self, result):
-        """XXX"""
+        """Mark the future done and set its result.
+
+        If the future is already done when this method is called, raises
+        InvalidStateError.
+        """
         if self._state != _PENDING:
             raise InvalidStateError
         self._result = result
@@ -161,7 +209,11 @@ class Future:
         self._schedule_callbacks()
 
     def set_exception(self, exception):
-        """XXX"""
+        """ Mark the future done and set an exception.
+
+        If the future is already done when this method is called, raises
+        InvalidStateError.
+        """
         if self._state != _PENDING:
             raise InvalidStateError
         self._exception = exception

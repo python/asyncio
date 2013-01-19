@@ -190,7 +190,8 @@ class _BaseSelector:
         try:
             return self._fd_to_key[fd]
         except KeyError:
-            raise RuntimeError("No key found for fd {}".format(fd))
+            logging.warn('No key found for fd %r', fd)
+            return None
 
 
 class SelectSelector(_BaseSelector):
@@ -232,7 +233,8 @@ class SelectSelector(_BaseSelector):
                 events |= SELECT_OUT
 
             key = self._key_from_fd(fd)
-            ready.append((key.fileobj, events, key.data))
+            if key:
+                ready.append((key.fileobj, events, key.data))
         return ready
 
     if sys.platform == 'win32':
@@ -283,7 +285,8 @@ if 'poll' in globals():
                     events |= SELECT_IN
 
                 key = self._key_from_fd(fd)
-                ready.append((key.fileobj, events, key.data))
+                if key:
+                    ready.append((key.fileobj, events, key.data))
             return ready
 
 
@@ -328,7 +331,8 @@ if 'epoll' in globals():
                     events |= SELECT_IN
 
                 key = self._key_from_fd(fd)
-                ready.append((key.fileobj, events, key.data))
+                if key:
+                    ready.append((key.fileobj, events, key.data))
             return ready
 
         def close(self):
@@ -384,7 +388,8 @@ if 'kqueue' in globals():
                     events |= SELECT_OUT
 
                 key = self._key_from_fd(fd)
-                ready.append((key.fileobj, events, key.data))
+                if key:
+                    ready.append((key.fileobj, events, key.data))
             return ready
 
         def close(self):

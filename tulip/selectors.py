@@ -11,11 +11,11 @@ from select import *
 
 # generic events, that must be mapped to implementation-specific ones
 # read event
-SELECT_IN  = (1 << 0)
+EVENT_READ  = (1 << 0)
 # write event
-SELECT_OUT = (1 << 1)
+EVENT_WRITE = (1 << 1)
 # connect event
-SELECT_CONNECT = SELECT_OUT
+EVENT_CONNECT = EVENT_WRITE
 
 
 def _fileobj_to_fd(fileobj):
@@ -79,13 +79,13 @@ class _BaseSelector:
 
         Parameters:
         fileobj -- file object
-        events  -- events to monitor (bitwise mask of SELECT_IN|SELECT_OUT)
+        events  -- events to monitor (bitwise mask of EVENT_READ|EVENT_WRITE)
         data    -- attached data
 
         Returns:
         SelectorKey instance
         """
-        if (not events) or (events & ~(SELECT_IN|SELECT_OUT)):
+        if (not events) or (events & ~(EVENT_READ|EVENT_WRITE)):
             raise ValueError("Invalid events: {}".format(events))
 
         if fileobj in self._fileobj_to_key:
@@ -118,7 +118,7 @@ class _BaseSelector:
 
         Parameters:
         fileobj -- file object
-        events  -- events to monitor (bitwise mask of SELECT_IN|SELECT_OUT)
+        events  -- events to monitor (bitwise mask of EVENT_READ|EVENT_WRITE)
         data    -- attached data
         """
         self.unregister(fileobj)
@@ -138,7 +138,7 @@ class _BaseSelector:
 
         Returns:
         list of (fileobj, events, attached data) for ready file objects
-        `events` is a bitwise mask of SELECT_IN|SELECT_OUT
+        `events` is a bitwise mask of EVENT_READ|EVENT_WRITE
         """
         raise NotImplementedError()
 
@@ -204,9 +204,9 @@ class SelectSelector(_BaseSelector):
 
     def register(self, fileobj, events, data=None):
         key = super().register(fileobj, events, data)
-        if events & SELECT_IN:
+        if events & EVENT_READ:
             self._readers.add(key.fd)
-        if events & SELECT_OUT:
+        if events & EVENT_WRITE:
             self._writers.add(key.fd)
         return key
 
@@ -228,9 +228,9 @@ class SelectSelector(_BaseSelector):
         for fd in r | w:
             events = 0
             if fd in r:
-                events |= SELECT_IN
+                events |= EVENT_READ
             if fd in w:
-                events |= SELECT_OUT
+                events |= EVENT_WRITE
 
             key = self._key_from_fd(fd)
             if key:
@@ -257,9 +257,9 @@ if 'poll' in globals():
         def register(self, fileobj, events, data=None):
             key = super().register(fileobj, events, data)
             poll_events = 0
-            if events & SELECT_IN:
+            if events & EVENT_READ:
                 poll_events |= POLLIN
-            if events & SELECT_OUT:
+            if events & EVENT_WRITE:
                 poll_events |= POLLOUT
             self._poll.register(key.fd, poll_events)
             return key
@@ -280,9 +280,9 @@ if 'poll' in globals():
             for fd, event in fd_event_list:
                 events = 0
                 if event & ~POLLIN:
-                    events |= SELECT_OUT
+                    events |= EVENT_WRITE
                 if event & ~POLLOUT:
-                    events |= SELECT_IN
+                    events |= EVENT_READ
 
                 key = self._key_from_fd(fd)
                 if key:
@@ -302,9 +302,9 @@ if 'epoll' in globals():
         def register(self, fileobj, events, data=None):
             key = super().register(fileobj, events, data)
             epoll_events = 0
-            if events & SELECT_IN:
+            if events & EVENT_READ:
                 epoll_events |= EPOLLIN
-            if events & SELECT_OUT:
+            if events & EVENT_WRITE:
                 epoll_events |= EPOLLOUT
             self._epoll.register(key.fd, epoll_events)
             return key
@@ -326,9 +326,9 @@ if 'epoll' in globals():
             for fd, event in fd_event_list:
                 events = 0
                 if event & ~EPOLLIN:
-                    events |= SELECT_OUT
+                    events |= EVENT_WRITE
                 if event & ~EPOLLOUT:
-                    events |= SELECT_IN
+                    events |= EVENT_READ
 
                 key = self._key_from_fd(fd)
                 if key:
@@ -352,20 +352,20 @@ if 'kqueue' in globals():
         def unregister(self, fileobj):
             key = super().unregister(fileobj)
             mask = 0
-            if key.events & SELECT_IN:
+            if key.events & EVENT_READ:
                 kev = kevent(key.fd, KQ_FILTER_READ, KQ_EV_DELETE)
                 self._kqueue.control([kev], 0, 0)
-            if key.events & SELECT_OUT:
+            if key.events & EVENT_WRITE:
                 kev = kevent(key.fd, KQ_FILTER_WRITE, KQ_EV_DELETE)
                 self._kqueue.control([kev], 0, 0)
             return key
 
         def register(self, fileobj, events, data=None):
             key = super().register(fileobj, events, data)
-            if events & SELECT_IN:
+            if events & EVENT_READ:
                 kev = kevent(key.fd, KQ_FILTER_READ, KQ_EV_ADD)
                 self._kqueue.control([kev], 0, 0)
-            if events & SELECT_OUT:
+            if events & EVENT_WRITE:
                 kev = kevent(key.fd, KQ_FILTER_WRITE, KQ_EV_ADD)
                 self._kqueue.control([kev], 0, 0)
             return key
@@ -383,9 +383,9 @@ if 'kqueue' in globals():
                 flag = kev.filter
                 events = 0
                 if flag == KQ_FILTER_READ:
-                    events |= SELECT_IN
+                    events |= EVENT_READ
                 if flag == KQ_FILTER_WRITE:
-                    events |= SELECT_OUT
+                    events |= EVENT_WRITE
 
                 key = self._key_from_fd(fd)
                 if key:

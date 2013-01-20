@@ -393,10 +393,10 @@ class UnixEventLoop(events.EventLoop):
         try:
             mask, (reader, writer, connector) = self._selector.get_info(fd)
         except KeyError:
-            self._selector.register(fd, selectors.SELECT_IN,
+            self._selector.register(fd, selectors.EVENT_READ,
                                     (handler, None, None))
         else:
-            self._selector.modify(fd, mask | selectors.SELECT_IN,
+            self._selector.modify(fd, mask | selectors.EVENT_READ,
                                   (handler, writer, connector))
 
         return handler
@@ -408,7 +408,7 @@ class UnixEventLoop(events.EventLoop):
         except KeyError:
             return False
         else:
-            mask &= ~selectors.SELECT_IN
+            mask &= ~selectors.EVENT_READ
             if not mask:
                 self._selector.unregister(fd)
             else:
@@ -421,10 +421,10 @@ class UnixEventLoop(events.EventLoop):
         try:
             mask, (reader, writer, connector) = self._selector.get_info(fd)
         except KeyError:
-            self._selector.register(fd, selectors.SELECT_OUT,
+            self._selector.register(fd, selectors.EVENT_WRITE,
                                     (None, handler, None))
         else:
-            self._selector.modify(fd, mask | selectors.SELECT_OUT,
+            self._selector.modify(fd, mask | selectors.EVENT_WRITE,
                                   (reader, handler, connector))
         return handler
 
@@ -435,7 +435,7 @@ class UnixEventLoop(events.EventLoop):
         except KeyError:
             return False
         else:
-            mask &= ~selectors.SELECT_OUT
+            mask &= ~selectors.EVENT_WRITE
             if not mask:
                 self._selector.unregister(fd)
             else:
@@ -444,16 +444,16 @@ class UnixEventLoop(events.EventLoop):
 
     def add_connector(self, fd, callback, *args):
         """Add a connector callback.  Return a Handler instance."""
-        # XXX As long as SELECT_CONNECT == SELECT_OUT, set the handler
+        # XXX As long as EVENT_CONNECT == EVENT_WRITE, set the handler
         # as both writer and connector.
         handler = events.make_handler(None, callback, args)
         try:
             mask, (reader, writer, connector) = self._selector.get_info(fd)
         except KeyError:
-            self._selector.register(fd, selectors.SELECT_CONNECT,
+            self._selector.register(fd, selectors.EVENT_CONNECT,
                                     (None, handler, handler))
         else:
-            self._selector.modify(fd, mask | selectors.SELECT_CONNECT,
+            self._selector.modify(fd, mask | selectors.EVENT_CONNECT,
                                   (reader, handler, handler))
         return handler
 
@@ -464,7 +464,7 @@ class UnixEventLoop(events.EventLoop):
         except KeyError:
             return False
         else:
-            mask &= ~selectors.SELECT_CONNECT
+            mask &= ~selectors.EVENT_CONNECT
             if not mask:
                 self._selector.unregister(fd)
             else:
@@ -724,19 +724,19 @@ class UnixEventLoop(events.EventLoop):
                 level = logging.DEBUG
             logging.log(level, 'poll%s took %.3f seconds', argstr, t1-t0)
             for fileobj, mask, (reader, writer, connector) in event_list:
-                if mask & selectors.SELECT_IN and reader is not None:
+                if mask & selectors.EVENT_READ and reader is not None:
                     if reader.cancelled:
                         self.remove_reader(fileobj)
                     else:
                         self._add_callback(reader)
-                if mask & selectors.SELECT_OUT and writer is not None:
+                if mask & selectors.EVENT_WRITE and writer is not None:
                     if writer.cancelled:
                         self.remove_writer(fileobj)
                     else:
                         self._add_callback(writer)
                 # XXX The next elif is unreachable until selector.py
-                # changes to implement SELECT_CONNECT != SELECTOR_OUT.
-                elif mask & selectors.SELECT_CONNECT and connector is not None:
+                # changes to implement EVENT_CONNECT != EVENT_WRITE.
+                elif mask & selectors.EVENT_CONNECT and connector is not None:
                     if connector.cancelled:
                         self.remove_connector(fileobj)
                     else:

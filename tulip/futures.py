@@ -47,11 +47,6 @@ class Future:
     (In Python 3.4 or later we may be able to unify the implementations.)
     """
 
-    # TODO: PEP 3148 seems to say that cancel() does not call the
-    # callbacks, but set_running_or_notify_cancel() does (if cancel()
-    # was called).  Here, cancel() schedules the callbacks, and
-    # set_running_or_notify_cancel() is not supported.
-
     # Class variables serving as defaults for instance variables.
     _state = _PENDING
     _result = None

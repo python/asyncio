@@ -21,7 +21,7 @@ class UnixSubprocessTransport(transports.Transport):
         self._eof = False
         rstdin, self._wstdin = os.pipe()
         self._rstdout, wstdout = os.pipe()
-        
+
         # TODO: This is incredibly naive.  Should look at
         # subprocess.py for all the precautions around fork/exec.
         pid = os.fork()

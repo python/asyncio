@@ -15,7 +15,12 @@ EVENT_READ  = (1 << 0)
 # write event
 EVENT_WRITE = (1 << 1)
 # connect event
-EVENT_CONNECT = EVENT_WRITE
+EVENT_CONNECT = (1 << 2)
+
+# In most cases we treat EVENT_WRITE and EVENT_CONNECT as aliases for
+# each other, and in fact we return both flags when a FD is found
+# either writable or connectable.  The distinction is necessary
+# only for poll() on Windows.
 
 
 def _fileobj_to_fd(fileobj):
@@ -79,14 +84,19 @@ class _BaseSelector:
 
         Parameters:
         fileobj -- file object
-        events  -- events to monitor (bitwise mask of EVENT_READ|EVENT_WRITE)
+        events  -- events to monitor (bitwise mask of
+                   EVENT_READ|EVENT_WRITE|EVENT_CONNECT)
         data    -- attached data
 
         Returns:
         SelectorKey instance
         """
-        if (not events) or (events & ~(EVENT_READ|EVENT_WRITE)):
+        if (not events) or (events & ~(EVENT_READ|EVENT_WRITE|EVENT_CONNECT)):
             raise ValueError("Invalid events: {}".format(events))
+
+        if events & (EVENT_WRITE|EVENT_CONNECT) == (EVENT_WRITE|EVENT_CONNECT):
+            raise ValueError("WRITE and CONNECT are mutually exclusive. "
+                             "Invalid events: {}".format(events))
 
         if fileobj in self._fileobj_to_key:
             raise ValueError("{!r} is already registered".format(fileobj))
@@ -118,11 +128,18 @@ class _BaseSelector:
 
         Parameters:
         fileobj -- file object
-        events  -- events to monitor (bitwise mask of EVENT_READ|EVENT_WRITE)
+        events  -- events to monitor (bitwise mask of
+                   EVENT_READ|EVENT_WRITE|EVENT_CONNECT)
         data    -- attached data
         """
-        self.unregister(fileobj)
-        self.register(fileobj, events, data)
+        # TODO: Subclasses can probably optimize this even further.
+        try:
+            key = self._fileobj_to_key[fileobj]
+        except KeyError:
+            raise ValueError("{!r} is not registered".format(fileobj))
+        if events != key.events:
+            self.unregister(fileobj)
+            self.register(fileobj, events, data)
 
     def select(self, timeout=None):
         """Perform the actual selection, until some monitored file objects are
@@ -138,7 +155,7 @@ class _BaseSelector:
 
         Returns:
         list of (fileobj, events, attached data) for ready file objects
-        `events` is a bitwise mask of EVENT_READ|EVENT_WRITE
+        `events` is a bitwise mask of EVENT_READ|EVENT_WRITE|EVENT_CONNECT
         """
         raise NotImplementedError()
 
@@ -206,7 +223,7 @@ class SelectSelector(_BaseSelector):
         key = super().register(fileobj, events, data)
         if events & EVENT_READ:
             self._readers.add(key.fd)
-        if events & EVENT_WRITE:
+        if events & (EVENT_WRITE|EVENT_CONNECT):
             self._writers.add(key.fd)
         return key
 
@@ -230,11 +247,11 @@ class SelectSelector(_BaseSelector):
             if fd in r:
                 events |= EVENT_READ
             if fd in w:
-                events |= EVENT_WRITE
+                events |= EVENT_WRITE|EVENT_CONNECT
 
             key = self._key_from_fd(fd)
             if key:
-                ready.append((key.fileobj, events, key.data))
+                ready.append((key.fileobj, events & key.events, key.data))
         return ready
 
     if sys.platform == 'win32':
@@ -246,6 +263,10 @@ class SelectSelector(_BaseSelector):
 
 
 if 'poll' in globals():
+
+    # TODO: Implement poll() for Windows with workaround for
+    # brokenness in WSAPoll() (Richard Oudkerk, see
+    # http://bugs.python.org/issue16507).
 
     class PollSelector(_BaseSelector):
         """Poll-based selector."""
@@ -259,7 +280,7 @@ if 'poll' in globals():
             poll_events = 0
             if events & EVENT_READ:
                 poll_events |= POLLIN
-            if events & EVENT_WRITE:
+            if events & (EVENT_WRITE|EVENT_CONNECT):
                 poll_events |= POLLOUT
             self._poll.register(key.fd, poll_events)
             return key
@@ -280,13 +301,13 @@ if 'poll' in globals():
             for fd, event in fd_event_list:
                 events = 0
                 if event & ~POLLIN:
-                    events |= EVENT_WRITE
+                    events |= EVENT_WRITE|EVENT_CONNECT
                 if event & ~POLLOUT:
                     events |= EVENT_READ
 
                 key = self._key_from_fd(fd)
                 if key:
-                    ready.append((key.fileobj, events, key.data))
+                    ready.append((key.fileobj, events & key.events, key.data))
             return ready
 
 
@@ -304,7 +325,7 @@ if 'epoll' in globals():
             epoll_events = 0
             if events & EVENT_READ:
                 epoll_events |= EPOLLIN
-            if events & EVENT_WRITE:
+            if events & (EVENT_WRITE|EVENT_CONNECT):
                 epoll_events |= EPOLLOUT
             self._epoll.register(key.fd, epoll_events)
             return key
@@ -326,13 +347,13 @@ if 'epoll' in globals():
             for fd, event in fd_event_list:
                 events = 0
                 if event & ~EPOLLIN:
-                    events |= EVENT_WRITE
+                    events |= EVENT_WRITE|EVENT_CONNECT
                 if event & ~EPOLLOUT:
                     events |= EVENT_READ
 
                 key = self._key_from_fd(fd)
                 if key:
-                    ready.append((key.fileobj, events, key.data))
+                    ready.append((key.fileobj, events & key.events, key.data))
             return ready
 
         def close(self):
@@ -355,7 +376,7 @@ if 'kqueue' in globals():
             if key.events & EVENT_READ:
                 kev = kevent(key.fd, KQ_FILTER_READ, KQ_EV_DELETE)
                 self._kqueue.control([kev], 0, 0)
-            if key.events & EVENT_WRITE:
+            if key.events & (EVENT_WRITE|EVENT_CONNECT):
                 kev = kevent(key.fd, KQ_FILTER_WRITE, KQ_EV_DELETE)
                 self._kqueue.control([kev], 0, 0)
             return key
@@ -365,7 +386,7 @@ if 'kqueue' in globals():
             if events & EVENT_READ:
                 kev = kevent(key.fd, KQ_FILTER_READ, KQ_EV_ADD)
                 self._kqueue.control([kev], 0, 0)
-            if events & EVENT_WRITE:
+            if events & (EVENT_WRITE|EVENT_CONNECT):
                 kev = kevent(key.fd, KQ_FILTER_WRITE, KQ_EV_ADD)
                 self._kqueue.control([kev], 0, 0)
             return key
@@ -385,11 +406,11 @@ if 'kqueue' in globals():
                 if flag == KQ_FILTER_READ:
                     events |= EVENT_READ
                 if flag == KQ_FILTER_WRITE:
-                    events |= EVENT_WRITE
+                    events |= EVENT_WRITE|EVENT_CONNECT
 
                 key = self._key_from_fd(fd)
                 if key:
-                    ready.append((key.fileobj, events, key.data))
+                    ready.append((key.fileobj, events & key.events, key.data))
             return ready
 
         def close(self):

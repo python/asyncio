@@ -423,8 +423,10 @@ class UnixEventLoop(events.EventLoop):
             self._selector.register(fd, selectors.EVENT_WRITE,
                                     (None, handler, None))
         else:
+            # Remove connector.
+            mask &= ~selectors.EVENT_CONNECT
             self._selector.modify(fd, mask | selectors.EVENT_WRITE,
-                                  (reader, handler, connector))
+                                  (reader, handler, None))
         return handler
 
     def remove_writer(self, fd):
@@ -434,26 +436,36 @@ class UnixEventLoop(events.EventLoop):
         except KeyError:
             return False
         else:
-            mask &= ~selectors.EVENT_WRITE
+            # Remove both writer and connector.
+            mask &= ~(selectors.EVENT_WRITE | selectors.EVENT_CONNECT)
             if not mask:
                 self._selector.unregister(fd)
             else:
-                self._selector.modify(fd, mask, (reader, None, connector))
+                self._selector.modify(fd, mask, (reader, None, None))
             return True
+
+    # NOTE: add_connector() and add_writer() are mutually exclusive.
+    # While you can independently manipulate readers and writers,
+    # adding a connector for a particular FD automatically removes the
+    # writer for that FD, and vice versa, and removing a writer or a
+    # connector actually removes both writer and connector.  This is
+    # because in most cases writers and connectors use the same mode
+    # for the platform polling function; the distinction is only
+    # important for PollSelector() on Windows.
 
     def add_connector(self, fd, callback, *args):
         """Add a connector callback.  Return a Handler instance."""
-        # XXX As long as EVENT_CONNECT == EVENT_WRITE, set the handler
-        # as both writer and connector.
         handler = events.make_handler(None, callback, args)
         try:
             mask, (reader, writer, connector) = self._selector.get_info(fd)
         except KeyError:
             self._selector.register(fd, selectors.EVENT_CONNECT,
-                                    (None, handler, handler))
+                                    (None, None, handler))
         else:
+            # Remove writer.
+            mask &= ~selectors.EVENT_WRITE
             self._selector.modify(fd, mask | selectors.EVENT_CONNECT,
-                                  (reader, handler, handler))
+                                  (reader, None, handler))
         return handler
 
     def remove_connector(self, fd):
@@ -463,7 +475,8 @@ class UnixEventLoop(events.EventLoop):
         except KeyError:
             return False
         else:
-            mask &= ~selectors.EVENT_CONNECT
+            # Remove both writer and connector.
+            mask &= ~(selectors.EVENT_WRITE | selectors.EVENT_CONNECT)
             if not mask:
                 self._selector.unregister(fd)
             else:
@@ -733,8 +746,6 @@ class UnixEventLoop(events.EventLoop):
                         self.remove_writer(fileobj)
                     else:
                         self._add_callback(writer)
-                # XXX The next elif is unreachable until selector.py
-                # changes to implement EVENT_CONNECT != EVENT_WRITE.
                 elif mask & selectors.EVENT_CONNECT and connector is not None:
                     if connector.cancelled:
                         self.remove_connector(fileobj)
@@ -888,7 +899,7 @@ class _UnixSslTransport(transports.Transport):
             self._event_loop.add_reader(fd, self._on_handshake)
             return
         except ssl.SSLWantWriteError:
-            self._event_loop.add_writable(fd, self._on_handshake)
+            self._event_loop.add_writer(fd, self._on_handshake)
             return
         except Exception as exc:
             self._sslsock.close()

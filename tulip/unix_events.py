@@ -291,7 +291,6 @@ class UnixEventLoop(events.EventLoop):
     def getnameinfo(self, sockaddr, flags=0):
         return self.run_in_executor(None, socket.getnameinfo, sockaddr, flags)
 
-    # TODO: Or create_connection()?  Or create_client()?
     @tasks.task
     def create_connection(self, protocol_factory, host, port, *, ssl=False,
                           family=0, proto=0, flags=0):
@@ -328,14 +327,14 @@ class UnixEventLoop(events.EventLoop):
                 raise socket.error('Multiple exceptions: {}'.format(
                     ', '.join(str(exc) for exc in exceptions)))
         protocol = protocol_factory()
+        waiter = futures.Future()
         if ssl:
             sslcontext = None if isinstance(ssl, bool) else ssl
-            waiter = futures.Future()
             transport = _UnixSslTransport(self, sock, protocol, sslcontext,
                                           waiter)
-            yield from waiter
         else:
-            transport = _UnixSocketTransport(self, sock, protocol)
+            transport = _UnixSocketTransport(self, sock, protocol, waiter)
+        yield from waiter
         return transport, protocol
 
     # TODO: Or create_server()?
@@ -770,7 +769,7 @@ class UnixEventLoop(events.EventLoop):
 
 class _UnixSocketTransport(transports.Transport):
 
-    def __init__(self, event_loop, sock, protocol):
+    def __init__(self, event_loop, sock, protocol, waiter=None):
         self._event_loop = event_loop
         self._sock = sock
         self._protocol = protocol
@@ -778,6 +777,8 @@ class _UnixSocketTransport(transports.Transport):
         self._closing = False  # Set when close() called.
         self._event_loop.add_reader(self._sock.fileno(), self._read_ready)
         self._event_loop.call_soon(self._protocol.connection_made, self)
+        if waiter is not None:
+            self._event_loop.call_soon(waiter.set_result, None)
 
     def _read_ready(self):
         try:
@@ -902,7 +903,7 @@ class _UnixSslTransport(transports.Transport):
         self._event_loop.add_reader(fd, self._on_ready)
         self._event_loop.add_writer(fd, self._on_ready)
         self._event_loop.call_soon(self._protocol.connection_made, self)
-        self._waiter.set_result(None)
+        self._event_loop.call_soon(self._waiter.set_result, None)
 
     def _on_ready(self):
         # Because of renegotiations (?), there's no difference between

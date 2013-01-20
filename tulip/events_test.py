@@ -428,6 +428,8 @@ class EventLoopTestsMixin:
         el.run_once()
         el.run_once()
         sock.close()
+        # the client socket must be closed after to avoid ECONNRESET upon
+        # recv()/send() on the serving socket
         client.close()
 
 

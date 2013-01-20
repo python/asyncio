@@ -21,7 +21,7 @@ import unittest
 
 assert sys.version >= '3.3', 'Please use Python 3.3 or higher.'
 
-def load_tests(patterns=()):
+def load_tests(includes=(), excludes=()):
   mods = ['events', 'futures', 'tasks']
   test_mods = ['%s_test' % name for name in mods]
   tulip = __import__('tulip', fromlist=test_mods)
@@ -34,26 +34,38 @@ def load_tests(patterns=()):
       if name.endswith('Tests'):
         test_module = getattr(mod, name)
         tests = loader.loadTestsFromTestCase(test_module)
-        if patterns:
+        if includes:
           tests = [test
                    for test in tests
-                   if any(re.search(pat, test.id()) for pat in patterns)]
+                   if any(re.search(pat, test.id()) for pat in includes)]
+        if excludes:
+          tests = [test
+                   for test in tests
+                   if not any(re.search(pat, test.id()) for pat in excludes)]
         suite.addTests(tests)
 
   return suite
 
 
 def main():
-  patterns = []
+  excludes = []
+  includes = []
+  patterns = includes  # A reference.
   v = 1
   for arg in sys.argv[1:]:
     if arg.startswith('-v'):
       v += arg.count('v')
     elif arg == '-q':
       v = 0
+    elif arg == '-x':
+        if patterns is includes:
+            patterns = excludes
+        else:
+            patterns = includes
     elif arg and not arg.startswith('-'):
       patterns.append(arg)
-  result = unittest.TextTestRunner(verbosity=v).run(load_tests(patterns))
+  tests = load_tests(includes, excludes)
+  result = unittest.TextTestRunner(verbosity=v).run(tests)
   sys.exit(not result.wasSuccessful())
 
 

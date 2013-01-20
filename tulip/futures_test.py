@@ -5,6 +5,10 @@ import unittest
 from . import futures
 
 
+def _fakefunc(f):
+    return f
+
+
 class FutureTests(unittest.TestCase):
 
     def testInitialState(self):
@@ -31,6 +35,9 @@ class FutureTests(unittest.TestCase):
 
     def testResult(self):
         f = futures.Future()
+        self.assertRaises(futures.InvalidStateError, f.result)
+        self.assertRaises(futures.InvalidTimeoutError, f.result, 10)
+
         f.set_result(42)
         self.assertFalse(f.cancelled())
         self.assertFalse(f.running())
@@ -44,6 +51,9 @@ class FutureTests(unittest.TestCase):
     def testException(self):
         exc = RuntimeError()
         f = futures.Future()
+        self.assertRaises(futures.InvalidStateError, f.exception)
+        self.assertRaises(futures.InvalidTimeoutError, f.exception, 10)
+
         f.set_exception(exc)
         self.assertFalse(f.cancelled())
         self.assertFalse(f.running())
@@ -69,6 +79,60 @@ class FutureTests(unittest.TestCase):
         self.assertEqual(next(g), ('B', 42))  # yield 'B', x.
         # The second "yield from f" does not yield f.
         self.assertEqual(next(g), ('C', 42))  # yield 'C', y.
+
+    def testRepr(self):
+        f_pending = futures.Future()
+        self.assertEqual(repr(f_pending), 'Future<PENDING>')
+
+        f_cancelled = futures.Future()
+        f_cancelled.cancel()
+        self.assertEqual(repr(f_cancelled), 'Future<CANCELLED>')
+
+        f_result = futures.Future()
+        f_result.set_result(4)
+        self.assertEqual(repr(f_result), 'Future<result=4>')
+
+        f_exception = futures.Future()
+        f_exception.set_exception(RuntimeError())
+        self.assertEqual(repr(f_exception), 'Future<exception=RuntimeError()>')
+
+        f_few_callbacks = futures.Future()
+        f_few_callbacks.add_done_callback(_fakefunc)
+        self.assertIn('Future<PENDING, [<function _fakefunc',
+                      repr(f_few_callbacks))
+
+        f_many_callbacks = futures.Future()
+        for i in range(20):
+            f_many_callbacks.add_done_callback(_fakefunc)
+        r = repr(f_many_callbacks)
+        self.assertIn('Future<PENDING, [<function _fakefunc', r)
+        self.assertIn('<18 more>', r)
+
+    def testCopyState(self):
+        # Test the internal _copy_state method since it's being directly
+        # invoked in other modules.
+        f = futures.Future()
+        f.set_result(10)
+
+        newf = futures.Future()
+        newf._copy_state(f)
+        self.assertTrue(newf.done())
+        self.assertEqual(newf.result(), 10)
+
+        f_exception = futures.Future()
+        f_exception.set_exception(RuntimeError())
+
+        newf_exception = futures.Future()
+        newf_exception._copy_state(f_exception)
+        self.assertTrue(newf_exception.done())
+        self.assertRaises(RuntimeError, newf_exception.result)
+
+        f_cancelled = futures.Future()
+        f_cancelled.cancel()
+
+        newf_cancelled = futures.Future()
+        newf_cancelled._copy_state(f_cancelled)
+        self.assertTrue(newf_cancelled.cancelled())
 
 
 # A fake event loop for tests. All it does is implement a call_soon method

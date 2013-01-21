@@ -99,7 +99,9 @@ class UnixEventLoop(events.EventLoop):
 
     def _make_self_pipe(self):
         # A self-socket, really. :-)
-        self._ssock, self._csock = socketpair()
+        a, b = socketpair()
+        self._ssock = self._selector.wrap_socket(a)
+        self._csock = self._selector.wrap_socket(b)
         self._ssock.setblocking(False)
         self._csock.setblocking(False)
         self.add_reader(self._ssock.fileno(), self._read_from_self)
@@ -306,6 +308,7 @@ class UnixEventLoop(events.EventLoop):
             sock = None
             try:
                 sock = socket.socket(family=family, type=type, proto=proto)
+                sock = self._selector.wrap_socket(sock)
                 sock.setblocking(False)
                 yield self.sock_connect(sock, address)
             except socket.error as exc:
@@ -354,6 +357,7 @@ class UnixEventLoop(events.EventLoop):
         exceptions = []
         for family, type, proto, cname, address in infos:
             sock = socket.socket(family=family, type=type, proto=proto)
+            sock = self._selector.wrap_socket(sock)
             try:
                 sock.bind(address)
             except socket.error as exc:

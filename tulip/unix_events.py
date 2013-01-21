@@ -83,7 +83,7 @@ class UnixEventLoop(events.EventLoop):
         if selector is None:
             # pick the best selector class for the platform
             selector = selectors.Selector()
-            logging.info('Using selector: %s', selector.__class__.__name__)
+            logging.debug('Using selector: %s', selector.__class__.__name__)
         self._selector = selector
         self._ready = collections.deque()
         self._scheduled = []
@@ -96,6 +96,8 @@ class UnixEventLoop(events.EventLoop):
         if self._selector is not None:
             self._selector.close()
             self._selector = None
+        self._ssock.close()
+        self._csock.close()
 
     def _make_self_pipe(self):
         # A self-socket, really. :-)
@@ -416,6 +418,8 @@ class UnixEventLoop(events.EventLoop):
                 self._selector.unregister(fd)
             else:
                 self._selector.modify(fd, mask, (None, writer, connector))
+            if reader is not None:
+                reader.cancel()
             return True
 
     def add_writer(self, fd, callback, *args):
@@ -446,6 +450,10 @@ class UnixEventLoop(events.EventLoop):
                 self._selector.unregister(fd)
             else:
                 self._selector.modify(fd, mask, (reader, None, None))
+            if writer is not None:
+                writer.cancel()
+            if connector is not None:
+                connector.cancel()
             return True
 
     # NOTE: add_connector() and add_writer() are mutually exclusive.
@@ -485,6 +493,10 @@ class UnixEventLoop(events.EventLoop):
                 self._selector.unregister(fd)
             else:
                 self._selector.modify(fd, mask, (reader, None, None))
+            if writer is not None:
+                writer.cancel()
+            if connector is not None:
+                connector.cancel()
             return True
 
     def sock_recv(self, sock, n):

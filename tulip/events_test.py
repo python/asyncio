@@ -198,9 +198,14 @@ class EventLoopTestsMixin:
     def testReaderCallback(self):
         el = events.get_event_loop()
         r, w = unix_events.socketpair()
+        r = el._selector.wrap_socket(r)
+        w = el._selector.wrap_socket(w)
         bytes_read = []
         def reader():
-            data = r.recv(1024)
+            try:
+                data = r.recv(1024)
+            except BlockingIOError:
+                return
             if data:
                 bytes_read.append(data)
             else:
@@ -216,9 +221,14 @@ class EventLoopTestsMixin:
     def testReaderCallbackWithHandler(self):
         el = events.get_event_loop()
         r, w = unix_events.socketpair()
+        r = el._selector.wrap_socket(r)
+        w = el._selector.wrap_socket(w)
         bytes_read = []
         def reader():
-            data = r.recv(1024)
+            try:
+                data = r.recv(1024)
+            except BlockingIOError:
+                return
             if data:
                 bytes_read.append(data)
             else:
@@ -235,9 +245,14 @@ class EventLoopTestsMixin:
     def testReaderCallbackCancel(self):
         el = events.get_event_loop()
         r, w = unix_events.socketpair()
+        r = el._selector.wrap_socket(r)
+        w = el._selector.wrap_socket(w)
         bytes_read = []
         def reader():
-            data = r.recv(1024)
+            try:
+                data = r.recv(1024)
+            except BlockingIOError:
+                return
             if data:
                 bytes_read.append(data)
             if sum(len(b) for b in bytes_read) >= 6:
@@ -254,6 +269,7 @@ class EventLoopTestsMixin:
     def testWriterCallback(self):
         el = events.get_event_loop()
         r, w = unix_events.socketpair()
+        w = el._selector.wrap_socket(w)
         w.setblocking(False)
         el.add_writer(w.fileno(), w.send, b'x'*(256*1024))
         def remove_writer():
@@ -268,6 +284,7 @@ class EventLoopTestsMixin:
     def testWriterCallbackWithHandler(self):
         el = events.get_event_loop()
         r, w = unix_events.socketpair()
+        w = el._selector.wrap_socket(w)
         w.setblocking(False)
         handler = events.Handler(None, w.send, (b'x'*(256*1024),))
         self.assertEqual(el.add_writer(w.fileno(), handler), handler)
@@ -283,6 +300,8 @@ class EventLoopTestsMixin:
     def testWriterCallbackCancel(self):
         el = events.get_event_loop()
         r, w = unix_events.socketpair()
+        r = el._selector.wrap_socket(r)
+        w = el._selector.wrap_socket(w)
         w.setblocking(False)
         def sender():
             w.send(b'x'*256)
@@ -297,9 +316,11 @@ class EventLoopTestsMixin:
     def testSockClientOps(self):
         el = events.get_event_loop()
         sock = socket.socket()
+        sock = el._selector.wrap_socket(sock)
         sock.setblocking(False)
         # TODO: This depends on python.org behavior!
-        el.run_until_complete(el.sock_connect(sock, ('python.org', 80)))
+        address = socket.getaddrinfo('python.org', 80, socket.AF_INET)[0][4]
+        el.run_until_complete(el.sock_connect(sock, address))
         el.run_until_complete(el.sock_sendall(sock, b'GET / HTTP/1.0\r\n\r\n'))
         data = el.run_until_complete(el.sock_recv(sock, 1024))
         sock.close()
@@ -309,19 +330,22 @@ class EventLoopTestsMixin:
         el = events.get_event_loop()
         sock = socket.socket()
         sock.setblocking(False)
+        sock = el._selector.wrap_socket(sock)
         # TODO: This depends on python.org behavior!
+        address = socket.getaddrinfo('python.org', 12345, socket.AF_INET)[0][4]
         with self.assertRaises(ConnectionRefusedError):
-            el.run_until_complete(el.sock_connect(sock, ('python.org', 12345)))
+            el.run_until_complete(el.sock_connect(sock, address))
         sock.close()
 
     def testSockAccept(self):
+        el = events.get_event_loop()
         listener = socket.socket()
+        listener = el._selector.wrap_socket(listener)
         listener.setblocking(False)
         listener.bind(('127.0.0.1', 0))
         listener.listen(1)
         client = socket.socket()
         client.connect(listener.getsockname())
-        el = events.get_event_loop()
         f = el.sock_accept(listener)
         conn, addr = el.run_until_complete(f)
         self.assertEqual(conn.gettimeout(), 0)
@@ -446,6 +470,18 @@ if hasattr(selectors, 'EpollSelector'):
 if hasattr(selectors, 'PollSelector'):
     class PollEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
         SELECTOR_CLASS = selectors.PollSelector
+
+
+try:
+    from . import iocpsockets
+except ImportError:
+    pass
+else:
+    class IocpEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
+        SELECTOR_CLASS = iocpsockets.IocpSelector
+
+        def testCreateSslTransport(self):
+            raise unittest.SkipTest("IocpSelector imcompatible with SSL")
 
 
 # Should always exist.

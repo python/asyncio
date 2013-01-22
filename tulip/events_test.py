@@ -200,7 +200,12 @@ class EventLoopTestsMixin:
         r, w = unix_events.socketpair()
         bytes_read = []
         def reader():
-            data = r.recv(1024)
+            try:
+                data = r.recv(1024)
+            except BlockingIOError:
+                # Spurious readiness notifications are possible
+                # at least on Linux -- see man select.
+                return
             if data:
                 bytes_read.append(data)
             else:
@@ -218,7 +223,12 @@ class EventLoopTestsMixin:
         r, w = unix_events.socketpair()
         bytes_read = []
         def reader():
-            data = r.recv(1024)
+            try:
+                data = r.recv(1024)
+            except BlockingIOError:
+                # Spurious readiness notifications are possible
+                # at least on Linux -- see man select.
+                return
             if data:
                 bytes_read.append(data)
             else:

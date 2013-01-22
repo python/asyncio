@@ -357,6 +357,7 @@ class UnixEventLoop(events.EventLoop):
         for family, type, proto, cname, address in infos:
             sock = socket.socket(family=family, type=type, proto=proto)
             try:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 sock.bind(address)
             except socket.error as exc:
                 sock.close()

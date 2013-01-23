@@ -85,7 +85,11 @@ class StreamReader:
                     self.buffer.appendleft(tail)
                 self.line_count -= 1
                 break
-        return b''.join(parts)
+        
+        line = b''.join(parts)
+        self.byte_count -= len(line)
+
+        return line
 
     @tasks.coroutine
     def read(self, n=-1):

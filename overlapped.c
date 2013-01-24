@@ -504,14 +504,14 @@ Overlapped_WSARecv(OverlappedObject *self, PyObject *args)
 {
     HANDLE handle;
     DWORD size;
-    DWORD flags;
+    DWORD flags = 0;
     DWORD nread;
     PyObject *buf;
     WSABUF wsabuf;
     int ret;
     DWORD err;
 
-    if (!PyArg_ParseTuple(args, F_HANDLE F_DWORD F_DWORD,
+    if (!PyArg_ParseTuple(args, F_HANDLE F_DWORD "|" F_DWORD,
                           &handle, &size, &flags))
         return NULL;
 

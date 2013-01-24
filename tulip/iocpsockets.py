@@ -31,25 +31,32 @@ class IocpSocket:
         return getattr(self._sock, name)
 
     def listen(self, backlog):
-        self._state = 'listening'
         self._sock.listen(backlog)
+        self._state = 'listening'
 
     def send(self, buf):
-        # if self._state != 'connected':
-        #     raise ValueError('socket is in state %r' % self._state)
         if self._pending[EVENT_WRITE]:
             raise BlockingIOError(errno.EAGAIN, 'try again')
+
         res = self._result[EVENT_WRITE]
         if res and not res[0]:
+            self._result[EVENT_WRITE] = None
             raise res[1]
-        ov = Overlapped(0)
-        ov.WSASend(self._fd, buf, 0)
+
+        try:
+            return self._sock.send(buf)
+        except BlockingIOError:
+            pass
+
         def callback():
             self._sock._decref_socketios()
             if ov.getresult() < len(buf):
                 # partial writes only happen if something has broken
                 raise RuntimeError('partial write -- should not get here')
-        self._sock._io_refs += 1
+
+        ov = Overlapped(0)
+        ov.WSASend(self._fd, buf, 0)
+        self._sock._io_refs += 1        # prevent real close till send complete
         if ov.pending:
             self._selector._defer(self, ov, EVENT_WRITE, callback)
         else:
@@ -57,45 +64,45 @@ class IocpSocket:
         return len(buf)
 
     def recv(self, length):
-        # if self._state != 'connected':
-        #     raise ValueError('socket is in state %r' % self._state)
         if self._pending[EVENT_READ]:
             raise BlockingIOError(errno.EAGAIN, 'try again')
-        if length <= 0:
-            if length < 0:
-                raise ValueError('negative length')
-            return b''
+
         res = self._result[EVENT_READ]
-        if res:
-            success, value = self._result[EVENT_READ]
-            if not success:
-                raise value
-            if length < len(value):
-                value = value[:length]
-                self._result[EVENT_READ] = (True, res[length:])
-            else:
-                self._result[EVENT_READ] = None
-            return value
+        if res and not res[0]:
+            self._result[EVENT_READ] = None
+            raise res[1]
+
+        try:
+            return self._sock.recv(length)
+        except BlockingIOError:
+            pass
+
+        # a zero length read will block till socket is readable
         ov = Overlapped(0)
-        ov.WSARecv(self._fd, length, 0)
+        ov.WSARecv(self._fd, 0, 0)
         if ov.pending:
             self._selector._defer(self, ov, EVENT_READ, ov.getresult)
             raise BlockingIOError(errno.EAGAIN, 'try again')
         else:
-            return ov.getresult()
+            return self._sock.recv(length)
 
     def connect(self, address):
         if self._state != 'unknown':
             raise ValueError('socket is in state %r' % self._state)
+
         self._state = 'connecting'
         BindLocal(self._fd, len(address))
         ov = Overlapped(0)
+
         try:
             ov.ConnectEx(self._fd, address)
         except OSError as e:
             if e.winerror == 10022:
                 raise ConnectionRefusedError(
                     errno.ECONNREFUSED, e.strerror, None, e.winerror)
+            else:
+                raise
+
         def callback():
             try:
                 ov.getresult(False)
@@ -108,6 +115,7 @@ class IocpSocket:
                 raise
             else:
                 self._state = 'connected'
+
         if ov.pending:
             self._selector._defer(self, ov, EVENT_WRITE, callback)
             raise BlockingIOError(errno.EINPROGRESS, 'connect in progress')
@@ -128,25 +136,30 @@ class IocpSocket:
     def accept(self):
         if self._state != 'listening':
             raise ValueError('socket is in state %r' % self._state)
-        if self._result[EVENT_READ]:
+
+        res = self._result[EVENT_READ]
+        if res:
             success, value = self._result[EVENT_READ]
             self._result[EVENT_READ] = None
             if success:
                 return value
             else:
                 raise value
+
         if self._pending[EVENT_READ]:
             raise BlockingIOError(errno.EAGAIN, 'try again')
-        conn = socket.socket(self.family, self.type, self.proto)
-        conn = self._selector.wrap_socket(conn)
-        ov = Overlapped(0)
-        ov.AcceptEx(self._fd, conn.fileno())
+
         def callback():
             ov.getresult(False)
             conn._sock.setsockopt(
                 socket.SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT, self._fd)
             conn._state = 'connected'
-            return conn, conn.getpeername()         # XXX
+            return conn, conn.getpeername()
+
+        conn = socket.socket(self.family, self.type, self.proto)
+        conn = self._selector.wrap_socket(conn)
+        ov = Overlapped(0)
+        ov.AcceptEx(self._fd, conn.fileno())
         if ov.pending:
             self._selector._defer(self, ov, EVENT_READ, callback)
             raise BlockingIOError(errno.EAGAIN, 'try again')
@@ -169,6 +182,7 @@ class IocpSelector(_BaseSelector):
         self._fd_to_fileobj = weakref.WeakValueDictionary()
 
     def wrap_socket(self, sock):
+        sock.setblocking(False)
         return IocpSocket(self, sock)
 
     def _defer(self, sock, ov, flag, callback):
@@ -191,7 +205,6 @@ class IocpSelector(_BaseSelector):
                 while self._address_to_info:
                     status = GetQueuedCompletionStatus(self._iocp, 1000)
                     if status is None:
-                        print(self._address_to_info)
                         continue
                     self._address_to_info.pop(status[3], None)
             finally:
@@ -199,6 +212,7 @@ class IocpSelector(_BaseSelector):
                 self._iocp = None
 
     def select(self, timeout=None):
+        # XXX currently this is O(n) where n is number of registered fds
         results = {}
         for fd, key in self._fd_to_key.items():
             fileobj = self._fd_to_fileobj[fd]

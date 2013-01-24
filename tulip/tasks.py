@@ -106,11 +106,13 @@ class Task(futures.Future):
                 super().cancel()
             else:
                 self.set_exception(exc)
+                logging.exception('Exception in task')
         except BaseException as exc:
             if self._must_cancel:
                 super().cancel()
             else:
                 self.set_exception(exc)
+                logging.exception('BaseException in task')
             raise
         else:
             # XXX No check for self._must_cancel here?

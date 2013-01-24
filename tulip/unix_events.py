@@ -675,6 +675,8 @@ class UnixEventLoop(events.EventLoop):
         if not (1 <= sig < signal.NSIG):
             raise ValueError('sig {} out of range(1, {})'.format(sig,
                                                                  signal.NSIG))
+        if sys.platform == 'win32':
+            raise RuntimeError('Signals are not really supported on Windows')
 
     def _add_callback(self, handler):
         """Add a Handler to ready or scheduled."""

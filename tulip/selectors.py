@@ -210,6 +210,10 @@ class _BaseSelector:
             logging.warn('No key found for fd %r', fd)
             return None
 
+    def wrap_socket(self, sock):
+        """Return sock or a wrapper for sock compatible with selector"""
+        return sock
+
 
 class SelectSelector(_BaseSelector):
     """Select-based selector."""

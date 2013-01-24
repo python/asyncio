@@ -121,7 +121,10 @@ def main():
     rooturl = sys.argv[1]
     c = Crawler(rooturl)
     loop = tulip.get_event_loop()
-    loop.add_signal_handler(signal.SIGINT, loop.stop)
+    try:
+        loop.add_signal_handler(signal.SIGINT, loop.stop)
+    except RuntimeError:
+        pass
     loop.run_forever()
     print('todo:', len(c.todo))
     print('busy:', len(c.busy))

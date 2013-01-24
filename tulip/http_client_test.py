@@ -70,7 +70,7 @@ class StreamReaderTest(unittest.TestCase):
         self.assertEqual(
             len(self.DATA) - len(b'line1\n') - len(b'line2\nl'),
             stream.byte_count)
-        
+
 
 if __name__ == '__main__':
     unittest.main()

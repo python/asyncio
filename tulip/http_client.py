@@ -85,7 +85,7 @@ class StreamReader:
                     self.buffer.appendleft(tail)
                 self.line_count -= 1
                 break
-        
+
         line = b''.join(parts)
         self.byte_count -= len(line)
 

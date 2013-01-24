@@ -46,8 +46,20 @@ class IocpSocket:
         try:
             return self._sock.send(buf)
         except BlockingIOError:
-            pass
+            return self._send(buf)
 
+    def sendall(self, buf):
+        if self._pending[EVENT_WRITE]:
+            raise BlockingIOError(errno.EAGAIN, 'try again')
+
+        res = self._result[EVENT_WRITE]
+        if res and not res[0]:
+            self._result[EVENT_WRITE] = None
+            raise res[1]
+
+        return self._send(buf)
+
+    def _send(self, buf):
         def callback():
             self._sock._decref_socketios()
             if ov.getresult() < len(buf):
@@ -165,8 +177,6 @@ class IocpSocket:
             raise BlockingIOError(errno.EAGAIN, 'try again')
         else:
             return callback()
-
-    sendall = send
 
     # XXX how do we deal with shutdown?
     # XXX connect_ex, makefile, ...?

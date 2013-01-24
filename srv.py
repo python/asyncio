@@ -2,7 +2,7 @@
 
 import email.message
 import email.parser
-import gc
+import os
 import re
 
 import tulip
@@ -21,8 +21,30 @@ class HttpServer(tulip.Protocol):
     def handle_request(self):
         line = yield from self.reader.readline()
         print('request line', line)
-        match = re.match(rb'GET (\S+) HTTP/(1.\d)\r?\n\Z', line)
+        match = re.match(rb'([A-Z]+) (\S+) HTTP/(1.\d)\r?\n\Z', line)
         if not match:
+            self.transport.close()
+            return
+        method, path, version = match.groups()
+        print('method = {!r}; path = {!r}; version = {!r}'.format(method, path, version))
+        try:
+            path = path.decode('ascii')
+        except UnicodeError as exc:
+            print('not ascii', repr(path), exc)
+            path = None
+        else:
+            if not (path.isprintable() and path.startswith('/')) or '/.' in path:
+                print('bad path', repr(path))
+                path = None
+            else:
+                path = '.' + path
+                if not os.path.exists(path):
+                    print('no file', repr(path))
+                    path = None
+                else:
+                    isdir = os.path.isdir(path)
+        if not path:
+            self.transport.write(b'HTTP/1.0 404 Not found\r\n\r\n')
             self.transport.close()
             return
         lines = []
@@ -36,10 +58,33 @@ class HttpServer(tulip.Protocol):
                 break
         parser = email.parser.BytesHeaderParser()
         headers = parser.parsebytes(b''.join(lines))
-        self.transport.write(b'HTTP/1.0 200 Ok\r\n'
-                             b'Content-type: text/plain\r\n'
-                             b'\r\n'
-                             b'Hello world.\r\n')
+        write = self.transport.write
+        write(b'HTTP/1.0 200 Ok\r\n')
+        if isdir:
+            write(b'Content-type: text/html\r\n')
+        else:
+             write(b'Content-type: text/plain\r\n')
+        write(b'\r\n')
+        if isdir:
+            write(b'<ul>\r\n')
+            for name in sorted(os.listdir(path)):
+                if name.isprintable() and not name.startswith('.'):
+                    try:
+                        bname = name.encode('ascii')
+                    except UnicodeError as exc:
+                        pass
+                    else:
+                        if os.path.isdir(os.path.join(path, name)):
+                            write(b'<li><a href="' + bname + b'/">' + bname + b'/</a></li>\r\n')
+                        else:
+                            write(b'<li><a href="' + bname + b'">' + bname + b'</a></li>\r\n')
+            write(b'</ul>')
+        else:
+            try:
+                with open(path, 'rb') as f:
+                    write(f.read())
+            except OSError as exc:
+                write(b'Cannot open\r\n')
         self.transport.close()
 
     def connection_made(self, transport):

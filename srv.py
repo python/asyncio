@@ -25,12 +25,12 @@ class HttpServer(tulip.Protocol):
         if not match:
             self.transport.close()
             return
-        method, path, version = match.groups()
-        print('method = {!r}; path = {!r}; version = {!r}'.format(method, path, version))
+        bmethod, bpath, bversion = match.groups()
+        print('method = {!r}; path = {!r}; version = {!r}'.format(bmethod, bpath, bversion))
         try:
-            path = path.decode('ascii')
+            path = bpath.decode('ascii')
         except UnicodeError as exc:
-            print('not ascii', repr(path), exc)
+            print('not ascii', repr(bpath), exc)
             path = None
         else:
             if not (path.isprintable() and path.startswith('/')) or '/.' in path:
@@ -59,6 +59,12 @@ class HttpServer(tulip.Protocol):
         parser = email.parser.BytesHeaderParser()
         headers = parser.parsebytes(b''.join(lines))
         write = self.transport.write
+        if isdir and not path.endswith('/'):
+            write(b'HTTP/1.0 302 Redirected\r\n'
+                  b'URI: ' + bpath + b'/\r\n'
+                  b'Location: ' + bpath + b'/\r\n'
+                  b'\r\n')
+            return
         write(b'HTTP/1.0 200 Ok\r\n')
         if isdir:
             write(b'Content-type: text/html\r\n')

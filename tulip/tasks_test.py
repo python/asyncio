@@ -6,6 +6,7 @@ import unittest
 from . import events
 from . import futures
 from . import tasks
+from . import test_utils
 
 
 class Dummy:
@@ -15,14 +16,16 @@ class Dummy:
         pass
 
 
-class TaskTests(unittest.TestCase):
+class TaskTests(test_utils.LogTrackingTestCase):
 
     def setUp(self):
+        super().setUp()
         self.event_loop = events.new_event_loop()
         events.set_event_loop(self.event_loop)
 
     def tearDown(self):
         self.event_loop.close()
+        super().tearDown()
 
     def testTaskClass(self):
         @tasks.coroutine
@@ -100,6 +103,7 @@ class TaskTests(unittest.TestCase):
         # TODO: Test different return_when values.
 
     def testWaitWithException(self):
+        self.suppress_log_errors()
         a = tasks.sleep(0.1)
         @tasks.coroutine
         def sleeper():
@@ -164,6 +168,7 @@ class TaskTests(unittest.TestCase):
         self.assertTrue(t1-t0 <= 0.01)
 
     def testAsCompletedWithTimeout(self):
+        self.suppress_log_errors()
         a = tasks.sleep(0.1, 'a')
         b = tasks.sleep(0.15, 'b')
         @tasks.coroutine

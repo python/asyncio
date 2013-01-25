@@ -7,7 +7,7 @@ from . import http_client
 from . import tasks
 
 
-class StreamReaderTest(unittest.TestCase):
+class StreamReaderTests(unittest.TestCase):
 
     DATA = b'line1\nline2\nline3\n'
 
@@ -70,7 +70,7 @@ class StreamReaderTest(unittest.TestCase):
         self.assertEqual(
             len(self.DATA) - len(b'line1\n') - len(b'line2\nl'),
             stream.byte_count)
-        
+
 
 if __name__ == '__main__':
     unittest.main()

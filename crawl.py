@@ -23,11 +23,11 @@ class Crawler:
         self.done = {}
         self.tasks = set()
         self.waiter = None
-        self.add(self.rooturl)  # Set initial work.
+        self.addurl(self.rooturl, '')  # Set initial work.
         self.run()  # Kick off work.
 
-    def add(self, url):
-        url = urllib.parse.urljoin(self.rooturl, url)
+    def addurl(self, url, parenturl):
+        url = urllib.parse.urljoin(parenturl, url)
         url, frag = urllib.parse.urldefrag(url)
         if not url.startswith(self.rooturl):
             return False
@@ -88,7 +88,7 @@ class Crawler:
             if status[:3] in ('301', '302'):
                 # Redirect.
                 u = headers.get('location') or headers.get('uri')
-                if self.add(u):
+                if self.addurl(u, url):
                     print('  ', url, status[:3], 'redirect to', u, end=END)
             elif status.startswith('200'):
                 ctype = headers.get_content_type()
@@ -101,7 +101,7 @@ class Crawler:
                         urls = re.findall(r'(?i)href=["\']?([^\s"\'<>]+)',
                                           line)
                         for u in urls:
-                            if self.add(u):
+                            if self.addurl(u, url):
                                 print('  ', url, 'href to', u, end=END)
             ok = True
         finally:

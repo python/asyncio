@@ -1,5 +1,6 @@
 """Tests for subprocess_transport.py."""
 
+import logging
 import unittest
 
 from . import events
@@ -17,7 +18,7 @@ class MyProto(protocols.Protocol):
         self.state = 'CONNECTED'
         transport.write_eof()
     def data_received(self, data):
-        print('received:', data)
+        logging.info('received: %r', data)
         assert self.state == 'CONNECTED', self.state
         self.nbytes += len(data)
     def eof_received(self):

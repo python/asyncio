@@ -15,6 +15,7 @@ e.g. 'tulip.events_test.PolicyTests.testPolicy'.
 
 # Originally written by Beech Horn (for NDB).
 
+import logging
 import os
 import re
 import sys
@@ -74,6 +75,17 @@ def main():
     elif arg and not arg.startswith('-'):
       patterns.append(arg)
   tests = load_tests(includes, excludes)
+  logger = logging.getLogger()
+  if v == 0:
+    logger.setLevel(logging.CRITICAL)
+  elif v == 1:
+    logger.setLevel(logging.ERROR)
+  elif v == 2:
+    logger.setLevel(logging.WARNING)
+  elif v == 3:
+    logger.setLevel(logging.INFO)
+  elif v >= 4:
+    logger.setLevel(logging.DEBUG)
   result = unittest.TextTestRunner(verbosity=v).run(tests)
   sys.exit(not result.wasSuccessful())
 

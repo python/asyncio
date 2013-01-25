@@ -5,6 +5,7 @@ import logging
 import unittest
 
 from . import events
+from . import tasks
 
 def sync(gen):
     @functools.wraps(gen)

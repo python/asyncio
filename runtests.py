@@ -15,15 +15,18 @@ e.g. 'tulip.events_test.PolicyTests.testPolicy'.
 
 # Originally written by Beech Horn (for NDB).
 
+import os
 import re
 import sys
 import unittest
 
 assert sys.version >= '3.3', 'Please use Python 3.3 or higher.'
 
+TULIP_DIR = os.path.join(os.path.dirname(__file__), 'tulip')
+
+
 def load_tests(includes=(), excludes=()):
-  mods = ['events', 'futures', 'tasks']
-  test_mods = ['%s_test' % name for name in mods]
+  test_mods = [f[:-3] for f in os.listdir(TULIP_DIR) if f.endswith('_test.py')]
   tulip = __import__('tulip', fromlist=test_mods)
 
   loader = unittest.TestLoader()

@@ -27,6 +27,12 @@ TULIP_DIR = os.path.join(os.path.dirname(__file__), 'tulip')
 
 def load_tests(includes=(), excludes=()):
   test_mods = [f[:-3] for f in os.listdir(TULIP_DIR) if f.endswith('_test.py')]
+
+  if sys.platform == 'win32':
+    try:
+      test_mods.remove('subprocess_test')
+    except ValueError:
+      pass
   tulip = __import__('tulip', fromlist=test_mods)
 
   loader = unittest.TestLoader()

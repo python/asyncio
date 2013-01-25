@@ -1,7 +1,19 @@
 """Utilities shared by tests."""
 
+import functools
 import logging
 import unittest
+
+from . import events
+
+def sync(gen):
+    @functools.wraps(gen)
+    def wrapper(*args, **kw):
+        return events.get_event_loop().run_until_complete(
+            tasks.Task(gen(*args, **kw)))
+
+    return wrapper
+
 
 class LogTrackingTestCase(unittest.TestCase):
 

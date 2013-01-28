@@ -8,7 +8,6 @@
 import errno
 import logging
 import os
-import heapq
 import sys
 import socket
 import time
@@ -17,6 +16,7 @@ import weakref
 from _winapi import CloseHandle
 
 from . import transports
+from . import events
 
 from .futures import Future
 from .unix_events import BaseEventLoop, _StopError
@@ -92,19 +92,10 @@ class IocpProactor:
         if obj not in self._registered:
             self._registered.add(obj)
             CreateIoCompletionPort(obj.fileno(), self._iocp, 0, 0)
-            SetFileCompletionNotificationModes(obj.fileno(),
-                FILE_SKIP_COMPLETION_PORT_ON_SUCCESS)
 
     def _register(self, ov, obj, callback):
         f = Future()
-        if ov.error == ERROR_IO_PENDING:
-            # we must prevent ov and obj from being garbage collected
-            self._cache[ov.address] = (f, ov, obj, callback)
-        else:
-            try:
-                f.set_result(callback())
-            except Exception as e:
-                f.set_exception(e)
+        self._cache[ov.address] = (f, ov, obj, callback)
         return f
 
     def _get_accept_socket(self):
@@ -125,115 +116,33 @@ class IocpProactor:
             status = GetQueuedCompletionStatus(self._iocp, ms)
             if status is None:
                 return
-            f, ov, obj, callback = self._cache.pop(status[3])
+            address = status[3]
+            f, ov, obj, callback = self._cache.pop(address)
             try:
                 value = callback()
             except OSError as e:
-                if f is None:
-                    sys.excepthook(*sys.exc_info())
-                    continue
                 f.set_exception(e)
                 self._results.append(f)
             else:
-                if f is None:
-                    continue
                 f.set_result(value)
                 self._results.append(f)
             ms = 0
 
-    def close(self, *, CloseHandle=CloseHandle):
-        for address, (f, ov, obj, callback) in list(self._cache.items()):
+    def close(self):
+        for (f, ov, obj, callback) in self._cache.values():
             try:
                 ov.cancel()
             except OSError:
                 pass
 
         while self._cache:
-            status = GetQueuedCompletionStatus(self._iocp, 1000)
-            if status is None:
+            if not self._poll(1000):
                 logging.debug('taking long time to close proactor')
-                continue
-            self._cache.pop(status[3])
 
+        self._results = []
         if self._iocp is not None:
             CloseHandle(self._iocp)
             self._iocp = None
-
-
-class IocpEventLoop(BaseEventLoop):
-
-    @staticmethod
-    def SocketTransport(*args, **kwds):
-        return _IocpSocketTransport(*args, **kwds)
-
-    @staticmethod
-    def SslTransport(*args, **kwds):
-        raise NotImplementedError
-
-    def __init__(self, proactor=None):
-        super().__init__()
-        if proactor is None:
-            proactor = IocpProactor()
-            logging.debug('Using proactor: %s', proactor.__class__.__name__)
-        self._proactor = proactor
-        self._selector = proactor   # convenient alias
-        self._readers = {}
-        self._make_self_pipe()
-
-    def close(self):
-        if self._proactor is not None:
-            self._proactor.close()
-            self._proactor = None
-        self._ssock.close()
-        self._csock.close()
-
-    def _make_self_pipe(self):
-        # A self-socket, really. :-)
-        self._ssock, self._csock = socketpair()
-        self._ssock.setblocking(False)
-        self._csock.setblocking(False)
-        def loop(f=None):
-            if f and f.exception():
-                self.close()
-                raise f.exception()
-            f = self._proactor.recv(self._ssock, 4096)
-            self.call_soon(f.add_done_callback, loop)
-        self.call_soon(loop)
-
-    def _write_to_self(self):
-        self._proactor.send(self._csock, b'x')
-
-    def _start_serving(self, protocol_factory, sock):
-        def loop(f=None):
-            try:
-                if f:
-                    conn, addr = f.result()
-                    protocol = protocol_factory()
-                    transport = self.SocketTransport(self, conn, protocol)
-                f = self._proactor.accept(sock)
-                self.call_soon(f.add_done_callback, loop)
-            except OSError as exc:
-                if exc.errno in _TRYAGAIN:
-                    self.call_soon(loop)
-                else:
-                    sock.close()
-                    logging.exception('Accept failed')
-        self.call_soon(loop)
-
-    def sock_recv(self, sock, n):
-        return self._proactor.recv(sock, n)
-
-    def sock_sendall(self, sock, data):
-        return self._proactor.send(sock, data)
-
-    def sock_connect(self, sock, address):
-        return self._proactor.connect(sock, address)
-
-    def sock_accept(self, sock):
-        return self._proactor.accept(sock)
-
-    def _process_events(self, event_list):
-        pass    # XXX hard work currently done in poll
 
 
 class _IocpSocketTransport(transports.Transport):
@@ -243,6 +152,7 @@ class _IocpSocketTransport(transports.Transport):
         self._sock = sock
         self._protocol = protocol
         self._buffer = []
+        self._read_fut = None
         self._write_fut = None
         self._closing = False  # Set when close() called.
         self._event_loop.call_soon(self._protocol.connection_made, self)
@@ -252,42 +162,44 @@ class _IocpSocketTransport(transports.Transport):
 
     def _loop_reading(self, f=None):
         try:
+            assert f is self._read_fut
             if f:
                 data = f.result()
                 if not data:
                     self._event_loop.call_soon(self._protocol.eof_received)
+                    self._read_fut = None
                     return
                 self._event_loop.call_soon(self._protocol.data_received, data)
-            f = self._event_loop._proactor.recv(self._sock, 4096)
-            self._event_loop.call_soon(
-                f.add_done_callback, self._loop_reading)
+            self._read_fut = self._event_loop._proactor.recv(self._sock, 4096)
         except OSError as exc:
             self._fatal_error(exc)
+        else:
+            self._read_fut.add_done_callback(self._loop_reading)
 
     def write(self, data):
         assert isinstance(data, bytes)
         assert not self._closing
         if not data:
             return
+        self._buffer.append(data)
+        if not self._write_fut:
+            self._loop_writing()
 
-        if self._write_fut is not None:
-            self._buffer.append(data)
-            return
-
-        def callback(f):
-            if f.exception():
-                self._fatal_error(f.exception())
-            # XXX should check for partial write
+    def _loop_writing(self, f=None):
+        try:
+            assert f is self._write_fut
+            if f:
+                f.result()
             data = b''.join(self._buffer)
-            if data:
-                self._buffer = []
-                self._write_fut = self._event_loop._proactor.send(
-                    self._sock, data)
-                assert f is self._write_fut
+            self._buffer = []
+            if not data:
                 self._write_fut = None
-
-        self._write_fut = self._event_loop._proactor.send(self._sock, data)
-        self._write_fut.add_done_callback(callback)
+                return
+            self._write_fut = self._event_loop._proactor.send(self._sock, data)
+        except OSError as exc:
+            self._fatal_error(exc)
+        else:
+            self._write_fut.add_done_callback(self._loop_writing)
 
     # TODO: write_eof(), can_write_eof().
 
@@ -305,8 +217,8 @@ class _IocpSocketTransport(transports.Transport):
         logging.exception('Fatal error for %s', self)
         if self._write_fut:
             self._write_fut.cancel()
-        # if self._read_fut:            # XXX
-        #     self._read_fut.cancel()
+        if self._read_fut:            # XXX
+            self._read_fut.cancel()
         self._write_fut = self._read_fut = None
         self._buffer = []
         self._event_loop.call_soon(self._call_connection_lost, exc)
@@ -316,3 +228,82 @@ class _IocpSocketTransport(transports.Transport):
             self._protocol.connection_lost(exc)
         finally:
             self._sock.close()
+
+
+class IocpEventLoop(BaseEventLoop):
+
+    SocketTransport = _IocpSocketTransport
+
+    @staticmethod
+    def SslTransport(*args, **kwds):
+        raise NotImplementedError
+
+    def __init__(self, proactor=None):
+        super().__init__()
+        if proactor is None:
+            proactor = IocpProactor()
+            logging.debug('Using proactor: %s', proactor.__class__.__name__)
+        self._proactor = proactor
+        self._selector = proactor   # convenient alias
+        self._make_self_pipe()
+
+    def close(self):
+        if self._proactor is not None:
+            self._proactor.close()
+            self._proactor = None
+            self._selector = None
+        self._ssock.close()
+        self._csock.close()
+
+    def sock_recv(self, sock, n):
+        return self._proactor.recv(sock, n)
+
+    def sock_sendall(self, sock, data):
+        return self._proactor.send(sock, data)
+
+    def sock_connect(self, sock, address):
+        return self._proactor.connect(sock, address)
+
+    def sock_accept(self, sock):
+        return self._proactor.accept(sock)
+
+    def _make_self_pipe(self):
+        # A self-socket, really. :-)
+        self._ssock, self._csock = socketpair()
+        self._ssock.setblocking(False)
+        self._csock.setblocking(False)
+        def loop(f=None):
+            try:
+                if f:
+                    f.result()      # may raise
+                f = self._proactor.recv(self._ssock, 4096)
+            except:
+                self.close()
+                raise
+            else:
+                f.add_done_callback(loop)
+        self.call_soon(loop)
+
+    def _write_to_self(self):
+        self._csock.send(b'x')
+
+    def _start_serving(self, protocol_factory, sock):
+        def loop(f=None):
+            try:
+                if f:
+                    conn, addr = f.result()
+                    protocol = protocol_factory()
+                    transport = self.SocketTransport(self, conn, protocol)
+                f = self._proactor.accept(sock)
+            except OSError as exc:
+                if exc.errno in _TRYAGAIN:
+                    self.call_soon(loop)
+                else:
+                    sock.close()
+                    logging.exception('Accept failed')
+            else:
+                f.add_done_callback(loop)
+        self.call_soon(loop)
+
+    def _process_events(self, event_list):
+        pass    # XXX hard work currently done in poll

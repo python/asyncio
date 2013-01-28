@@ -122,11 +122,11 @@ PyDoc_STRVAR(
 static PyObject *
 overlapped_GetQueuedCompletionStatus(PyObject *self, PyObject *args)
 {
-    HANDLE CompletionPort;
-    DWORD Milliseconds;
-    DWORD NumberOfBytes;
-    ULONG_PTR CompletionKey;
+    HANDLE CompletionPort = NULL;
+    DWORD NumberOfBytes = 0;
+    ULONG_PTR CompletionKey = 0;
     OVERLAPPED *Overlapped = NULL;
+    DWORD Milliseconds;
     DWORD err;
     BOOL ret;
 

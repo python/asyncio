@@ -133,4 +133,7 @@ def main():
 
 
 if __name__ == '__main__':
+    from tulip import events, iocp_events
+    el = iocp_events.IocpEventLoop()
+    events.set_event_loop(el)
     main()

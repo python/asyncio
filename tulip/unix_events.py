@@ -72,54 +72,13 @@ def _raise_stop_error():
     raise _StopError
 
 
-class UnixEventLoop(events.EventLoop):
-    """Unix event loop.
+class BaseEventLoop(events.EventLoop):
 
-    See events.EventLoop for API specification.
-    """
-
-    def __init__(self, selector=None):
-        super().__init__()
-        if selector is None:
-            # pick the best selector class for the platform
-            selector = selectors.Selector()
-            logging.debug('Using selector: %s', selector.__class__.__name__)
-        self._selector = selector
+    def __init__(self):
         self._ready = collections.deque()
         self._scheduled = []
         self._default_executor = None
         self._signal_handlers = {}
-        self._make_self_pipe()
-
-    def close(self):
-        if self._selector is not None:
-            self._selector.close()
-            self._selector = None
-        self._ssock.close()
-        self._csock.close()
-
-    def _make_self_pipe(self):
-        # A self-socket, really. :-)
-        self._ssock, self._csock = socketpair()
-        self._ssock.setblocking(False)
-        self._csock.setblocking(False)
-        self.add_reader(self._ssock.fileno(), self._read_from_self)
-
-    def _read_from_self(self):
-        try:
-            self._ssock.recv(1)
-        except socket.error as exc:
-            if exc.errno in _TRYAGAIN:
-                return
-            raise  # Halp!
-
-    def _write_to_self(self):
-        try:
-            self._csock.send(b'x')
-        except socket.error as exc:
-            if exc.errno in _TRYAGAIN:
-                return
-            raise  # Halp!
 
     def run(self):
         """Run the event loop until nothing left to do or stop() called.
@@ -246,16 +205,6 @@ class UnixEventLoop(events.EventLoop):
         self._write_to_self()
         return handler
 
-    def wrap_future(self, future):
-        """XXX"""
-        if isinstance(future, futures.Future):
-            return future  # Don't wrap our own type of Future.
-        new_future = futures.Future()
-        future.add_done_callback(
-            lambda future:
-                self.call_soon_threadsafe(new_future._copy_state, future))
-        return new_future
-
     def run_in_executor(self, executor, callback, *args):
         if isinstance(callback, events.Handler):
             assert not args
@@ -322,10 +271,10 @@ class UnixEventLoop(events.EventLoop):
         waiter = futures.Future()
         if ssl:
             sslcontext = None if isinstance(ssl, bool) else ssl
-            transport = _UnixSslTransport(self, sock, protocol, sslcontext,
+            transport = self.SslTransport(self, sock, protocol, sslcontext,
                                           waiter)
         else:
-            transport = _UnixSocketTransport(self, sock, protocol, waiter)
+            transport = self.SocketTransport(self, sock, protocol, waiter)
         yield from waiter
         return transport, protocol
 
@@ -358,9 +307,153 @@ class UnixEventLoop(events.EventLoop):
             raise exceptions[0]
         sock.listen(backlog)
         sock.setblocking(False)
+        self._start_serving(protocol_factory, sock)
+        return sock
+
+    def _add_callback(self, handler):
+        """Add a Handler to ready or scheduled."""
+        if handler.cancelled:
+            return
+        if handler.when is None:
+            self._ready.append(handler)
+        else:
+            heapq.heappush(self._scheduled, handler)
+
+    def wrap_future(self, future):
+        """XXX"""
+        if isinstance(future, futures.Future):
+            return future  # Don't wrap our own type of Future.
+        new_future = futures.Future()
+        future.add_done_callback(
+            lambda future:
+                self.call_soon_threadsafe(new_future._copy_state, future))
+        return new_future
+
+    def _run_once(self, timeout=None):
+        """Run one full iteration of the event loop.
+
+        This calls all currently ready callbacks, polls for I/O,
+        schedules the resulting callbacks, and finally schedules
+        'call_later' callbacks.
+        """
+        # TODO: Break each of these into smaller pieces.
+        # TODO: Refactor to separate the callbacks from the readers/writers.
+        # TODO: An alternative API would be to do the *minimal* amount
+        # of work, e.g. one callback or one I/O poll.
+
+        # Remove delayed calls that were cancelled from head of queue.
+        while self._scheduled and self._scheduled[0].cancelled:
+            heapq.heappop(self._scheduled)
+
+        # Inspect the poll queue.  If there's exactly one selectable
+        # file descriptor, it's the self-pipe, and if there's nothing
+        # scheduled, we should ignore it.
+        if self._selector.registered_count() > 1 or self._scheduled:
+            if self._ready:
+                timeout = 0
+            elif self._scheduled:
+                # Compute the desired timeout.
+                when = self._scheduled[0].when
+                deadline = max(0, when - time.monotonic())
+                if timeout is None:
+                    timeout = deadline
+                else:
+                    timeout = min(timeout, deadline)
+
+            t0 = time.monotonic()
+            event_list = self._selector.select(timeout)
+            t1 = time.monotonic()
+            argstr = '' if timeout is None else ' %.3f' % timeout
+            if t1-t0 >= 1:
+                level = logging.INFO
+            else:
+                level = logging.DEBUG
+            logging.log(level, 'poll%s took %.3f seconds', argstr, t1-t0)
+            self._process_events(event_list)
+
+        # Handle 'later' callbacks that are ready.
+        now = time.monotonic()
+        while self._scheduled:
+            handler = self._scheduled[0]
+            if handler.when > now:
+                break
+            handler = heapq.heappop(self._scheduled)
+            self._ready.append(handler)
+
+        # This is the only place where callbacks are actually *called*.
+        # All other places just add them to ready.
+        # Note: We run all currently scheduled callbacks, but not any
+        # callbacks scheduled by callbacks run this time around --
+        # they will be run the next time (after another I/O poll).
+        # Use an idiom that is threadsafe without using locks.
+        ntodo = len(self._ready)
+        for i in range(ntodo):
+            handler = self._ready.popleft()
+            if not handler.cancelled:
+                try:
+                    handler.callback(*handler.args)
+                except Exception:
+                    logging.exception('Exception in callback %s %r',
+                                      handler.callback, handler.args)
+
+
+class UnixEventLoop(BaseEventLoop):
+    """Unix event loop.
+
+    See events.EventLoop for API specification.
+    """
+
+    @staticmethod
+    def SocketTransport(event_loop, sock, protocol, waiter=None):
+        return _UnixSocketTransport(event_loop, sock, protocol, waiter)
+
+    @staticmethod
+    def SslTransport(event_loop, rawsock, protocol, sslcontext, waiter):
+        return _UnixSslTransport(event_loop, rawsock, protocol,
+                                 sslcontext, waiter)
+
+    def __init__(self, selector=None):
+        super().__init__()
+        if selector is None:
+            # pick the best selector class for the platform
+            selector = selectors.Selector()
+            logging.debug('Using selector: %s', selector.__class__.__name__)
+        self._selector = selector
+        self._make_self_pipe()
+
+    def close(self):
+        if self._selector is not None:
+            self._selector.close()
+            self._selector = None
+        self._ssock.close()
+        self._csock.close()
+
+    def _make_self_pipe(self):
+        # A self-socket, really. :-)
+        self._ssock, self._csock = socketpair()
+        self._ssock.setblocking(False)
+        self._csock.setblocking(False)
+        self.add_reader(self._ssock.fileno(), self._read_from_self)
+
+    def _read_from_self(self):
+        try:
+            self._ssock.recv(1)
+        except socket.error as exc:
+            if exc.errno in _TRYAGAIN:
+                return
+            raise  # Halp!
+
+    def _write_to_self(self):
+        try:
+            self._csock.send(b'x')
+        except socket.error as exc:
+            if exc.errno in _TRYAGAIN:
+                return
+            raise  # Halp!
+
+    def _start_serving(self, protocol_factory, sock):
         self.add_reader(sock.fileno(), self._accept_connection,
                         protocol_factory, sock)
-        return sock
 
     def _accept_connection(self, protocol_factory, sock):
         try:
@@ -593,6 +686,24 @@ class UnixEventLoop(events.EventLoop):
             else:
                 self.add_reader(fd, self._sock_accept, fut, True, sock)
 
+    def _process_events(self, event_list):
+        for fileobj, mask, (reader, writer, connector) in event_list:
+            if mask & selectors.EVENT_READ and reader is not None:
+                if reader.cancelled:
+                    self.remove_reader(fileobj)
+                else:
+                    self._add_callback(reader)
+            if mask & selectors.EVENT_WRITE and writer is not None:
+                if writer.cancelled:
+                    self.remove_writer(fileobj)
+                else:
+                    self._add_callback(writer)
+            elif mask & selectors.EVENT_CONNECT and connector is not None:
+                if connector.cancelled:
+                    self.remove_connector(fileobj)
+                else:
+                    self._add_callback(connector)
+
     def add_signal_handler(self, sig, callback, *args):
         """Add a handler for a signal.  UNIX only.
 
@@ -678,97 +789,6 @@ class UnixEventLoop(events.EventLoop):
         if sys.platform == 'win32':
             raise RuntimeError('Signals are not really supported on Windows')
 
-    def _add_callback(self, handler):
-        """Add a Handler to ready or scheduled."""
-        if handler.cancelled:
-            return
-        if handler.when is None:
-            self._ready.append(handler)
-        else:
-            heapq.heappush(self._scheduled, handler)
-
-    def _run_once(self, timeout=None):
-        """Run one full iteration of the event loop.
-
-        This calls all currently ready callbacks, polls for I/O,
-        schedules the resulting callbacks, and finally schedules
-        'call_later' callbacks.
-        """
-        # TODO: Break each of these into smaller pieces.
-        # TODO: Refactor to separate the callbacks from the readers/writers.
-        # TODO: An alternative API would be to do the *minimal* amount
-        # of work, e.g. one callback or one I/O poll.
-
-        # Remove delayed calls that were cancelled from head of queue.
-        while self._scheduled and self._scheduled[0].cancelled:
-            heapq.heappop(self._scheduled)
-
-        # Inspect the poll queue.  If there's exactly one selectable
-        # file descriptor, it's the self-pipe, and if there's nothing
-        # scheduled, we should ignore it.
-        if self._selector.registered_count() > 1 or self._scheduled:
-            if self._ready:
-                timeout = 0
-            elif self._scheduled:
-                # Compute the desired timeout.
-                when = self._scheduled[0].when
-                deadline = max(0, when - time.monotonic())
-                if timeout is None:
-                    timeout = deadline
-                else:
-                    timeout = min(timeout, deadline)
-
-            t0 = time.monotonic()
-            event_list = self._selector.select(timeout)
-            t1 = time.monotonic()
-            argstr = '' if timeout is None else ' %.3f' % timeout
-            if t1-t0 >= 1:
-                level = logging.INFO
-            else:
-                level = logging.DEBUG
-            logging.log(level, 'poll%s took %.3f seconds', argstr, t1-t0)
-            for fileobj, mask, (reader, writer, connector) in event_list:
-                if mask & selectors.EVENT_READ and reader is not None:
-                    if reader.cancelled:
-                        self.remove_reader(fileobj)
-                    else:
-                        self._add_callback(reader)
-                if mask & selectors.EVENT_WRITE and writer is not None:
-                    if writer.cancelled:
-                        self.remove_writer(fileobj)
-                    else:
-                        self._add_callback(writer)
-                elif mask & selectors.EVENT_CONNECT and connector is not None:
-                    if connector.cancelled:
-                        self.remove_connector(fileobj)
-                    else:
-                        self._add_callback(connector)
-
-        # Handle 'later' callbacks that are ready.
-        now = time.monotonic()
-        while self._scheduled:
-            handler = self._scheduled[0]
-            if handler.when > now:
-                break
-            handler = heapq.heappop(self._scheduled)
-            self._ready.append(handler)
-
-        # This is the only place where callbacks are actually *called*.
-        # All other places just add them to ready.
-        # Note: We run all currently scheduled callbacks, but not any
-        # callbacks scheduled by callbacks run this time around --
-        # they will be run the next time (after another I/O poll).
-        # Use an idiom that is threadsafe without using locks.
-        ntodo = len(self._ready)
-        for i in range(ntodo):
-            handler = self._ready.popleft()
-            if not handler.cancelled:
-                try:
-                    handler.callback(*handler.args)
-                except Exception:
-                    logging.exception('Exception in callback %s %r',
-                                      handler.callback, handler.args)
-
 
 class _UnixSocketTransport(transports.Transport):
 
@@ -795,7 +815,6 @@ class _UnixSocketTransport(transports.Transport):
             else:
                 self._event_loop.remove_reader(self._sock.fileno())
                 self._event_loop.call_soon(self._protocol.eof_received)
-
 
     def write(self, data):
         assert isinstance(data, bytes)

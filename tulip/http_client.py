@@ -70,7 +70,6 @@ class StreamReader:
             assert self.waiter is None
             self.waiter = futures.Future()
             yield from self.waiter
-            continue
         parts = []
         while self.buffer:
             data = self.buffer.popleft()

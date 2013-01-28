@@ -439,6 +439,18 @@ if sys.platform == 'win32':
             return iocp_events.IocpEventLoop()
         def testCreateSslTransport(self):
             raise unittest.SkipTest("IocpEventLoop imcompatible with SSL")
+        def testReaderCallback(self):
+            raise unittest.SkipTest("IocpEventLoop does not have add_reader()")
+        def testReaderCallbackCancel(self):
+            raise unittest.SkipTest("IocpEventLoop does not have add_reader()")
+        def testReaderCallbackWithHandler(self):
+            raise unittest.SkipTest("IocpEventLoop does not have add_reader()")
+        def testWriterCallback(self):
+            raise unittest.SkipTest("IocpEventLoop does not have add_writer()")
+        def testWriterCallbackCancel(self):
+            raise unittest.SkipTest("IocpEventLoop does not have add_writer()")
+        def testWriterCallbackWithHandler(self):
+            raise unittest.SkipTest("IocpEventLoop does not have add_writer()")
 
 # Should always exist.
 class SelectEventLoopTests(EventLoopTestsMixin, unittest.TestCase):

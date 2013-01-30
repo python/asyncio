@@ -170,7 +170,7 @@ class EventLoopTestsMixin:
 
     def test_reader_callback(self):
         el = events.get_event_loop()
-        r, w = selector_events.socketpair()
+        r, w = el._socketpair()
         bytes_read = []
         def reader():
             try:
@@ -193,7 +193,7 @@ class EventLoopTestsMixin:
 
     def test_reader_callback_with_handler(self):
         el = events.get_event_loop()
-        r, w = selector_events.socketpair()
+        r, w = el._socketpair()
         bytes_read = []
         def reader():
             try:
@@ -217,7 +217,7 @@ class EventLoopTestsMixin:
 
     def test_reader_callback_cancel(self):
         el = events.get_event_loop()
-        r, w = selector_events.socketpair()
+        r, w = el._socketpair()
         bytes_read = []
         def reader():
             try:
@@ -239,7 +239,7 @@ class EventLoopTestsMixin:
 
     def test_writer_callback(self):
         el = events.get_event_loop()
-        r, w = selector_events.socketpair()
+        r, w = el._socketpair()
         w.setblocking(False)
         el.add_writer(w.fileno(), w.send, b'x'*(256*1024))
         def remove_writer():
@@ -253,7 +253,7 @@ class EventLoopTestsMixin:
 
     def test_writer_callback_with_handler(self):
         el = events.get_event_loop()
-        r, w = selector_events.socketpair()
+        r, w = el._socketpair()
         w.setblocking(False)
         handler = events.Handler(None, w.send, (b'x'*(256*1024),))
         self.assertEqual(el.add_writer(w.fileno(), handler), handler)
@@ -268,7 +268,7 @@ class EventLoopTestsMixin:
 
     def test_writer_callback_cancel(self):
         el = events.get_event_loop()
-        r, w = selector_events.socketpair()
+        r, w = el._socketpair()
         w.setblocking(False)
         def sender():
             w.send(b'x'*256)
@@ -422,16 +422,15 @@ class EventLoopTestsMixin:
 
 
 if sys.platform == 'win32':
-    from . import iocp_events
-    from . import selector_events
+    from . import windows_events
 
     class SelectEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
         def create_event_loop(self):
-            return selector_events.SelectorEventLoop(selectors.SelectSelector())
+            return windows_events.SelectorEventLoop()
 
-    class IocpEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
+    class ProactorEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
         def create_event_loop(self):
-            return iocp_events.IocpEventLoop()
+            return windows_events.ProactorEventLoop()
         def test_create_ssl_transport(self):
             raise unittest.SkipTest("IocpEventLoop imcompatible with SSL")
         def test_reader_callback(self):
@@ -453,22 +452,22 @@ else:
     if hasattr(selectors, 'KqueueSelector'):
         class KqueueEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
             def create_event_loop(self):
-                return unix_events.UnixEventLoop(selectors.KqueueSelector())
+                return unix_events.SelectorEventLoop(selectors.KqueueSelector())
 
     if hasattr(selectors, 'EpollSelector'):
         class EPollEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
             def create_event_loop(self):
-                return unix_events.UnixEventLoop(selectors.EpollSelector())
+                return unix_events.SelectorEventLoop(selectors.EpollSelector())
 
     if hasattr(selectors, 'PollSelector'):
         class PollEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
             def create_event_loop(self):
-                return unix_events.UnixEventLoop(selectors.PollSelector())
+                return unix_events.SelectorEventLoop(selectors.PollSelector())
 
     # Should always exist.
     class SelectEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
         def create_event_loop(self):
-            return unix_events.UnixEventLoop(selectors.SelectSelector())
+            return unix_events.SelectorEventLoop(selectors.SelectSelector())
 
 
 class HandlerTests(unittest.TestCase):

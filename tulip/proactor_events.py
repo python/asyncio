@@ -1,155 +1,18 @@
-#
-# Module implementing the Proactor pattern
-#
-# A proactor is used to initiate asynchronous I/O, and to wait for
-# completion of previously initiated operations.
-#
+"""Event loop using a proactor and related classes.
 
-import errno
+A proactor is a "notify-on-completion" multiplexer.  Currently a
+proactor is only implemented on Windows with IOCP.
+"""
+
 import logging
-import os
-import sys
-import socket
-import time
-import weakref
 
-from _winapi import CloseHandle
 
 from . import base_events
-from . import futures
 from . import transports
-from . import selector_events
 from . import winsocketpair
-from . import _overlapped
 
 
-NULL = 0
-INFINITE = 0xffffffff
-ERROR_CONNECTION_REFUSED = 1225
-ERROR_CONNECTION_ABORTED = 1236
-
-
-class IocpProactor:
-
-    def __init__(self, concurrency=0xffffffff):
-        self._results = []
-        self._iocp = _overlapped.CreateIoCompletionPort(
-            _overlapped.INVALID_HANDLE_VALUE, NULL, 0, concurrency)
-        self._cache = {}
-        self._registered = weakref.WeakSet()
-
-    def registered_count(self):
-        return len(self._cache)
-
-    def select(self, timeout=None):
-        if not self._results:
-            self._poll(timeout)
-        tmp, self._results = self._results, []
-        return tmp
-
-    def recv(self, conn, nbytes, flags=0):
-        self._register_with_iocp(conn)
-        ov = _overlapped.Overlapped(NULL)
-        ov.WSARecv(conn.fileno(), nbytes, flags)
-        return self._register(ov, conn, ov.getresult)
-
-    def send(self, conn, buf, flags=0):
-        self._register_with_iocp(conn)
-        ov = _overlapped.Overlapped(NULL)
-        ov.WSASend(conn.fileno(), buf, flags)
-        return self._register(ov, conn, ov.getresult)
-
-    def accept(self, listener):
-        self._register_with_iocp(listener)
-        conn = self._get_accept_socket()
-        ov = _overlapped.Overlapped(NULL)
-        ov.AcceptEx(listener.fileno(), conn.fileno())
-        def finish_accept():
-            addr = ov.getresult()
-            conn.setsockopt(socket.SOL_SOCKET,
-                            _overlapped.SO_UPDATE_ACCEPT_CONTEXT,
-                            listener.fileno())
-            conn.settimeout(listener.gettimeout())
-            return conn, conn.getpeername()
-        return self._register(ov, listener, finish_accept)
-
-    def connect(self, conn, address):
-        self._register_with_iocp(conn)
-        _overlapped.BindLocal(conn.fileno(), len(address))
-        ov = _overlapped.Overlapped(NULL)
-        ov.ConnectEx(conn.fileno(), address)
-        def finish_connect():
-            try:
-                ov.getresult()
-            except OSError as e:
-                if e.winerror == ERROR_CONNECTION_REFUSED:
-                    raise ConnectionRefusedError(errno.ECONNREFUSED,
-                                                 'connection refused')
-                raise
-            conn.setsockopt(socket.SOL_SOCKET,
-                            _overlapped.SO_UPDATE_CONNECT_CONTEXT,
-                            0)
-            return conn
-        return self._register(ov, conn, finish_connect)
-
-    def _register_with_iocp(self, obj):
-        if obj not in self._registered:
-            self._registered.add(obj)
-            _overlapped.CreateIoCompletionPort(obj.fileno(), self._iocp, 0, 0)
-
-    def _register(self, ov, obj, callback):
-        f = futures.Future()
-        self._cache[ov.address] = (f, ov, obj, callback)
-        return f
-
-    def _get_accept_socket(self):
-        s = socket.socket()
-        s.settimeout(0)
-        return s
-
-    def _poll(self, timeout=None):
-        if timeout is None:
-            ms = INFINITE
-        elif timeout < 0:
-            raise ValueError("negative timeout")
-        else:
-            ms = int(timeout * 1000 + 0.5)
-            if ms >= INFINITE:
-                raise ValueError("timeout too big")
-        while True:
-            status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
-            if status is None:
-                return
-            address = status[3]
-            f, ov, obj, callback = self._cache.pop(address)
-            try:
-                value = callback()
-            except OSError as e:
-                f.set_exception(e)
-                self._results.append(f)
-            else:
-                f.set_result(value)
-                self._results.append(f)
-            ms = 0
-
-    def close(self):
-        for (f, ov, obj, callback) in self._cache.values():
-            try:
-                ov.cancel()
-            except OSError:
-                pass
-
-        while self._cache:
-            if not self._poll(1000):
-                logging.debug('taking long time to close proactor')
-
-        self._results = []
-        if self._iocp is not None:
-            CloseHandle(self._iocp)
-            self._iocp = None
-
-
-class _IocpSocketTransport(transports.Transport):
+class _ProactorSocketTransport(transports.Transport):
 
     def __init__(self, event_loop, sock, protocol, waiter=None):
         self._event_loop = event_loop
@@ -236,19 +99,17 @@ class _IocpSocketTransport(transports.Transport):
             self._sock.close()
 
 
-class IocpEventLoop(base_events.BaseEventLoop):
+class BaseProactorEventLoop(base_events.BaseEventLoop):
 
-    SocketTransport = _IocpSocketTransport
+    SocketTransport = _ProactorSocketTransport
 
     @staticmethod
     def SslTransport(*args, **kwds):
         raise NotImplementedError
 
-    def __init__(self, proactor=None):
+    def __init__(self, proactor):
         super().__init__()
-        if proactor is None:
-            proactor = IocpProactor()
-            logging.debug('Using proactor: %s', proactor.__class__.__name__)
+        logging.debug('Using proactor: %s', proactor.__class__.__name__)
         self._proactor = proactor
         self._selector = proactor   # convenient alias
         self._make_self_pipe()
@@ -273,9 +134,12 @@ class IocpEventLoop(base_events.BaseEventLoop):
     def sock_accept(self, sock):
         return self._proactor.accept(sock)
 
+    def _socketpair(self):
+        raise NotImplementedError
+
     def _make_self_pipe(self):
         # A self-socket, really. :-)
-        self._ssock, self._csock = winsocketpair.socketpair()
+        self._ssock, self._csock = self._socketpair()
         self._ssock.setblocking(False)
         self._csock.setblocking(False)
         def loop(f=None):

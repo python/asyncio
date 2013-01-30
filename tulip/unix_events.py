@@ -1,4 +1,8 @@
+"""Selector eventloop for Unix with signal handling.
+"""
+
 import errno
+import socket
 import sys
 
 try:
@@ -10,18 +14,20 @@ from . import events
 from . import selector_events
 
 
-__all__ = ['UnixEventLoop']
+__all__ = ['SelectorEventLoop']
 
 
 if sys.platform == 'win32':
     raise ImportError('Signals are not really supported on Windows')
 
 
-class UnixEventLoop(selector_events.SelectorEventLoop):
+class SelectorEventLoop(selector_events.BaseSelectorEventLoop):
     """Unix event loop
 
     Adds signal handling to SelectorEventLoop
     """
+    def _socketpair(self):
+        return socket.socketpair()
 
     def add_signal_handler(self, sig, callback, *args):
         """Add a handler for a signal.  UNIX only.

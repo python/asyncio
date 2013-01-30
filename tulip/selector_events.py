@@ -1,16 +1,7 @@
-"""UNIX event loop and related classes.
+"""Event loop using a selector and related classes.
 
-The event loop can be broken up into a selector (the part responsible
-for telling us when file descriptors are ready) and the event loop
-proper, which wraps a selector with functionality for scheduling
-callbacks, immediately or at a given time in the future.
-
-Whenever a public API takes a callback, subsequent positional
-arguments will be passed to the callback if/when it is called.  This
-avoids the proliferation of trivial lambdas implementing closures.
-Keyword arguments for the callback are not supported; this is a
-conscious design decision, leaving the door open for keyword arguments
-to modify the meaning of the API call itself.
+A selector is a "notify-when-ready" multiplexer.  For a subclass which
+also includes support for signal handling, see the unix_events sub-module.
 """
 
 import errno
@@ -28,11 +19,6 @@ from . import futures
 from . import selectors
 from . import transports
 
-try:
-    from socket import socketpair
-except ImportError:
-    assert sys.platform == 'win32'
-    from .winsocketpair import socketpair
 
 # Errno values indicating the connection was disconnected.
 _DISCONNECTED = frozenset((errno.ECONNRESET,
@@ -49,7 +35,7 @@ if sys.platform == 'win32':
     _TRYAGAIN = frozenset(list(_TRYAGAIN) + [errno.WSAEWOULDBLOCK])
 
 
-class SelectorEventLoop(base_events.BaseEventLoop):
+class BaseSelectorEventLoop(base_events.BaseEventLoop):
     """Selector event loop.
 
     See events.EventLoop for API specification.
@@ -67,9 +53,8 @@ class SelectorEventLoop(base_events.BaseEventLoop):
     def __init__(self, selector=None):
         super().__init__()
         if selector is None:
-            # pick the best selector class for the platform
             selector = selectors.Selector()
-            logging.debug('Using selector: %s', selector.__class__.__name__)
+        logging.debug('Using selector: %s', selector.__class__.__name__)
         self._selector = selector
         self._make_self_pipe()
 
@@ -80,9 +65,12 @@ class SelectorEventLoop(base_events.BaseEventLoop):
         self._ssock.close()
         self._csock.close()
 
+    def _socketpair(self):
+        raise NotImplementedError
+
     def _make_self_pipe(self):
         # A self-socket, really. :-)
-        self._ssock, self._csock = socketpair()
+        self._ssock, self._csock = self._socketpair()
         self._ssock.setblocking(False)
         self._csock.setblocking(False)
         self.add_reader(self._ssock.fileno(), self._read_from_self)

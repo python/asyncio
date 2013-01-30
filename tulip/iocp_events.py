@@ -15,7 +15,7 @@ import weakref
 
 from _winapi import CloseHandle
 
-from . import events
+from . import base_events
 from . import futures
 from . import transports
 from . import unix_events
@@ -236,7 +236,7 @@ class _IocpSocketTransport(transports.Transport):
             self._sock.close()
 
 
-class IocpEventLoop(unix_events.BaseEventLoop):
+class IocpEventLoop(base_events.BaseEventLoop):
 
     SocketTransport = _IocpSocketTransport
 

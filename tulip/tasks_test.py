@@ -27,7 +27,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.event_loop.close()
         super().tearDown()
 
-    def testTaskClass(self):
+    def test_task_class(self):
         @tasks.coroutine
         def notmuch():
             yield from []
@@ -37,7 +37,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'ok')
 
-    def testTaskDecorator(self):
+    def test_task_decorator(self):
         @tasks.task
         def notmuch():
             yield from []
@@ -47,7 +47,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'ko')
 
-    def testTaskRepr(self):
+    def test_task_repr(self):
         @tasks.task
         def notmuch():
             yield from []
@@ -64,7 +64,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.event_loop.run_until_complete(t)
         self.assertEqual(repr(t), "Task(<notmuch>)<result='abc'>")
 
-    def testTaskBasics(self):
+    def test_task_basics(self):
         @tasks.task
         def outer():
             a = yield from inner1()
@@ -81,7 +81,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
         t = outer()
         self.assertEqual(self.event_loop.run_until_complete(t), 1042)
 
-    def testWait(self):
+    def test_wait(self):
         a = tasks.sleep(0.1)
         b = tasks.sleep(0.15)
         @tasks.coroutine
@@ -102,7 +102,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertTrue(t1-t0 <= 0.01)
         # TODO: Test different return_when values.
 
-    def testWaitWithException(self):
+    def test_wait_with_exception(self):
         self.suppress_log_errors()
         a = tasks.sleep(0.1)
         @tasks.coroutine
@@ -126,7 +126,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
         t1 = time.monotonic()
         self.assertTrue(t1-t0 <= 0.01)
 
-    def testWaitWithTimeout(self):
+    def test_wait_with_timeout(self):
         a = tasks.sleep(0.1)
         b = tasks.sleep(0.15)
         @tasks.coroutine
@@ -140,7 +140,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertTrue(t1-t0 >= 0.1)
         self.assertTrue(t1-t0 <= 0.13)
 
-    def testAsCompleted(self):
+    def test_as_completed(self):
         @tasks.coroutine
         def sleeper(dt, x):
             yield from tasks.sleep(dt)
@@ -167,7 +167,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
         t1 = time.monotonic()
         self.assertTrue(t1-t0 <= 0.01)
 
-    def testAsCompletedWithTimeout(self):
+    def test_as_completed_with_timeout(self):
         self.suppress_log_errors()
         a = tasks.sleep(0.1, 'a')
         b = tasks.sleep(0.15, 'b')
@@ -190,7 +190,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertEqual(res[1][0], 2)
         self.assertTrue(isinstance(res[1][1], futures.TimeoutError))
 
-    def testSleep(self):
+    def test_sleep(self):
         @tasks.coroutine
         def sleeper(dt, arg):
             yield from tasks.sleep(dt/2)
@@ -204,7 +204,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'yeah')
 
-    def testTaskCancelSleepingTask(self):
+    def test_task_cancel_sleeping_task(self):
         sleepfut = None
         @tasks.task
         def sleep(dt):

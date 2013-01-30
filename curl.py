@@ -28,7 +28,11 @@ def main():
 
 
 if __name__ == '__main__':
-    from tulip import events, iocp_events
-    el = iocp_events.IocpEventLoop()
-    events.set_event_loop(el)
+    try:
+        from tulip import events, iocp_events
+    except ImportError:
+        pass
+    else:
+        el = iocp_events.IocpEventLoop()
+        events.set_event_loop(el)
     main()

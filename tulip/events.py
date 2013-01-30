@@ -10,6 +10,7 @@ __all__ = ['EventLoopPolicy', 'DefaultEventLoopPolicy',
            'get_event_loop', 'set_event_loop', 'new_event_loop',
            ]
 
+import sys
 import threading
 
 
@@ -246,8 +247,12 @@ class DefaultEventLoopPolicy(threading.local, EventLoopPolicy):
         loop.
         """
         # TODO: Do something else for Windows.
-        from . import selector_events
-        return selector_events.SelectorEventLoop()
+        if sys.platform == 'win32':
+            from . import selector_events
+            return selector_events.SelectorEventLoop()
+        else:
+            from . import unix_events
+            return unix_events.UnixEventLoop()
 
 
 # Event loop policy.  The policy itself is always global, even if the

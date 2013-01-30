@@ -23,21 +23,26 @@ from . import unix_events
 
 
 class MyProto(protocols.Protocol):
+
     def __init__(self):
         self.state = 'INITIAL'
         self.nbytes = 0
+
     def connection_made(self, transport):
         self.transport = transport
         assert self.state == 'INITIAL', self.state
         self.state = 'CONNECTED'
         transport.write(b'GET / HTTP/1.0\r\nHost: xkcd.com\r\n\r\n')
+
     def data_received(self, data):
         assert self.state == 'CONNECTED', self.state
         self.nbytes += len(data)
+
     def eof_received(self):
         assert self.state == 'CONNECTED', self.state
         self.state = 'EOF'
         self.transport.close()
+
     def connection_lost(self, exc):
         assert self.state in ('CONNECTED', 'EOF'), self.state
         self.state = 'CLOSED'
@@ -53,11 +58,11 @@ class EventLoopTestsMixin:
         self.event_loop.close()
         gc.collect()
 
-    def testRun(self):
+    def test_run(self):
         el = events.get_event_loop()
         el.run()  # Returns immediately.
 
-    def testCallLater(self):
+    def test_call_later(self):
         el = events.get_event_loop()
         results = []
         def callback(arg):
@@ -69,7 +74,7 @@ class EventLoopTestsMixin:
         self.assertEqual(results, ['hello world'])
         self.assertTrue(t1-t0 >= 0.09)
 
-    def testCallRepeatedly(self):
+    def test_call_repeatedly(self):
         el = events.get_event_loop()
         results = []
         def callback(arg):
@@ -79,7 +84,7 @@ class EventLoopTestsMixin:
         el.run()
         self.assertEqual(results, ['ho', 'ho', 'ho'])
 
-    def testCallSoon(self):
+    def test_call_soon(self):
         el = events.get_event_loop()
         results = []
         def callback(arg1, arg2):
@@ -88,7 +93,7 @@ class EventLoopTestsMixin:
         el.run()
         self.assertEqual(results, [('hello', 'world')])
 
-    def testCallSoonWithHandler(self):
+    def test_call_soon_with_handler(self):
         el = events.get_event_loop()
         results = []
         def callback():
@@ -98,7 +103,7 @@ class EventLoopTestsMixin:
         el.run()
         self.assertEqual(results, ['yeah'])
 
-    def testCallSoonThreadsafe(self):
+    def test_call_soon_threadsafe(self):
         el = events.get_event_loop()
         results = []
         def callback(arg):
@@ -115,7 +120,7 @@ class EventLoopTestsMixin:
         self.assertEqual(results, ['hello', 'world'])
         self.assertTrue(t1-t0 >= 0.09)
 
-    def testCallSoonThreadsafeWithHandler(self):
+    def test_call_soon_threadsafe_with_handler(self):
         el = events.get_event_loop()
         results = []
         def callback(arg):
@@ -133,7 +138,7 @@ class EventLoopTestsMixin:
         self.assertEqual(results, ['hello', 'world'])
         self.assertTrue(t1-t0 >= 0.09)
 
-    def testWrapFuture(self):
+    def test_wrap_future(self):
         el = events.get_event_loop()
         def run(arg):
             time.sleep(0.1)
@@ -144,7 +149,7 @@ class EventLoopTestsMixin:
         res = el.run_until_complete(f2)
         self.assertEqual(res, 'oi')
 
-    def testRunInExecutor(self):
+    def test_run_in_executor(self):
         el = events.get_event_loop()
         def run(arg):
             time.sleep(0.1)
@@ -153,7 +158,7 @@ class EventLoopTestsMixin:
         res = el.run_until_complete(f2)
         self.assertEqual(res, 'yo')
 
-    def testRunInExecutorWithHandler(self):
+    def test_run_in_executor_with_handler(self):
         el = events.get_event_loop()
         def run(arg):
             time.sleep(0.1)
@@ -163,7 +168,7 @@ class EventLoopTestsMixin:
         res = el.run_until_complete(f2)
         self.assertEqual(res, 'yo')
 
-    def testReaderCallback(self):
+    def test_reader_callback(self):
         el = events.get_event_loop()
         r, w = unix_events.socketpair()
         bytes_read = []
@@ -186,7 +191,7 @@ class EventLoopTestsMixin:
         el.run()
         self.assertEqual(b''.join(bytes_read), b'abcdef')
 
-    def testReaderCallbackWithHandler(self):
+    def test_reader_callback_with_handler(self):
         el = events.get_event_loop()
         r, w = unix_events.socketpair()
         bytes_read = []
@@ -210,7 +215,7 @@ class EventLoopTestsMixin:
         el.run()
         self.assertEqual(b''.join(bytes_read), b'abcdef')
 
-    def testReaderCallbackCancel(self):
+    def test_reader_callback_cancel(self):
         el = events.get_event_loop()
         r, w = unix_events.socketpair()
         bytes_read = []
@@ -232,7 +237,7 @@ class EventLoopTestsMixin:
         el.run()
         self.assertEqual(b''.join(bytes_read), b'abcdef')
 
-    def testWriterCallback(self):
+    def test_writer_callback(self):
         el = events.get_event_loop()
         r, w = unix_events.socketpair()
         w.setblocking(False)
@@ -246,7 +251,7 @@ class EventLoopTestsMixin:
         r.close()
         self.assertTrue(len(data) >= 200)
 
-    def testWriterCallbackWithHandler(self):
+    def test_writer_callback_with_handler(self):
         el = events.get_event_loop()
         r, w = unix_events.socketpair()
         w.setblocking(False)
@@ -261,7 +266,7 @@ class EventLoopTestsMixin:
         r.close()
         self.assertTrue(len(data) >= 200)
 
-    def testWriterCallbackCancel(self):
+    def test_writer_callback_cancel(self):
         el = events.get_event_loop()
         r, w = unix_events.socketpair()
         w.setblocking(False)
@@ -275,7 +280,7 @@ class EventLoopTestsMixin:
         r.close()
         self.assertTrue(data == b'x'*256)
 
-    def testSockClientOps(self):
+    def test_sock_client_ops(self):
         el = events.get_event_loop()
         sock = socket.socket()
         sock.setblocking(False)
@@ -287,7 +292,7 @@ class EventLoopTestsMixin:
         sock.close()
         self.assertTrue(data.startswith(b'HTTP/1.1 302 Found\r\n'))
 
-    def testSockClientFail(self):
+    def test_sock_client_fail(self):
         el = events.get_event_loop()
         sock = socket.socket()
         sock.setblocking(False)
@@ -297,7 +302,7 @@ class EventLoopTestsMixin:
             el.run_until_complete(el.sock_connect(sock, address))
         sock.close()
 
-    def testSockAccept(self):
+    def test_sock_accept(self):
         el = events.get_event_loop()
         listener = socket.socket()
         listener.setblocking(False)
@@ -315,7 +320,7 @@ class EventLoopTestsMixin:
         listener.close()
 
     @unittest.skipUnless(hasattr(signal, 'SIGKILL'), 'No SIGKILL')
-    def testAddSignalHandler(self):
+    def test_add_signal_handler(self):
         caught = 0
         def my_handler():
             nonlocal caught
@@ -349,7 +354,7 @@ class EventLoopTestsMixin:
         self.assertFalse(el.remove_signal_handler(signal.SIGINT))
 
     @unittest.skipIf(sys.platform == 'win32', 'Unix only')
-    def testCancelSignalHandler(self):
+    def test_cancel_signal_handler(self):
         # Cancelling the handler should remove it (eventually).
         caught = 0
         def my_handler():
@@ -363,7 +368,7 @@ class EventLoopTestsMixin:
         self.assertEqual(caught, 0)
 
     @unittest.skipUnless(hasattr(signal, 'SIGALRM'), 'No SIGALRM')
-    def testSignalHandlingWhileSelecting(self):
+    def test_signal_handling_while_selecting(self):
         # Test with a signal actually arriving during a select() call.
         caught = 0
         def my_handler():
@@ -376,7 +381,7 @@ class EventLoopTestsMixin:
         el.run_forever()
         self.assertEqual(caught, 1)
 
-    def testCreateTransport(self):
+    def test_create_transport(self):
         el = events.get_event_loop()
         # TODO: This depends on xkcd.com behavior!
         f = el.create_connection(MyProto, 'xkcd.com', 80)
@@ -387,7 +392,7 @@ class EventLoopTestsMixin:
         self.assertTrue(pr.nbytes > 0)
 
     @unittest.skipIf(ssl is None, 'No ssl module')
-    def testCreateSslTransport(self):
+    def test_create_ssl_transport(self):
         el = events.get_event_loop()
         # TODO: This depends on xkcd.com behavior!
         f = el.create_connection(MyProto, 'xkcd.com', 443, ssl=True)
@@ -398,7 +403,7 @@ class EventLoopTestsMixin:
         el.run()
         self.assertTrue(pr.nbytes > 0)
 
-    def testStartServing(self):
+    def test_start_serving(self):
         el = events.get_event_loop()
         f = el.start_serving(MyProto, '0.0.0.0', 0)
         sock = el.run_until_complete(f)
@@ -437,19 +442,19 @@ if sys.platform == 'win32':
     class IocpEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
         def create_event_loop(self):
             return iocp_events.IocpEventLoop()
-        def testCreateSslTransport(self):
+        def test_create_ssl_transport(self):
             raise unittest.SkipTest("IocpEventLoop imcompatible with SSL")
-        def testReaderCallback(self):
+        def test_reader_callback(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_reader()")
-        def testReaderCallbackCancel(self):
+        def test_reader_callback_cancel(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_reader()")
-        def testReaderCallbackWithHandler(self):
+        def test_reader_callback_with_handler(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_reader()")
-        def testWriterCallback(self):
+        def test_writer_callback(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_writer()")
-        def testWriterCallbackCancel(self):
+        def test_writer_callback_cancel(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_writer()")
-        def testWriterCallbackWithHandler(self):
+        def test_writer_callback_with_handler(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_writer()")
 
 # Should always exist.
@@ -460,10 +465,10 @@ class SelectEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
 
 class HandlerTests(unittest.TestCase):
 
-    def testHandler(self):
+    def test_handler(self):
         pass
 
-    def testMakeHandler(self):
+    def test_make_handler(self):
         def callback(*args):
             return args
         h1 = events.Handler(None, callback, ())
@@ -473,7 +478,7 @@ class HandlerTests(unittest.TestCase):
 
 class PolicyTests(unittest.TestCase):
 
-    def testPolicy(self):
+    def test_policy(self):
         pass
 
 

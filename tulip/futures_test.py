@@ -11,17 +11,17 @@ def _fakefunc(f):
 
 class FutureTests(unittest.TestCase):
 
-    def testInitialState(self):
+    def test_initial_state(self):
         f = futures.Future()
         self.assertFalse(f.cancelled())
         self.assertFalse(f.running())
         self.assertFalse(f.done())
 
-    def testInitEventLoopPositional(self):
+    def test_init_event_loop_positional(self):
         # Make sure Future does't accept a positional argument
         self.assertRaises(TypeError, futures.Future, 42)
 
-    def testCancel(self):
+    def test_cancel(self):
         f = futures.Future()
         self.assertTrue(f.cancel())
         self.assertTrue(f.cancelled())
@@ -33,7 +33,7 @@ class FutureTests(unittest.TestCase):
         self.assertRaises(futures.InvalidStateError, f.set_exception, None)
         self.assertFalse(f.cancel())
 
-    def testResult(self):
+    def test_result(self):
         f = futures.Future()
         self.assertRaises(futures.InvalidStateError, f.result)
         self.assertRaises(futures.InvalidTimeoutError, f.result, 10)
@@ -48,7 +48,7 @@ class FutureTests(unittest.TestCase):
         self.assertRaises(futures.InvalidStateError, f.set_exception, None)
         self.assertFalse(f.cancel())
 
-    def testException(self):
+    def test_exception(self):
         exc = RuntimeError()
         f = futures.Future()
         self.assertRaises(futures.InvalidStateError, f.exception)
@@ -64,7 +64,7 @@ class FutureTests(unittest.TestCase):
         self.assertRaises(futures.InvalidStateError, f.set_exception, None)
         self.assertFalse(f.cancel())
 
-    def testYieldFromTwice(self):
+    def test_yield_from_twice(self):
         f = futures.Future()
         def fixture():
             yield 'A'
@@ -80,7 +80,7 @@ class FutureTests(unittest.TestCase):
         # The second "yield from f" does not yield f.
         self.assertEqual(next(g), ('C', 42))  # yield 'C', y.
 
-    def testRepr(self):
+    def test_repr(self):
         f_pending = futures.Future()
         self.assertEqual(repr(f_pending), 'Future<PENDING>')
 
@@ -108,7 +108,7 @@ class FutureTests(unittest.TestCase):
         self.assertIn('Future<PENDING, [<function _fakefunc', r)
         self.assertIn('<18 more>', r)
 
-    def testCopyState(self):
+    def test_copy_state(self):
         # Test the internal _copy_state method since it's being directly
         # invoked in other modules.
         f = futures.Future()
@@ -153,7 +153,7 @@ class FutureDoneCallbackTests(unittest.TestCase):
     def _new_future(self):
         return futures.Future(event_loop=_FakeEventLoop())
 
-    def testCallbacksInvokedOnSetResult(self):
+    def test_callbacks_invoked_on_set_result(self):
         bag = []
         f = self._new_future()
         f.add_done_callback(self._make_callback(bag, 42))
@@ -164,7 +164,7 @@ class FutureDoneCallbackTests(unittest.TestCase):
         self.assertEqual(bag, [42, 17])
         self.assertEqual(f.result(), 'foo')
 
-    def testCallbacksInvokedOnSetException(self):
+    def test_callbacks_invoked_on_set_exception(self):
         bag = []
         f = self._new_future()
         f.add_done_callback(self._make_callback(bag, 100))
@@ -175,7 +175,7 @@ class FutureDoneCallbackTests(unittest.TestCase):
         self.assertEqual(bag, [100])
         self.assertEqual(f.exception(), exc)
 
-    def testRemoveDoneCallback(self):
+    def test_remove_done_callback(self):
         bag = []
         f = self._new_future()
         cb1 = self._make_callback(bag, 1)

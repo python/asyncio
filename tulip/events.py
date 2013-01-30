@@ -246,8 +246,8 @@ class DefaultEventLoopPolicy(threading.local, EventLoopPolicy):
         loop.
         """
         # TODO: Do something else for Windows.
-        from . import unix_events
-        return unix_events.UnixEventLoop()
+        from . import selector_events
+        return selector_events.SelectorEventLoop()
 
 
 # Event loop policy.  The policy itself is always global, even if the

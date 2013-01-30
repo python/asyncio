@@ -26,14 +26,16 @@ class HttpServer(tulip.Protocol):
             self.transport.close()
             return
         bmethod, bpath, bversion = match.groups()
-        print('method = {!r}; path = {!r}; version = {!r}'.format(bmethod, bpath, bversion))
+        print('method = {!r}; path = {!r}; version = {!r}'.format(
+            bmethod, bpath, bversion))
         try:
             path = bpath.decode('ascii')
         except UnicodeError as exc:
             print('not ascii', repr(bpath), exc)
             path = None
         else:
-            if not (path.isprintable() and path.startswith('/')) or '/.' in path:
+            if (not (path.isprintable() and path.startswith('/')) or
+                '/.' in path):
                 print('bad path', repr(path))
                 path = None
             else:
@@ -69,7 +71,7 @@ class HttpServer(tulip.Protocol):
         if isdir:
             write(b'Content-type: text/html\r\n')
         else:
-             write(b'Content-type: text/plain\r\n')
+            write(b'Content-type: text/plain\r\n')
         write(b'\r\n')
         if isdir:
             write(b'<ul>\r\n')
@@ -81,9 +83,11 @@ class HttpServer(tulip.Protocol):
                         pass
                     else:
                         if os.path.isdir(os.path.join(path, name)):
-                            write(b'<li><a href="' + bname + b'/">' + bname + b'/</a></li>\r\n')
+                            write(b'<li><a href="' + bname +
+                                  b'/">' + bname + b'/</a></li>\r\n')
                         else:
-                            write(b'<li><a href="' + bname + b'">' + bname + b'</a></li>\r\n')
+                            write(b'<li><a href="' + bname +
+                                  b'">' + bname + b'</a></li>\r\n')
             write(b'</ul>')
         else:
             try:

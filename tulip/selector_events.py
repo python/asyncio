@@ -54,20 +54,20 @@ if sys.platform == 'win32':
     _TRYAGAIN = frozenset(list(_TRYAGAIN) + [errno.WSAEWOULDBLOCK])
 
 
-class UnixEventLoop(base_events.BaseEventLoop):
-    """Unix event loop.
+class SelectorEventLoop(base_events.BaseEventLoop):
+    """Selector event loop.
 
     See events.EventLoop for API specification.
     """
 
     @staticmethod
     def SocketTransport(event_loop, sock, protocol, waiter=None):
-        return _UnixSocketTransport(event_loop, sock, protocol, waiter)
+        return _SelectorSocketTransport(event_loop, sock, protocol, waiter)
 
     @staticmethod
     def SslTransport(event_loop, rawsock, protocol, sslcontext, waiter):
-        return _UnixSslTransport(event_loop, rawsock, protocol,
-                                 sslcontext, waiter)
+        return _SelectorSslTransport(event_loop, rawsock, protocol,
+                                     sslcontext, waiter)
 
     def __init__(self, selector=None):
         super().__init__()
@@ -126,7 +126,7 @@ class UnixEventLoop(base_events.BaseEventLoop):
             logging.exception('Accept failed')
             return
         protocol = protocol_factory()
-        transport = _UnixSocketTransport(self, conn, protocol)
+        transport = self.SocketTransport(self, conn, protocol)
         # It's now up to the protocol to handle the connection.
 
     def add_reader(self, fd, callback, *args):
@@ -447,7 +447,7 @@ class UnixEventLoop(base_events.BaseEventLoop):
             raise RuntimeError('Signals are not really supported on Windows')
 
 
-class _UnixSocketTransport(transports.Transport):
+class _SelectorSocketTransport(transports.Transport):
 
     def __init__(self, event_loop, sock, protocol, waiter=None):
         self._event_loop = event_loop
@@ -543,7 +543,7 @@ class _UnixSocketTransport(transports.Transport):
             self._sock.close()
 
 
-class _UnixSslTransport(transports.Transport):
+class _SelectorSslTransport(transports.Transport):
 
     def __init__(self, event_loop, rawsock, protocol, sslcontext, waiter):
         self._event_loop = event_loop

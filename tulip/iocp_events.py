@@ -18,7 +18,7 @@ from _winapi import CloseHandle
 from . import base_events
 from . import futures
 from . import transports
-from . import unix_events
+from . import selector_events
 from . import winsocketpair
 from . import _overlapped
 

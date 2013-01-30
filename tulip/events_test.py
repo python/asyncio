@@ -421,23 +421,13 @@ class EventLoopTestsMixin:
         client.close()
 
 
-if hasattr(selectors, 'KqueueSelector'):
-    class KqueueEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
-        def create_event_loop(self):
-            return selector_events.SelectorEventLoop(selectors.KqueueSelector())
-
-if hasattr(selectors, 'EpollSelector'):
-    class EPollEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
-        def create_event_loop(self):
-            return selector_events.SelectorEventLoop(selectors.EpollSelector())
-
-if hasattr(selectors, 'PollSelector'):
-    class PollEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
-        def create_event_loop(self):
-            return selector_events.SelectorEventLoop(selectors.PollSelector())
-
 if sys.platform == 'win32':
     from . import iocp_events
+    from . import selector_events
+
+    class SelectEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
+        def create_event_loop(self):
+            return selector_events.SelectorEventLoop(selectors.SelectSelector())
 
     class IocpEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
         def create_event_loop(self):
@@ -457,10 +447,28 @@ if sys.platform == 'win32':
         def test_writer_callback_with_handler(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_writer()")
 
-# Should always exist.
-class SelectEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
-    def create_event_loop(self):
-        return selector_events.SelectorEventLoop(selectors.SelectSelector())
+else:
+    from . import unix_events
+
+    if hasattr(selectors, 'KqueueSelector'):
+        class KqueueEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
+            def create_event_loop(self):
+                return unix_events.UnixEventLoop(selectors.KqueueSelector())
+
+    if hasattr(selectors, 'EpollSelector'):
+        class EPollEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
+            def create_event_loop(self):
+                return unix_events.UnixEventLoop(selectors.EpollSelector())
+
+    if hasattr(selectors, 'PollSelector'):
+        class PollEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
+            def create_event_loop(self):
+                return unix_events.UnixEventLoop(selectors.PollSelector())
+
+    # Should always exist.
+    class SelectEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
+        def create_event_loop(self):
+            return unix_events.UnixEventLoop(selectors.SelectSelector())
 
 
 class HandlerTests(unittest.TestCase):

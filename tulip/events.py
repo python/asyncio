@@ -5,7 +5,7 @@ Beyond the PEP:
 """
 
 __all__ = ['EventLoopPolicy', 'DefaultEventLoopPolicy',
-           'EventLoop', 'Handler', 'make_handler',
+           'AbstractEventLoop', 'Handler', 'make_handler',
            'get_event_loop_policy', 'set_event_loop_policy',
            'get_event_loop', 'set_event_loop', 'new_event_loop',
            ]
@@ -73,7 +73,7 @@ def make_handler(when, callback, args):
     return Handler(when, callback, args)
 
 
-class EventLoop:
+class AbstractEventLoop:
     """Abstract event loop."""
 
     # TODO: Rename run() -> run_until_idle(), run_forever() -> run().
@@ -236,7 +236,7 @@ class DefaultEventLoopPolicy(threading.local, EventLoopPolicy):
 
     def set_event_loop(self, event_loop):
         """Set the event loop."""
-        assert event_loop is None or isinstance(event_loop, EventLoop)
+        assert event_loop is None or isinstance(event_loop, AbstractEventLoop)
         self._event_loop = event_loop
 
     def new_event_loop(self):

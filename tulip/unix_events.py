@@ -72,7 +72,7 @@ def _raise_stop_error():
     raise _StopError
 
 
-class BaseEventLoop(events.EventLoop):
+class BaseEventLoop(events.AbstractEventLoop):
 
     def __init__(self):
         self._ready = collections.deque()

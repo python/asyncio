@@ -248,11 +248,11 @@ class DefaultEventLoopPolicy(threading.local, EventLoopPolicy):
         """
         # TODO: Do something else for Windows.
         if sys.platform == 'win32':
-            from . import selector_events
-            return selector_events.SelectorEventLoop()
+            from . import windows_events
+            return windows_events.SelectorEventLoop()
         else:
             from . import unix_events
-            return unix_events.UnixEventLoop()
+            return unix_events.SelectorEventLoop()
 
 
 # Event loop policy.  The policy itself is always global, even if the

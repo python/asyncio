@@ -36,6 +36,11 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.event_loop.run()
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'ok')
+        self.assertIs(t._event_loop, self.event_loop)
+
+        event_loop = events.new_event_loop()
+        t = tasks.Task(notmuch(), event_loop=event_loop)
+        self.assertIs(t._event_loop, event_loop)
 
     def test_task_decorator(self):
         @tasks.task
@@ -80,6 +85,34 @@ class TaskTests(test_utils.LogTrackingTestCase):
             return 1000
         t = outer()
         self.assertEqual(self.event_loop.run_until_complete(t), 1042)
+
+    def test_cancel(self):
+        @tasks.task
+        def task():
+            yield from tasks.sleep(10.0)
+            return 12
+
+        t = task()
+        self.event_loop.call_soon(t.cancel)
+        self.assertRaises(
+            futures.CancelledError,
+            self.event_loop.run_until_complete, t)
+        self.assertTrue(t.done())
+        self.assertFalse(t.cancel())
+
+    def test_cancel_in_coro(self):
+        @tasks.coroutine
+        def task():
+            t.cancel()
+            yield from []
+            return 12
+
+        t = tasks.Task(task())
+        self.assertRaises(
+            futures.CancelledError,
+            self.event_loop.run_until_complete, t)
+        self.assertTrue(t.done())
+        self.assertFalse(t.cancel())
 
     def test_wait(self):
         a = tasks.sleep(0.1)

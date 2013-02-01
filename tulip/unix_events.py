@@ -284,78 +284,101 @@ class UnixEventLoop(events.EventLoop):
         return self.run_in_executor(None, socket.getnameinfo, sockaddr, flags)
 
     @tasks.task
-    def create_connection(self, protocol_factory, host, port, *, ssl=False,
-                          family=0, proto=0, flags=0):
+    def create_connection(self, protocol_factory, host=None, port=None, *,
+                          ssl=False, family=0, proto=0, flags=0, sock=None):
         """XXX"""
-        infos = yield from self.getaddrinfo(host, port,
-                                            family=family,
-                                            type=socket.SOCK_STREAM,
-                                            proto=proto, flags=flags)
-        if not infos:
-            raise socket.error('getaddrinfo() returned empty list')
-        exceptions = []
-        for family, type, proto, cname, address in infos:
-            sock = None
-            try:
-                sock = socket.socket(family=family, type=type, proto=proto)
-                sock.setblocking(False)
-                yield self.sock_connect(sock, address)
-            except socket.error as exc:
-                if sock is not None:
-                    sock.close()
-                exceptions.append(exc)
+        if host is not None or port is not None:
+            if sock is not None:
+                raise ValueError(
+                    "host, port and sock can not be specified at the same time")
+
+            infos = yield from self.getaddrinfo(
+                host, port, family=family,
+                type=socket.SOCK_STREAM, proto=proto, flags=flags)
+
+            if not infos:
+                raise socket.error('getaddrinfo() returned empty list')
+
+            exceptions = []
+            for family, type, proto, cname, address in infos:
+                sock = None
+                try:
+                    sock = socket.socket(family=family, type=type, proto=proto)
+                    sock.setblocking(False)
+                    yield self.sock_connect(sock, address)
+                except socket.error as exc:
+                    if sock is not None:
+                        sock.close()
+                    exceptions.append(exc)
+                else:
+                    break
             else:
-                break
-        else:
-            if len(exceptions) == 1:
-                raise exceptions[0]
-            else:
-                # If they all have the same str(), raise one.
-                model = str(exceptions[0])
-                if all(str(exc) == model for exc in exceptions):
+                if len(exceptions) == 1:
                     raise exceptions[0]
-                # Raise a combined exception so the user can see all
-                # the various error messages.
-                raise socket.error('Multiple exceptions: {}'.format(
-                    ', '.join(str(exc) for exc in exceptions)))
+                else:
+                    # If they all have the same str(), raise one.
+                    model = str(exceptions[0])
+                    if all(str(exc) == model for exc in exceptions):
+                        raise exceptions[0]
+                    # Raise a combined exception so the user can see all
+                    # the various error messages.
+                    raise socket.error('Multiple exceptions: {}'.format(
+                        ', '.join(str(exc) for exc in exceptions)))
+
+        elif sock is None:
+            raise ValueError(
+                "host and port was not specified and no sock specified")
+
         protocol = protocol_factory()
         waiter = futures.Future()
         if ssl:
             sslcontext = None if isinstance(ssl, bool) else ssl
-            transport = _UnixSslTransport(self, sock, protocol, sslcontext,
-                                          waiter)
+            transport = _UnixSslTransport(
+                self, sock, protocol, sslcontext, waiter)
         else:
-            transport = _UnixSocketTransport(self, sock, protocol, waiter)
+            transport = _UnixSocketTransport(
+                self, sock, protocol, waiter)
+
         yield from waiter
         return transport, protocol
 
     # TODO: Or create_server()?
     @tasks.task
-    def start_serving(self, protocol_factory, host, port, *,
-                      family=0, proto=0, flags=0,
-                      backlog=100):
+    def start_serving(self, protocol_factory, host=None, port=None, *,
+                      family=0, proto=0, flags=0, backlog=100, sock=None):
         """XXX"""
-        infos = yield from self.getaddrinfo(host, port,
-                                            family=family,
-                                            type=socket.SOCK_STREAM,
-                                            proto=proto, flags=flags)
-        if not infos:
-            raise socket.error('getaddrinfo() returned empty list')
-        # TODO: Maybe we want to bind every address in the list
-        # instead of the first one that works?
-        exceptions = []
-        for family, type, proto, cname, address in infos:
-            sock = socket.socket(family=family, type=type, proto=proto)
-            try:
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                sock.bind(address)
-            except socket.error as exc:
-                sock.close()
-                exceptions.append(exc)
+        if host is not None or port is not None:
+            if sock is not None:
+                raise ValueError(
+                    "host, port and sock can not be specified at the same time")
+
+            infos = yield from self.getaddrinfo(
+                host, port, family=family,
+                type=socket.SOCK_STREAM, proto=proto, flags=flags)
+
+            if not infos:
+                raise socket.error('getaddrinfo() returned empty list')
+
+            # TODO: Maybe we want to bind every address in the list
+            # instead of the first one that works?
+            exceptions = []
+            for family, type, proto, cname, address in infos:
+                sock = socket.socket(family=family, type=type, proto=proto)
+                try:
+                    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    sock.bind(address)
+                except socket.error as exc:
+                    sock.close()
+                    exceptions.append(exc)
+                else:
+                    break
             else:
-                break
-        else:
-            raise exceptions[0]
+                raise exceptions[0]
+
+        elif sock is None:
+            raise ValueError(
+                "host and port was not specified and no sock specified")
+
         sock.listen(backlog)
         sock.setblocking(False)
         self.add_reader(sock.fileno(), self._accept_connection,

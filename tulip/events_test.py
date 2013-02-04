@@ -552,8 +552,61 @@ class HandlerTests(unittest.TestCase):
 
 class PolicyTests(unittest.TestCase):
 
-    def test_policy(self):
-        pass
+    def test_event_loop_policy(self):
+        policy = events.EventLoopPolicy()
+        self.assertRaises(NotImplementedError, policy.get_event_loop)
+        self.assertRaises(NotImplementedError, policy.set_event_loop, object())
+        self.assertRaises(NotImplementedError, policy.new_event_loop)
+
+    def test_get_event_loop(self):
+        policy = events.DefaultEventLoopPolicy()
+        self.assertIsNone(policy._event_loop)
+
+        event_loop = policy.get_event_loop()
+        self.assertIsInstance(event_loop, events.EventLoop)
+
+        self.assertIs(policy._event_loop, event_loop)
+        self.assertIs(event_loop, policy.get_event_loop())
+
+    @unittest.mock.patch('tulip.events.threading')
+    def test_get_event_loop_thread(self, m_threading):
+        m_t = m_threading.current_thread.return_value = unittest.mock.Mock()
+        m_t.name = 'Thread 1'
+
+        policy = events.DefaultEventLoopPolicy()
+        self.assertIsNone(policy.get_event_loop())
+
+    def test_new_event_loop(self):
+        policy = events.DefaultEventLoopPolicy()
+
+        event_loop = policy.new_event_loop()
+        self.assertIsInstance(event_loop, events.EventLoop)
+
+    def test_set_event_loop(self):
+        policy = events.DefaultEventLoopPolicy()
+        old_event_loop = policy.get_event_loop()
+
+        self.assertRaises(AssertionError, policy.set_event_loop, object())
+
+        event_loop = policy.new_event_loop()
+        policy.set_event_loop(event_loop)
+        self.assertIs(event_loop, policy.get_event_loop())
+        self.assertIsNot(old_event_loop, policy.get_event_loop())
+
+    def test_get_event_loop_policy(self):
+        policy = events.get_event_loop_policy()
+        self.assertIsInstance(policy, events.EventLoopPolicy)
+        self.assertIs(policy, events.get_event_loop_policy())
+
+    def test_set_event_loop_policy(self):
+        self.assertRaises(
+            AssertionError, events.set_event_loop_policy, object())
+
+        old_policy = events.get_event_loop_policy()
+
+        policy = events.DefaultEventLoopPolicy()
+        events.set_event_loop_policy(policy)
+        self.assertIs(policy, events.get_event_loop_policy())
 
 
 if __name__ == '__main__':

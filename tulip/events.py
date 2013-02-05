@@ -5,11 +5,12 @@ Beyond the PEP:
 """
 
 __all__ = ['EventLoopPolicy', 'DefaultEventLoopPolicy',
-           'EventLoop', 'Handler', 'make_handler',
+           'AbstractEventLoop', 'Handler', 'make_handler',
            'get_event_loop_policy', 'set_event_loop_policy',
            'get_event_loop', 'set_event_loop', 'new_event_loop',
            ]
 
+import sys
 import threading
 
 
@@ -93,7 +94,7 @@ def make_handler(when, callback, args):
     return Handler(when, callback, args)
 
 
-class EventLoop:
+class AbstractEventLoop:
     """Abstract event loop."""
 
     # TODO: Rename run() -> run_until_idle(), run_forever() -> run().
@@ -256,7 +257,7 @@ class DefaultEventLoopPolicy(threading.local, EventLoopPolicy):
 
     def set_event_loop(self, event_loop):
         """Set the event loop."""
-        assert event_loop is None or isinstance(event_loop, EventLoop)
+        assert event_loop is None or isinstance(event_loop, AbstractEventLoop)
         self._event_loop = event_loop
 
     def new_event_loop(self):
@@ -266,8 +267,12 @@ class DefaultEventLoopPolicy(threading.local, EventLoopPolicy):
         loop.
         """
         # TODO: Do something else for Windows.
-        from . import unix_events
-        return unix_events.UnixEventLoop()
+        if sys.platform == 'win32':
+            from . import windows_events
+            return windows_events.SelectorEventLoop()
+        else:
+            from . import unix_events
+            return unix_events.SelectorEventLoop()
 
 
 # Event loop policy.  The policy itself is always global, even if the

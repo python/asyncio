@@ -20,7 +20,7 @@ import unittest.mock
 from . import events
 from . import transports
 from . import protocols
-from . import selectors
+from . import selector_events
 from . import test_utils
 from . import unix_events
 
@@ -55,8 +55,7 @@ class EventLoopTestsMixin:
 
     def setUp(self):
         super().setUp()
-        self.selector = self.SELECTOR_CLASS()
-        self.event_loop = unix_events.UnixEventLoop(self.selector)
+        self.event_loop = self.create_event_loop()
         events.set_event_loop(self.event_loop)
 
     def tearDown(self):
@@ -167,7 +166,7 @@ class EventLoopTestsMixin:
         self.assertEqual(res, 'yo')
 
     def test_reader_callback(self):
-        r, w = unix_events.socketpair()
+        r, w = self.event_loop._socketpair()
         bytes_read = []
         def reader():
             try:
@@ -189,7 +188,7 @@ class EventLoopTestsMixin:
         self.assertEqual(b''.join(bytes_read), b'abcdef')
 
     def test_reader_callback_with_handler(self):
-        r, w = unix_events.socketpair()
+        r, w = self.event_loop._socketpair()
         bytes_read = []
         def reader():
             try:
@@ -214,10 +213,13 @@ class EventLoopTestsMixin:
         self.assertEqual(b''.join(bytes_read), b'abcdef')
 
     def test_reader_callback_cancel(self):
-        r, w = unix_events.socketpair()
+        r, w = self.event_loop._socketpair()
         bytes_read = []
         def reader():
-            data = r.recv(1024)
+            try:
+                data = r.recv(1024)
+            except BlockingIOError:
+                return
             if data:
                 bytes_read.append(data)
             if sum(len(b) for b in bytes_read) >= 6:
@@ -232,7 +234,7 @@ class EventLoopTestsMixin:
         self.assertEqual(b''.join(bytes_read), b'abcdef')
 
     def test_writer_callback(self):
-        r, w = unix_events.socketpair()
+        r, w = self.event_loop._socketpair()
         w.setblocking(False)
         self.event_loop.add_writer(w.fileno(), w.send, b'x'*(256*1024))
         def remove_writer():
@@ -245,7 +247,7 @@ class EventLoopTestsMixin:
         self.assertTrue(len(data) >= 200)
 
     def test_writer_callback_with_handler(self):
-        r, w = unix_events.socketpair()
+        r, w = self.event_loop._socketpair()
         w.setblocking(False)
         handler = events.Handler(None, w.send, (b'x'*(256*1024),))
         self.assertIs(self.event_loop.add_writer(w.fileno(), handler), handler)
@@ -259,7 +261,7 @@ class EventLoopTestsMixin:
         self.assertTrue(len(data) >= 200)
 
     def test_writer_callback_cancel(self):
-        r, w = unix_events.socketpair()
+        r, w = self.event_loop._socketpair()
         w.setblocking(False)
         def sender():
             w.send(b'x'*256)
@@ -275,8 +277,9 @@ class EventLoopTestsMixin:
         sock = socket.socket()
         sock.setblocking(False)
         # TODO: This depends on python.org behavior!
+        address = socket.getaddrinfo('python.org', 80, socket.AF_INET)[0][4]
         self.event_loop.run_until_complete(
-            self.event_loop.sock_connect(sock, ('python.org', 80)))
+            self.event_loop.sock_connect(sock, address))
         self.event_loop.run_until_complete(
             self.event_loop.sock_sendall(sock, b'GET / HTTP/1.0\r\n\r\n'))
         data = self.event_loop.run_until_complete(
@@ -288,12 +291,14 @@ class EventLoopTestsMixin:
         sock = socket.socket()
         sock.setblocking(False)
         # TODO: This depends on python.org behavior!
+        address = socket.getaddrinfo('python.org', 12345, socket.AF_INET)[0][4]
         with self.assertRaises(ConnectionRefusedError):
             self.event_loop.run_until_complete(
-                self.event_loop.sock_connect(sock, ('python.org', 12345)))
+                self.event_loop.sock_connect(sock, address))
         sock.close()
 
     def test_sock_accept(self):
+        el = events.get_event_loop()
         listener = socket.socket()
         listener.setblocking(False)
         listener.bind(('127.0.0.1', 0))
@@ -479,7 +484,7 @@ class EventLoopTestsMixin:
         self.assertRaises(
             socket.error, self.event_loop.run_until_complete, f)
 
-    @unittest.mock.patch('tulip.unix_events.socket')
+    @unittest.mock.patch('tulip.base_events.socket')
     def test_start_serving_cant_bind(self, m_socket):
         class Err(socket.error):
             pass
@@ -513,28 +518,60 @@ class EventLoopTestsMixin:
         self.assertTrue(sock.close.called)
 
 
-if hasattr(selectors, 'KqueueSelector'):
-    class KqueueEventLoopTests(EventLoopTestsMixin,
+if sys.platform == 'win32':
+    from . import windows_events
+
+    class SelectEventLoopTests(EventLoopTestsMixin,
                                test_utils.LogTrackingTestCase):
-        SELECTOR_CLASS = selectors.KqueueSelector
+        def create_event_loop(self):
+            return windows_events.SelectorEventLoop()
 
+    class ProactorEventLoopTests(EventLoopTestsMixin,
+                                 test_utils.LogTrackingTestCase):
+        def create_event_loop(self):
+            return windows_events.ProactorEventLoop()
+        def test_create_ssl_transport(self):
+            raise unittest.SkipTest("IocpEventLoop imcompatible with SSL")
+        def test_reader_callback(self):
+            raise unittest.SkipTest("IocpEventLoop does not have add_reader()")
+        def test_reader_callback_cancel(self):
+            raise unittest.SkipTest("IocpEventLoop does not have add_reader()")
+        def test_reader_callback_with_handler(self):
+            raise unittest.SkipTest("IocpEventLoop does not have add_reader()")
+        def test_writer_callback(self):
+            raise unittest.SkipTest("IocpEventLoop does not have add_writer()")
+        def test_writer_callback_cancel(self):
+            raise unittest.SkipTest("IocpEventLoop does not have add_writer()")
+        def test_writer_callback_with_handler(self):
+            raise unittest.SkipTest("IocpEventLoop does not have add_writer()")
 
-if hasattr(selectors, 'EpollSelector'):
-    class EPollEventLoopTests(EventLoopTestsMixin,
-                              test_utils.LogTrackingTestCase):
-        SELECTOR_CLASS = selectors.EpollSelector
+else:
+    from . import selectors
+    from . import unix_events
 
+    if hasattr(selectors, 'KqueueSelector'):
+        class KqueueEventLoopTests(EventLoopTestsMixin,
+                                   test_utils.LogTrackingTestCase):
+            def create_event_loop(self):
+                return unix_events.SelectorEventLoop(selectors.KqueueSelector())
 
-if hasattr(selectors, 'PollSelector'):
-    class PollEventLoopTests(EventLoopTestsMixin,
-                             test_utils.LogTrackingTestCase):
-        SELECTOR_CLASS = selectors.PollSelector
+    if hasattr(selectors, 'EpollSelector'):
+        class EPollEventLoopTests(EventLoopTestsMixin,
+                                  test_utils.LogTrackingTestCase):
+            def create_event_loop(self):
+                return unix_events.SelectorEventLoop(selectors.EpollSelector())
 
+    if hasattr(selectors, 'PollSelector'):
+        class PollEventLoopTests(EventLoopTestsMixin,
+                                 test_utils.LogTrackingTestCase):
+            def create_event_loop(self):
+                return unix_events.SelectorEventLoop(selectors.PollSelector())
 
-# Should always exist.
-class SelectEventLoopTests(EventLoopTestsMixin,
-                           test_utils.LogTrackingTestCase):
-    SELECTOR_CLASS = selectors.SelectSelector
+    # Should always exist.
+    class SelectEventLoopTests(EventLoopTestsMixin,
+                               test_utils.LogTrackingTestCase):
+        def create_event_loop(self):
+            return unix_events.SelectorEventLoop(selectors.SelectSelector())
 
 
 class HandlerTests(unittest.TestCase):
@@ -636,7 +673,7 @@ class PolicyTests(unittest.TestCase):
         self.assertIsNone(policy._event_loop)
 
         event_loop = policy.get_event_loop()
-        self.assertIsInstance(event_loop, events.EventLoop)
+        self.assertIsInstance(event_loop, events.AbstractEventLoop)
 
         self.assertIs(policy._event_loop, event_loop)
         self.assertIs(event_loop, policy.get_event_loop())
@@ -653,7 +690,7 @@ class PolicyTests(unittest.TestCase):
         policy = events.DefaultEventLoopPolicy()
 
         event_loop = policy.new_event_loop()
-        self.assertIsInstance(event_loop, events.EventLoop)
+        self.assertIsInstance(event_loop, events.AbstractEventLoop)
 
     def test_set_event_loop(self):
         policy = events.DefaultEventLoopPolicy()

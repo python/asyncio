@@ -5,7 +5,6 @@ import unittest
 from . import events
 from . import http_client
 from . import tasks
-from . import test_utils
 
 
 class StreamReaderTests(unittest.TestCase):
@@ -14,9 +13,10 @@ class StreamReaderTests(unittest.TestCase):
 
     def setUp(self):
         self.event_loop = events.new_event_loop()
-        self.addCleanup(self.event_loop.close)
-
         events.set_event_loop(self.event_loop)
+
+    def tearDown(self):
+        self.event_loop.close()
 
     def test_feed_empty_data(self):
         stream = http_client.StreamReader()
@@ -32,56 +32,62 @@ class StreamReaderTests(unittest.TestCase):
         self.assertEqual(self.DATA.count(b'\n'), stream.line_count)
         self.assertEqual(len(self.DATA), stream.byte_count)
 
-    @test_utils.sync
     def test_read_zero(self):
-        """ Read zero bytes """
+        """Read zero bytes"""
         stream = http_client.StreamReader()
         stream.feed_data(self.DATA)
 
-        data = yield from stream.read(0)
+        read_task = tasks.Task(stream.read(0))
+        data = self.event_loop.run_until_complete(read_task)
         self.assertEqual(b'', data)
         self.assertEqual(len(self.DATA), stream.byte_count)
         self.assertEqual(self.DATA.count(b'\n'), stream.line_count)
 
-    @test_utils.sync
     def test_read(self):
         """ Read bytes """
         stream = http_client.StreamReader()
-
-        res = stream.read(30)
+        read_task = tasks.Task(stream.read(30))
 
         def cb():
             stream.feed_data(self.DATA)
         self.event_loop.call_soon(cb)
 
-        data = yield from res
+        data = self.event_loop.run_until_complete(read_task)
         self.assertEqual(self.DATA, data)
         self.assertFalse(stream.byte_count)
         self.assertFalse(stream.line_count)
 
-    @test_utils.sync
+    def test_read_line_breaks(self):
+        """ Read bytes without line breaks """
+        stream = http_client.StreamReader()
+        stream.feed_data(b'line1')
+        stream.feed_data(b'line2')
+
+        read_task = tasks.Task(stream.read(5))
+        data = self.event_loop.run_until_complete(read_task)
+
+        self.assertEqual(b'line1', data)
+        self.assertEqual(5, stream.byte_count)
+        self.assertFalse(stream.line_count)
+
     def test_read_eof(self):
         """ Read bytes, stop at eof """
         stream = http_client.StreamReader()
-
-        read = tasks.Task(stream.read(1024))
+        read_task = tasks.Task(stream.read(1024))
 
         def cb():
             stream.feed_eof()
         self.event_loop.call_soon(cb)
 
-        data = yield from read
-
+        data = self.event_loop.run_until_complete(read_task)
         self.assertEqual(b'', data)
         self.assertFalse(stream.byte_count)
         self.assertFalse(stream.line_count)
 
-    @test_utils.sync
     def test_read_until_eof(self):
         """ Read all bytes until eof """
         stream = http_client.StreamReader()
-
-        read = tasks.Task(stream.read(-1))
+        read_task = tasks.Task(stream.read(-1))
 
         def cb():
             stream.feed_data(b'chunk1\n')
@@ -89,17 +95,17 @@ class StreamReaderTests(unittest.TestCase):
             stream.feed_eof()
         self.event_loop.call_soon(cb)
 
-        data = yield from read
+        data = self.event_loop.run_until_complete(read_task)
 
         self.assertEqual(b'chunk1\nchunk2', data)
         self.assertFalse(stream.byte_count)
         self.assertFalse(stream.line_count)
 
-    @test_utils.sync
     def test_readline(self):
         """ Read one line """
         stream = http_client.StreamReader()
         stream.feed_data(b'chunk1 ')
+        read_task = tasks.Task(stream.readline())
 
         def cb():
             stream.feed_data(b'chunk2 ')
@@ -107,30 +113,41 @@ class StreamReaderTests(unittest.TestCase):
             stream.feed_data(b'\n chunk4')
         self.event_loop.call_soon(cb)
 
-        line = yield from stream.readline()
-
+        line = self.event_loop.run_until_complete(read_task)
         self.assertEqual(b'chunk1 chunk2 chunk3 \n', line)
         self.assertFalse(stream.line_count)
         self.assertEqual(len(b'\n chunk4')-1, stream.byte_count)
 
-    @test_utils.sync
     def test_readline_line_byte_count(self):
         stream = http_client.StreamReader()
-        stream.feed_data(self.DATA)
+        stream.feed_data(self.DATA[:6])
+        stream.feed_data(self.DATA[6:])
 
-        line = yield from stream.readline()
+        read_task = tasks.Task(stream.readline())
+        line = self.event_loop.run_until_complete(read_task)
 
         self.assertEqual(b'line1\n', line)
         self.assertEqual(self.DATA.count(b'\n')-1, stream.line_count)
         self.assertEqual(len(self.DATA) - len(b'line1\n'), stream.byte_count)
 
-    @test_utils.sync
+    def test_readline_empty_eof(self):
+        stream = http_client.StreamReader()
+        stream.feed_eof()
+
+        read_task = tasks.Task(stream.readline())
+        line = self.event_loop.run_until_complete(read_task)
+
+        self.assertEqual(b'', line)
+
     def test_readline_read_byte_count(self):
         stream = http_client.StreamReader()
         stream.feed_data(self.DATA)
 
-        line = yield from stream.readline()
-        data = yield from stream.read(7)
+        read_task = tasks.Task(stream.readline())
+        line = self.event_loop.run_until_complete(read_task)
+
+        read_task = tasks.Task(stream.read(7))
+        data = self.event_loop.run_until_complete(read_task)
 
         self.assertEqual(b'line2\nl', data)
         self.assertEqual(
@@ -139,26 +156,29 @@ class StreamReaderTests(unittest.TestCase):
             len(self.DATA) - len(b'line1\n') - len(b'line2\nl'),
             stream.byte_count)
 
-    @test_utils.sync
     def test_readexactly_zero_or_less(self):
         """ Read exact number of bytes (zero or less) """
         stream = http_client.StreamReader()
         stream.feed_data(self.DATA)
 
-        data = yield from stream.readexactly(0)
+        read_task = tasks.Task(stream.readexactly(0))
+        data = self.event_loop.run_until_complete(read_task)
         self.assertEqual(b'', data)
         self.assertEqual(len(self.DATA), stream.byte_count)
         self.assertEqual(self.DATA.count(b'\n'), stream.line_count)
 
-        data = yield from stream.readexactly(-1)
+        read_task = tasks.Task(stream.readexactly(-1))
+        data = self.event_loop.run_until_complete(read_task)
         self.assertEqual(b'', data)
         self.assertEqual(len(self.DATA), stream.byte_count)
         self.assertEqual(self.DATA.count(b'\n'), stream.line_count)
 
-    @test_utils.sync
     def test_readexactly(self):
         """ Read exact number of bytes """
         stream = http_client.StreamReader()
+
+        n = 2*len(self.DATA)
+        read_task = tasks.Task(stream.readexactly(n))
 
         def cb():
             stream.feed_data(self.DATA)
@@ -166,26 +186,23 @@ class StreamReaderTests(unittest.TestCase):
             stream.feed_data(self.DATA)
         self.event_loop.call_soon(cb)
 
-        n = 2*len(self.DATA)
-        data = yield from stream.readexactly(n)
-
+        data = self.event_loop.run_until_complete(read_task)
         self.assertEqual(self.DATA+self.DATA, data)
         self.assertEqual(len(self.DATA), stream.byte_count)
         self.assertEqual(self.DATA.count(b'\n'), stream.line_count)
 
-    @test_utils.sync
     def test_readexactly_eof(self):
         """ Read exact number of bytes (eof) """
         stream = http_client.StreamReader()
+        n = 2*len(self.DATA)
+        read_task = tasks.Task(stream.readexactly(n))
 
         def cb():
             stream.feed_data(self.DATA)
             stream.feed_eof()
         self.event_loop.call_soon(cb)
 
-        n = 2*len(self.DATA)
-        data = yield from stream.readexactly(n)
-
+        data = self.event_loop.run_until_complete(read_task)
         self.assertEqual(self.DATA, data)
         self.assertFalse(stream.byte_count)
         self.assertFalse(stream.line_count)

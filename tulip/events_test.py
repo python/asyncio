@@ -22,7 +22,6 @@ from . import transports
 from . import protocols
 from . import selector_events
 from . import test_utils
-from . import unix_events
 
 
 class MyProto(protocols.Protocol):

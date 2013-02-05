@@ -297,8 +297,7 @@ class BaseEventLoop(events.AbstractEventLoop):
 
         sock.listen(backlog)
         sock.setblocking(False)
-        self.add_reader(sock.fileno(), self._accept_connection,
-                        protocol_factory, sock)
+        self._start_serving(protocol_factory, sock)
         return sock
 
     def _add_callback(self, handler):

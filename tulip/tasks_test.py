@@ -1,7 +1,9 @@
 """Tests for tasks.py."""
 
+import concurrent.futures
 import time
 import unittest
+import unittest.mock
 
 from . import events
 from . import futures
@@ -69,6 +71,21 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.event_loop.run_until_complete(t)
         self.assertEqual(repr(t), "Task(<notmuch>)<result='abc'>")
 
+    def test_task_repr_custom(self):
+        def coro():
+            yield from []
+
+        class T(futures.Future):
+            def __repr__(self):
+                return 'T[]'
+
+        class MyTask(tasks.Task, T):
+            def __repr__(self):
+                return super().__repr__()
+
+        t = MyTask(coro())
+        self.assertEqual(repr(t), 'T[](<coro>)')
+
     def test_task_basics(self):
         @tasks.task
         def outer():
@@ -134,6 +151,51 @@ class TaskTests(test_utils.LogTrackingTestCase):
         t1 = time.monotonic()
         self.assertTrue(t1-t0 <= 0.01)
         # TODO: Test different return_when values.
+
+    def test_wait_first_completed(self):
+        a = tasks.sleep(10.0)
+        b = tasks.sleep(0.1)
+        task = tasks.Task(tasks.wait(
+                [b, a], return_when=tasks.FIRST_COMPLETED))
+
+        done, pending = self.event_loop.run_until_complete(task)
+        self.assertEqual({b}, done)
+        self.assertEqual({a}, pending)
+
+    def test_wait_really_done(self):
+        # there is possibility that some tasks in the pending list
+        # became done but their callbacks haven't all been called yet
+
+        @tasks.coroutine
+        def coro1():
+            yield from [None]
+        @tasks.coroutine
+        def coro2():
+            yield from [None, None]
+
+        a = tasks.Task(coro1())
+        b = tasks.Task(coro2())
+        task = tasks.Task(tasks.wait([b, a], return_when=tasks.FIRST_COMPLETED))
+
+        done, pending = self.event_loop.run_until_complete(task)
+        self.assertEqual({a, b}, done)
+
+    def test_wait_first_exception(self):
+        self.suppress_log_errors()
+
+        a = tasks.sleep(10.0)
+        @tasks.coroutine
+        def exc():
+            yield from []
+            raise ZeroDivisionError('err')
+
+        b = tasks.Task(exc())
+        task = tasks.Task(tasks.wait(
+                [b, a], return_when=tasks.FIRST_EXCEPTION))
+
+        done, pending = self.event_loop.run_until_complete(task)
+        self.assertEqual({b}, done)
+        self.assertEqual({a}, pending)
 
     def test_wait_with_exception(self):
         self.suppress_log_errors()
@@ -265,6 +327,146 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertEqual(self.event_loop.run_until_complete(doer), 'cancelled')
         t1 = time.monotonic()
         self.assertTrue(0.09 <= t1-t0 <= 0.13, (t1-t0, sleepfut, doer))
+
+    @unittest.mock.patch('tulip.tasks.logging')
+    def test_step_in_completed_task(self, m_logging):
+        @tasks.coroutine
+        def notmuch():
+            yield from []
+            return 'ko'
+
+        task = tasks.Task(notmuch())
+        task.set_result('ok')
+
+        task._step()
+        self.assertTrue(m_logging.warn.called)
+        self.assertTrue(m_logging.warn.call_args[0][0].startswith(
+            '_step(): already done: '))
+
+    @unittest.mock.patch('tulip.tasks.logging')
+    def test_step_result(self, m_logging):
+        @tasks.coroutine
+        def notmuch():
+            yield from [None, 1]
+            return 'ko'
+
+        task = tasks.Task(notmuch())
+        task._step()
+        self.assertFalse(m_logging.warn.called)
+
+        task._step()
+        self.assertTrue(m_logging.warn.called)
+        self.assertEqual(
+            '_step(): bad yield: %r',
+            m_logging.warn.call_args[0][0])
+        self.assertEqual(1, m_logging.warn.call_args[0][1])
+
+    def test_step_result_future(self):
+        """Coroutine returns Future"""
+        class Fut(futures.Future):
+            def __init__(self, *args):
+                self.cb_added = False
+                super().__init__(*args)
+            def add_done_callback(self, fn):
+                self.cb_added = True
+                super().add_done_callback(fn)
+
+        c_fut = Fut()
+
+        @tasks.coroutine
+        def notmuch():
+            yield from [c_fut]
+            return (yield)
+
+        task = tasks.Task(notmuch())
+        task._step()
+        self.assertTrue(c_fut.cb_added)
+
+        res = object()
+        c_fut.set_result(res)
+        self.event_loop.run()
+        self.assertIs(res, task.result())
+
+    def test_step_result_cuncurrent_future(self):
+        """Coroutine returns cuncurrent.future.Future"""
+        class Fut(concurrent.futures.Future):
+
+            def __init__(self):
+                self.cb_added = False
+                super().__init__()
+            def add_done_callback(self, fn):
+                self.cb_added = True
+                super().add_done_callback(fn)
+
+        c_fut = Fut()
+
+        @tasks.coroutine
+        def notmuch():
+            yield from [c_fut]
+            return (yield)
+
+        task = tasks.Task(notmuch())
+        task._step()
+        self.assertTrue(c_fut.cb_added)
+
+        res = object()
+        c_fut.set_result(res)
+        self.event_loop.run()
+        self.assertIs(res, task.result())
+
+    def test_step_with_baseexception(self):
+        self.suppress_log_errors()
+
+        @tasks.coroutine
+        def notmutch():
+            yield from []
+            raise BaseException()
+
+        task = tasks.Task(notmutch())
+        self.assertRaises(BaseException, task._step)
+
+        self.assertTrue(task.done())
+        self.assertIsInstance(task.exception(), BaseException)
+
+    def test_baseexception_during_cancel(self):
+        self.suppress_log_errors()
+
+        @tasks.coroutine
+        def sleeper():
+            yield from tasks.sleep(10)
+
+        @tasks.coroutine
+        def notmutch():
+            try:
+                yield from sleeper()
+            except futures.CancelledError:
+                raise BaseException()
+
+        task = tasks.Task(notmutch())
+        self.event_loop.run_once()
+
+        task.cancel()
+        self.assertFalse(task.done())
+
+        self.assertRaises(BaseException, self.event_loop.run_once)
+
+        self.assertTrue(task.done())
+        self.assertTrue(task.cancelled())
+
+    def test_iscoroutinefunction(self):
+        def fn():
+            pass
+
+        self.assertFalse(tasks.iscoroutinefunction(fn))
+
+        def fn1():
+            yield
+        self.assertFalse(tasks.iscoroutinefunction(fn1))
+
+        @tasks.coroutine
+        def fn2():
+            yield
+        self.assertTrue(tasks.iscoroutinefunction(fn2))
 
 
 if __name__ == '__main__':

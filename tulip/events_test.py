@@ -540,14 +540,87 @@ class SelectEventLoopTests(EventLoopTestsMixin,
 class HandlerTests(unittest.TestCase):
 
     def test_handler(self):
-        pass
+        def callback(*args):
+            return args
+
+        args = ()
+        h = events.Handler(None, callback, args)
+        self.assertIsNone(h.when)
+        self.assertIs(h.callback, callback)
+        self.assertIs(h.args, args)
+        self.assertFalse(h.cancelled)
+
+        r = repr(h)
+        self.assertTrue(r.startswith(
+            'Handler(None, '
+            '<function HandlerTests.test_handler.<locals>.callback'))
+        self.assertTrue(r.endswith('())'))
+
+        h.cancel()
+        self.assertTrue(h.cancelled)
+
+        r = repr(h)
+        self.assertTrue(r.startswith(
+            'Handler(None, '
+            '<function HandlerTests.test_handler.<locals>.callback'))
+        self.assertTrue(r.endswith('())<cancelled>'))
+
+    def test_handler_comparison(self):
+        def callback(*args):
+            return args
+
+        h1 = events.Handler(None, callback, ())
+        h2 = events.Handler(None, callback, ())
+        self.assertTrue((h1 <  h2) == False)
+        self.assertTrue((h1 <= h2) == True)
+        self.assertTrue((h1 >  h2) == False)
+        self.assertTrue((h1 >= h2) == True)
+        self.assertTrue((h1 == h2) == True)
+
+        when = time.monotonic()
+
+        h1 = events.Handler(when, callback, ())
+        h2 = events.Handler(None, callback, ())
+        self.assertTrue((h1 <  h2) == False)
+        self.assertTrue((h1 <= h2) == False)
+        self.assertTrue((h1 >  h2) == True)
+        self.assertTrue((h1 >= h2) == True)
+        self.assertTrue((h1 == h2) == False)
+
+        self.assertTrue((h2 <  h1) == True)
+        self.assertTrue((h2 <= h1) == True)
+        self.assertTrue((h2 >  h1) == False)
+        self.assertTrue((h2 >= h1) == False)
+        self.assertTrue((h2 == h1) == False)
+
+        h1 = events.Handler(when, callback, ())
+        h2 = events.Handler(when, callback, ())
+        self.assertTrue((h1 <  h2) == False)
+        self.assertTrue((h1 <= h2) == True)
+        self.assertTrue((h1 >  h2) == False)
+        self.assertTrue((h1 >= h2) == True)
+        self.assertTrue((h1 == h2) == True)
+
+        h1 = events.Handler(when, callback, ())
+        h2 = events.Handler(when + 10.0, callback, ())
+        self.assertTrue((h1 <  h2) == True)
+        self.assertTrue((h1 <= h2) == True)
+        self.assertTrue((h1 >  h2) == False)
+        self.assertTrue((h1 >= h2) == False)
+        self.assertTrue((h1 == h2) == False)
 
     def test_make_handler(self):
         def callback(*args):
             return args
         h1 = events.Handler(None, callback, ())
         h2 = events.make_handler(None, h1, ())
-        self.assertEqual(h1, h2)
+        self.assertIs(h1, h2)
+
+        self.assertRaises(AssertionError,
+                          events.make_handler, 10.0, h1, ())
+
+        self.assertRaises(AssertionError,
+                          events.make_handler, None, h1, (1,2,))
 
 
 class PolicyTests(unittest.TestCase):

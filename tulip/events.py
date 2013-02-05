@@ -50,15 +50,35 @@ class Handler:
         self._cancelled = True
 
     def __lt__(self, other):
+        if self._when is None:
+            return other._when is not None
+        elif other._when is None:
+            return False
+
         return self._when < other._when
 
     def __le__(self, other):
+        if self._when is None:
+            return True
+        elif other._when is None:
+            return False
+
         return self._when <= other._when
 
     def __gt__(self, other):
+        if self._when is None:
+            return False
+        elif other._when is None:
+            return True
+
         return self._when > other._when
 
     def __ge__(self, other):
+        if self._when is None:
+            return other._when is None
+        elif other._when is None:
+            return True
+
         return self._when >= other._when
 
     def __eq__(self, other):

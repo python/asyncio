@@ -1,0 +1,8 @@
+.*\.py[co]$
+.*~$
+.*\.orig$
+.*\#.*$
+.*@.*$
+\.coverage$
+htmlcov$
+\.DS_Store$

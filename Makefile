@@ -1,3 +1,5 @@
+# Some simple testing tasks (sorry, UNIX only).
+
 PYTHON=python3
 COVERAGE=coverage3
 NONTESTS=`find tulip -name [a-z]\*.py ! -name \*_test.py`
@@ -9,6 +11,7 @@ test:
 testloop:
 	while sleep 1; do $(PYTHON) runtests.py -v $(FLAGS); done
 
+# See README for coverage installation instructions.
 cov coverage:
 	$(COVERAGE) run --branch runtests.py -v $(FLAGS)
 	$(COVERAGE) html $(NONTESTS)

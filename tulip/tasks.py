@@ -46,9 +46,9 @@ def task(func):
 class Task(futures.Future):
     """A coroutine wrapped in a Future."""
 
-    def __init__(self, coro):
+    def __init__(self, coro, event_loop=None):
         assert inspect.isgenerator(coro)  # Must be a coroutine *object*.
-        super().__init__()  # Sets self._event_loop.
+        super().__init__(event_loop=event_loop)  # Sets self._event_loop.
         self._coro = coro
         self._must_cancel = False
         self._event_loop.call_soon(self._step)
@@ -82,7 +82,7 @@ class Task(futures.Future):
             return self._step()
 
     def _step(self, value=None, exc=None):
-        if self.done():  # pragma: no cover
+        if self.done():
             logging.warn('_step(): already done: %r, %r, %r', self, value, exc)
             return
         # We'll call either coro.throw(exc) or coro.send(value).

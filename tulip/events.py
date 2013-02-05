@@ -185,12 +185,6 @@ class AbstractEventLoop:
     def remove_writer(self, fd):
         raise NotImplementedError
 
-    def add_connector(self, fd, callback, *args):
-        raise NotImplementedError
-
-    def remove_connector(self, fd):
-        raise NotImplementedError
-
     # Completion based I/O methods returning Futures.
 
     def sock_recv(self, sock, nbytes):

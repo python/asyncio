@@ -116,20 +116,20 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         """Add a reader callback.  Return a Handler instance."""
         handler = events.make_handler(None, callback, args)
         try:
-            mask, (reader, writer, connector) = self._selector.get_info(fd)
+            mask, (reader, writer) = self._selector.get_info(fd)
         except KeyError:
             self._selector.register(fd, selectors.EVENT_READ,
-                                    (handler, None, None))
+                                    (handler, None))
         else:
             self._selector.modify(fd, mask | selectors.EVENT_READ,
-                                  (handler, writer, connector))
+                                  (handler, writer))
 
         return handler
 
     def remove_reader(self, fd):
         """Remove a reader callback."""
         try:
-            mask, (reader, writer, connector) = self._selector.get_info(fd)
+            mask, (reader, writer) = self._selector.get_info(fd)
         except KeyError:
             return False
         else:
@@ -137,7 +137,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             if not mask:
                 self._selector.unregister(fd)
             else:
-                self._selector.modify(fd, mask, (None, writer, connector))
+                self._selector.modify(fd, mask, (None, writer))
             if reader is not None:
                 reader.cancel()
             return True
@@ -146,77 +146,30 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         """Add a writer callback.  Return a Handler instance."""
         handler = events.make_handler(None, callback, args)
         try:
-            mask, (reader, writer, connector) = self._selector.get_info(fd)
+            mask, (reader, writer) = self._selector.get_info(fd)
         except KeyError:
             self._selector.register(fd, selectors.EVENT_WRITE,
-                                    (None, handler, None))
+                                    (None, handler))
         else:
-            # Remove connector.
-            mask &= ~selectors.EVENT_CONNECT
             self._selector.modify(fd, mask | selectors.EVENT_WRITE,
-                                  (reader, handler, None))
+                                  (reader, handler))
         return handler
 
     def remove_writer(self, fd):
         """Remove a writer callback."""
         try:
-            mask, (reader, writer, connector) = self._selector.get_info(fd)
+            mask, (reader, writer) = self._selector.get_info(fd)
         except KeyError:
             return False
         else:
             # Remove both writer and connector.
-            mask &= ~(selectors.EVENT_WRITE | selectors.EVENT_CONNECT)
-            if not mask:
-                self._selector.unregister(fd)
-            else:
-                self._selector.modify(fd, mask, (reader, None, None))
-            if writer is not None:
-                writer.cancel()
-            if connector is not None:
-                connector.cancel()
-            return True
-
-    # NOTE: add_connector() and add_writer() are mutually exclusive.
-    # While you can independently manipulate readers and writers,
-    # adding a connector for a particular FD automatically removes the
-    # writer for that FD, and vice versa, and removing a writer or a
-    # connector actually removes both writer and connector.  This is
-    # because in most cases writers and connectors use the same mode
-    # for the platform polling function; the distinction is only
-    # important for PollSelector() on Windows.
-
-    def add_connector(self, fd, callback, *args):
-        """Add a connector callback.  Return a Handler instance."""
-        handler = events.make_handler(None, callback, args)
-        try:
-            mask, (reader, writer, connector) = self._selector.get_info(fd)
-        except KeyError:
-            self._selector.register(fd, selectors.EVENT_CONNECT,
-                                    (None, None, handler))
-        else:
-            # Remove writer.
             mask &= ~selectors.EVENT_WRITE
-            self._selector.modify(fd, mask | selectors.EVENT_CONNECT,
-                                  (reader, None, handler))
-        return handler
-
-    def remove_connector(self, fd):
-        """Remove a connector callback."""
-        try:
-            mask, (reader, writer, connector) = self._selector.get_info(fd)
-        except KeyError:
-            return False
-        else:
-            # Remove both writer and connector.
-            mask &= ~(selectors.EVENT_WRITE | selectors.EVENT_CONNECT)
             if not mask:
                 self._selector.unregister(fd)
             else:
-                self._selector.modify(fd, mask, (reader, None, None))
+                self._selector.modify(fd, mask, (reader, None))
             if writer is not None:
                 writer.cancel()
-            if connector is not None:
-                connector.cancel()
             return True
 
     def sock_recv(self, sock, n):
@@ -284,7 +237,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
     def _sock_connect(self, fut, registered, sock, address):
         fd = sock.fileno()
         if registered:
-            self.remove_connector(fd)
+            self.remove_writer(fd)
         if fut.cancelled():
             return
         try:
@@ -301,8 +254,8 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             if exc.errno not in _TRYAGAIN:
                 fut.set_exception(exc)
             else:
-                self.add_connector(fd, self._sock_connect,
-                                   fut, True, sock, address)
+                self.add_writer(fd, self._sock_connect,
+                                fut, True, sock, address)
 
     def sock_accept(self, sock):
         """XXX"""
@@ -327,7 +280,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
                 self.add_reader(fd, self._sock_accept, fut, True, sock)
 
     def _process_events(self, event_list):
-        for fileobj, mask, (reader, writer, connector) in event_list:
+        for fileobj, mask, (reader, writer) in event_list:
             if mask & selectors.EVENT_READ and reader is not None:
                 if reader.cancelled:
                     self.remove_reader(fileobj)
@@ -338,11 +291,6 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
                     self.remove_writer(fileobj)
                 else:
                     self._add_callback(writer)
-            elif mask & selectors.EVENT_CONNECT and connector is not None:
-                if connector.cancelled:
-                    self.remove_connector(fileobj)
-                else:
-                    self._add_callback(connector)
 
 
 class _SelectorSocketTransport(transports.Transport):

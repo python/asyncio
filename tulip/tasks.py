@@ -61,7 +61,7 @@ class Task(futures.Future):
             res = res.replace('<PENDING', '<CANCELLING', 1)
         i = res.find('<')
         if i < 0:
-            i = len(res)  # pragma: no cover
+            i = len(res)
         res = res[:i] + '(<{}>)'.format(self._coro.__name__) + res[i:]
         return res
 
@@ -123,7 +123,8 @@ class Task(futures.Future):
                 # because we don't create an extra Future.
                 result.add_done_callback(
                     lambda future:
-                        self._event_loop.call_soon_threadsafe(_wakeup, future))
+                        self._event_loop.call_soon_threadsafe(
+                            self._wakeup, future))
             else:
                 if result is not None:
                     logging.warn('_step(): bad yield: %r', result)
@@ -168,6 +169,7 @@ def wait(fs, timeout=None, return_when=ALL_COMPLETED):
 def _wait(fs, timeout=None, return_when=ALL_COMPLETED):
     """Internal helper: Like wait() but does not wrap coroutines."""
     done, pending = set(), set()
+
     errors = 0
     for f in fs:
         if f.done():
@@ -176,17 +178,21 @@ def _wait(fs, timeout=None, return_when=ALL_COMPLETED):
                 errors += 1
         else:
             pending.add(f)
+
     if (not pending or
         timeout != None and timeout <= 0 or
         return_when == FIRST_COMPLETED and done or
         return_when == FIRST_EXCEPTION and errors):
         return done, pending
+
     bail = futures.Future()  # Will always be cancelled eventually.
     timeout_handler = None
     debugstuff = locals()
+
     if timeout is not None:
         loop = events.get_event_loop()
         timeout_handler = loop.call_later(timeout, bail.cancel)
+
     def _on_completion(f):
         pending.remove(f)
         done.add(f)
@@ -196,6 +202,7 @@ def _wait(fs, timeout=None, return_when=ALL_COMPLETED):
              not f.cancelled() and
              f.exception() is not None)):
             bail.cancel()
+
     try:
         for f in pending:
             f.add_done_callback(_on_completion)
@@ -208,11 +215,12 @@ def _wait(fs, timeout=None, return_when=ALL_COMPLETED):
             f.remove_done_callback(_on_completion)
         if timeout_handler is not None:
             timeout_handler.cancel()
+
     really_done = set(f for f in pending if f.done())
-    if really_done:  # pragma: no cover
-        # We don't expect this to ever happen.  Or do we?
+    if really_done:
         done.update(really_done)
         pending.difference_update(really_done)
+
     return done, pending
 
 

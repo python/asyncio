@@ -38,7 +38,7 @@ enum {TYPE_NONE, TYPE_NOT_STARTED, TYPE_READ, TYPE_WRITE, TYPE_ACCEPT,
  * Map Windows error codes to subclasses of OSError
  */
 
-static void *
+static PyObject *
 SetFromWindowsErr(DWORD err)
 {
     PyObject *exception_type;

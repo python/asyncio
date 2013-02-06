@@ -91,13 +91,7 @@ class IocpProactor:
         ov = _overlapped.Overlapped(NULL)
         ov.ConnectEx(conn.fileno(), address)
         def finish_connect():
-            try:
-                ov.getresult()
-            except OSError as e:
-                if e.winerror == ERROR_CONNECTION_REFUSED:
-                    raise ConnectionRefusedError(errno.ECONNREFUSED,
-                                                 'connection refused')
-                raise
+            ov.getresult()
             conn.setsockopt(socket.SOL_SOCKET,
                             _overlapped.SO_UPDATE_CONNECT_CONTEXT,
                             0)

@@ -38,9 +38,10 @@ class _ProactorSocketTransport(transports.Transport):
                     return
                 self._event_loop.call_soon(self._protocol.data_received, data)
             self._read_fut = self._event_loop._proactor.recv(self._sock, 4096)
+        except ConnectionAbortedError as exc:
+            if not self._closing:
+                self._fatal_error(exc)
         except OSError as exc:
-            if exc.winerror == ERROR_CONNECTION_ABORTED and self._closing:
-                return
             self._fatal_error(exc)
         else:
             self._read_fut.add_done_callback(self._loop_reading)

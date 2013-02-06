@@ -35,6 +35,30 @@ enum {TYPE_NONE, TYPE_NOT_STARTED, TYPE_READ, TYPE_WRITE, TYPE_ACCEPT,
       TYPE_CONNECT, TYPE_DISCONNECT};
 
 /*
+ * Map Windows error codes to subclasses of OSError
+ */
+
+static void *
+SetFromWindowsErr(DWORD err)
+{
+    PyObject *exception_type;
+
+    if (err == 0)
+        err = GetLastError();
+    switch (err) {
+        case ERROR_CONNECTION_REFUSED:
+            exception_type = PyExc_ConnectionRefusedError;
+            break;
+        case ERROR_CONNECTION_ABORTED:
+            exception_type = PyExc_ConnectionAbortedError;
+            break;
+        default:
+            exception_type = PyExc_OSError;
+    }
+    return PyErr_SetExcFromWindowsErr(exception_type, err);
+}
+
+/*
  * Some functions should be loaded at runtime
  */
 
@@ -60,7 +84,7 @@ initialize_function_pointers(void)
 
     s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (s == INVALID_SOCKET) {
-        PyErr_SetFromWindowsErr(WSAGetLastError());
+        SetFromWindowsErr(WSAGetLastError());
         return -1;
     }
 
@@ -69,7 +93,7 @@ initialize_function_pointers(void)
         !GET_WSA_POINTER(s, DisconnectEx))
     {
         closesocket(s);
-        PyErr_SetFromWindowsErr(WSAGetLastError());
+        SetFromWindowsErr(WSAGetLastError());
         return -1;
     }
 
@@ -110,7 +134,7 @@ overlapped_CreateIoCompletionPort(PyObject *self, PyObject *args)
     Py_END_ALLOW_THREADS
 
     if (ret == NULL)
-        return PyErr_SetFromWindowsErr(0);
+        return SetFromWindowsErr(0);
     return Py_BuildValue(F_HANDLE, ret);
 }
 
@@ -144,7 +168,7 @@ overlapped_GetQueuedCompletionStatus(PyObject *self, PyObject *args)
         if (err == WAIT_TIMEOUT)
             Py_RETURN_NONE;
         else
-            return PyErr_SetFromWindowsErr(err);
+            return SetFromWindowsErr(err);
     }
     return Py_BuildValue(F_DWORD F_DWORD F_ULONG_PTR F_POINTER,
                          err, NumberOfBytes, CompletionKey, Overlapped);
@@ -175,7 +199,7 @@ overlapped_PostQueuedCompletionStatus(PyObject *self, PyObject *args)
     Py_END_ALLOW_THREADS
 
     if (!ret)
-        return PyErr_SetFromWindowsErr(0);
+        return SetFromWindowsErr(0);
     Py_RETURN_NONE;
 }
 
@@ -220,7 +244,7 @@ overlapped_BindLocal(PyObject *self, PyObject *args)
     }
 
     if (!ret)
-        return PyErr_SetExcFromWindowsErr(PyExc_IOError, WSAGetLastError());
+        return SetFromWindowsErr(WSAGetLastError());
     Py_RETURN_NONE;
 }
 
@@ -243,7 +267,7 @@ overlapped_SetFileCompletionNotificationModes(PyObject *self, PyObject *args)
         return NULL;
 
     if (!SetFileCompletionNotificationModes(FileHandle, Flags))
-        return PyErr_SetExcFromWindowsErr(PyExc_IOError, 0);
+        return SetFromWindowsErr(0);
 
     Py_RETURN_NONE;
 }
@@ -286,7 +310,7 @@ Overlapped_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     if (event == INVALID_HANDLE_VALUE) {
         event = CreateEvent(NULL, TRUE, FALSE, NULL);
         if (event == NULL)
-            return PyErr_SetExcFromWindowsErr(PyExc_OSError, 0);
+            return SetFromWindowsErr(0);
     }
 
     self = PyObject_New(OverlappedObject, type);
@@ -375,7 +399,7 @@ Overlapped_cancel(OverlappedObject *self)
 
     /* CancelIoEx returns ERROR_NOT_FOUND if the I/O completed in-between */
     if (!ret && GetLastError() != ERROR_NOT_FOUND)
-        return PyErr_SetExcFromWindowsErr(PyExc_IOError, 0);
+        return SetFromWindowsErr(0);
     Py_RETURN_NONE;
 }
 
@@ -422,7 +446,7 @@ Overlapped_getresult(OverlappedObject *self, PyObject *args)
                 break;
             /* fall through */
         default:
-            return PyErr_SetExcFromWindowsErr(PyExc_IOError, err);
+            return SetFromWindowsErr(err);
     }
 
     switch (self->type) {
@@ -492,7 +516,7 @@ Overlapped_ReadFile(OverlappedObject *self, PyObject *args)
             Py_RETURN_NONE;
         default:
             self->type = TYPE_NOT_STARTED;
-            return PyErr_SetExcFromWindowsErr(PyExc_IOError, err);
+            return SetFromWindowsErr(err);
     }
 }
 
@@ -551,7 +575,7 @@ Overlapped_WSARecv(OverlappedObject *self, PyObject *args)
             Py_RETURN_NONE;
         default:
             self->type = TYPE_NOT_STARTED;
-            return PyErr_SetExcFromWindowsErr(PyExc_IOError, err);
+            return SetFromWindowsErr(err);
     }
 }
 
@@ -603,7 +627,7 @@ Overlapped_WriteFile(OverlappedObject *self, PyObject *args)
             Py_RETURN_NONE;
         default:
             self->type = TYPE_NOT_STARTED;
-            return PyErr_SetExcFromWindowsErr(PyExc_IOError, err);
+            return SetFromWindowsErr(err);
     }
 }
 
@@ -660,7 +684,7 @@ Overlapped_WSASend(OverlappedObject *self, PyObject *args)
             Py_RETURN_NONE;
         default:
             self->type = TYPE_NOT_STARTED;
-            return PyErr_SetExcFromWindowsErr(PyExc_IOError, err);
+            return SetFromWindowsErr(err);
     }
 }
 
@@ -710,7 +734,7 @@ Overlapped_AcceptEx(OverlappedObject *self, PyObject *args)
             Py_RETURN_NONE;
         default:
             self->type = TYPE_NOT_STARTED;
-            return PyErr_SetExcFromWindowsErr(PyExc_IOError, err);
+            return SetFromWindowsErr(err);
     }
 }
 
@@ -729,7 +753,7 @@ parse_address(PyObject *obj, SOCKADDR *Address, int Length)
     {
         Address->sa_family = AF_INET;
         if (WSAStringToAddressA(Host, AF_INET, NULL, Address, &Length) < 0) {
-            PyErr_SetExcFromWindowsErr(PyExc_IOError, WSAGetLastError());
+            SetFromWindowsErr(WSAGetLastError());
             return -1;
         }
         ((SOCKADDR_IN*)Address)->sin_port = htons(Port);
@@ -740,7 +764,7 @@ parse_address(PyObject *obj, SOCKADDR *Address, int Length)
         PyErr_Clear();
         Address->sa_family = AF_INET6;
         if (WSAStringToAddressA(Host, AF_INET6, NULL, Address, &Length) < 0) {
-            PyErr_SetExcFromWindowsErr(PyExc_IOError, WSAGetLastError());
+            SetFromWindowsErr(WSAGetLastError());
             return -1;
         }
         ((SOCKADDR_IN6*)Address)->sin6_port = htons(Port);
@@ -797,7 +821,7 @@ Overlapped_ConnectEx(OverlappedObject *self, PyObject *args)
             Py_RETURN_NONE;
         default:
             self->type = TYPE_NOT_STARTED;
-            return PyErr_SetExcFromWindowsErr(PyExc_IOError, err);
+            return SetFromWindowsErr(err);
     }
 }
 
@@ -836,7 +860,7 @@ Overlapped_DisconnectEx(OverlappedObject *self, PyObject *args)
             Py_RETURN_NONE;
         default:
             self->type = TYPE_NOT_STARTED;
-            return PyErr_SetExcFromWindowsErr(PyExc_IOError, err);
+            return SetFromWindowsErr(err);
     }
 }
 

@@ -55,7 +55,8 @@ class IocpProactor:
     def select(self, timeout=None):
         if not self._results:
             self._poll(timeout)
-        tmp, self._results = self._results, []
+        tmp = self._results
+        self._results = []
         return tmp
 
     def recv(self, conn, nbytes, flags=0):
@@ -151,7 +152,7 @@ class IocpProactor:
                 pass
 
         while self._cache:
-            if not self._poll(1000):
+            if not self._poll(1):
                 logging.debug('taking long time to close proactor')
 
         self._results = []

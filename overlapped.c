@@ -332,10 +332,10 @@ Overlapped_dealloc(OverlappedObject *self)
             case ERROR_OPERATION_ABORTED:
                 break;
             default:
-                PyErr_SetString(
+                PyErr_Format(
                     PyExc_RuntimeError,
-                    "I/O operations still in flight while destroying "
-                    "Overlapped object, the process may crash");
+                    "%R still has pending operation at "
+                    "deallocation, the process may crash", self);
                 PyErr_WriteUnraisable(NULL);
         }
     }
@@ -483,10 +483,12 @@ Overlapped_ReadFile(OverlappedObject *self, PyObject *args)
 
     self->error = err = ret ? ERROR_SUCCESS : GetLastError();
     switch (err) {
+        case ERROR_BROKEN_PIPE:
+            self->type = TYPE_NOT_STARTED;
+            Py_RETURN_NONE;
         case ERROR_SUCCESS:
         case ERROR_MORE_DATA:
         case ERROR_IO_PENDING:
-        case ERROR_BROKEN_PIPE:
             Py_RETURN_NONE;
         default:
             self->type = TYPE_NOT_STARTED;
@@ -540,10 +542,12 @@ Overlapped_WSARecv(OverlappedObject *self, PyObject *args)
 
     self->error = err = (ret < 0 ? WSAGetLastError() : ERROR_SUCCESS);
     switch (err) {
+        case ERROR_BROKEN_PIPE:
+            self->type = TYPE_NOT_STARTED;
+            Py_RETURN_NONE;
         case ERROR_SUCCESS:
         case ERROR_MORE_DATA:
         case ERROR_IO_PENDING:
-        case ERROR_BROKEN_PIPE:
             Py_RETURN_NONE;
         default:
             self->type = TYPE_NOT_STARTED;
@@ -595,7 +599,6 @@ Overlapped_WriteFile(OverlappedObject *self, PyObject *args)
     self->error = err = ret ? ERROR_SUCCESS : GetLastError();
     switch (err) {
         case ERROR_SUCCESS:
-        case ERROR_MORE_DATA:
         case ERROR_IO_PENDING:
             Py_RETURN_NONE;
         default:
@@ -653,7 +656,6 @@ Overlapped_WSASend(OverlappedObject *self, PyObject *args)
     self->error = err = (ret < 0 ? WSAGetLastError() : ERROR_SUCCESS);
     switch (err) {
         case ERROR_SUCCESS:
-        case ERROR_MORE_DATA:
         case ERROR_IO_PENDING:
             Py_RETURN_NONE;
         default:

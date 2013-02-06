@@ -5,7 +5,7 @@ Beyond the PEP:
 """
 
 __all__ = ['EventLoopPolicy', 'DefaultEventLoopPolicy',
-           'AbstractEventLoop', 'Handler', 'make_handler',
+           'AbstractEventLoop', 'Timer', 'Handler', 'make_handler',
            'get_event_loop_policy', 'set_event_loop_policy',
            'get_event_loop', 'set_event_loop', 'new_event_loop',
            ]
@@ -17,23 +17,16 @@ import threading
 class Handler:
     """Object returned by callback registration methods."""
 
-    def __init__(self, when, callback, args):
-        self._when = when
+    def __init__(self, callback, args):
         self._callback = callback
         self._args = args
         self._cancelled = False
 
     def __repr__(self):
-        res = 'Handler({}, {}, {})'.format(self._when,
-                                           self._callback,
-                                           self._args)
+        res = 'Handler({}, {})'.format(self._callback, self._args)
         if self._cancelled:
             res += '<cancelled>'
         return res
-
-    @property
-    def when(self):
-        return self._when
 
     @property
     def callback(self):
@@ -50,48 +43,61 @@ class Handler:
     def cancel(self):
         self._cancelled = True
 
-    def __lt__(self, other):
-        if self._when is None:
-            return other._when is not None
-        elif other._when is None:
-            return False
 
+def make_handler(callback, args):
+    if isinstance(callback, Handler):
+        assert not args
+        return callback
+    return Handler(callback, args)
+
+
+class Timer(Handler):
+    """Object returned by timed callback registration methods."""
+
+    def __init__(self, when, callback, args):
+        assert when is not None
+        super().__init__(callback, args)
+        self._when = when
+
+    def __repr__(self):
+        res = 'Timer({}, {}, {})'.format(self._when,
+                                         self._callback,
+                                         self._args)
+        if self._cancelled:
+            res += '<cancelled>'
+        return res
+
+    @property
+    def when(self):
+        return self._when
+
+    def __lt__(self, other):
         return self._when < other._when
 
     def __le__(self, other):
-        if self._when is None:
+        if self._when < other._when:
             return True
-        elif other._when is None:
-            return False
-
-        return self._when <= other._when
+        return self.__eq__(other)
 
     def __gt__(self, other):
-        if self._when is None:
-            return False
-        elif other._when is None:
-            return True
-
         return self._when > other._when
 
     def __ge__(self, other):
-        if self._when is None:
-            return other._when is None
-        elif other._when is None:
+        if self._when > other._when:
             return True
-
-        return self._when >= other._when
+        return self.__eq__(other)
 
     def __eq__(self, other):
-        return self._when == other._when
+        if isinstance(other, Timer):
+            return (self._when == other._when and
+                    self._callback == other._callback and
+                    self._args == other._args and
+                    self._cancelled == other._cancelled)
+        return NotImplemented
 
-
-def make_handler(when, callback, args):
-    if isinstance(callback, Handler):
-        assert not args
-        assert when is None
-        return callback
-    return Handler(when, callback, args)
+    def __ne__(self, other):
+        equal = self.__eq__(other)
+        return NotImplemented if equal is NotImplemented else not equal
 
 
 class AbstractEventLoop:

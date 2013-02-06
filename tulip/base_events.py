@@ -140,7 +140,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         """
         if delay <= 0:
             return self.call_soon(callback, *args)
-        handler = events.make_handler(time.monotonic() + delay, callback, args)
+        handler = events.Timer(time.monotonic() + delay, callback, args)
         heapq.heappush(self._scheduled, handler)
         return handler
 
@@ -150,7 +150,7 @@ class BaseEventLoop(events.AbstractEventLoop):
             callback(*args)  # If this fails, the chain is broken.
             handler._when = time.monotonic() + interval
             heapq.heappush(self._scheduled, handler)
-        handler = events.make_handler(time.monotonic() + interval, wrapper, ())
+        handler = events.Timer(time.monotonic() + interval, wrapper, ())
         heapq.heappush(self._scheduled, handler)
         return handler
 
@@ -164,7 +164,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         Any positional arguments after the callback will be passed to
         the callback when it is called.
         """
-        handler = events.make_handler(None, callback, args)
+        handler = events.make_handler(callback, args)
         self._ready.append(handler)
         return handler
 
@@ -177,7 +177,7 @@ class BaseEventLoop(events.AbstractEventLoop):
     def run_in_executor(self, executor, callback, *args):
         if isinstance(callback, events.Handler):
             assert not args
-            assert callback.when is None
+            assert not isinstance(callback, events.Timer)
             if callback.cancelled:
                 f = futures.Future()
                 f.set_result(None)
@@ -304,10 +304,10 @@ class BaseEventLoop(events.AbstractEventLoop):
         """Add a Handler to ready or scheduled."""
         if handler.cancelled:
             return
-        if handler.when is None:
-            self._ready.append(handler)
-        else:
+        if isinstance(handler, events.Timer):
             heapq.heappush(self._scheduled, handler)
+        else:
+            self._ready.append(handler)
 
     def wrap_future(self, future):
         """XXX"""

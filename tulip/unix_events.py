@@ -44,7 +44,7 @@ class SelectorEventLoop(selector_events.BaseSelectorEventLoop):
             signal.set_wakeup_fd(self._csock.fileno())
         except ValueError as exc:
             raise RuntimeError(str(exc))
-        handler = events.make_handler(None, callback, args)
+        handler = events.make_handler(callback, args)
         self._signal_handlers[sig] = handler
         try:
             signal.signal(sig, self._handle_signal)

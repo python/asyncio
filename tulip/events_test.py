@@ -96,7 +96,7 @@ class EventLoopTestsMixin:
         results = []
         def callback():
             results.append('yeah')
-        handler = events.Handler(None, callback, ())
+        handler = events.Handler(callback, ())
         self.assertIs(self.event_loop.call_soon(handler), handler)
         self.event_loop.run()
         self.assertEqual(results, ['yeah'])
@@ -122,7 +122,7 @@ class EventLoopTestsMixin:
         def callback(arg):
             results.append(arg)
 
-        handler = events.Handler(None, callback, ('hello',))
+        handler = events.Handler(callback, ('hello',))
         def run():
             self.assertIs(self.event_loop.call_soon_threadsafe(handler),handler)
 
@@ -159,7 +159,7 @@ class EventLoopTestsMixin:
         def run(arg):
             time.sleep(0.1)
             return arg
-        handler = events.Handler(None, run, ('yo',))
+        handler = events.Handler(run, ('yo',))
         f2 = self.event_loop.run_in_executor(None, handler)
         res = self.event_loop.run_until_complete(f2)
         self.assertEqual(res, 'yo')
@@ -202,7 +202,7 @@ class EventLoopTestsMixin:
                 self.assertTrue(self.event_loop.remove_reader(r.fileno()))
                 r.close()
 
-        handler = events.Handler(None, reader, ())
+        handler = events.Handler(reader, ())
         self.assertIs(handler, self.event_loop.add_reader(r.fileno(), handler))
 
         self.event_loop.call_later(0.05, w.send, b'abc')
@@ -248,7 +248,7 @@ class EventLoopTestsMixin:
     def test_writer_callback_with_handler(self):
         r, w = self.event_loop._socketpair()
         w.setblocking(False)
-        handler = events.Handler(None, w.send, (b'x'*(256*1024),))
+        handler = events.Handler(w.send, (b'x'*(256*1024),))
         self.assertIs(self.event_loop.add_writer(w.fileno(), handler), handler)
         def remove_writer():
             self.assertTrue(self.event_loop.remove_writer(w.fileno()))
@@ -584,15 +584,14 @@ class HandlerTests(unittest.TestCase):
             return args
 
         args = ()
-        h = events.Handler(None, callback, args)
-        self.assertIsNone(h.when)
+        h = events.Handler(callback, args)
         self.assertIs(h.callback, callback)
         self.assertIs(h.args, args)
         self.assertFalse(h.cancelled)
 
         r = repr(h)
         self.assertTrue(r.startswith(
-            'Handler(None, '
+            'Handler('
             '<function HandlerTests.test_handler.<locals>.callback'))
         self.assertTrue(r.endswith('())'))
 
@@ -601,66 +600,69 @@ class HandlerTests(unittest.TestCase):
 
         r = repr(h)
         self.assertTrue(r.startswith(
-            'Handler(None, '
+            'Handler('
             '<function HandlerTests.test_handler.<locals>.callback'))
         self.assertTrue(r.endswith('())<cancelled>'))
 
-    def test_handler_comparison(self):
+    def test_make_handler(self):
+        def callback(*args):
+            return args
+        h1 = events.Handler(callback, ())
+        h2 = events.make_handler(h1, ())
+        self.assertIs(h1, h2)
+
+        self.assertRaises(AssertionError,
+                          events.make_handler, h1, (1,2,))
+
+
+class TimerTests(unittest.TestCase):
+
+    def test_timer(self):
         def callback(*args):
             return args
 
-        h1 = events.Handler(None, callback, ())
-        h2 = events.Handler(None, callback, ())
-        self.assertTrue((h1 <  h2) == False)
-        self.assertTrue((h1 <= h2) == True)
-        self.assertTrue((h1 >  h2) == False)
-        self.assertTrue((h1 >= h2) == True)
-        self.assertTrue((h1 == h2) == True)
+        args = ()
+        when = time.monotonic()
+        h = events.Timer(when, callback, args)
+        self.assertIs(h.callback, callback)
+        self.assertIs(h.args, args)
+        self.assertFalse(h.cancelled)
+
+        r = repr(h)
+        self.assertTrue(r.endswith('())'))
+
+        h.cancel()
+        self.assertTrue(h.cancelled)
+
+        r = repr(h)
+        self.assertTrue(r.endswith('())<cancelled>'))
+
+        self.assertRaises(AssertionError, events.Timer, None, callback, args)
+
+    def test_timer_comparison(self):
+        def callback(*args):
+            return args
 
         when = time.monotonic()
 
-        h1 = events.Handler(when, callback, ())
-        h2 = events.Handler(None, callback, ())
-        self.assertTrue((h1 <  h2) == False)
-        self.assertTrue((h1 <= h2) == False)
-        self.assertTrue((h1 >  h2) == True)
-        self.assertTrue((h1 >= h2) == True)
-        self.assertTrue((h1 == h2) == False)
-
-        self.assertTrue((h2 <  h1) == True)
-        self.assertTrue((h2 <= h1) == True)
-        self.assertTrue((h2 >  h1) == False)
-        self.assertTrue((h2 >= h1) == False)
-        self.assertTrue((h2 == h1) == False)
-
-        h1 = events.Handler(when, callback, ())
-        h2 = events.Handler(when, callback, ())
+        h1 = events.Timer(when, callback, ())
+        h2 = events.Timer(when, callback, ())
         self.assertTrue((h1 <  h2) == False)
         self.assertTrue((h1 <= h2) == True)
         self.assertTrue((h1 >  h2) == False)
         self.assertTrue((h1 >= h2) == True)
         self.assertTrue((h1 == h2) == True)
 
-        h1 = events.Handler(when, callback, ())
-        h2 = events.Handler(when + 10.0, callback, ())
+        h2.cancel()
+        self.assertTrue((h1 == h2) == False)
+
+        h1 = events.Timer(when, callback, ())
+        h2 = events.Timer(when + 10.0, callback, ())
         self.assertTrue((h1 <  h2) == True)
         self.assertTrue((h1 <= h2) == True)
         self.assertTrue((h1 >  h2) == False)
         self.assertTrue((h1 >= h2) == False)
         self.assertTrue((h1 == h2) == False)
-
-    def test_make_handler(self):
-        def callback(*args):
-            return args
-        h1 = events.Handler(None, callback, ())
-        h2 = events.make_handler(None, h1, ())
-        self.assertIs(h1, h2)
-
-        self.assertRaises(AssertionError,
-                          events.make_handler, 10.0, h1, ())
-
-        self.assertRaises(AssertionError,
-                          events.make_handler, None, h1, (1,2,))
 
 
 class PolicyTests(unittest.TestCase):

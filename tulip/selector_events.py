@@ -114,7 +114,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
 
     def add_reader(self, fd, callback, *args):
         """Add a reader callback.  Return a Handler instance."""
-        handler = events.make_handler(None, callback, args)
+        handler = events.make_handler(callback, args)
         try:
             mask, (reader, writer) = self._selector.get_info(fd)
         except KeyError:
@@ -144,7 +144,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
 
     def add_writer(self, fd, callback, *args):
         """Add a writer callback.  Return a Handler instance."""
-        handler = events.make_handler(None, callback, args)
+        handler = events.make_handler(callback, args)
         try:
             mask, (reader, writer) = self._selector.get_info(fd)
         except KeyError:

@@ -544,9 +544,11 @@ if sys.platform == 'win32':
         def test_writer_callback_with_handler(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_writer()")
         def test_accept_connection_retry(self):
-            raise unittest.SkipTest("IocpEventLoop does not have _accept_connection()")
+            raise unittest.SkipTest(
+                "IocpEventLoop does not have _accept_connection()")
         def test_accept_connection_exception(self):
-            raise unittest.SkipTest("IocpEventLoop does not have _accept_connection()")
+            raise unittest.SkipTest(
+                "IocpEventLoop does not have _accept_connection()")
 
 else:
     from . import selectors

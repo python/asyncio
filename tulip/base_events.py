@@ -251,7 +251,8 @@ class BaseEventLoop(events.AbstractEventLoop):
         waiter = futures.Future()
         if ssl:
             sslcontext = None if isinstance(ssl, bool) else ssl
-            transport = self.SslTransport(self, sock, protocol, sslcontext, waiter)
+            transport = self.SslTransport(self, sock, protocol,
+                                          sslcontext, waiter)
         else:
             transport = self.SocketTransport(self, sock, protocol, waiter)
 

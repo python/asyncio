@@ -60,6 +60,7 @@ class EventLoopTestsMixin:
     def tearDown(self):
         self.event_loop.close()
         gc.collect()
+        super().tearDown()
 
     def test_run(self):
         self.event_loop.run()  # Returns immediately.

@@ -408,15 +408,18 @@ class EventLoopTestsMixin:
         self.assertTrue(pr.nbytes > 0)
 
     def test_create_transport_host_port_sock(self):
+        self.suppress_log_errors()
         fut = self.event_loop.create_connection(
             MyProto, 'xkcd.com', 80, sock=object())
         self.assertRaises(ValueError, self.event_loop.run_until_complete, fut)
 
     def test_create_transport_no_host_port_sock(self):
+        self.suppress_log_errors()
         fut = self.event_loop.create_connection(MyProto)
         self.assertRaises(ValueError, self.event_loop.run_until_complete, fut)
 
     def test_create_transport_no_getaddrinfo(self):
+        self.suppress_log_errors()
         getaddrinfo = self.event_loop.getaddrinfo = unittest.mock.Mock()
         getaddrinfo.return_value = []
 
@@ -425,6 +428,7 @@ class EventLoopTestsMixin:
             socket.error, self.event_loop.run_until_complete, fut)
 
     def test_create_transport_connect_err(self):
+        self.suppress_log_errors()
         self.event_loop.sock_connect = unittest.mock.Mock()
         self.event_loop.sock_connect.side_effect = socket.error
 
@@ -469,14 +473,17 @@ class EventLoopTestsMixin:
         client.close()
 
     def test_start_serving_host_port_sock(self):
+        self.suppress_log_errors()
         fut = self.event_loop.start_serving(MyProto,'0.0.0.0',0,sock=object())
         self.assertRaises(ValueError, self.event_loop.run_until_complete, fut)
 
     def test_start_serving_no_host_port_sock(self):
+        self.suppress_log_errors()
         fut = self.event_loop.start_serving(MyProto)
         self.assertRaises(ValueError, self.event_loop.run_until_complete, fut)
 
     def test_start_serving_no_getaddrinfo(self):
+        self.suppress_log_errors()
         getaddrinfo = self.event_loop.getaddrinfo = unittest.mock.Mock()
         getaddrinfo.return_value = []
 
@@ -486,6 +493,8 @@ class EventLoopTestsMixin:
 
     @unittest.mock.patch('tulip.base_events.socket')
     def test_start_serving_cant_bind(self, m_socket):
+        self.suppress_log_errors()
+
         class Err(socket.error):
             pass
 

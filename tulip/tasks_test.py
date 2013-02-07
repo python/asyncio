@@ -163,6 +163,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertEqual({a}, pending)
 
     def test_wait_really_done(self):
+        self.suppress_log_errors()
         # there is possibility that some tasks in the pending list
         # became done but their callbacks haven't all been called yet
 
@@ -362,7 +363,9 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertEqual(1, m_logging.warn.call_args[0][1])
 
     def test_step_result_future(self):
-        """Coroutine returns Future"""
+        # Coroutine returns Future
+        self.suppress_log_warnings()
+
         class Fut(futures.Future):
             def __init__(self, *args):
                 self.cb_added = False
@@ -387,10 +390,11 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.event_loop.run()
         self.assertIs(res, task.result())
 
-    def test_step_result_cuncurrent_future(self):
-        """Coroutine returns cuncurrent.future.Future"""
-        class Fut(concurrent.futures.Future):
+    def test_step_result_concurrent_future(self):
+        # Coroutine returns concurrent.futures.Future
+        self.suppress_log_warnings()
 
+        class Fut(concurrent.futures.Future):
             def __init__(self):
                 self.cb_added = False
                 super().__init__()

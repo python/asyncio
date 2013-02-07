@@ -5,6 +5,7 @@ import errno
 import logging
 import socket
 import weakref
+import struct
 import _winapi
 
 
@@ -78,9 +79,10 @@ class IocpProactor:
         ov.AcceptEx(listener.fileno(), conn.fileno())
         def finish_accept():
             addr = ov.getresult()
+            buf = struct.pack('@P', listener.fileno())
             conn.setsockopt(socket.SOL_SOCKET,
                             _overlapped.SO_UPDATE_ACCEPT_CONTEXT,
-                            listener.fileno())
+                            buf)
             conn.settimeout(listener.gettimeout())
             return conn, conn.getpeername()
         return self._register(ov, listener, finish_accept)

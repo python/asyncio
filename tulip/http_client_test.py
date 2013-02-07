@@ -5,17 +5,20 @@ import unittest
 from . import events
 from . import http_client
 from . import tasks
+from . import test_utils
 
 
-class StreamReaderTests(unittest.TestCase):
+class StreamReaderTests(test_utils.LogTrackingTestCase):
 
     DATA = b'line1\nline2\nline3\n'
 
     def setUp(self):
+        super().setUp()
         self.event_loop = events.new_event_loop()
         events.set_event_loop(self.event_loop)
 
     def tearDown(self):
+        super().tearDown()
         self.event_loop.close()
 
     def test_feed_empty_data(self):
@@ -118,6 +121,47 @@ class StreamReaderTests(unittest.TestCase):
         self.assertFalse(stream.line_count)
         self.assertEqual(len(b'\n chunk4')-1, stream.byte_count)
 
+    def test_readline_limit_with_existing_data(self):
+        self.suppress_log_errors()
+
+        stream = http_client.StreamReader(3)
+        stream.feed_data(b'li')
+        stream.feed_data(b'ne1\nline2\n')
+
+        read_task = tasks.Task(stream.readline())
+        self.assertRaises(
+            ValueError, self.event_loop.run_until_complete, read_task)
+        self.assertEqual([b'line2\n'], list(stream.buffer))
+
+        stream = http_client.StreamReader(3)
+        stream.feed_data(b'li')
+        stream.feed_data(b'ne1')
+        stream.feed_data(b'li')
+
+        read_task = tasks.Task(stream.readline())
+        self.assertRaises(
+            ValueError, self.event_loop.run_until_complete, read_task)
+        self.assertEqual([b'li'], list(stream.buffer))
+        self.assertEqual(2, stream.byte_count)
+
+    def test_readline_limit(self):
+        self.suppress_log_errors()
+
+        stream = http_client.StreamReader(7)
+
+        def cb():
+            stream.feed_data(b'chunk1')
+            stream.feed_data(b'chunk2')
+            stream.feed_data(b'chunk3\n')
+            stream.feed_eof()
+        self.event_loop.call_soon(cb)
+
+        read_task = tasks.Task(stream.readline())
+        self.assertRaises(
+            ValueError, self.event_loop.run_until_complete, read_task)
+        self.assertEqual([b'chunk3\n'], list(stream.buffer))
+        self.assertEqual(7, stream.byte_count)
+
     def test_readline_line_byte_count(self):
         stream = http_client.StreamReader()
         stream.feed_data(self.DATA[:6])
@@ -129,6 +173,16 @@ class StreamReaderTests(unittest.TestCase):
         self.assertEqual(b'line1\n', line)
         self.assertEqual(self.DATA.count(b'\n')-1, stream.line_count)
         self.assertEqual(len(self.DATA) - len(b'line1\n'), stream.byte_count)
+
+    def test_readline_eof(self):
+        stream = http_client.StreamReader()
+        stream.feed_data(b'some data')
+        stream.feed_eof()
+
+        read_task = tasks.Task(stream.readline())
+        line = self.event_loop.run_until_complete(read_task)
+
+        self.assertEqual(b'some data', line)
 
     def test_readline_empty_eof(self):
         stream = http_client.StreamReader()

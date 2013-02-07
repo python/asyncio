@@ -249,30 +249,6 @@ overlapped_BindLocal(PyObject *self, PyObject *args)
 }
 
 /*
- * Set notification mode for the handle
- */
-
-PyDoc_STRVAR(
-    SetFileCompletionNotificationModes_doc,
-    "SetFileCompletionNotificationModes(FileHandle, Flags) -> None\n\n"
-    "Set whether notification happens if operation succeeds without blocking");
-
-static PyObject *
-overlapped_SetFileCompletionNotificationModes(PyObject *self, PyObject *args)
-{
-    HANDLE FileHandle;
-    UCHAR Flags;
-
-    if (!PyArg_ParseTuple(args, F_HANDLE F_BOOL, &FileHandle, &Flags))
-        return NULL;
-
-    if (!SetFileCompletionNotificationModes(FileHandle, Flags))
-        return SetFromWindowsErr(0);
-
-    Py_RETURN_NONE;
-}
-
-/*
  * A Python object wrapping an OVERLAPPED structure and other useful data
  * for overlapped I/O
  */
@@ -968,9 +944,6 @@ static PyMethodDef overlapped_functions[] = {
      METH_VARARGS, PostQueuedCompletionStatus_doc},
     {"BindLocal", overlapped_BindLocal,
      METH_VARARGS, BindLocal_doc},
-    {"SetFileCompletionNotificationModes",
-     overlapped_SetFileCompletionNotificationModes,
-     METH_VARARGS, SetFileCompletionNotificationModes_doc},
     {NULL}
 };
 
@@ -1013,7 +986,6 @@ PyInit__overlapped(void)
     d = PyModule_GetDict(m);
 
     WINAPI_CONSTANT(F_DWORD,  ERROR_IO_PENDING);
-    WINAPI_CONSTANT(F_DWORD,  FILE_SKIP_COMPLETION_PORT_ON_SUCCESS);
     WINAPI_CONSTANT(F_DWORD,  INFINITE);
     WINAPI_CONSTANT(F_HANDLE, INVALID_HANDLE_VALUE);
     WINAPI_CONSTANT(F_HANDLE, NULL);

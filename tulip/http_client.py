@@ -65,28 +65,41 @@ class StreamReader:
 
     @tasks.coroutine
     def readline(self):
-        # TODO: Limit line length for security.
-        while not self.line_count and not self.eof:
-            assert self.waiter is None
-            self.waiter = futures.Future()
-            yield from self.waiter
         parts = []
-        while self.buffer:
-            data = self.buffer.popleft()
-            ichar = data.find(b'\n')
-            if ichar < 0:
-                parts.append(data)
-            else:
-                ichar += 1
-                head, tail = data[:ichar], data[ichar:]
-                parts.append(head)
-                if tail:
-                    self.buffer.appendleft(tail)
-                self.line_count -= 1
+        parts_size = 0
+        not_enough = True
+
+        while not_enough:
+            while self.buffer and not_enough:
+                data = self.buffer.popleft()
+                ichar = data.find(b'\n')
+                if ichar < 0:
+                    parts.append(data)
+                    parts_size += len(data)
+                else:
+                    ichar += 1
+                    head, tail = data[:ichar], data[ichar:]
+                    if tail:
+                        self.buffer.appendleft(tail)
+                    self.line_count -= 1
+                    not_enough = False
+                    parts.append(head)
+                    parts_size += len(head)
+
+                if parts_size > self.limit:
+                    self.byte_count -= parts_size
+                    raise ValueError('Line is too long')
+
+            if self.eof:
                 break
 
+            if not_enough:
+                assert self.waiter is None
+                self.waiter = futures.Future()
+                yield from self.waiter
+
         line = b''.join(parts)
-        self.byte_count -= len(line)
+        self.byte_count -= parts_size
 
         return line
 

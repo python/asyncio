@@ -605,7 +605,7 @@ Overlapped_WriteFile(OverlappedObject *self, PyObject *args)
         return NULL;
 
 #if SIZEOF_SIZE_T > SIZEOF_LONG
-    if (self->write_buffer.len > (Py_ssize_t)PY_ULONG_MAX) {
+    if (self->write_buffer.len > (Py_ssize_t)ULONG_MAX) {
         PyBuffer_Release(&self->write_buffer);
         PyErr_SetString(PyExc_ValueError, "buffer to large");
         return NULL;

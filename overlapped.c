@@ -616,7 +616,8 @@ Overlapped_WriteFile(OverlappedObject *self, PyObject *args)
     self->handle = handle;
 
     Py_BEGIN_ALLOW_THREADS
-    ret = WriteFile(handle, self->write_buffer.buf, self->write_buffer.len,
+    ret = WriteFile(handle, self->write_buffer.buf,
+                    (DWORD)self->write_buffer.len,
                     &written, &self->overlapped);
     Py_END_ALLOW_THREADS
 
@@ -660,7 +661,7 @@ Overlapped_WSASend(OverlappedObject *self, PyObject *args)
         return NULL;
 
 #if SIZEOF_SIZE_T > SIZEOF_LONG
-    if (self->write_buffer.len > (Py_ssize_t)PY_ULONG_MAX) {
+    if (self->write_buffer.len > (Py_ssize_t)ULONG_MAX) {
         PyBuffer_Release(&self->write_buffer);
         PyErr_SetString(PyExc_ValueError, "buffer to large");
         return NULL;

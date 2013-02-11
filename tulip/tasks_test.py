@@ -131,6 +131,27 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertTrue(t.done())
         self.assertFalse(t.cancel())
 
+    def test_stop_while_run_in_complete(self):
+        x = 0
+        @tasks.coroutine
+        def task():
+            nonlocal x
+            while x < 10:
+                yield from tasks.sleep(0.1)
+                x += 1
+                if x == 2:
+                    self.event_loop.stop()
+
+        t = tasks.Task(task())
+        t0 = time.monotonic()
+        self.assertRaises(
+            futures.InvalidStateError,
+            self.event_loop.run_until_complete, t)
+        t1 = time.monotonic()
+        self.assertFalse(t.done())
+        self.assertTrue(0.18 <= t1-t0 <= 0.22)
+        self.assertEqual(x, 2)
+
     def test_timeout(self):
         @tasks.task
         def task():
@@ -138,10 +159,13 @@ class TaskTests(test_utils.LogTrackingTestCase):
             return 42
 
         t = task()
+        t0 = time.monotonic()
         self.assertRaises(
             futures.TimeoutError,
             self.event_loop.run_until_complete, t, 0.1)
+        t1 = time.monotonic()
         self.assertFalse(t.done())
+        self.assertTrue(0.08 <= t1-t0 <= 0.12)
 
     def test_timeout_not(self):
         @tasks.task
@@ -150,9 +174,12 @@ class TaskTests(test_utils.LogTrackingTestCase):
             return 42
 
         t = task()
+        t0 = time.monotonic()
         r = self.event_loop.run_until_complete(t, 10.0)
+        t1 = time.monotonic()
         self.assertTrue(t.done())
         self.assertEqual(r, 42)
+        self.assertTrue(0.08 <= t1-t0 <= 0.12)
 
     def test_wait(self):
         a = tasks.sleep(0.1)

@@ -37,7 +37,7 @@ class _StopError(BaseException):
     """Raised to stop the event loop."""
 
 
-def _raise_stop_error():
+def _raise_stop_error(*args):
     raise _StopError
 
 
@@ -94,16 +94,21 @@ class BaseEventLoop(events.AbstractEventLoop):
         Return the Future's result, or raise its exception.  If the
         timeout is reached or stop() is called, raise TimeoutError.
         """
+        handler_called = False
+        def stop_loop():
+            nonlocal handler_called
+            handler_called = True
+            raise _StopError
+        future.add_done_callback(_raise_stop_error)
         if timeout is None:
-            timeout = 0x7fffffff/1000.0  # 24 days
-        future.add_done_callback(lambda _: self.stop())
-        handler = self.call_later(timeout, _raise_stop_error)
-        self.run()
-        handler.cancel()
-        if future.done():
-            return future.result()  # May raise future.exception().
+            self.run_forever()
         else:
+            handler = self.call_later(timeout, stop_loop)
+            self.run()
+            handler.cancel()
+        if handler_called:
             raise futures.TimeoutError
+        return future.result()
 
     def stop(self):
         """Stop running the event loop.

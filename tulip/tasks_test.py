@@ -131,6 +131,29 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertTrue(t.done())
         self.assertFalse(t.cancel())
 
+    def test_timeout(self):
+        @tasks.task
+        def task():
+            yield from tasks.sleep(10.0)
+            return 42
+
+        t = task()
+        self.assertRaises(
+            futures.TimeoutError,
+            self.event_loop.run_until_complete, t, 0.1)
+        self.assertFalse(t.done())
+
+    def test_timeout_not(self):
+        @tasks.task
+        def task():
+            yield from tasks.sleep(0.1)
+            return 42
+
+        t = task()
+        r = self.event_loop.run_until_complete(t, 10.0)
+        self.assertTrue(t.done())
+        self.assertEqual(r, 42)
+
     def test_wait(self):
         a = tasks.sleep(0.1)
         b = tasks.sleep(0.15)

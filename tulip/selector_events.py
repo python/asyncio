@@ -41,22 +41,23 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
     See events.EventLoop for API specification.
     """
 
-    @staticmethod
-    def SocketTransport(event_loop, sock, protocol, waiter=None):
-        return _SelectorSocketTransport(event_loop, sock, protocol, waiter)
-
-    @staticmethod
-    def SslTransport(event_loop, rawsock, protocol, sslcontext, waiter):
-        return _SelectorSslTransport(event_loop, rawsock, protocol,
-                                     sslcontext, waiter)
-
     def __init__(self, selector=None):
         super().__init__()
+
         if selector is None:
             selector = selectors.Selector()
         logging.debug('Using selector: %s', selector.__class__.__name__)
         self._selector = selector
         self._make_self_pipe()
+
+    def _make_socket_transport(self, event_loop, sock, protocol, waiter=None):
+        return _SelectorSocketTransport(
+            event_loop, sock, protocol, waiter)
+
+    def _make_ssl_transport(self, event_loop, rawsock, protocol,
+                            sslcontext, waiter):
+        return _SelectorSslTransport(
+            event_loop, rawsock, protocol, sslcontext, waiter)
 
     def close(self):
         if self._selector is not None:
@@ -109,7 +110,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             logging.exception('Accept failed')
             return
         protocol = protocol_factory()
-        transport = self.SocketTransport(self, conn, protocol)
+        transport = self._make_socket_transport(self, conn, protocol)
         # It's now up to the protocol to handle the connection.
 
     def add_reader(self, fd, callback, *args):

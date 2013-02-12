@@ -49,6 +49,15 @@ class BaseEventLoop(events.AbstractEventLoop):
         self._default_executor = None
         self._signal_handlers = {}
 
+    def _make_socket_transport(self, event_loop, sock, protocol, waiter=None):
+        """Create socket transport."""
+        raise NotImplementedError
+
+    def _make_ssl_transport(self, event_loop, rawsock,
+                            protocol, sslcontext, waiter):
+        """Create SSL transport."""
+        raise NotImplementedError
+
     def run(self):
         """Run the event loop until nothing left to do or stop() called.
 
@@ -256,10 +265,11 @@ class BaseEventLoop(events.AbstractEventLoop):
         waiter = futures.Future()
         if ssl:
             sslcontext = None if isinstance(ssl, bool) else ssl
-            transport = self.SslTransport(self, sock, protocol,
-                                          sslcontext, waiter)
+            transport = self._make_ssl_transport(
+                self, sock, protocol, sslcontext, waiter)
         else:
-            transport = self.SocketTransport(self, sock, protocol, waiter)
+            transport = self._make_socket_transport(
+                self, sock, protocol, waiter)
 
         yield from waiter
         return transport, protocol

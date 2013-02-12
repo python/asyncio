@@ -10,8 +10,33 @@ except ImportError:
     ssl = None
 
 from . import futures
+from .selector_events import BaseSelectorEventLoop
 from .selector_events import _SelectorSslTransport
 from .selector_events import _SelectorSocketTransport
+
+
+class TestBaseSelectorEventLoop(BaseSelectorEventLoop):
+
+    def _make_self_pipe(self):
+        pass
+
+
+class BaseSelectorEventLoopTests(unittest.TestCase):
+
+    def setUp(self):
+        self.event_loop = TestBaseSelectorEventLoop()
+
+    def test_make_socket_transport(self):
+        m = unittest.mock.Mock()
+        self.assertIsInstance(
+            self.event_loop._make_socket_transport(m, m, m),
+            _SelectorSocketTransport)
+
+    def test_make_ssl_transport(self):
+        m = unittest.mock.Mock()
+        self.assertIsInstance(
+            self.event_loop._make_ssl_transport(m, m, m, m, m),
+            _SelectorSslTransport)
 
 
 class SelectorSocketTransportTests(unittest.TestCase):

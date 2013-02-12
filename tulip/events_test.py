@@ -18,6 +18,7 @@ import unittest
 import unittest.mock
 
 from . import events
+from . import futures
 from . import transports
 from . import protocols
 from . import selector_events
@@ -659,22 +660,93 @@ class TimerTests(unittest.TestCase):
 
         h1 = events.Timer(when, callback, ())
         h2 = events.Timer(when, callback, ())
-        self.assertTrue((h1 <  h2) == False)
-        self.assertTrue((h1 <= h2) == True)
-        self.assertTrue((h1 >  h2) == False)
-        self.assertTrue((h1 >= h2) == True)
-        self.assertTrue((h1 == h2) == True)
+        self.assertFalse(h1 < h2)
+        self.assertFalse(h2 < h1)
+        self.assertTrue(h1 <= h2)
+        self.assertTrue(h2 <= h1)
+        self.assertFalse(h1 > h2)
+        self.assertFalse(h2 > h1)
+        self.assertTrue(h1 >= h2)
+        self.assertTrue(h2 >= h1)
+        self.assertTrue(h1 == h2)
+        self.assertFalse(h1 != h2)
 
         h2.cancel()
-        self.assertTrue((h1 == h2) == False)
+        self.assertFalse(h1 == h2)
 
         h1 = events.Timer(when, callback, ())
         h2 = events.Timer(when + 10.0, callback, ())
-        self.assertTrue((h1 <  h2) == True)
-        self.assertTrue((h1 <= h2) == True)
-        self.assertTrue((h1 >  h2) == False)
-        self.assertTrue((h1 >= h2) == False)
-        self.assertTrue((h1 == h2) == False)
+        self.assertTrue(h1 < h2)
+        self.assertFalse(h2 < h1)
+        self.assertTrue(h1 <= h2)
+        self.assertFalse(h2 <= h1)
+        self.assertFalse(h1 > h2)
+        self.assertTrue(h2 > h1)
+        self.assertFalse(h1 >= h2)
+        self.assertTrue(h2 >= h1)
+        self.assertFalse(h1 == h2)
+        self.assertTrue(h1 != h2)
+
+        h3 = events.Handler(callback, ())
+        self.assertIs(NotImplemented, h1.__eq__(h3))
+        self.assertIs(NotImplemented, h1.__ne__(h3))
+
+
+class AbstractEventLoopTests(unittest.TestCase):
+
+    def test_not_imlemented(self):
+        f = unittest.mock.Mock()
+        ev_loop = events.AbstractEventLoop()
+        self.assertRaises(
+            NotImplementedError, ev_loop.run)
+        self.assertRaises(
+            NotImplementedError, ev_loop.run_forever)
+        self.assertRaises(
+            NotImplementedError, ev_loop.run_once)
+        self.assertRaises(
+            NotImplementedError, ev_loop.run_until_complete, None)
+        self.assertRaises(
+            NotImplementedError, ev_loop.stop)
+        self.assertRaises(
+            NotImplementedError, ev_loop.call_later, None, None)
+        self.assertRaises(
+            NotImplementedError, ev_loop.call_repeatedly, None, None)
+        self.assertRaises(
+            NotImplementedError, ev_loop.call_soon, None)
+        self.assertRaises(
+            NotImplementedError, ev_loop.call_soon_threadsafe, None)
+        self.assertRaises(
+            NotImplementedError, ev_loop.wrap_future, f)
+        self.assertRaises(
+            NotImplementedError, ev_loop.run_in_executor, f, f)
+        self.assertRaises(
+            NotImplementedError, ev_loop.getaddrinfo, 'localhost', 8080)
+        self.assertRaises(
+            NotImplementedError, ev_loop.getnameinfo, ('localhost', 8080))
+        self.assertRaises(
+            NotImplementedError, ev_loop.create_connection, f)
+        self.assertRaises(
+            NotImplementedError, ev_loop.start_serving, f)
+        self.assertRaises(
+            NotImplementedError, ev_loop.add_reader, 1, f)
+        self.assertRaises(
+            NotImplementedError, ev_loop.remove_reader, 1)
+        self.assertRaises(
+            NotImplementedError, ev_loop.add_writer, 1, f)
+        self.assertRaises(
+            NotImplementedError, ev_loop.remove_writer, 1)
+        self.assertRaises(
+            NotImplementedError, ev_loop.sock_recv, f, 10)
+        self.assertRaises(
+            NotImplementedError, ev_loop.sock_sendall, f, 10)
+        self.assertRaises(
+            NotImplementedError, ev_loop.sock_connect, f, f)
+        self.assertRaises(
+            NotImplementedError, ev_loop.sock_accept, f)
+        self.assertRaises(
+            NotImplementedError, ev_loop.add_signal_handler, 1, f)
+        self.assertRaises(
+            NotImplementedError, ev_loop.remove_signal_handler, 1)
 
 
 class PolicyTests(unittest.TestCase):

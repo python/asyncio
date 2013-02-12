@@ -9,7 +9,7 @@ import logging
 import socket
 try:
     import ssl
-except ImportError:
+except ImportError: # pragma: no cover
     ssl = None
 import sys
 
@@ -31,7 +31,7 @@ _DISCONNECTED = frozenset((errno.ECONNRESET,
 
 # Errno values indicating the socket isn't ready for I/O just yet.
 _TRYAGAIN = frozenset((errno.EAGAIN, errno.EWOULDBLOCK, errno.EINPROGRESS))
-if sys.platform == 'win32':
+if sys.platform == 'win32': # pragma: no cover
     _TRYAGAIN = frozenset(list(_TRYAGAIN) + [errno.WSAEWOULDBLOCK])
 
 
@@ -473,16 +473,22 @@ class _SelectorSslTransport(transports.Transport):
         try:
             n = self._sslsock.send(data)
         except ssl.SSLWantReadError:
-            pass
+            n = 0
         except ssl.SSLWantWriteError:
-            pass
+            n = 0
         except socket.error as exc:
             if exc.errno not in _TRYAGAIN:
                 self._fatal_error(exc)
                 return
-        else:
-            if n < len(data):
-                self._buffer.append(data[n:])
+            else:
+                n = 0
+
+        if n < len(data):
+            self._buffer.append(data[n:])
+        elif self._closing:
+            self._event_loop.remove_writer(self._sslsock.fileno())
+            self._sslsock.close()
+            self._protocol.connection_lost(None)
 
     def write(self, data):
         assert isinstance(data, bytes)

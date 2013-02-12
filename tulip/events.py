@@ -267,7 +267,7 @@ class DefaultEventLoopPolicy(threading.local, EventLoopPolicy):
         loop.
         """
         # TODO: Do something else for Windows.
-        if sys.platform == 'win32':
+        if sys.platform == 'win32': # pragma: no cover
             from . import windows_events
             return windows_events.SelectorEventLoop()
         else:

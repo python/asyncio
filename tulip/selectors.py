@@ -124,9 +124,11 @@ class _BaseSelector:
             key = self._fileobj_to_key[fileobj]
         except KeyError:
             raise ValueError("{!r} is not registered".format(fileobj))
-        if events != key.events:
+        if events != key.events or data != key.data:
             self.unregister(fileobj)
-            self.register(fileobj, events, data)
+            return self.register(fileobj, events, data)
+        else:
+            return key
 
     def select(self, timeout=None):
         """Perform the actual selection, until some monitored file objects are

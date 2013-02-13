@@ -49,13 +49,16 @@ class BaseEventLoop(events.AbstractEventLoop):
         self._default_executor = None
         self._signal_handlers = {}
 
-    def _make_socket_transport(self, event_loop, sock, protocol, waiter=None):
+    def _make_socket_transport(self, sock, protocol, waiter=None):
         """Create socket transport."""
         raise NotImplementedError
 
-    def _make_ssl_transport(self, event_loop, rawsock,
-                            protocol, sslcontext, waiter):
+    def _make_ssl_transport(self, rawsock, protocol, sslcontext, waiter):
         """Create SSL transport."""
+        raise NotImplementedError
+
+    def _process_events(self, event_list):
+        """Process selector events."""
         raise NotImplementedError
 
     def run(self):
@@ -266,10 +269,9 @@ class BaseEventLoop(events.AbstractEventLoop):
         if ssl:
             sslcontext = None if isinstance(ssl, bool) else ssl
             transport = self._make_ssl_transport(
-                self, sock, protocol, sslcontext, waiter)
+                sock, protocol, sslcontext, waiter)
         else:
-            transport = self._make_socket_transport(
-                self, sock, protocol, waiter)
+            transport = self._make_socket_transport(sock, protocol, waiter)
 
         yield from waiter
         return transport, protocol

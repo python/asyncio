@@ -10,6 +10,7 @@ except ImportError:
     ssl = None
 
 from . import futures
+from . import selectors
 from .selector_events import BaseSelectorEventLoop
 from .selector_events import _SelectorSslTransport
 from .selector_events import _SelectorSocketTransport
@@ -25,18 +26,23 @@ class TestBaseSelectorEventLoop(BaseSelectorEventLoop):
 class BaseSelectorEventLoopTests(unittest.TestCase):
 
     def setUp(self):
-        self.event_loop = TestBaseSelectorEventLoop()
+        self.event_loop = TestBaseSelectorEventLoop(unittest.mock.Mock())
 
     def test_make_socket_transport(self):
         m = unittest.mock.Mock()
+        self.event_loop.add_reader = unittest.mock.Mock()
         self.assertIsInstance(
-            self.event_loop._make_socket_transport(m, m, m),
+            self.event_loop._make_socket_transport(m, m),
             _SelectorSocketTransport)
 
     def test_make_ssl_transport(self):
         m = unittest.mock.Mock()
+        self.event_loop.add_reader = unittest.mock.Mock()
+        self.event_loop.add_writer = unittest.mock.Mock()
+        self.event_loop.remove_reader = unittest.mock.Mock()
+        self.event_loop.remove_writer = unittest.mock.Mock()
         self.assertIsInstance(
-            self.event_loop._make_ssl_transport(m, m, m, m, m),
+            self.event_loop._make_ssl_transport(m, m, m, m),
             _SelectorSslTransport)
 
     def test_close(self):
@@ -246,6 +252,289 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         self.assertEqual(
             (10, self.event_loop._sock_sendall, f, True, sock, b'data'),
             self.event_loop.add_writer.call_args[0])
+
+    def test_sock_connect(self):
+        sock = unittest.mock.Mock()
+        self.event_loop._sock_connect = unittest.mock.Mock()
+
+        f = self.event_loop.sock_connect(sock, ('127.0.0.1',8080))
+        self.assertIsInstance(f, futures.Future)
+        self.assertEqual(
+            (f, False, sock, ('127.0.0.1',8080)),
+            self.event_loop._sock_connect.call_args[0])
+
+    def test__sock_connect(self):
+        f = futures.Future()
+
+        sock = unittest.mock.Mock()
+        sock.fileno.return_value = 10
+
+        self.event_loop._sock_connect(f, False, sock, ('127.0.0.1',8080))
+        self.assertTrue(f.done())
+        self.assertTrue(sock.connect.called)
+
+    def test__sock_connect_canceled_fut(self):
+        sock = unittest.mock.Mock()
+
+        f = futures.Future()
+        f.cancel()
+
+        self.event_loop._sock_connect(f, False, sock, ('127.0.0.1',8080))
+        self.assertFalse(sock.connect.called)
+
+    def test__sock_connect_unregister(self):
+        sock = unittest.mock.Mock()
+        sock.fileno.return_value = 10
+
+        f = futures.Future()
+        f.cancel()
+
+        self.event_loop.remove_writer = unittest.mock.Mock()
+        self.event_loop._sock_connect(f, True, sock, ('127.0.0.1',8080))
+        self.assertEqual((10,), self.event_loop.remove_writer.call_args[0])
+
+    def test__sock_connect_tryagain(self):
+        f = futures.Future()
+        sock = unittest.mock.Mock()
+        sock.fileno.return_value = 10
+        sock.getsockopt.return_value = errno.EAGAIN
+
+        self.event_loop.add_writer = unittest.mock.Mock()
+        self.event_loop.remove_writer = unittest.mock.Mock()
+
+        self.event_loop._sock_connect(f, True, sock, ('127.0.0.1',8080))
+        self.assertEqual(
+            (10, self.event_loop._sock_connect, f,
+             True, sock, ('127.0.0.1',8080)),
+            self.event_loop.add_writer.call_args[0])
+
+    def test__sock_connect_exception(self):
+        f = futures.Future()
+        sock = unittest.mock.Mock()
+        sock.fileno.return_value = 10
+        sock.getsockopt.return_value = errno.ENOTCONN
+
+        self.event_loop.remove_writer = unittest.mock.Mock()
+        self.event_loop._sock_connect(f, True, sock, ('127.0.0.1',8080))
+        self.assertIsInstance(f.exception(), socket.error)
+
+    def test_sock_accept(self):
+        sock = unittest.mock.Mock()
+        self.event_loop._sock_accept = unittest.mock.Mock()
+
+        f = self.event_loop.sock_accept(sock)
+        self.assertIsInstance(f, futures.Future)
+        self.assertEqual(
+            (f, False, sock), self.event_loop._sock_accept.call_args[0])
+
+    def test__sock_accept(self):
+        f = futures.Future()
+
+        conn = unittest.mock.Mock()
+
+        sock = unittest.mock.Mock()
+        sock.fileno.return_value = 10
+        sock.accept.return_value = conn, ('127.0.0.1', 1000)
+
+        self.event_loop._sock_accept(f, False, sock)
+        self.assertTrue(f.done())
+        self.assertEqual((conn, ('127.0.0.1', 1000)), f.result())
+        self.assertEqual((False,), conn.setblocking.call_args[0])
+
+    def test__sock_accept_canceled_fut(self):
+        sock = unittest.mock.Mock()
+
+        f = futures.Future()
+        f.cancel()
+
+        self.event_loop._sock_accept(f, False, sock)
+        self.assertFalse(sock.accept.called)
+
+    def test__sock_accept_unregister(self):
+        sock = unittest.mock.Mock()
+        sock.fileno.return_value = 10
+
+        f = futures.Future()
+        f.cancel()
+
+        self.event_loop.remove_reader = unittest.mock.Mock()
+        self.event_loop._sock_accept(f, True, sock)
+        self.assertEqual((10,), self.event_loop.remove_reader.call_args[0])
+
+    def test__sock_accept_tryagain(self):
+        class Err(socket.error):
+            errno = errno.EAGAIN
+
+        f = futures.Future()
+        sock = unittest.mock.Mock()
+        sock.fileno.return_value = 10
+        sock.accept.side_effect = Err
+
+        self.event_loop.add_reader = unittest.mock.Mock()
+        self.event_loop._sock_accept(f, False, sock)
+        self.assertEqual(
+            (10, self.event_loop._sock_accept, f, True, sock),
+            self.event_loop.add_reader.call_args[0])
+
+    def test__sock_accept_exception(self):
+        class Err(socket.error):
+            pass
+
+        f = futures.Future()
+        sock = unittest.mock.Mock()
+        sock.fileno.return_value = 10
+        sock.accept.side_effect = Err
+
+        self.event_loop._sock_accept(f, False, sock)
+        self.assertIsInstance(f.exception(), Err)
+
+    def test_add_reader(self):
+        self.event_loop._selector.get_info.side_effect = KeyError
+        h = self.event_loop.add_reader(1, lambda: True)
+
+        self.assertTrue(self.event_loop._selector.register.called)
+        self.assertEqual(
+            (1, selectors.EVENT_READ, (h, None)),
+            self.event_loop._selector.register.call_args[0])
+
+    def test_add_reader_existing(self):
+        reader = unittest.mock.Mock()
+        writer = unittest.mock.Mock()
+        self.event_loop._selector.get_info.return_value = (
+            selectors.EVENT_WRITE, (reader, writer))
+        h = self.event_loop.add_reader(1, lambda: True)
+
+        self.assertTrue(reader.cancel.called)
+        self.assertFalse(self.event_loop._selector.register.called)
+        self.assertTrue(self.event_loop._selector.modify.called)
+        self.assertEqual(
+            (1, selectors.EVENT_WRITE | selectors.EVENT_READ, (h, writer)),
+            self.event_loop._selector.modify.call_args[0])
+
+    def test_add_reader_existing_writer(self):
+        writer = unittest.mock.Mock()
+        self.event_loop._selector.get_info.return_value = (
+            selectors.EVENT_WRITE, (None, writer))
+        h = self.event_loop.add_reader(1, lambda: True)
+
+        self.assertFalse(self.event_loop._selector.register.called)
+        self.assertTrue(self.event_loop._selector.modify.called)
+        self.assertEqual(
+            (1, selectors.EVENT_WRITE | selectors.EVENT_READ, (h, writer)),
+            self.event_loop._selector.modify.call_args[0])
+
+    def test_remove_reader(self):
+        self.event_loop._selector.get_info.return_value = (
+            selectors.EVENT_READ, (None, None))
+        self.assertFalse(self.event_loop.remove_reader(1))
+
+        self.assertTrue(self.event_loop._selector.unregister.called)
+
+    def test_remove_reader_read_write(self):
+        reader = unittest.mock.Mock()
+        writer = unittest.mock.Mock()
+        self.event_loop._selector.get_info.return_value = (
+            selectors.EVENT_READ | selectors.EVENT_WRITE, (reader, writer))
+        self.assertTrue(
+            self.event_loop.remove_reader(1))
+
+        self.assertFalse(self.event_loop._selector.unregister.called)
+        self.assertEqual(
+            (1, selectors.EVENT_WRITE, (None, writer)),
+            self.event_loop._selector.modify.call_args[0])
+
+    def test_remove_reader_unknown(self):
+        self.event_loop._selector.get_info.side_effect = KeyError
+        self.assertFalse(
+            self.event_loop.remove_reader(1))
+
+    def test_add_writer(self):
+        self.event_loop._selector.get_info.side_effect = KeyError
+        h = self.event_loop.add_writer(1, lambda: True)
+
+        self.assertTrue(self.event_loop._selector.register.called)
+        self.assertEqual(
+            (1, selectors.EVENT_WRITE, (None, h)),
+            self.event_loop._selector.register.call_args[0])
+
+    def test_add_writer_existing(self):
+        reader = unittest.mock.Mock()
+        writer = unittest.mock.Mock()
+        self.event_loop._selector.get_info.return_value = (
+            selectors.EVENT_READ, (reader, writer))
+        h = self.event_loop.add_writer(1, lambda: True)
+
+        self.assertTrue(writer.cancel.called)
+        self.assertFalse(self.event_loop._selector.register.called)
+        self.assertTrue(self.event_loop._selector.modify.called)
+        self.assertEqual(
+            (1, selectors.EVENT_WRITE | selectors.EVENT_READ, (reader, h)),
+            self.event_loop._selector.modify.call_args[0])
+
+    def test_remove_writer(self):
+        self.event_loop._selector.get_info.return_value = (
+            selectors.EVENT_WRITE, (None, None))
+        self.assertFalse(self.event_loop.remove_writer(1))
+
+        self.assertTrue(self.event_loop._selector.unregister.called)
+
+    def test_remove_writer_read_write(self):
+        reader = unittest.mock.Mock()
+        writer = unittest.mock.Mock()
+        self.event_loop._selector.get_info.return_value = (
+            selectors.EVENT_READ | selectors.EVENT_WRITE, (reader, writer))
+        self.assertTrue(
+            self.event_loop.remove_writer(1))
+
+        self.assertFalse(self.event_loop._selector.unregister.called)
+        self.assertEqual(
+            (1, selectors.EVENT_READ, (reader, None)),
+            self.event_loop._selector.modify.call_args[0])
+
+    def test_remove_writer_unknown(self):
+        self.event_loop._selector.get_info.side_effect = KeyError
+        self.assertFalse(
+            self.event_loop.remove_writer(1))
+
+    def test_process_events_read(self):
+        reader = unittest.mock.Mock()
+        reader.cancelled = False
+
+        self.event_loop._add_callback = unittest.mock.Mock()
+        self.event_loop._process_events(
+            ((1, selectors.EVENT_READ, (reader, None)),))
+        self.assertTrue(self.event_loop._add_callback.called)
+        self.assertEqual((reader,), self.event_loop._add_callback.call_args[0])
+
+    def test_process_events_read_cancelled(self):
+        reader = unittest.mock.Mock()
+        reader.cancelled = True
+
+        self.event_loop.remove_reader = unittest.mock.Mock()
+        self.event_loop._process_events(
+            ((1, selectors.EVENT_READ, (reader, None)),))
+        self.assertTrue(self.event_loop.remove_reader.called)
+        self.assertEqual((1,), self.event_loop.remove_reader.call_args[0])
+
+    def test_process_events_write(self):
+        writer = unittest.mock.Mock()
+        writer.cancelled = False
+
+        self.event_loop._add_callback = unittest.mock.Mock()
+        self.event_loop._process_events(
+            ((1, selectors.EVENT_WRITE, (None, writer)),))
+        self.assertTrue(self.event_loop._add_callback.called)
+        self.assertEqual((writer,), self.event_loop._add_callback.call_args[0])
+
+    def test_process_events_write_cancelled(self):
+        writer = unittest.mock.Mock()
+        writer.cancelled = True
+
+        self.event_loop.remove_writer = unittest.mock.Mock()
+        self.event_loop._process_events(
+            ((1, selectors.EVENT_WRITE, (None, writer)),))
+        self.assertTrue(self.event_loop.remove_writer.called)
+        self.assertEqual((1,), self.event_loop.remove_writer.call_args[0])
 
 
 class SelectorSocketTransportTests(unittest.TestCase):

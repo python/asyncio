@@ -102,18 +102,15 @@ class _ProactorSocketTransport(transports.Transport):
 
 class BaseProactorEventLoop(base_events.BaseEventLoop):
 
-    SocketTransport = _ProactorSocketTransport
-
-    @staticmethod
-    def SslTransport(*args, **kwds):
-        raise NotImplementedError
-
     def __init__(self, proactor):
         super().__init__()
         logging.debug('Using proactor: %s', proactor.__class__.__name__)
         self._proactor = proactor
         self._selector = proactor   # convenient alias
         self._make_self_pipe()
+
+    def _make_socket_transport(self, sock, protocol, waiter=None):
+        return _ProactorSocketTransport(self, sock, protocol, waiter)
 
     def close(self):
         if self._proactor is not None:

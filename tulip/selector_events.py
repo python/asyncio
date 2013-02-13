@@ -50,14 +50,12 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         self._selector = selector
         self._make_self_pipe()
 
-    def _make_socket_transport(self, event_loop, sock, protocol, waiter=None):
-        return _SelectorSocketTransport(
-            event_loop, sock, protocol, waiter)
+    def _make_socket_transport(self, sock, protocol, waiter=None):
+        return _SelectorSocketTransport(self, sock, protocol, waiter)
 
-    def _make_ssl_transport(self, event_loop, rawsock, protocol,
-                            sslcontext, waiter):
+    def _make_ssl_transport(self, rawsock, protocol, sslcontext, waiter):
         return _SelectorSslTransport(
-            event_loop, rawsock, protocol, sslcontext, waiter)
+            self, rawsock, protocol, sslcontext, waiter)
 
     def close(self):
         if self._selector is not None:
@@ -110,7 +108,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             logging.exception('Accept failed')
             return
         protocol = protocol_factory()
-        transport = self._make_socket_transport(self, conn, protocol)
+        transport = self._make_socket_transport(conn, protocol)
         # It's now up to the protocol to handle the connection.
 
     def add_reader(self, fd, callback, *args):
@@ -124,6 +122,8 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         else:
             self._selector.modify(fd, mask | selectors.EVENT_READ,
                                   (handler, writer))
+            if reader is not None:
+                reader.cancel()
 
         return handler
 
@@ -139,9 +139,12 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
                 self._selector.unregister(fd)
             else:
                 self._selector.modify(fd, mask, (None, writer))
+
             if reader is not None:
                 reader.cancel()
-            return True
+                return True
+            else:
+                return False
 
     def add_writer(self, fd, callback, *args):
         """Add a writer callback.  Return a Handler instance."""
@@ -154,6 +157,9 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         else:
             self._selector.modify(fd, mask | selectors.EVENT_WRITE,
                                   (reader, handler))
+            if writer is not None:
+                writer.cancel()
+
         return handler
 
     def remove_writer(self, fd):
@@ -169,9 +175,12 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
                 self._selector.unregister(fd)
             else:
                 self._selector.modify(fd, mask, (reader, None))
+
             if writer is not None:
                 writer.cancel()
-            return True
+                return True
+            else:
+                return False
 
     def sock_recv(self, sock, n):
         """XXX"""

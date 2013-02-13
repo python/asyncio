@@ -14,7 +14,10 @@ class BaseEventLoopTests(unittest.TestCase):
         m = unittest.mock.Mock()
         self.assertRaises(
             NotImplementedError,
-            base_event_loop._make_socket_transport, m, m, m)
+            base_event_loop._make_socket_transport, m, m)
         self.assertRaises(
             NotImplementedError,
-            base_event_loop._make_ssl_transport, m, m, m, m, m)
+            base_event_loop._make_ssl_transport, m, m, m, m)
+        self.assertRaises(
+            NotImplementedError,
+            base_event_loop._process_events, [])

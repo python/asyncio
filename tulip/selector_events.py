@@ -201,23 +201,28 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
     def sock_sendall(self, sock, data):
         """XXX"""
         fut = futures.Future()
-        self._sock_sendall(fut, False, sock, data)
+        if data:
+            self._sock_sendall(fut, False, sock, data)
+        else:
+            fut.set_result(None)
         return fut
 
     def _sock_sendall(self, fut, registered, sock, data):
         fd = sock.fileno()
+
         if registered:
             self.remove_writer(fd)
         if fut.cancelled():
             return
-        n = 0
+
         try:
-            if data:
-                n = sock.send(data)
+            n = sock.send(data)
         except socket.error as exc:
             if exc.errno not in _TRYAGAIN:
                 fut.set_exception(exc)
                 return
+            n = 0
+
         if n == len(data):
             fut.set_result(None)
         else:

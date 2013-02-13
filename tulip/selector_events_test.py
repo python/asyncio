@@ -18,7 +18,8 @@ from .selector_events import _SelectorSocketTransport
 class TestBaseSelectorEventLoop(BaseSelectorEventLoop):
 
     def _make_self_pipe(self):
-        pass
+        self._ssock = unittest.mock.Mock()
+        self._csock = unittest.mock.Mock()
 
 
 class BaseSelectorEventLoopTests(unittest.TestCase):
@@ -37,6 +38,214 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         self.assertIsInstance(
             self.event_loop._make_ssl_transport(m, m, m, m, m),
             _SelectorSslTransport)
+
+    def test_close(self):
+        self.event_loop._selector.close()
+        self.event_loop._selector = selector = unittest.mock.Mock()
+        self.event_loop.close()
+        self.assertIsNone(self.event_loop._selector)
+        self.assertTrue(selector.close.called)
+        self.assertTrue(self.event_loop._ssock.close.called)
+        self.assertTrue(self.event_loop._csock.close.called)
+
+    def test_close_no_selector(self):
+        self.event_loop._selector.close()
+        self.event_loop._selector = None
+        self.event_loop.close()
+        self.assertIsNone(self.event_loop._selector)
+        self.assertTrue(self.event_loop._ssock.close.called)
+        self.assertTrue(self.event_loop._csock.close.called)
+
+    def test_socketpair(self):
+        self.assertRaises(NotImplementedError, self.event_loop._socketpair)
+
+    def test_read_from_self_tryagain(self):
+        class Err(socket.error):
+            errno = errno.EAGAIN
+
+        self.event_loop._ssock.recv.side_effect = Err
+        self.assertIsNone(self.event_loop._read_from_self())
+
+    def test_read_from_self_exception(self):
+        class Err(socket.error):
+            pass
+
+        self.event_loop._ssock.recv.side_effect = Err
+        self.assertRaises(Err, self.event_loop._read_from_self)
+
+    def test_write_to_self_tryagain(self):
+        class Err(socket.error):
+            errno = errno.EAGAIN
+
+        self.event_loop._csock.send.side_effect = Err
+        self.assertIsNone(self.event_loop._write_to_self())
+
+    def test_write_to_self_exception(self):
+        class Err(socket.error):
+            pass
+
+        self.event_loop._csock.send.side_effect = Err
+        self.assertRaises(Err, self.event_loop._write_to_self)
+
+    def test_sock_recv(self):
+        sock = unittest.mock.Mock()
+        self.event_loop._sock_recv = unittest.mock.Mock()
+
+        f = self.event_loop.sock_recv(sock, 1024)
+        self.assertIsInstance(f, futures.Future)
+        self.assertEqual(
+            (f, False, sock, 1024),
+            self.event_loop._sock_recv.call_args[0])
+
+    def test__sock_recv_canceled_fut(self):
+        sock = unittest.mock.Mock()
+
+        f = futures.Future()
+        f.cancel()
+
+        self.event_loop._sock_recv(f, False, sock, 1024)
+        self.assertFalse(sock.recv.called)
+
+    def test__sock_recv_unregister(self):
+        sock = unittest.mock.Mock()
+        sock.fileno.return_value = 10
+
+        f = futures.Future()
+        f.cancel()
+
+        self.event_loop.remove_reader = unittest.mock.Mock()
+        self.event_loop._sock_recv(f, True, sock, 1024)
+        self.assertEqual((10,), self.event_loop.remove_reader.call_args[0])
+
+    def test__sock_recv_tryagain(self):
+        class Err(socket.error):
+            errno = errno.EAGAIN
+
+        f = futures.Future()
+        sock = unittest.mock.Mock()
+        sock.fileno.return_value = 10
+        sock.recv.side_effect = Err
+
+        self.event_loop.add_reader = unittest.mock.Mock()
+        self.event_loop._sock_recv(f, False, sock, 1024)
+        self.assertEqual((10, self.event_loop._sock_recv, f, True, sock, 1024),
+                         self.event_loop.add_reader.call_args[0])
+
+    def test__sock_recv_exception(self):
+        class Err(socket.error):
+            pass
+
+        f = futures.Future()
+        sock = unittest.mock.Mock()
+        sock.fileno.return_value = 10
+        sock.recv.side_effect = Err
+
+        self.event_loop._sock_recv(f, False, sock, 1024)
+        self.assertIsInstance(f.exception(), Err)
+
+    def test_sock_sendall(self):
+        sock = unittest.mock.Mock()
+        self.event_loop._sock_sendall = unittest.mock.Mock()
+
+        f = self.event_loop.sock_sendall(sock, b'data')
+        self.assertIsInstance(f, futures.Future)
+        self.assertEqual(
+            (f, False, sock, b'data'),
+            self.event_loop._sock_sendall.call_args[0])
+
+    def test_sock_sendall_nodata(self):
+        sock = unittest.mock.Mock()
+        self.event_loop._sock_sendall = unittest.mock.Mock()
+
+        f = self.event_loop.sock_sendall(sock, b'')
+        self.assertIsInstance(f, futures.Future)
+        self.assertTrue(f.done())
+        self.assertFalse(self.event_loop._sock_sendall.called)
+
+    def test__sock_sendall_canceled_fut(self):
+        sock = unittest.mock.Mock()
+
+        f = futures.Future()
+        f.cancel()
+
+        self.event_loop._sock_sendall(f, False, sock, b'data')
+        self.assertFalse(sock.send.called)
+
+    def test__sock_sendall_unregister(self):
+        sock = unittest.mock.Mock()
+        sock.fileno.return_value = 10
+
+        f = futures.Future()
+        f.cancel()
+
+        self.event_loop.remove_writer = unittest.mock.Mock()
+        self.event_loop._sock_sendall(f, True, sock, b'data')
+        self.assertEqual((10,), self.event_loop.remove_writer.call_args[0])
+
+    def test__sock_sendall_tryagain(self):
+        class Err(socket.error):
+            errno = errno.EAGAIN
+
+        f = futures.Future()
+        sock = unittest.mock.Mock()
+        sock.fileno.return_value = 10
+        sock.send.side_effect = Err
+
+        self.event_loop.add_writer = unittest.mock.Mock()
+        self.event_loop._sock_sendall(f, False, sock, b'data')
+        self.assertEqual(
+            (10, self.event_loop._sock_sendall, f, True, sock, b'data'),
+            self.event_loop.add_writer.call_args[0])
+
+    def test__sock_sendall_exception(self):
+        class Err(socket.error):
+            pass
+
+        f = futures.Future()
+        sock = unittest.mock.Mock()
+        sock.fileno.return_value = 10
+        sock.send.side_effect = Err
+
+        self.event_loop._sock_sendall(f, False, sock, b'data')
+        self.assertIsInstance(f.exception(), Err)
+
+    def test__sock_sendall(self):
+        sock = unittest.mock.Mock()
+
+        f = futures.Future()
+        sock.fileno.return_value = 10
+        sock.send.return_value = 4
+
+        self.event_loop._sock_sendall(f, False, sock, b'data')
+        self.assertTrue(f.done())
+
+    def test__sock_sendall_partial(self):
+        sock = unittest.mock.Mock()
+
+        f = futures.Future()
+        sock.fileno.return_value = 10
+        sock.send.return_value = 2
+
+        self.event_loop.add_writer = unittest.mock.Mock()
+        self.event_loop._sock_sendall(f, False, sock, b'data')
+        self.assertFalse(f.done())
+        self.assertEqual(
+            (10, self.event_loop._sock_sendall, f, True, sock, b'ta'),
+            self.event_loop.add_writer.call_args[0])
+
+    def test__sock_sendall_none(self):
+        sock = unittest.mock.Mock()
+
+        f = futures.Future()
+        sock.fileno.return_value = 10
+        sock.send.return_value = 0
+
+        self.event_loop.add_writer = unittest.mock.Mock()
+        self.event_loop._sock_sendall(f, False, sock, b'data')
+        self.assertFalse(f.done())
+        self.assertEqual(
+            (10, self.event_loop._sock_sendall, f, True, sock, b'data'),
+            self.event_loop.add_writer.call_args[0])
 
 
 class SelectorSocketTransportTests(unittest.TestCase):

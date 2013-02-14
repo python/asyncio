@@ -1,6 +1,5 @@
 """Tests for selectors.py."""
 
-import sys
 import unittest
 import unittest.mock
 
@@ -21,11 +20,9 @@ class BaseSelectorTests(unittest.TestCase):
         self.assertRaises(ValueError, selectors._fileobj_to_fd, f)
 
     def test_selector_key_repr(self):
-        key = selectors.SelectorKey(sys.stdin, selectors.EVENT_READ)
+        key = selectors.SelectorKey(10, selectors.EVENT_READ)
         self.assertEqual(
-            "SelectorKey<fileobj=<_io.TextIOWrapper name='<stdin>' "
-            "mode='r' encoding='UTF-8'>, fd=0, events=0x1, data=None>",
-            repr(key))
+            "SelectorKey<fileobj=10, fd=10, events=0x1, data=None>", repr(key))
 
     def test_register(self):
         fobj = unittest.mock.Mock()

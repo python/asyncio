@@ -161,7 +161,7 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
                 if f:
                     conn, addr = f.result()
                     protocol = protocol_factory()
-                    transport = self.SocketTransport(self, conn, protocol)
+                    transport = self._make_socket_transport(conn, protocol)
                 f = self._proactor.accept(sock)
             except OSError as exc:
                 sock.close()

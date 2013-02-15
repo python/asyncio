@@ -50,12 +50,13 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         self._selector = selector
         self._make_self_pipe()
 
-    def _make_socket_transport(self, sock, protocol, waiter=None):
-        return _SelectorSocketTransport(self, sock, protocol, waiter)
+    def _make_socket_transport(self, sock, protocol, waiter=None, extra=None):
+        return _SelectorSocketTransport(self, sock, protocol, waiter, extra)
 
-    def _make_ssl_transport(self, rawsock, protocol, sslcontext, waiter):
+    def _make_ssl_transport(self, rawsock, protocol,
+                            sslcontext, waiter, extra=None):
         return _SelectorSslTransport(
-            self, rawsock, protocol, sslcontext, waiter)
+            self, rawsock, protocol, sslcontext, waiter, extra)
 
     def close(self):
         if self._selector is not None:
@@ -108,7 +109,8 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             logging.exception('Accept failed')
             return
         protocol = protocol_factory()
-        transport = self._make_socket_transport(conn, protocol)
+        transport = self._make_socket_transport(
+            conn, protocol, extra={'addr': addr})
         # It's now up to the protocol to handle the connection.
 
     def add_reader(self, fd, callback, *args):
@@ -310,7 +312,9 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
 
 class _SelectorSocketTransport(transports.Transport):
 
-    def __init__(self, event_loop, sock, protocol, waiter=None):
+    def __init__(self, event_loop, sock, protocol, waiter=None, extra=None):
+        super().__init__(extra)
+        self._extra['socket'] = sock
         self._event_loop = event_loop
         self._sock = sock
         self._protocol = protocol
@@ -406,7 +410,10 @@ class _SelectorSocketTransport(transports.Transport):
 
 class _SelectorSslTransport(transports.Transport):
 
-    def __init__(self, event_loop, rawsock, protocol, sslcontext, waiter):
+    def __init__(self, event_loop, rawsock,
+                 protocol, sslcontext, waiter, extra=None):
+        super().__init__(extra)
+
         self._event_loop = event_loop
         self._rawsock = rawsock
         self._protocol = protocol
@@ -418,6 +425,8 @@ class _SelectorSslTransport(transports.Transport):
         self._sslsock = sslsock
         self._buffer = []
         self._closing = False  # Set when close() called.
+        self._extra['socket'] = sslsock
+
         self._on_handshake()
 
     def _on_handshake(self):

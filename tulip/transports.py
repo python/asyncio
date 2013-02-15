@@ -24,6 +24,15 @@ class Transport:
     except writelines(), which calls write() in a loop.
     """
 
+    def __init__(self, extra=None):
+        if extra is None:
+            extra = {}
+        self._extra = extra
+
+    def get_extra_info(self, name, default=None):
+        """Get optional transport information."""
+        return self._extra.get(name, default)
+
     def write(self, data):
         """Write some data bytes to the transport.
 

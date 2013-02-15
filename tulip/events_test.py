@@ -405,6 +405,7 @@ class EventLoopTestsMixin:
         self.assertTrue(isinstance(tr, transports.Transport))
         self.assertTrue(isinstance(pr, protocols.Protocol))
         self.assertTrue('ssl' in tr.__class__.__name__.lower())
+        self.assertTrue(hasattr(tr.get_extra_info('socket'), 'getsockname'))
         self.event_loop.run()
         self.assertTrue(pr.nbytes > 0)
 
@@ -438,17 +439,41 @@ class EventLoopTestsMixin:
             socket.error, self.event_loop.run_until_complete, fut)
 
     def test_start_serving(self):
-        f = self.event_loop.start_serving(MyProto, '0.0.0.0', 0)
+        proto = None
+        def factory():
+            nonlocal proto
+            proto = MyProto()
+            return proto
+
+        f = self.event_loop.start_serving(factory, '0.0.0.0', 0)
         sock = self.event_loop.run_until_complete(f)
         host, port = sock.getsockname()
         self.assertEqual(host, '0.0.0.0')
         client = socket.socket()
         client.connect(('127.0.0.1', port))
         client.send(b'xxx')
-        self.event_loop.run_once()  # This is quite mysterious, but necessary.
         self.event_loop.run_once()
+        self.assertIsInstance(proto, MyProto)
+        self.assertEqual('INITIAL', proto.state)
         self.event_loop.run_once()
-        sock.close()
+        self.assertEqual('CONNECTED', proto.state)
+        self.assertEqual(0, proto.nbytes)
+        self.event_loop.run_once()
+        self.assertEqual(3, proto.nbytes)
+
+        # extra info is available
+        self.assertIsNotNone(proto.transport.get_extra_info('socket'))
+        conn = proto.transport.get_extra_info('socket')
+        self.assertTrue(hasattr(conn, 'getsockname'))
+        self.assertEqual(
+            '127.0.0.1', proto.transport.get_extra_info('addr')[0])
+
+        # close connection
+        proto.transport.close()
+
+        self.event_loop.run_once()
+        self.assertEqual('CLOSED', proto.state)
+
         # the client socket must be closed after to avoid ECONNRESET upon
         # recv()/send() on the serving socket
         client.close()

@@ -66,8 +66,6 @@ FROM OLDER LIST
 - Add explicit wait queue to wait for Task's completion, instead of
   callbacks?
 
-- Implement various lock styles a la threading.py.
-
 - Look at pyfdpdlib's ioloop.py:
   http://code.google.com/p/pyftpdlib/source/browse/trunk/pyftpdlib/lib/ioloop.py
 

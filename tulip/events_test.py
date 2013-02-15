@@ -387,7 +387,7 @@ class EventLoopTestsMixin:
         self.event_loop.run_forever()
         self.assertEqual(caught, 1)
 
-    def test_create_transport(self):
+    def test_create_connection(self):
         # TODO: This depends on xkcd.com behavior!
         f = self.event_loop.create_connection(MyProto, 'xkcd.com', 80)
         tr, pr = self.event_loop.run_until_complete(f)
@@ -396,8 +396,31 @@ class EventLoopTestsMixin:
         self.event_loop.run()
         self.assertTrue(pr.nbytes > 0)
 
+    def test_create_connection_sock(self):
+        # TODO: This depends on xkcd.com behavior!
+        sock = None
+        infos = self.event_loop.run_until_complete(
+            self.event_loop.getaddrinfo('xkcd.com', 80,type=socket.SOCK_STREAM))
+        for family, type, proto, cname, address in infos:
+            try:
+                sock = socket.socket(family=family, type=type, proto=proto)
+                sock.setblocking(False)
+                self.event_loop.run_until_complete(
+                    self.event_loop.sock_connect(sock, address))
+            except:
+                pass
+            else:
+                break
+
+        f = self.event_loop.create_connection(MyProto, sock=sock)
+        tr, pr = self.event_loop.run_until_complete(f)
+        self.assertTrue(isinstance(tr, transports.Transport))
+        self.assertTrue(isinstance(pr, protocols.Protocol))
+        self.event_loop.run()
+        self.assertTrue(pr.nbytes > 0)
+
     @unittest.skipIf(ssl is None, 'No ssl module')
-    def test_create_ssl_transport(self):
+    def test_create_ssl_connection(self):
         # TODO: This depends on xkcd.com behavior!
         f = self.event_loop.create_connection(
             MyProto, 'xkcd.com', 443, ssl=True)
@@ -409,18 +432,18 @@ class EventLoopTestsMixin:
         self.event_loop.run()
         self.assertTrue(pr.nbytes > 0)
 
-    def test_create_transport_host_port_sock(self):
+    def test_create_connection_host_port_sock(self):
         self.suppress_log_errors()
         fut = self.event_loop.create_connection(
             MyProto, 'xkcd.com', 80, sock=object())
         self.assertRaises(ValueError, self.event_loop.run_until_complete, fut)
 
-    def test_create_transport_no_host_port_sock(self):
+    def test_create_connection_no_host_port_sock(self):
         self.suppress_log_errors()
         fut = self.event_loop.create_connection(MyProto)
         self.assertRaises(ValueError, self.event_loop.run_until_complete, fut)
 
-    def test_create_transport_no_getaddrinfo(self):
+    def test_create_connection_no_getaddrinfo(self):
         self.suppress_log_errors()
         getaddrinfo = self.event_loop.getaddrinfo = unittest.mock.Mock()
         getaddrinfo.return_value = []
@@ -429,8 +452,23 @@ class EventLoopTestsMixin:
         self.assertRaises(
             socket.error, self.event_loop.run_until_complete, fut)
 
-    def test_create_transport_connect_err(self):
+    def test_create_connection_connect_err(self):
         self.suppress_log_errors()
+        self.event_loop.sock_connect = unittest.mock.Mock()
+        self.event_loop.sock_connect.side_effect = socket.error
+
+        fut = self.event_loop.create_connection(MyProto, 'xkcd.com', 80)
+        self.assertRaises(
+            socket.error, self.event_loop.run_until_complete, fut)
+
+    def test_create_connection_mutiple_errors(self):
+        self.suppress_log_errors()
+
+        def getaddrinfo(*args, **kw):
+            yield from []
+            return [(2,1,6,'',('107.6.106.82',80)),
+                    (2,1,6,'',('107.6.106.82',80))]
+        self.event_loop.getaddrinfo = getaddrinfo
         self.event_loop.sock_connect = unittest.mock.Mock()
         self.event_loop.sock_connect.side_effect = socket.error
 

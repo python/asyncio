@@ -57,6 +57,14 @@ class BaseEventLoop(events.AbstractEventLoop):
         """Create SSL transport."""
         raise NotImplementedError
 
+    def _read_from_self(self):
+        """XXX"""
+        raise NotImplementedError
+
+    def _write_to_self(self):
+        """XXX"""
+        raise NotImplementedError
+
     def _process_events(self, event_list):
         """Process selector events."""
         raise NotImplementedError
@@ -236,11 +244,10 @@ class BaseEventLoop(events.AbstractEventLoop):
 
             exceptions = []
             for family, type, proto, cname, address in infos:
-                sock = None
                 try:
                     sock = socket.socket(family=family, type=type, proto=proto)
                     sock.setblocking(False)
-                    yield self.sock_connect(sock, address)
+                    yield from self.sock_connect(sock, address)
                 except socket.error as exc:
                     if sock is not None:
                         sock.close()
@@ -263,6 +270,8 @@ class BaseEventLoop(events.AbstractEventLoop):
         elif sock is None:
             raise ValueError(
                 "host and port was not specified and no sock specified")
+
+        sock.setblocking(False)
 
         protocol = protocol_factory()
         waiter = futures.Future()

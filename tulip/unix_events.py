@@ -1,13 +1,13 @@
-"""Selector eventloop for Unix with signal handling.
-"""
+"""Selector eventloop for Unix with signal handling."""
 
 import errno
+import logging
 import socket
 import sys
 
 try:
     import signal
-except ImportError:
+except ImportError:  # pragma: no cover
     signal = None
 
 from . import events
@@ -17,7 +17,7 @@ from . import selector_events
 __all__ = ['SelectorEventLoop']
 
 
-if sys.platform == 'win32':
+if sys.platform == 'win32':  # pragma: no cover
     raise ImportError('Signals are not really supported on Windows')
 
 

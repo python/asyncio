@@ -119,6 +119,15 @@ class EventLoopTestsMixin:
         self.assertEqual(results, ['hello', 'world'])
         self.assertTrue(t1-t0 >= 0.09)
 
+    def test_call_soon_threadsafe_same_thread(self):
+        results = []
+        def callback(arg):
+            results.append(arg)
+        self.event_loop.call_later(0.1, callback, 'world')
+        self.event_loop.call_soon_threadsafe(callback, 'hello')
+        self.event_loop.run()
+        self.assertEqual(results, ['hello', 'world'])
+
     def test_call_soon_threadsafe_with_handler(self):
         results = []
         def callback(arg):
@@ -589,6 +598,17 @@ class EventLoopTestsMixin:
 
         self.event_loop._accept_connection(MyProto, sock)
         self.assertTrue(sock.close.called)
+
+    def test_internal_fds(self):
+        event_loop = self.create_event_loop()
+        if not isinstance(event_loop, selector_events.BaseSelectorEventLoop):
+            return
+
+        self.assertEqual(1, event_loop._internal_fds)
+        event_loop.close()
+        self.assertEqual(0, event_loop._internal_fds)
+        self.assertIsNone(event_loop._csock)
+        self.assertIsNone(event_loop._ssock)
 
 
 if sys.platform == 'win32':

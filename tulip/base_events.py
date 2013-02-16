@@ -47,6 +47,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         self._ready = collections.deque()
         self._scheduled = []
         self._default_executor = None
+        self._internal_fds = 0
         self._signal_handlers = {}
 
     def _make_socket_transport(self, sock, protocol, waiter=None):
@@ -365,7 +366,8 @@ class BaseEventLoop(events.AbstractEventLoop):
         # Inspect the poll queue.  If there's exactly one selectable
         # file descriptor, it's the self-pipe, and if there's nothing
         # scheduled, we should ignore it.
-        if self._selector.registered_count() > 1 or self._scheduled:
+        if (self._scheduled or
+                self._selector.registered_count() > self._internal_fds):
             if self._ready:
                 timeout = 0
             elif self._scheduled:

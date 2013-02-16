@@ -21,6 +21,7 @@ class TestBaseSelectorEventLoop(BaseSelectorEventLoop):
     def _make_self_pipe(self):
         self._ssock = unittest.mock.Mock()
         self._csock = unittest.mock.Mock()
+        self._internal_fds += 1
 
 
 class BaseSelectorEventLoopTests(unittest.TestCase):
@@ -46,21 +47,36 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
             _SelectorSslTransport)
 
     def test_close(self):
+        ssock = self.event_loop._ssock
+        csock = self.event_loop._csock
+        remove_reader = self.event_loop.remove_reader = unittest.mock.Mock()
+
         self.event_loop._selector.close()
         self.event_loop._selector = selector = unittest.mock.Mock()
         self.event_loop.close()
         self.assertIsNone(self.event_loop._selector)
+        self.assertIsNone(self.event_loop._csock)
+        self.assertIsNone(self.event_loop._ssock)
         self.assertTrue(selector.close.called)
-        self.assertTrue(self.event_loop._ssock.close.called)
-        self.assertTrue(self.event_loop._csock.close.called)
+        self.assertTrue(ssock.close.called)
+        self.assertTrue(csock.close.called)
+        self.assertTrue(remove_reader.called)
+
+        self.event_loop.close()
+        self.event_loop.close()
 
     def test_close_no_selector(self):
+        ssock = self.event_loop._ssock
+        csock = self.event_loop._csock
+        remove_reader = self.event_loop.remove_reader = unittest.mock.Mock()
+
         self.event_loop._selector.close()
         self.event_loop._selector = None
         self.event_loop.close()
         self.assertIsNone(self.event_loop._selector)
-        self.assertTrue(self.event_loop._ssock.close.called)
-        self.assertTrue(self.event_loop._csock.close.called)
+        self.assertFalse(ssock.close.called)
+        self.assertFalse(csock.close.called)
+        self.assertFalse(remove_reader.called)
 
     def test_socketpair(self):
         self.assertRaises(NotImplementedError, self.event_loop._socketpair)

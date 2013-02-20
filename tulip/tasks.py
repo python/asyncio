@@ -117,7 +117,16 @@ class Task(futures.Future):
         else:
             # XXX No check for self._must_cancel here?
             if isinstance(result, futures.Future):
-                result.add_done_callback(self._wakeup)
+                if not result._blocking:
+                    self._event_loop.call_soon(
+                        self._step,
+                        None, RuntimeError(
+                            'yield was used instead of yield from in task %r '
+                            'with %r' % (self, result)))
+                else:
+                    result._blocking = False
+                    result.add_done_callback(self._wakeup)
+
             elif isinstance(result, concurrent.futures.Future):
                 # This ought to be more efficient than wrap_future(),
                 # because we don't create an extra Future.
@@ -126,9 +135,17 @@ class Task(futures.Future):
                         self._event_loop.call_soon_threadsafe(
                             self._wakeup, future))
             else:
-                if result is not None:
-                    logging.warn('_step(): bad yield: %r', result)
-                self._event_loop.call_soon(self._step)
+                if inspect.isgenerator(result):
+                    self._event_loop.call_soon(
+                        self._step,
+                        None, RuntimeError(
+                            'yield was used instead of yield from for '
+                            'generator in task %r with %s' % (self, result)))
+                else:
+                    if result is not None:
+                        logging.warn('_step(): bad yield: %r', result)
+
+                    self._event_loop.call_soon(self._step)
 
     def _wakeup(self, future):
         try:
@@ -180,7 +197,7 @@ def _wait(fs, timeout=None, return_when=ALL_COMPLETED):
             pending.add(f)
 
     if (not pending or
-        timeout != None and timeout <= 0 or
+        timeout is not None and timeout <= 0 or
         return_when == FIRST_COMPLETED and done or
         return_when == FIRST_EXCEPTION and errors):
         return done, pending

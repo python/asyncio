@@ -413,7 +413,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertEqual(1, m_logging.warn.call_args[0][1])
 
     def test_step_result_future(self):
-        # Coroutine returns Future
+        """If coroutine returns future, task waits on this future."""
         self.suppress_log_warnings()
 
         class Fut(futures.Future):
@@ -424,21 +424,22 @@ class TaskTests(test_utils.LogTrackingTestCase):
                 self.cb_added = True
                 super().add_done_callback(fn)
 
-        c_fut = Fut()
+        fut = Fut()
+        result = None
 
-        @tasks.coroutine
-        def notmuch():
-            yield from [c_fut]
-            return (yield)
+        @tasks.task
+        def wait_for_future():
+            nonlocal result
+            result = yield from fut
 
-        task = tasks.Task(notmuch())
-        task._step()
-        self.assertTrue(c_fut.cb_added)
+        task = wait_for_future()
+        self.event_loop.run_once()
+        self.assertTrue(fut.cb_added)
 
         res = object()
-        c_fut.set_result(res)
-        self.event_loop.run()
-        self.assertIs(res, task.result())
+        fut.set_result(res)
+        self.event_loop.run_once()
+        self.assertIs(res, result)
 
     def test_step_result_concurrent_future(self):
         # Coroutine returns concurrent.futures.Future
@@ -521,6 +522,34 @@ class TaskTests(test_utils.LogTrackingTestCase):
         def fn2():
             yield
         self.assertTrue(tasks.iscoroutinefunction(fn2))
+
+    def test_yield_vs_yield_from(self):
+        fut = futures.Future()
+
+        @tasks.task
+        def wait_for_future():
+            yield fut
+
+        task = wait_for_future()
+        self.assertRaises(
+            RuntimeError,
+            self.event_loop.run_until_complete, task)
+
+    def test_yield_vs_yield_from_generator(self):
+        fut = futures.Future()
+
+        @tasks.coroutine
+        def coro():
+            yield from fut
+
+        @tasks.task
+        def wait_for_future():
+            yield coro()
+
+        task = wait_for_future()
+        self.assertRaises(
+            RuntimeError,
+            self.event_loop.run_until_complete, task)
 
 
 if __name__ == '__main__':

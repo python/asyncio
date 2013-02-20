@@ -30,17 +30,19 @@ def load_tests(includes=(), excludes=()):
     test_mods = [f[:-3] for f in os.listdir(TULIP_DIR)
                  if f.endswith('_test.py')]
 
-    if sys.platform == 'win32':
+    mods = []
+    for mod in test_mods:
         try:
-            test_mods.remove('subprocess_test')
-        except ValueError:
+            __import__('tulip', fromlist=[mod])
+            mods.append(mod)
+        except ImportError:
             pass
-    tulip = __import__('tulip', fromlist=test_mods)
 
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
+    tulip = sys.modules['tulip']
 
-    for mod in [getattr(tulip, name) for name in test_mods]:
+    for mod in [getattr(tulip, name) for name in mods]:
         for name in set(dir(mod)):
             if name.endswith('Tests'):
                 test_module = getattr(mod, name)

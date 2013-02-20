@@ -14,7 +14,9 @@ from . import winsocketpair
 
 class _ProactorSocketTransport(transports.Transport):
 
-    def __init__(self, event_loop, sock, protocol, waiter=None):
+    def __init__(self, event_loop, sock, protocol, waiter=None, extra=None):
+        super().__init__(extra)
+        self._extra['socket'] = sock
         self._event_loop = event_loop
         self._sock = sock
         self._protocol = protocol
@@ -109,16 +111,15 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
         self._selector = proactor   # convenient alias
         self._make_self_pipe()
 
-    def _make_socket_transport(self, sock, protocol, waiter=None):
-        return _ProactorSocketTransport(self, sock, protocol, waiter)
+    def _make_socket_transport(self, sock, protocol, waiter=None, extra=None):
+        return _ProactorSocketTransport(self, sock, protocol, waiter, extra)
 
     def close(self):
         if self._proactor is not None:
+            self._close_self_pipe()
             self._proactor.close()
             self._proactor = None
             self._selector = None
-        self._ssock.close()
-        self._csock.close()
 
     def sock_recv(self, sock, n):
         return self._proactor.recv(sock, n)
@@ -135,11 +136,19 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
     def _socketpair(self):
         raise NotImplementedError
 
+    def _close_self_pipe(self):
+        self._ssock.close()
+        self._ssock = None
+        self._csock.close()
+        self._csock = None
+        self._internal_fds -= 1
+
     def _make_self_pipe(self):
         # A self-socket, really. :-)
         self._ssock, self._csock = self._socketpair()
         self._ssock.setblocking(False)
         self._csock.setblocking(False)
+        self._internal_fds += 1
         def loop(f=None):
             try:
                 if f:
@@ -161,7 +170,8 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
                 if f:
                     conn, addr = f.result()
                     protocol = protocol_factory()
-                    transport = self._make_socket_transport(conn, protocol)
+                    transport = self._make_socket_transport(
+                        conn, protocol, extra={'addr': addr})
                 f = self._proactor.accept(sock)
             except OSError as exc:
                 sock.close()

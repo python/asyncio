@@ -496,6 +496,7 @@ class EventLoopTestsMixin:
         sock = self.event_loop.run_until_complete(f)
         host, port = sock.getsockname()
         self.assertEqual(host, '0.0.0.0')
+        self.event_loop.run_once(0.01) # for windows proactor selector
         client = socket.socket()
         client.connect(('127.0.0.1', port))
         client.send(b'xxx')
@@ -506,6 +507,7 @@ class EventLoopTestsMixin:
         self.assertEqual('CONNECTED', proto.state)
         self.assertEqual(0, proto.nbytes)
         self.event_loop.run_once()
+        self.event_loop.run_once(0.1) # for windows proactor selector
         self.assertEqual(3, proto.nbytes)
 
         # extra info is available
@@ -623,7 +625,7 @@ if sys.platform == 'win32':
                                  test_utils.LogTrackingTestCase):
         def create_event_loop(self):
             return windows_events.ProactorEventLoop()
-        def test_create_ssl_transport(self):
+        def test_create_ssl_connection(self):
             raise unittest.SkipTest("IocpEventLoop imcompatible with SSL")
         def test_reader_callback(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_reader()")

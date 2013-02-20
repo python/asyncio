@@ -52,6 +52,8 @@ class Future:
     _result = None
     _exception = None
 
+    _blocking = False # proper use of future (yield vs yield from)
+
     def __init__(self, *, event_loop=None):
         """Initialize the future.
 
@@ -236,5 +238,6 @@ class Future:
 
     def __iter__(self):
         if not self.done():
+            self._blocking = True
             yield self  # This tells Task to wait for completion.
         return self.result()  # May raise too.

@@ -134,6 +134,16 @@ class FutureTests(unittest.TestCase):
         newf_cancelled._copy_state(f_cancelled)
         self.assertTrue(newf_cancelled.cancelled())
 
+    def test_iter(self):
+        def coro():
+            fut = futures.Future()
+            yield from fut
+
+        def test():
+            arg1, arg2 = coro()
+
+        self.assertRaises(AssertionError, test)
+
 
 # A fake event loop for tests. All it does is implement a call_soon method
 # that immediately invokes the given function.

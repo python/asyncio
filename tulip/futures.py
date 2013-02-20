@@ -240,4 +240,5 @@ class Future:
         if not self.done():
             self._blocking = True
             yield self  # This tells Task to wait for completion.
+        assert self.done(), "yield from wasn't used with future"
         return self.result()  # May raise too.

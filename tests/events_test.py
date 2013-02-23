@@ -17,12 +17,12 @@ import time
 import unittest
 import unittest.mock
 
-from . import events
-from . import futures
-from . import transports
-from . import protocols
-from . import selector_events
-from . import test_utils
+from tulip import events
+from tulip import futures
+from tulip import transports
+from tulip import protocols
+from tulip import selector_events
+from tulip import test_utils
 
 
 class MyProto(protocols.Protocol):
@@ -647,8 +647,8 @@ if sys.platform == 'win32':
                 "IocpEventLoop does not have _accept_connection()")
 
 else:
-    from . import selectors
-    from . import unix_events
+    from tulip import selectors
+    from tulip import unix_events
 
     if hasattr(selectors, 'KqueueSelector'):
         class KqueueEventLoopTests(EventLoopTestsMixin,

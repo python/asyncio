@@ -2,7 +2,7 @@
 
 import unittest
 
-from . import futures
+from tulip import futures
 
 
 def _fakefunc(f):

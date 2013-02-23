@@ -20,21 +20,23 @@ import os
 import re
 import sys
 import unittest
+import importlib.machinery
 
 assert sys.version >= '3.3', 'Please use Python 3.3 or higher.'
 
-TULIP_DIR = os.path.join(os.path.dirname(__file__), 'tulip')
+TULIP_DIR = os.path.join(os.path.dirname(__file__), 'tests')
 
 
 def load_tests(includes=(), excludes=()):
-    test_mods = [f[:-3] for f in os.listdir(TULIP_DIR)
+    test_mods = [(f[:-3], f) for f in os.listdir(TULIP_DIR)
                  if f.endswith('_test.py')]
 
     mods = []
-    for mod in test_mods:
+    for mod, sourcefile in test_mods:
         try:
-            __import__('tulip', fromlist=[mod])
-            mods.append(mod)
+            loader = importlib.machinery.SourceFileLoader(
+                mod, os.path.join(TULIP_DIR, sourcefile))
+            mods.append(loader.load_module())
         except ImportError:
             pass
 
@@ -42,7 +44,7 @@ def load_tests(includes=(), excludes=()):
     suite = unittest.TestSuite()
     tulip = sys.modules['tulip']
 
-    for mod in [getattr(tulip, name) for name in mods]:
+    for mod in mods:
         for name in set(dir(mod)):
             if name.endswith('Tests'):
                 test_module = getattr(mod, name)

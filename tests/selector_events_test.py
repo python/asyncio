@@ -9,11 +9,11 @@ try:
 except ImportError:
     ssl = None
 
-from . import futures
-from . import selectors
-from .selector_events import BaseSelectorEventLoop
-from .selector_events import _SelectorSslTransport
-from .selector_events import _SelectorSocketTransport
+from tulip import futures
+from tulip import selectors
+from tulip.selector_events import BaseSelectorEventLoop
+from tulip.selector_events import _SelectorSslTransport
+from tulip.selector_events import _SelectorSocketTransport
 
 
 class TestBaseSelectorEventLoop(BaseSelectorEventLoop):

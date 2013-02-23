@@ -9,8 +9,8 @@ try:
 except ImportError:
     signal = None
 
-from . import events
-from . import unix_events
+from tulip import events
+from tulip import unix_events
 
 
 @unittest.skipUnless(signal, 'Signals are not supported')

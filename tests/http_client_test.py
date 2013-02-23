@@ -2,10 +2,10 @@
 
 import unittest
 
-from . import events
-from . import http_client
-from . import tasks
-from . import test_utils
+from tulip import events
+from tulip import http_client
+from tulip import tasks
+from tulip import test_utils
 
 
 class StreamReaderTests(test_utils.LogTrackingTestCase):

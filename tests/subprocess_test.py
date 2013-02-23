@@ -3,9 +3,9 @@
 import logging
 import unittest
 
-from . import events
-from . import protocols
-from . import subprocess_transport
+from tulip import events
+from tulip import protocols
+from tulip import subprocess_transport
 
 
 class MyProto(protocols.Protocol):

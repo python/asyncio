@@ -7,11 +7,11 @@ import time
 import unittest
 import unittest.mock
 
-from . import base_events
-from . import events
-from . import futures
-from . import protocols
-from . import test_utils
+from tulip import base_events
+from tulip import events
+from tulip import futures
+from tulip import protocols
+from tulip import test_utils
 
 
 class BaseEventLoopTests(test_utils.LogTrackingTestCase):

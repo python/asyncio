@@ -4,11 +4,11 @@ import time
 import unittest
 import unittest.mock
 
-from . import events
-from . import futures
-from . import locks
-from . import tasks
-from . import test_utils
+from tulip import events
+from tulip import futures
+from tulip import locks
+from tulip import tasks
+from tulip import test_utils
 
 
 class LockTests(unittest.TestCase):

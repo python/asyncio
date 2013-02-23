@@ -3,7 +3,7 @@
 import unittest
 import unittest.mock
 
-from . import transports
+from tulip import transports
 
 
 class TransportTests(unittest.TestCase):

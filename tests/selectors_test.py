@@ -3,8 +3,8 @@
 import unittest
 import unittest.mock
 
-from . import events
-from . import selectors
+from tulip import events
+from tulip import selectors
 
 
 class BaseSelectorTests(unittest.TestCase):

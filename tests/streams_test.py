@@ -1,9 +1,9 @@
-"""Tests for http/http_client.py."""
+"""Tests for streams.py."""
 
 import unittest
 
 from tulip import events
-from tulip import http
+from tulip import streams
 from tulip import tasks
 from tulip import test_utils
 
@@ -22,22 +22,22 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         self.event_loop.close()
 
     def test_feed_empty_data(self):
-        stream = http.StreamReader()
+        stream = streams.StreamReader()
 
         stream.feed_data(b'')
         self.assertEqual(0, stream.line_count)
         self.assertEqual(0, stream.byte_count)
 
     def test_feed_data_line_byte_count(self):
-        stream = http.StreamReader()
+        stream = streams.StreamReader()
 
         stream.feed_data(self.DATA)
         self.assertEqual(self.DATA.count(b'\n'), stream.line_count)
         self.assertEqual(len(self.DATA), stream.byte_count)
 
     def test_read_zero(self):
-        """Read zero bytes"""
-        stream = http.StreamReader()
+        """Read zero bytes."""
+        stream = streams.StreamReader()
         stream.feed_data(self.DATA)
 
         read_task = tasks.Task(stream.read(0))
@@ -47,8 +47,8 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         self.assertEqual(self.DATA.count(b'\n'), stream.line_count)
 
     def test_read(self):
-        """ Read bytes """
-        stream = http.StreamReader()
+        """Read bytes."""
+        stream = streams.StreamReader()
         read_task = tasks.Task(stream.read(30))
 
         def cb():
@@ -61,8 +61,8 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         self.assertFalse(stream.line_count)
 
     def test_read_line_breaks(self):
-        """ Read bytes without line breaks """
-        stream = http.StreamReader()
+        """Read bytes without line breaks."""
+        stream = streams.StreamReader()
         stream.feed_data(b'line1')
         stream.feed_data(b'line2')
 
@@ -74,8 +74,8 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         self.assertFalse(stream.line_count)
 
     def test_read_eof(self):
-        """ Read bytes, stop at eof """
-        stream = http.StreamReader()
+        """Read bytes, stop at eof."""
+        stream = streams.StreamReader()
         read_task = tasks.Task(stream.read(1024))
 
         def cb():
@@ -88,8 +88,8 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         self.assertFalse(stream.line_count)
 
     def test_read_until_eof(self):
-        """ Read all bytes until eof """
-        stream = http.StreamReader()
+        """Read all bytes until eof."""
+        stream = streams.StreamReader()
         read_task = tasks.Task(stream.read(-1))
 
         def cb():
@@ -105,8 +105,8 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         self.assertFalse(stream.line_count)
 
     def test_readline(self):
-        """ Read one line """
-        stream = http.StreamReader()
+        """Read one line."""
+        stream = streams.StreamReader()
         stream.feed_data(b'chunk1 ')
         read_task = tasks.Task(stream.readline())
 
@@ -124,7 +124,7 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
     def test_readline_limit_with_existing_data(self):
         self.suppress_log_errors()
 
-        stream = http.StreamReader(3)
+        stream = streams.StreamReader(3)
         stream.feed_data(b'li')
         stream.feed_data(b'ne1\nline2\n')
 
@@ -133,7 +133,7 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
             ValueError, self.event_loop.run_until_complete, read_task)
         self.assertEqual([b'line2\n'], list(stream.buffer))
 
-        stream = http.StreamReader(3)
+        stream = streams.StreamReader(3)
         stream.feed_data(b'li')
         stream.feed_data(b'ne1')
         stream.feed_data(b'li')
@@ -147,7 +147,7 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
     def test_readline_limit(self):
         self.suppress_log_errors()
 
-        stream = http.StreamReader(7)
+        stream = streams.StreamReader(7)
 
         def cb():
             stream.feed_data(b'chunk1')
@@ -163,7 +163,7 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         self.assertEqual(7, stream.byte_count)
 
     def test_readline_line_byte_count(self):
-        stream = http.StreamReader()
+        stream = streams.StreamReader()
         stream.feed_data(self.DATA[:6])
         stream.feed_data(self.DATA[6:])
 
@@ -175,7 +175,7 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         self.assertEqual(len(self.DATA) - len(b'line1\n'), stream.byte_count)
 
     def test_readline_eof(self):
-        stream = http.StreamReader()
+        stream = streams.StreamReader()
         stream.feed_data(b'some data')
         stream.feed_eof()
 
@@ -185,7 +185,7 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         self.assertEqual(b'some data', line)
 
     def test_readline_empty_eof(self):
-        stream = http.StreamReader()
+        stream = streams.StreamReader()
         stream.feed_eof()
 
         read_task = tasks.Task(stream.readline())
@@ -194,7 +194,7 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         self.assertEqual(b'', line)
 
     def test_readline_read_byte_count(self):
-        stream = http.StreamReader()
+        stream = streams.StreamReader()
         stream.feed_data(self.DATA)
 
         read_task = tasks.Task(stream.readline())
@@ -211,8 +211,8 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
             stream.byte_count)
 
     def test_readexactly_zero_or_less(self):
-        """ Read exact number of bytes (zero or less) """
-        stream = http.StreamReader()
+        """Read exact number of bytes (zero or less)."""
+        stream = streams.StreamReader()
         stream.feed_data(self.DATA)
 
         read_task = tasks.Task(stream.readexactly(0))
@@ -228,8 +228,8 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         self.assertEqual(self.DATA.count(b'\n'), stream.line_count)
 
     def test_readexactly(self):
-        """ Read exact number of bytes """
-        stream = http.StreamReader()
+        """Read exact number of bytes."""
+        stream = streams.StreamReader()
 
         n = 2 * len(self.DATA)
         read_task = tasks.Task(stream.readexactly(n))
@@ -246,8 +246,8 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         self.assertEqual(self.DATA.count(b'\n'), stream.line_count)
 
     def test_readexactly_eof(self):
-        """ Read exact number of bytes (eof) """
-        stream = http.StreamReader()
+        """Read exact number of bytes (eof)."""
+        stream = streams.StreamReader()
         n = 2 * len(self.DATA)
         read_task = tasks.Task(stream.readexactly(n))
 

@@ -6,7 +6,7 @@ import os
 import re
 
 import tulip
-from tulip.http_client import StreamReader
+import tulip.http
 
 
 class HttpServer(tulip.Protocol):
@@ -99,8 +99,8 @@ class HttpServer(tulip.Protocol):
 
     def connection_made(self, transport):
         self.transport = transport
-        print('connection made', transport, transport._sock)
-        self.reader = StreamReader()
+        print('connection made', transport, transport.get_extra_info('socket'))
+        self.reader = tulip.http.StreamReader()
         self.handler = self.handle_request()
 
     def data_received(self, data):

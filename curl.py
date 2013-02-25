@@ -4,7 +4,7 @@ import sys
 import urllib.parse
 
 import tulip
-from tulip import http_client
+import tulip.http
 
 
 def main():
@@ -15,8 +15,7 @@ def main():
     if query:
         path = '?'.join([path, query])
     print(netloc, path, scheme)
-    p = http_client.HttpClientProtocol(netloc, path=path,
-                                       ssl=(scheme=='https'))
+    p = tulip.http.HttpClientProtocol(netloc, path=path, ssl=(scheme=='https'))
     f = p.connect()
     sts, headers, stream = p.event_loop.run_until_complete(tulip.Task(f))
     print(sts)

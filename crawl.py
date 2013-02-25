@@ -8,7 +8,7 @@ import sys
 import urllib.parse
 
 import tulip
-from tulip import http_client
+import tulip.http
 
 END = '\n'
 MAXTASKS = 100
@@ -71,8 +71,8 @@ class Crawler:
                 path = '/'
             if query:
                 path = '?'.join([path, query])
-            p = http_client.HttpClientProtocol(netloc, path=path,
-                                               ssl=(scheme=='https'))
+            p = tulip.http.HttpClientProtocol(netloc, path=path,
+                                              ssl=(scheme=='https'))
             delay = 1
             while True:
                 try:

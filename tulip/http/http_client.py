@@ -23,15 +23,15 @@ TODO: Reuse email.Message class (or its subclass, http.client.HTTPMessage).
 TODO: How do we do connection keep alive?  Pooling?
 """
 
+__all__ = ['StreamReader', 'HttpClientProtocol']
+
+
 import collections
 import email.message
 import email.parser
 import re
 
 import tulip
-from . import events
-from . import futures
-from . import tasks
 
 
 # TODO: Move to another module.
@@ -63,7 +63,7 @@ class StreamReader:
             self.waiter = None
             waiter.set_result(False)
 
-    @tasks.coroutine
+    @tulip.coroutine
     def readline(self):
         parts = []
         parts_size = 0
@@ -95,7 +95,7 @@ class StreamReader:
 
             if not_enough:
                 assert self.waiter is None
-                self.waiter = futures.Future()
+                self.waiter = tulip.Future()
                 yield from self.waiter
 
         line = b''.join(parts)
@@ -103,19 +103,19 @@ class StreamReader:
 
         return line
 
-    @tasks.coroutine
+    @tulip.coroutine
     def read(self, n=-1):
         if not n:
             return b''
         if n < 0:
             while not self.eof:
                 assert not self.waiter
-                self.waiter = futures.Future()
+                self.waiter = tulip.Future()
                 yield from self.waiter
         else:
             if not self.byte_count and not self.eof:
                 assert not self.waiter
-                self.waiter = futures.Future()
+                self.waiter = tulip.Future()
                 yield from self.waiter
         if n < 0 or self.byte_count <= n:
             data = b''.join(self.buffer)
@@ -139,15 +139,16 @@ class StreamReader:
                 self.line_count -= data.count(b'\n')
         return b''.join(parts)
 
-    @tasks.coroutine
+    @tulip.coroutine
     def readexactly(self, n):
         if n <= 0:
             return b''
         while self.byte_count < n and not self.eof:
             assert not self.waiter
-            self.waiter = futures.Future()
+            self.waiter = tulip.Future()
             yield from self.waiter
         return (yield from self.read(n))
+
 
 class HttpClientProtocol:
     """This Protocol class is also used to initiate the connection.
@@ -200,24 +201,24 @@ class HttpClientProtocol:
                 assert self.headers['Transfer-Encoding'].lower() == 'chunked'
         if 'host' not in self.headers:
             self.headers['Host'] = self.host
-        self.event_loop = events.get_event_loop()
+        self.event_loop = tulip.get_event_loop()
         self.transport = None
 
     def validate(self, value, name, embedded_spaces_okay=False):
-        # Must be a string.  If embedded_spaces_okay is False, no
+        # Must be a string. If embedded_spaces_okay is False, no
         # whitespace is allowed; otherwise, internal single spaces are
         # allowed (but no other whitespace).
         assert isinstance(value, str), \
-               '{} should be str, not {}'.format(name, type(value))
+            '{} should be str, not {}'.format(name, type(value))
         parts = value.split()
         assert parts, '{} should not be empty'.format(name)
         if embedded_spaces_okay:
             assert ' '.join(parts) == value, \
-                   '{} can only contain embedded single spaces ({!r})'.format(
-                       name, value)
+                '{} can only contain embedded single spaces ({!r})'.format(
+                    name, value)
         else:
             assert parts == [value], \
-                   '{} cannot contain whitespace ({!r})'.format(name, value)
+                '{} cannot contain whitespace ({!r})'.format(name, value)
         return value
 
     @tulip.coroutine

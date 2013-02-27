@@ -24,12 +24,12 @@ import importlib.machinery
 
 assert sys.version >= '3.3', 'Please use Python 3.3 or higher.'
 
-TESTS_DIR = os.path.join(os.path.dirname(__file__), 'tests')
+TESTS_DIR = 'tests'
 
 
 def load_tests(includes=(), excludes=()):
     test_mods = [(f[:-3], f) for f in os.listdir(TESTS_DIR)
-                 if f.endswith('_test.py')]
+                 if f.endswith('_test.py') and not f.startswith('.')]
 
     mods = []
     for mod, sourcefile in test_mods:

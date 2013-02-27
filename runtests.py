@@ -10,7 +10,7 @@ Where:
 
 Note that the test id is the fully qualified name of the test,
 including package, module, class and method,
-e.g. 'tulip.events_test.PolicyTests.testPolicy'.
+e.g. 'tests.events_test.PolicyTests.testPolicy'.
 """
 
 # Originally written by Beech Horn (for NDB).
@@ -24,25 +24,24 @@ import importlib.machinery
 
 assert sys.version >= '3.3', 'Please use Python 3.3 or higher.'
 
-TULIP_DIR = os.path.join(os.path.dirname(__file__), 'tests')
+TESTS_DIR = os.path.join(os.path.dirname(__file__), 'tests')
 
 
 def load_tests(includes=(), excludes=()):
-    test_mods = [(f[:-3], f) for f in os.listdir(TULIP_DIR)
+    test_mods = [(f[:-3], f) for f in os.listdir(TESTS_DIR)
                  if f.endswith('_test.py')]
 
     mods = []
     for mod, sourcefile in test_mods:
         try:
             loader = importlib.machinery.SourceFileLoader(
-                mod, os.path.join(TULIP_DIR, sourcefile))
+                mod, os.path.join(TESTS_DIR, sourcefile))
             mods.append(loader.load_module())
         except ImportError:
             pass
 
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
-    tulip = sys.modules['tulip']
 
     for mod in mods:
         for name in set(dir(mod)):

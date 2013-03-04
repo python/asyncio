@@ -614,7 +614,7 @@ class EventLoopTestsMixin:
 
 
 if sys.platform == 'win32':
-    from . import windows_events
+    from tulip import windows_events
 
     class SelectEventLoopTests(EventLoopTestsMixin,
                                test_utils.LogTrackingTestCase):

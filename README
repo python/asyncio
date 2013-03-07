@@ -4,7 +4,7 @@ PEP 3156: http://www.python.org/dev/peps/pep-3156/
 
 *** This requires Python 3.3 or later! ***
 
-Copyright/license: Open source, Apache 2.0.  Enjoy.
+Copyright/license: Open source, Apache 2.0. Enjoy.
 
 Master Mercurial repo: http://code.google.com/p/tulip/
 
@@ -14,17 +14,8 @@ to PEP 3156, under construction) lives in the 'tulip' subdirectory.
 To run tests:
   - make test
 
-To run coverage (after installing coverage3, see below):
+To run coverage (coverage package is required):
   - make coverage
 
-To install coverage3 (coverage.py for Python 3), you need:
-  - Distribute (http://packages.python.org/distribute/)
-  - Coverage (http://nedbatchelder.com/code/coverage/)
-  What worked for me:
-  - curl -O http://python-distribute.org/distribute_setup.py
-  - python3 distribute_setup.py
-  - <dowload and untar the coverage.py source distro>
-  - cd coveragepy
-  - python3 setup.py install
 
 --Guido van Rossum <guido@python.org>

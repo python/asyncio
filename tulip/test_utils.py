@@ -2,13 +2,14 @@
 
 import logging
 import socket
+import sys
 import unittest
 
 
-try:
-    from socket import socketpair
-except ImportError:
+if sys.platform == 'win32':  # pragma: no cover
     from .winsocketpair import socketpair
+else:
+    from socket import socketpair
 
 
 class LogTrackingTestCase(unittest.TestCase):
@@ -20,10 +21,10 @@ class LogTrackingTestCase(unittest.TestCase):
     def tearDown(self):
         self._logger.setLevel(self._log_level)
 
-    def suppress_log_errors(self):
+    def suppress_log_errors(self):  # pragma: no cover
         if self._log_level >= logging.WARNING:
             self._logger.setLevel(logging.CRITICAL)
 
-    def suppress_log_warnings(self):
+    def suppress_log_warnings(self):  # pragma: no cover
         if self._log_level >= logging.WARNING:
             self._logger.setLevel(logging.ERROR)

@@ -1,8 +1,6 @@
 # Some simple testing tasks (sorry, UNIX only).
 
 PYTHON=python3
-COVERAGE=coverage3
-NONTESTS=`find tulip -name [a-z]\*.py ! -name \*_test.py`
 FLAGS=
 
 test:
@@ -13,9 +11,7 @@ testloop:
 
 # See README for coverage installation instructions.
 cov coverage:
-	$(COVERAGE) run --branch runtests.py -v $(FLAGS)
-	$(COVERAGE) html $(NONTESTS)
-	$(COVERAGE) report -m $(NONTESTS)
+	$(PYTHON) runtests.py --coverage tulip -v $(FLAGS)
 	echo "open file://`pwd`/htmlcov/index.html"
 
 check:

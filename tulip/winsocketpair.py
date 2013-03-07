@@ -5,6 +5,10 @@ Origin: https://gist.github.com/4325783, by Geert Jansen.  Public domain.
 
 import errno
 import socket
+import sys
+
+if sys.platform != 'win32':
+    raise ImportError('winsocketpair is win32 only')
 
 
 def socketpair(family=socket.AF_INET, type=socket.SOCK_STREAM, proto=0):

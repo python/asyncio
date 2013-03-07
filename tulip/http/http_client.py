@@ -23,7 +23,7 @@ TODO: Reuse email.Message class (or its subclass, http.client.HTTPMessage).
 TODO: How do we do connection keep alive?  Pooling?
 """
 
-__all__ = ['StreamReader', 'HttpClientProtocol']
+__all__ = ['HttpClientProtocol']
 
 
 import collections

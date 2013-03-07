@@ -11,34 +11,91 @@ Where:
 Note that the test id is the fully qualified name of the test,
 including package, module, class and method,
 e.g. 'tests.events_test.PolicyTests.testPolicy'.
+
+runtests.py with --coverage argument is equivalent of:
+
+  $(COVERAGE) run --branch runtests.py -v
+  $(COVERAGE) html $(list of files)
+  $(COVERAGE) report -m $(list of files)
+
 """
 
 # Originally written by Beech Horn (for NDB).
 
+import argparse
 import logging
 import os
 import re
 import sys
+import subprocess
 import unittest
 import importlib.machinery
 
 assert sys.version >= '3.3', 'Please use Python 3.3 or higher.'
 
-TESTS_DIR = 'tests'
+ARGS = argparse.ArgumentParser(description="Run all unittests.")
+ARGS.add_argument(
+    '-v', action="store", dest='verbose',
+    nargs='?', const=1, type=int, default=0, help='verbose')
+ARGS.add_argument(
+    '-x', action="store_true", dest='exclude', help='exclude tests')
+ARGS.add_argument(
+    '-q', action="store_true", dest='quiet', help='quiet')
+ARGS.add_argument(
+    '--tests', action="store", dest='testsdir', default='tests',
+    help='tests directory')
+ARGS.add_argument(
+    '--coverage', action="store", dest='coverage', nargs='?', const='',
+    help='enable coverage report and provide python files directory')
+ARGS.add_argument(
+    'pattern', action="store", nargs="*",
+    help='optional regex patterns to match test ids (default all tests)')
+
+COV_ARGS = argparse.ArgumentParser(description="Run all unittests.")
+COV_ARGS.add_argument(
+    '--coverage', action="store", dest='coverage', nargs='?', const='',
+    help='enable coverage report and provide python files directory')
 
 
-def load_tests(includes=(), excludes=()):
-    test_mods = [(f[:-3], f) for f in os.listdir(TESTS_DIR)
-                 if f.endswith('_test.py') and not f.startswith('.')]
+def load_modules(basedir, suffix='.py'):
+    def list_dir(prefix, dir):
+        files = []
+
+        for name in os.listdir(dir):
+            path = os.path.join(dir, name)
+
+            if os.path.isdir(path):
+                files.extend(list_dir('%s%s.' % (prefix, name), path))
+            else:
+                if name.endswith(suffix) and not name.startswith(('.', '_')):
+                    files.append(('%s%s'%(prefix, name[:-3]), path))
+
+        return files
+
+    files = []
+    modpath = os.path.join(basedir, '__init__.py')
+    if os.path.isfile(modpath):
+        mod = os.path.split(basedir)[-1]
+        prefix = '%s.' % mod
+        files.append((mod, modpath))
+    else:
+        prefix = ''
 
     mods = []
-    for mod, sourcefile in test_mods:
+    for modname, sourcefile in files + list_dir(prefix, basedir):
+        if modname == 'runtests':
+            continue
         try:
-            loader = importlib.machinery.SourceFileLoader(
-                mod, os.path.join(TESTS_DIR, sourcefile))
-            mods.append(loader.load_module())
-        except ImportError:
+            loader = importlib.machinery.SourceFileLoader(modname, sourcefile)
+            mods.append((loader.load_module(), sourcefile))
+        except:
             pass
+
+    return mods
+
+
+def load_tests(testsdir, includes=(), excludes=()):
+    mods = [mod for mod, _ in load_modules(testsdir)]
 
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
@@ -63,24 +120,24 @@ def load_tests(includes=(), excludes=()):
     return suite
 
 
-def main():
-    excludes = []
-    includes = []
-    patterns = includes  # A reference.
-    v = 1
-    for arg in sys.argv[1:]:
-        if arg.startswith('-v'):
-            v += arg.count('v')
-        elif arg == '-q':
-            v = 0
-        elif arg == '-x':
-            if patterns is includes:
-                patterns = excludes
-            else:
-                patterns = includes
-        elif arg and not arg.startswith('-'):
-            patterns.append(arg)
-    tests = load_tests(includes, excludes)
+def runtests():
+    args = ARGS.parse_args()
+
+    testsdir = os.path.abspath(args.testsdir)
+    if not os.path.isdir(testsdir):
+        print("Tests directory is not found: %s\n"%testsdir)
+        ARGS.print_help()
+        return
+
+    excludes = includes = []
+    if args.exclude:
+        excludes = args.pattern
+    else:
+        includes = args.pattern
+
+    v = 0 if args.quiet else args.verbose + 1
+
+    tests = load_tests(args.testsdir, includes, excludes)
     logger = logging.getLogger()
     if v == 0:
         logger.setLevel(logging.CRITICAL)
@@ -96,5 +153,41 @@ def main():
     sys.exit(not result.wasSuccessful())
 
 
+def runcoverage(sdir, args):
+    """
+    To install coverage3 for Python 3, you need:
+      - Distribute (http://packages.python.org/distribute/)
+
+      What worked for me:
+      - download http://python-distribute.org/distribute_setup.py
+         * curl -O http://python-distribute.org/distribute_setup.py
+      - python3 distribute_setup.py
+      - python3 -m easy_install coverage
+    """
+    try:
+        import coverage
+    except ImportError:
+        print("Coverage package is not found.")
+        print(runcoverage.__doc__)
+        return
+
+    sdir = os.path.abspath(sdir)
+    if not os.path.isdir(sdir):
+        print("Python files directory is not found: %s\n"%sdir)
+        ARGS.print_help()
+        return
+
+    mods = [source for _, source in load_modules(sdir)]
+    coverage = [sys.executable, '-m', 'coverage']
+
+    subprocess.check_call(coverage + ['run', '--branch', 'runtests.py'] + args)
+    subprocess.check_call(coverage + ['html'] + mods)
+    subprocess.check_call(coverage + ['report'] + mods)
+
+
 if __name__ == '__main__':
-    main()
+    if '--coverage' in sys.argv:
+        cov_args, args = COV_ARGS.parse_known_args()
+        runcoverage(cov_args.coverage, args)
+    else:
+        runtests()

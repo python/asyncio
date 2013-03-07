@@ -176,7 +176,7 @@ class EventLoopTestsMixin:
         self.assertEqual(res, 'yo')
 
     def test_reader_callback(self):
-        r, w = self.event_loop._socketpair()
+        r, w = test_utils.socketpair()
         bytes_read = []
         def reader():
             try:
@@ -198,7 +198,7 @@ class EventLoopTestsMixin:
         self.assertEqual(b''.join(bytes_read), b'abcdef')
 
     def test_reader_callback_with_handler(self):
-        r, w = self.event_loop._socketpair()
+        r, w = test_utils.socketpair()
         bytes_read = []
         def reader():
             try:
@@ -223,7 +223,7 @@ class EventLoopTestsMixin:
         self.assertEqual(b''.join(bytes_read), b'abcdef')
 
     def test_reader_callback_cancel(self):
-        r, w = self.event_loop._socketpair()
+        r, w = test_utils.socketpair()
         bytes_read = []
         def reader():
             try:
@@ -244,7 +244,7 @@ class EventLoopTestsMixin:
         self.assertEqual(b''.join(bytes_read), b'abcdef')
 
     def test_writer_callback(self):
-        r, w = self.event_loop._socketpair()
+        r, w = test_utils.socketpair()
         w.setblocking(False)
         self.event_loop.add_writer(w.fileno(), w.send, b'x'*(256*1024))
         def remove_writer():
@@ -257,7 +257,7 @@ class EventLoopTestsMixin:
         self.assertTrue(len(data) >= 200)
 
     def test_writer_callback_with_handler(self):
-        r, w = self.event_loop._socketpair()
+        r, w = test_utils.socketpair()
         w.setblocking(False)
         handler = events.Handler(w.send, (b'x'*(256*1024),))
         self.assertIs(self.event_loop.add_writer(w.fileno(), handler), handler)
@@ -271,7 +271,7 @@ class EventLoopTestsMixin:
         self.assertTrue(len(data) >= 200)
 
     def test_writer_callback_cancel(self):
-        r, w = self.event_loop._socketpair()
+        r, w = test_utils.socketpair()
         w.setblocking(False)
         def sender():
             w.send(b'x'*256)

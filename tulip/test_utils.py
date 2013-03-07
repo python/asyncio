@@ -1,7 +1,14 @@
 """Utilities shared by tests."""
 
 import logging
+import socket
 import unittest
+
+
+try:
+    from socket import socketpair
+except ImportError:
+    from .winsocketpair import socketpair
 
 
 class LogTrackingTestCase(unittest.TestCase):

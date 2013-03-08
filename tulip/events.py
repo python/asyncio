@@ -10,6 +10,7 @@ __all__ = ['EventLoopPolicy', 'DefaultEventLoopPolicy',
            'get_event_loop', 'set_event_loop', 'new_event_loop',
            ]
 
+import logging
 import sys
 import threading
 
@@ -42,6 +43,13 @@ class Handler:
 
     def cancel(self):
         self._cancelled = True
+
+    def run(self):
+        try:
+            self._callback(*self._args)
+        except Exception:
+            logging.exception('Exception in callback %s %r',
+                                self._callback, self._args)
 
 
 def make_handler(callback, args):

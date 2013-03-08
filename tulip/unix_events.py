@@ -69,7 +69,7 @@ class SelectorEventLoop(selector_events.BaseSelectorEventLoop):
         if handler.cancelled:
             self.remove_signal_handler(sig)  # Remove it properly.
         else:
-            self.call_soon_threadsafe(handler.callback, *handler.args)
+            self.call_soon_threadsafe(handler)
 
     def remove_signal_handler(self, sig):
         """Remove a handler for a signal.  UNIX only.

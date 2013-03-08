@@ -409,8 +409,4 @@ class BaseEventLoop(events.AbstractEventLoop):
         for i in range(ntodo):
             handler = self._ready.popleft()
             if not handler.cancelled:
-                try:
-                    handler.callback(*handler.args)
-                except Exception:
-                    logging.exception('Exception in callback %s %r',
-                                      handler.callback, handler.args)
+                handler.run()

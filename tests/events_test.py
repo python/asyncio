@@ -396,6 +396,23 @@ class EventLoopTestsMixin:
         self.event_loop.run_forever()
         self.assertEqual(caught, 1)
 
+    @unittest.skipUnless(hasattr(signal, 'SIGALRM'), 'No SIGALRM')
+    def test_signal_handling_args(self):
+        some_args = (42,)
+        caught = 0
+        def my_handler(*args):
+            nonlocal caught
+            caught += 1
+            self.assertEqual(args, some_args)
+
+        handler = self.event_loop.add_signal_handler(signal.SIGALRM,
+                                                     my_handler,
+                                                     *some_args)
+        signal.setitimer(signal.ITIMER_REAL, 0.1, 0)  # Send SIGALRM once.
+        self.event_loop.call_later(0.15, self.event_loop.stop)
+        self.event_loop.run_forever()
+        self.assertEqual(caught, 1)
+
     def test_create_connection(self):
         # TODO: This depends on xkcd.com behavior!
         f = self.event_loop.create_connection(MyProto, 'xkcd.com', 80)

@@ -61,35 +61,35 @@ def load_modules(basedir, suffix='.py'):
     def list_dir(prefix, dir):
         files = []
 
+        modpath = os.path.join(dir, '__init__.py')
+        if os.path.isfile(modpath):
+            mod = os.path.split(dir)[-1]
+            files.append(('%s%s' % (prefix, mod), modpath))
+
+            prefix = '%s%s.' % (prefix, mod)
+
         for name in os.listdir(dir):
             path = os.path.join(dir, name)
 
             if os.path.isdir(path):
                 files.extend(list_dir('%s%s.' % (prefix, name), path))
             else:
-                if name.endswith(suffix) and not name.startswith(('.', '_')):
-                    files.append(('%s%s'%(prefix, name[:-3]), path))
+                if (name != '__init__.py' and
+                    name.endswith(suffix) and
+                    not name.startswith(('.', '_'))):
+                    files.append(('%s%s' % (prefix, name[:-3]), path))
 
         return files
 
-    files = []
-    modpath = os.path.join(basedir, '__init__.py')
-    if os.path.isfile(modpath):
-        mod = os.path.split(basedir)[-1]
-        prefix = '%s.' % mod
-        files.append((mod, modpath))
-    else:
-        prefix = ''
-
     mods = []
-    for modname, sourcefile in files + list_dir(prefix, basedir):
+    for modname, sourcefile in list_dir('', basedir):
         if modname == 'runtests':
             continue
         try:
             loader = importlib.machinery.SourceFileLoader(modname, sourcefile)
             mods.append((loader.load_module(), sourcefile))
-        except:
-            pass
+        except Exception as err:
+            print("Skipping '%s': %s" % (modname, err))
 
     return mods
 
@@ -125,7 +125,7 @@ def runtests():
 
     testsdir = os.path.abspath(args.testsdir)
     if not os.path.isdir(testsdir):
-        print("Tests directory is not found: %s\n"%testsdir)
+        print("Tests directory is not found: %s\n" % testsdir)
         ARGS.print_help()
         return
 
@@ -173,7 +173,7 @@ def runcoverage(sdir, args):
 
     sdir = os.path.abspath(sdir)
     if not os.path.isdir(sdir):
-        print("Python files directory is not found: %s\n"%sdir)
+        print("Python files directory is not found: %s\n" % sdir)
         ARGS.print_help()
         return
 

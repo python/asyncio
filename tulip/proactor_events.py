@@ -6,10 +6,8 @@ proactor is only implemented on Windows with IOCP.
 
 import logging
 
-
 from . import base_events
 from . import transports
-from . import winsocketpair
 
 
 class _ProactorSocketTransport(transports.Transport):
@@ -29,16 +27,18 @@ class _ProactorSocketTransport(transports.Transport):
         if waiter is not None:
             self._event_loop.call_soon(waiter.set_result, None)
 
-    def _loop_reading(self, f=None):
+    def _loop_reading(self, fut=None):
+        data = None
+
         try:
-            assert f is self._read_fut
-            if f:
-                data = f.result()
+            if fut is not None:
+                assert fut is self._read_fut
+
+                data = fut.result()  # deliver data later in "finally" clause
                 if not data:
-                    self._event_loop.call_soon(self._protocol.eof_received)
                     self._read_fut = None
                     return
-                self._event_loop.call_soon(self._protocol.data_received, data)
+
             self._read_fut = self._event_loop._proactor.recv(self._sock, 4096)
         except ConnectionAbortedError as exc:
             if not self._closing:
@@ -47,6 +47,11 @@ class _ProactorSocketTransport(transports.Transport):
             self._fatal_error(exc)
         else:
             self._read_fut.add_done_callback(self._loop_reading)
+        finally:
+            if data:
+                self._protocol.data_received(data)
+            elif data is not None:
+                self._protocol.eof_received()
 
     def write(self, data):
         assert isinstance(data, bytes)
@@ -149,6 +154,7 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
         self._ssock.setblocking(False)
         self._csock.setblocking(False)
         self._internal_fds += 1
+
         def loop(f=None):
             try:
                 if f:
@@ -170,10 +176,10 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
                 if f:
                     conn, addr = f.result()
                     protocol = protocol_factory()
-                    transport = self._make_socket_transport(
+                    self._make_socket_transport(
                         conn, protocol, extra={'addr': addr})
                 f = self._proactor.accept(sock)
-            except OSError as exc:
+            except OSError:
                 sock.close()
                 logging.exception('Accept failed')
             else:

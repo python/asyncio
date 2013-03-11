@@ -26,12 +26,12 @@ TODO: How do we do connection keep alive?  Pooling?
 __all__ = ['HttpClientProtocol']
 
 
-import collections
 import email.message
 import email.parser
-import re
 
 import tulip
+
+from . import protocol
 
 
 class HttpClientProtocol:
@@ -39,8 +39,8 @@ class HttpClientProtocol:
 
     Usage:
       p = HttpClientProtocol(url, ...)
-      f = p.connect()  # Returns a Future
-      ...now what?...
+      sts, headers, stream = yield from p.connect()
+
     """
 
     def __init__(self, host, port=None, *,
@@ -107,19 +107,14 @@ class HttpClientProtocol:
 
     @tulip.coroutine
     def connect(self):
-        yield from self.event_loop.create_connection(lambda: self,
-                                                     self.host,
-                                                     self.port,
-                                                     ssl=self.ssl)
+        yield from self.event_loop.create_connection(
+            lambda: self, self.host, self.port, ssl=self.ssl)
+
         # TODO: A better mechanism to return all info from the
         # status line, all headers, and the buffer, without having
         # an N-tuple return value.
-        status_line = yield from self.stream.readline()
-        m = re.match(rb'HTTP/(\d\.\d)\s+(\d\d\d)\s+([^\r\n]+)\r?\n\Z',
-                     status_line)
-        if not m:
-            raise 'Invalid HTTP status line ({!r})'.format(status_line)
-        version, status, message = m.groups()
+        version, status, message = yield from self.stream.read_response_status()
+
         raw_headers = []
         while True:
             header = yield from self.stream.readline()
@@ -137,7 +132,7 @@ class HttpClientProtocol:
             # TODO: A wrapping stream that limits how much it can read
             # without reading it all into memory at once.
             body = yield from self.stream.readexactly(content_length)
-            stream = StreamReader()
+            stream = protocol.HttpStreamReader()
             stream.feed_data(body)
             stream.feed_eof()
         sts = '{} {}'.format(self.decode(status), self.decode(message))
@@ -176,7 +171,7 @@ class HttpClientProtocol:
         for key, value in self.headers.items():
             self.write_str('{}: {}\r\n'.format(key, value))
         self.transport.write(b'\r\n')
-        self.stream = StreamReader()
+        self.stream = protocol.HttpStreamReader()
         if self.make_body is not None:
             if self.chunked:
                 self.make_body(self.write_chunked, self.write_chunked_eof)

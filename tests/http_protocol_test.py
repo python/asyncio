@@ -140,3 +140,64 @@ class HttpStreamReaderTests(LogTrackingTestCase):
                 tulip.Task(self.stream.read_response_status()))
 
         self.assertIn('HTTP/1.1 ttt test', str(cm.exception))
+
+    def test_read_headers(self):
+        self.stream.feed_data(b'test: line\r\n'
+                              b' continue\r\n'
+                              b'test2: data\r\n'
+                              b'\r\n')
+
+        headers = self.loop.run_until_complete(
+            tulip.Task(self.stream.read_headers()))
+        self.assertEqual(headers,
+                         [('TEST', 'line\r\n continue'), ('TEST2', 'data')])
+
+    def test_read_headers_size(self):
+        self.stream.feed_data(b'test: line\r\n')
+        self.stream.feed_data(b' continue\r\n')
+        self.stream.feed_data(b'test2: data\r\n')
+        self.stream.feed_data(b'\r\n')
+
+        self.stream.MAX_HEADERS = 5
+        self.assertRaises(
+            http.client.LineTooLong,
+            self.loop.run_until_complete,
+            tulip.Task(self.stream.read_headers()))
+
+    def test_read_headers_invalid_header(self):
+        self.stream.feed_data(b'test line\r\n')
+
+        with self.assertRaises(ValueError) as cm:
+            self.loop.run_until_complete(
+                tulip.Task(self.stream.read_headers()))
+
+        self.assertIn("Invalid header b'test line'", str(cm.exception))
+
+    def test_read_headers_invalid_name(self):
+        self.stream.feed_data(b'test[]: line\r\n')
+
+        with self.assertRaises(ValueError) as cm:
+            self.loop.run_until_complete(
+                tulip.Task(self.stream.read_headers()))
+
+        self.assertIn("Invalid header name b'TEST[]'", str(cm.exception))
+
+    def test_read_headers_headers_size(self):
+        self.stream.MAX_HEADERFIELD_SIZE = 5
+        self.stream.feed_data(b'test: line data data\r\ndata\r\n')
+
+        with self.assertRaises(http.client.LineTooLong) as cm:
+            self.loop.run_until_complete(
+                tulip.Task(self.stream.read_headers()))
+
+        self.assertIn("limit request headers fields size", str(cm.exception))
+
+    def test_read_headers_continuation_headers_size(self):
+        self.stream.MAX_HEADERFIELD_SIZE = 5
+        self.stream.feed_data(b'test: line\r\n test\r\n')
+
+        with self.assertRaises(http.client.LineTooLong) as cm:
+            self.loop.run_until_complete(
+                tulip.Task(self.stream.read_headers()))
+
+        self.assertIn("limit request headers fields size", str(cm.exception))

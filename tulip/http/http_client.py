@@ -110,19 +110,15 @@ class HttpClientProtocol:
         yield from self.event_loop.create_connection(
             lambda: self, self.host, self.port, ssl=self.ssl)
 
-        # TODO: A better mechanism to return all info from the
-        # status line, all headers, and the buffer, without having
-        # an N-tuple return value.
-        version, status, message = yield from self.stream.read_response_status()
+        # read response status
+        version, status, reason = yield from self.stream.read_response_status()
 
-        raw_headers = []
-        while True:
-            header = yield from self.stream.readline()
-            if not header.strip():
-                break
-            raw_headers.append(header)
-        parser = email.parser.BytesHeaderParser()
-        headers = parser.parsebytes(b''.join(raw_headers))
+        # read headers
+        headers = email.message.Message()
+        for hdr, val in (yield from self.stream.read_headers()):
+            headers.add_header(hdr, val)
+
+        # read payload
         content_length = headers.get('content-length')
         if content_length:
             content_length = int(content_length)  # May raise.
@@ -135,7 +131,7 @@ class HttpClientProtocol:
             stream = protocol.HttpStreamReader()
             stream.feed_data(body)
             stream.feed_eof()
-        sts = '{} {}'.format(self.decode(status), self.decode(message))
+        sts = '{} {}'.format(status, reason)
         return (sts, headers, stream)
 
     def encode(self, s):

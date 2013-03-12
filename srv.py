@@ -44,18 +44,10 @@ class HttpServer(tulip.Protocol):
             self.transport.close()
             return
 
-        lines = []
-        while True:
-            line = yield from self.reader.readline()
-            print('header line', line)
-            if not line.strip(b' \t\r\n'):
-                break
-            lines.append(line)
-            if line == b'\r\n':
-                break
-
-        parser = email.parser.BytesHeaderParser()
-        parser.parsebytes(b''.join(lines))
+        headers = email.message.Message()
+        for hdr, val in (yield from self.reader.read_headers()):
+            print(hdr, val)
+            headers.add_header(hdr, val)
 
         write = self.transport.write
         if isdir and not path.endswith('/'):

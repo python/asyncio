@@ -17,6 +17,16 @@ class StreamReader:
         self.line_count = 0  # Number of complete lines in buffer.
         self.eof = False  # Whether we're done.
         self.waiter = None  # A future.
+        self._exception = None
+
+    def exception(self):
+        return self._exception
+
+    def set_exception(self, exc):
+        self._exception = exc
+
+        if self.waiter is not None:
+            self.waiter.set_exception(exc)
 
     def feed_eof(self):
         self.eof = True
@@ -40,6 +50,9 @@ class StreamReader:
 
     @tasks.coroutine
     def readline(self):
+        if self._exception is not None:
+            raise self._exception
+
         parts = []
         parts_size = 0
         not_enough = True
@@ -80,6 +93,9 @@ class StreamReader:
 
     @tasks.coroutine
     def read(self, n=-1):
+        if self._exception is not None:
+            raise self._exception
+
         if not n:
             return b''
 
@@ -121,6 +137,9 @@ class StreamReader:
 
     @tasks.coroutine
     def readexactly(self, n):
+        if self._exception is not None:
+            raise self._exception
+
         if n <= 0:
             return b''
 

@@ -63,6 +63,7 @@ class HttpClientProtocol:
         self.path = self.validate(path, 'path')
         self.method = self.validate(method, 'method')
         self.headers = email.message.Message()
+        self.headers['Accept-Encoding'] = 'gzip, deflate'
         if headers:
             for key, value in headers.items():
                 self.validate(key, 'header key')
@@ -114,25 +115,48 @@ class HttpClientProtocol:
         version, status, reason = yield from self.stream.read_response_status()
 
         # read headers
-        headers = email.message.Message()
-        for hdr, val in (yield from self.stream.read_headers()):
-            headers.add_header(hdr, val)
+        headers = yield from self.stream.read_headers()
+        msg_headers = email.message.Message()
+        for hdr, val in headers:
+            msg_headers.add_header(hdr, val)
+
+        # TODO: A wrapping stream that limits how much it can read
+        # without reading it all into memory at once.
 
         # read payload
-        content_length = headers.get('content-length')
-        if content_length:
-            content_length = int(content_length)  # May raise.
-        if content_length is None:
-            stream = self.stream
+        chunked = False
+        length = None
+        encoding = None
+
+        for (name, value) in headers:
+            if name == 'CONTENT-LENGTH':
+                length = value
+            elif name == 'TRANSFER-ENCODING':
+                chunked = value.lower() == 'chunked'
+            elif name == 'CONTENT-ENCODING':
+                enc = value.lower()
+                if enc in ('gzip', 'deflate'):
+                    encoding = enc
+
+        # payload
+        if chunked:
+            payload = self.stream.read_chunked_payload(encoding=encoding)
+
+        elif length is not None:
+            try:
+                length = int(length)
+            except ValueError:
+                raise ValueError('CONTENT-LENGTH')
+
+            if length < 0:
+                raise ValueError('CONTENT-LENGTH')
+
+            payload = self.stream.read_length_payload(length, encoding=encoding)
         else:
-            # TODO: A wrapping stream that limits how much it can read
-            # without reading it all into memory at once.
-            body = yield from self.stream.readexactly(content_length)
-            stream = protocol.HttpStreamReader()
-            stream.feed_data(body)
-            stream.feed_eof()
+            payload = self.stream.read_length_payload(0, encoding=encoding)
+
         sts = '{} {}'.format(status, reason)
-        return (sts, headers, stream)
+        return (sts, msg_headers, payload)
 
     def encode(self, s):
         if isinstance(s, bytes):

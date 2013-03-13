@@ -22,7 +22,7 @@ def main():
     for k, v in headers.items():
         print('{}: {}'.format(k, v))
     print()
-    data = p.event_loop.run_until_complete(tulip.Task(stream.read(1000000)))
+    data = p.event_loop.run_until_complete(tulip.Task(stream))
     print(data.decode('utf-8', 'replace'))
 
 

@@ -3,6 +3,7 @@
 import http.client
 import unittest
 import unittest.mock
+import zlib
 
 import tulip
 from tulip.http import protocol
@@ -201,3 +202,148 @@ class HttpStreamReaderTests(LogTrackingTestCase):
                 tulip.Task(self.stream.read_headers()))
 
         self.assertIn("limit request headers fields size", str(cm.exception))
+
+    def test_read_payload_unknown_encoding(self):
+        self.assertRaises(
+            ValueError, self.stream.read_length_payload, encoding='unknown')
+
+    def test_read_payload(self):
+        self.stream.feed_data(b'da')
+        self.stream.feed_data(b't')
+        self.stream.feed_data(b'ali')
+        self.stream.feed_data(b'ne')
+
+        stream = self.stream.read_length_payload(4)
+        self.assertIsInstance(stream, tulip.StreamReader)
+
+        data = self.loop.run_until_complete(tulip.Task(stream.read()))
+        self.assertEqual(b'data', data)
+        self.assertEqual(b'line', b''.join(self.stream.buffer))
+
+    def test_read_payload_eof(self):
+        self.stream.feed_data(b'da')
+        self.stream.feed_eof()
+        stream = self.stream.read_length_payload(4)
+
+        self.assertRaises(
+            http.client.IncompleteRead,
+            self.loop.run_until_complete, tulip.Task(stream.read()))
+
+    def test_read_payload_eof_exc(self):
+        self.stream.feed_data(b'da')
+        stream = self.stream.read_length_payload(4)
+
+        def eof():
+            yield from []
+            self.stream.feed_eof()
+
+        t1 = tulip.Task(stream.read())
+        t2 = tulip.Task(eof())
+
+        self.loop.run_until_complete(tulip.Task(tulip.wait([t1, t2])))
+        self.assertRaises(http.client.IncompleteRead, t1.result)
+        self.assertIsNone(self.stream._reader)
+
+    def test_read_payload_deflate(self):
+        comp = zlib.compressobj(wbits=-zlib.MAX_WBITS)
+
+        data = b''.join([comp.compress(b'data'), comp.flush()])
+        stream = self.stream.read_length_payload(len(data), encoding='deflate')
+
+        self.stream.feed_data(data)
+
+        data = self.loop.run_until_complete(tulip.Task(stream.read()))
+        self.assertEqual(b'data', data)
+
+    def _test_read_payload_compress_error(self):
+        data = b'123123123datadatadata'
+        reader = protocol.length_reader(4)
+        self.stream.feed_data(data)
+        stream = self.stream.read_payload(reader, 'deflate')
+
+        self.assertRaises(
+            http.client.IncompleteRead,
+            self.loop.run_until_complete, tulip.Task(stream.read()))
+
+    def test_read_chunked_payload(self):
+        stream = self.stream.read_chunked_payload()
+        self.stream.feed_data(b'4\r\ndata\r\n4\r\nline\r\n0\r\ntest\r\n\r\n')
+
+        data = self.loop.run_until_complete(tulip.Task(stream.read()))
+        self.assertEqual(b'dataline', data)
+
+    def test_read_chunked_payload_chunks(self):
+        stream = self.stream.read_chunked_payload()
+
+        self.stream.feed_data(b'4\r\ndata\r')
+        self.stream.feed_data(b'\n4')
+        self.stream.feed_data(b'\r')
+        self.stream.feed_data(b'\n')
+        self.stream.feed_data(b'line\r\n0\r\n')
+        self.stream.feed_data(b'test\r\n\r\n')
+
+        data = self.loop.run_until_complete(tulip.Task(stream.read()))
+        self.assertEqual(b'dataline', data)
+
+    def test_read_chunked_payload_incomplete(self):
+        stream = self.stream.read_chunked_payload()
+
+        self.stream.feed_data(b'4\r\ndata\r\n')
+        self.stream.feed_eof()
+
+        self.assertRaises(
+            http.client.IncompleteRead,
+            self.loop.run_until_complete, tulip.Task(stream.read()))
+
+    def test_read_chunked_payload_extension(self):
+        stream = self.stream.read_chunked_payload()
+
+        self.stream.feed_data(
+            b'4;test\r\ndata\r\n4\r\nline\r\n0\r\ntest\r\n\r\n')
+
+        data = self.loop.run_until_complete(tulip.Task(stream.read()))
+        self.assertEqual(b'dataline', data)
+
+    def test_read_chunked_payload_size_error(self):
+        stream = self.stream.read_chunked_payload()
+
+        self.stream.feed_data(b'blah\r\n')
+        self.assertRaises(
+            http.client.IncompleteRead,
+            self.loop.run_until_complete, tulip.Task(stream.read()))
+
+    def test_read_length_payload(self):
+        stream = self.stream.read_length_payload(8)
+
+        self.stream.feed_data(b'data')
+        self.stream.feed_data(b'data')
+
+        data = self.loop.run_until_complete(tulip.Task(stream.read()))
+        self.assertEqual(b'datadata', data)
+
+    def test_read_length_payload_zero(self):
+        stream = self.stream.read_length_payload(0)
+
+        self.stream.feed_data(b'data')
+
+        data = self.loop.run_until_complete(tulip.Task(stream.read()))
+        self.assertEqual(b'', data)
+
+    def test_read_length_payload_incomplete(self):
+        stream = self.stream.read_length_payload(8)
+
+        self.stream.feed_data(b'data')
+        self.stream.feed_eof()
+
+        self.assertRaises(
+            http.client.IncompleteRead,
+            self.loop.run_until_complete, tulip.Task(stream.read()))
+
+    def test_read_eof_payload(self):
+        stream = self.stream.read_eof_payload()
+
+        self.stream.feed_data(b'data')
+        self.stream.feed_eof()
+
+        data = self.loop.run_until_complete(tulip.Task(stream.read()))
+        self.assertEqual(b'data', data)

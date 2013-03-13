@@ -104,6 +104,18 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         self.assertFalse(stream.byte_count)
         self.assertFalse(stream.line_count)
 
+    def test_read_exception(self):
+        stream = streams.StreamReader()
+        stream.feed_data(b'line\n')
+
+        data = self.event_loop.run_until_complete(tasks.Task(stream.read(2)))
+        self.assertEqual(b'li', data)
+
+        stream.set_exception(ValueError())
+        self.assertRaises(
+            ValueError,
+            self.event_loop.run_until_complete, tasks.Task(stream.read(2)))
+
     def test_readline(self):
         """Read one line."""
         stream = streams.StreamReader()
@@ -198,7 +210,7 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         stream.feed_data(self.DATA)
 
         read_task = tasks.Task(stream.readline())
-        line = self.event_loop.run_until_complete(read_task)
+        self.event_loop.run_until_complete(read_task)
 
         read_task = tasks.Task(stream.read(7))
         data = self.event_loop.run_until_complete(read_task)
@@ -209,6 +221,19 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         self.assertEqual(
             len(self.DATA) - len(b'line1\n') - len(b'line2\nl'),
             stream.byte_count)
+
+    def test_readline_exception(self):
+        stream = streams.StreamReader()
+        stream.feed_data(b'line\n')
+
+        data = self.event_loop.run_until_complete(
+            tasks.Task(stream.readline()))
+        self.assertEqual(b'line\n', data)
+
+        stream.set_exception(ValueError())
+        self.assertRaises(
+            ValueError,
+            self.event_loop.run_until_complete, tasks.Task(stream.readline()))
 
     def test_readexactly_zero_or_less(self):
         """Read exact number of bytes (zero or less)."""
@@ -260,6 +285,45 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         self.assertEqual(self.DATA, data)
         self.assertFalse(stream.byte_count)
         self.assertFalse(stream.line_count)
+
+    def test_readexactly_exception(self):
+        stream = streams.StreamReader()
+        stream.feed_data(b'line\n')
+
+        data = self.event_loop.run_until_complete(
+            tasks.Task(stream.readexactly(2)))
+        self.assertEqual(b'li', data)
+
+        stream.set_exception(ValueError())
+        self.assertRaises(
+            ValueError,
+            self.event_loop.run_until_complete,
+            tasks.Task(stream.readexactly(2)))
+
+    def test_exception(self):
+        stream = streams.StreamReader()
+        self.assertIsNone(stream.exception())
+
+        exc = ValueError()
+        stream.set_exception(exc)
+        self.assertIs(stream.exception(), exc)
+
+    def test_exception_waiter(self):
+        stream = streams.StreamReader()
+
+        def set_err():
+            yield from []
+            stream.set_exception(ValueError())
+
+        def readline():
+            yield from stream.readline()
+
+        t1 = tasks.Task(stream.readline())
+        t2 = tasks.Task(set_err())
+
+        self.event_loop.run_until_complete(tasks.Task(tasks.wait([t1, t2])))
+
+        self.assertRaises(ValueError, t1.result)
 
 
 if __name__ == '__main__':

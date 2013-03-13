@@ -3,8 +3,10 @@
 __all__ = ['HttpStreamReader', 'RequestLine', 'ResponseStatus']
 
 import collections
+import functools
 import http.client
 import re
+import zlib
 
 import tulip
 
@@ -22,10 +24,140 @@ ResponseStatus = collections.namedtuple(
     'ResponseStatus', ['version', 'code', 'reason'])
 
 
+class StreamEofException(http.client.HTTPException):
+    """eof received"""
+
+
+def wrap_payload_reader(f):
+    """wrap_payload_reader wraps payload readers and redirect stream.
+    payload readers are generator functions, read_chunked_payload,
+    read_length_payload, read_eof_payload.
+    payload reader allows to modify data stream and feed data into stream.
+
+    StreamReader instance should be send to generator as first parameter.
+    This steam is used as destination stream for processed data.
+    To send data to reader use generator's send() method.
+
+    To indicate eof stream, throw StreamEofException exception into the reader.
+    In case of errors in incoming stream reader sets exception to
+    destination stream with StreamReader.set_exception() method.
+
+    Before exit, reader generator returns unprocessed data.
+    """
+
+    @functools.wraps(f)
+    def wrapper(self, *args, **kw):
+        assert self._reader is None
+
+        rstream = stream = tulip.StreamReader()
+
+        encoding = kw.pop('encoding', None)
+        if encoding is not None:
+            if encoding not in ('gzip', 'deflate'):
+                raise ValueError(
+                    'Content-Encoding %r is not supported' % encoding)
+
+            stream = DeflateStream(stream, encoding)
+
+        reader = f(self, *args, **kw)
+        next(reader)
+        try:
+            reader.send(stream)
+        except StopIteration:
+            pass
+        else:
+            # feed buffer
+            self.line_count = 0
+            self.byte_count = 0
+            while self.buffer:
+                try:
+                    reader.send(self.buffer.popleft())
+                except StopIteration as exc:
+                    buf = b''.join(self.buffer)
+                    self.buffer.clear()
+                    reader = None
+                    if exc.value:
+                        self.feed_data(exc.value)
+
+                    if buf:
+                        self.feed_data(buf)
+
+                    break
+
+            if reader is not None:
+                if self.eof:
+                    try:
+                        reader.throw(StreamEofException())
+                    except StopIteration as exc:
+                        pass
+                else:
+                    self._reader = reader
+
+        return rstream
+
+    return wrapper
+
+
+class DeflateStream:
+    """DeflateStream decomress stream and feed data into specified steram."""
+
+    def __init__(self, stream, encoding):
+        self.stream = stream
+        zlib_mode = (16 + zlib.MAX_WBITS
+                     if encoding == 'gzip' else -zlib.MAX_WBITS)
+
+        self.zlib = zlib.decompressobj(wbits=zlib_mode)
+
+    def feed_data(self, chunk):
+        try:
+            chunk = self.zlib.decompress(chunk)
+        except:
+            self.stream.set_exception(http.client.IncompleteRead(b''))
+
+        if chunk:
+            self.stream.feed_data(chunk)
+
+    def feed_eof(self):
+        self.stream.feed_data(self.zlib.flush())
+        if not self.zlib.eof:
+            self.stream.set_exception(http.client.IncompleteRead(b''))
+
+        self.stream.feed_eof()
+
+
 class HttpStreamReader(tulip.StreamReader):
 
     MAX_HEADERS = 32768
     MAX_HEADERFIELD_SIZE = 8190
+
+    # if _reader is set, feed_data and feed_eof sends data into
+    # _reader instead of self. is it being used as stream redirection for
+    # read_chunked_payload, read_length_payload and read_eof_payload
+    _reader = None
+
+    def feed_data(self, data):
+        """_reader is a generator, if _reader is set, feed_data sends
+        incoming data into this generator untile generates stops."""
+        if self._reader:
+            try:
+                self._reader.send(data)
+            except StopIteration as exc:
+                self._reader = None
+                if exc.value:
+                    self.feed_data(exc.value)
+        else:
+            super().feed_data(data)
+
+    def feed_eof(self):
+        """_reader is a generator, if _reader is set feed_eof throws
+        StreamEofException into this generator."""
+        if self._reader:
+            try:
+                self._reader.throw(StreamEofException())
+            except StopIteration:
+                self._reader = None
+
+        super().feed_eof()
 
     @tulip.coroutine
     def read_request_line(self):
@@ -122,7 +254,7 @@ class HttpStreamReader(tulip.StreamReader):
         """Read and parses RFC2822 headers from a stream.
 
         Line continuations are supported. Returns list of header name
-        and value pairs.
+        and value pairs. Header name is in upper case.
         """
         size = 0
         headers = []
@@ -176,3 +308,100 @@ class HttpStreamReader(tulip.StreamReader):
                  b''.join(value).rstrip().decode('ascii', 'surrogateescape')))
 
         return headers
+
+    @wrap_payload_reader
+    def read_chunked_payload(self):
+        """Read chunked stream."""
+        stream = yield
+
+        try:
+            data = bytearray()
+
+            while True:
+                # read line
+                if b'\n' not in data:
+                    data.extend((yield))
+                    continue
+
+                line, data = data.split(b'\n', 1)
+
+                # Read the next chunk size from the file
+                i = line.find(b";")
+                if i >= 0:
+                    line = line[:i]  # strip chunk-extensions
+                try:
+                    size = int(line, 16)
+                except ValueError:
+                    raise http.client.IncompleteRead(b'') from None
+
+                if size == 0:
+                    break
+
+                # read chunk
+                while len(data) < size:
+                    data.extend((yield))
+
+                # feed stream
+                stream.feed_data(data[:size])
+
+                data = data[size:]
+
+                # toss the CRLF at the end of the chunk
+                while len(data) < 2:
+                    data.extend((yield))
+
+                data = data[2:]
+
+            # read and discard trailer up to the CRLF terminator
+            while True:
+                if b'\n' in data:
+                    line, data = data.split(b'\n', 1)
+                    if line in (b'\r', b''):
+                        break
+                else:
+                    data.extend((yield))
+
+            # stream eof
+            stream.feed_eof()
+            return data
+
+        except StreamEofException:
+            stream.set_exception(http.client.IncompleteRead(b''))
+        except http.client.IncompleteRead as exc:
+            stream.set_exception(exc)
+
+    @wrap_payload_reader
+    def read_length_payload(self, length):
+        """Read specified amount of bytes."""
+        stream = yield
+
+        try:
+            data = bytearray()
+            while length:
+                data.extend((yield))
+
+                data_len = len(data)
+                if data_len <= length:
+                    stream.feed_data(data)
+                    data = bytearray()
+                    length -= data_len
+                else:
+                    stream.feed_data(data[:length])
+                    data = data[length:]
+                    length = 0
+
+            stream.feed_eof()
+            return data
+        except StreamEofException:
+            stream.set_exception(http.client.IncompleteRead(b''))
+
+    @wrap_payload_reader
+    def read_eof_payload(self):
+        """Read all bytes untile eof."""
+        stream = yield
+
+        try:
+            while True:
+                stream.feed_data((yield))
+        except StreamEofException:
+            stream.feed_eof()

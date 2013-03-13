@@ -4,12 +4,13 @@ A selector is a "notify-when-ready" multiplexer.  For a subclass which
 also includes support for signal handling, see the unix_events sub-module.
 """
 
+import collections
 import errno
 import logging
 import socket
 try:
     import ssl
-except ImportError: # pragma: no cover
+except ImportError:  # pragma: no cover
     ssl = None
 import sys
 
@@ -31,7 +32,7 @@ _DISCONNECTED = frozenset((errno.ECONNRESET,
 
 # Errno values indicating the socket isn't ready for I/O just yet.
 _TRYAGAIN = frozenset((errno.EAGAIN, errno.EWOULDBLOCK, errno.EINPROGRESS))
-if sys.platform == 'win32': # pragma: no cover
+if sys.platform == 'win32':  # pragma: no cover
     _TRYAGAIN = frozenset(list(_TRYAGAIN) + [errno.WSAEWOULDBLOCK])
 
 
@@ -57,6 +58,10 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
                             sslcontext, waiter, extra=None):
         return _SelectorSslTransport(
             self, rawsock, protocol, sslcontext, waiter, extra)
+
+    def _make_datagram_transport(self, sock, protocol,
+                                 address=None, extra=None):
+        return _SelectorDatagramTransport(self, sock, protocol, address, extra)
 
     def close(self):
         if self._selector is not None:
@@ -116,9 +121,9 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             # TODO: Someone will want an error handler for this.
             logging.exception('Accept failed')
             return
-        protocol = protocol_factory()
-        transport = self._make_socket_transport(
-            conn, protocol, extra={'addr': addr})
+
+        self._make_socket_transport(
+            conn, protocol_factory(), extra={'addr': addr})
         # It's now up to the protocol to handle the connection.
 
     def add_reader(self, fd, callback, *args):
@@ -547,3 +552,110 @@ class _SelectorSslTransport(transports.Transport):
         self._event_loop.remove_reader(self._sslsock.fileno())
         self._buffer = []
         self._event_loop.call_soon(self._protocol.connection_lost, exc)
+
+
+class _SelectorDatagramTransport(transports.Transport):
+
+    max_size = 256 * 1024  # max bytes we read in one eventloop iteration
+
+    def __init__(self, event_loop, sock, protocol, address=None, extra=None):
+        super().__init__(extra)
+        self._extra['socket'] = sock
+        self._event_loop = event_loop
+        self._sock = sock
+        self._fileno = sock.fileno()
+        self._protocol = protocol
+        self._address = address
+        self._buffer = collections.deque()
+        self._closing = False  # Set when close() called.
+        self._event_loop.add_reader(self._fileno, self._read_ready)
+        self._event_loop.call_soon(self._protocol.connection_made, self)
+
+    def _read_ready(self):
+        try:
+            data, addr = self._sock.recvfrom(self.max_size)
+        except socket.error as exc:
+            if exc.errno not in _TRYAGAIN:
+                self._fatal_error(exc)
+        else:
+            self._event_loop.call_soon(
+                self._protocol.datagram_received, data, addr)
+
+    def sendto(self, data, addr=None):
+        assert isinstance(data, bytes)
+        assert not self._closing
+        if not data:
+            return
+
+        if self._address:
+            assert addr in (None, self._address)
+
+        if not self._buffer:
+            # Attempt to send it right away first.
+            try:
+                if self._address:
+                    self._sock.send(data)
+                else:
+                    self._sock.sendto(data, addr)
+                return
+            except ConnectionRefusedError as exc:
+                if self._address:
+                    self._fatal_error(exc)
+            except socket.error as exc:
+                if exc.errno not in _TRYAGAIN:
+                    self._fatal_error(exc)
+
+                self._event_loop.add_writer(self._fileno, self._sendto_ready)
+
+        self._buffer.append((data, addr))
+
+    def _sendto_ready(self):
+        while self._buffer:
+            data, addr = self._buffer.popleft()
+            try:
+                if self._address:
+                    self._sock.send(data)
+                else:
+                    self._sock.sendto(data, addr)
+            except ConnectionRefusedError as exc:
+                if self._address:
+                    self._fatal_error(exc)
+                return
+            except socket.error as exc:
+                if exc.errno not in _TRYAGAIN:
+                    self._fatal_error(exc)
+                    return
+
+                # Try again later.
+                self._buffer.appendleft((data, addr))
+                break
+
+        if not self._buffer:
+            self._event_loop.remove_writer(self._fileno)
+            if self._closing:
+                self._event_loop.call_soon(self._call_connection_lost, None)
+
+    def abort(self):
+        self._fatal_error(None)
+
+    def close(self):
+        self._closing = True
+        self._event_loop.remove_reader(self._fileno)
+        if not self._buffer:
+            self._event_loop.call_soon(self._call_connection_lost, None)
+
+    def _fatal_error(self, exc):
+        logging.exception('Fatal error for %s', self)
+
+        self._buffer.clear()
+        self._event_loop.remove_writer(self._fileno)
+        self._event_loop.remove_reader(self._fileno)
+        if self._address and isinstance(exc, ConnectionRefusedError):
+            self._event_loop.call_soon(self._protocol.connection_refused, exc)
+        self._event_loop.call_soon(self._call_connection_lost, exc)
+
+    def _call_connection_lost(self, exc):
+        try:
+            self._protocol.connection_lost(exc)
+        finally:
+            self._sock.close()

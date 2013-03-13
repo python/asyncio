@@ -49,7 +49,7 @@ class Handler:
             self._callback(*self._args)
         except Exception:
             logging.exception('Exception in callback %s %r',
-                                self._callback, self._args)
+                              self._callback, self._args)
 
 
 def make_handler(callback, args):
@@ -182,6 +182,15 @@ class AbstractEventLoop:
                       family=0, proto=0, flags=0, sock=None):
         raise NotImplementedError
 
+    def create_datagram_connection(self, protocol_factory,
+                                   host=None, port=None, *,
+                                   family=0, proto=0, flags=0):
+        raise NotImplementedError
+
+    def start_serving_datagram(self, protocol_factory, host, port, *,
+                               family=0, proto=0, flags=0):
+        raise NotImplementedError
+
     # Ready-based callback registration methods.
     # The add_*() methods return a Handler.
     # The remove_*() methods return True if something was removed,
@@ -275,7 +284,7 @@ class DefaultEventLoopPolicy(threading.local, EventLoopPolicy):
         loop.
         """
         # TODO: Do something else for Windows.
-        if sys.platform == 'win32': # pragma: no cover
+        if sys.platform == 'win32':  # pragma: no cover
             from . import windows_events
             return windows_events.SelectorEventLoop()
         else:

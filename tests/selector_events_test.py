@@ -14,6 +14,7 @@ from tulip import selectors
 from tulip.selector_events import BaseSelectorEventLoop
 from tulip.selector_events import _SelectorSslTransport
 from tulip.selector_events import _SelectorSocketTransport
+from tulip.selector_events import _SelectorDatagramTransport
 
 
 class TestBaseSelectorEventLoop(BaseSelectorEventLoop):
@@ -273,10 +274,10 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         sock = unittest.mock.Mock()
         self.event_loop._sock_connect = unittest.mock.Mock()
 
-        f = self.event_loop.sock_connect(sock, ('127.0.0.1',8080))
+        f = self.event_loop.sock_connect(sock, ('127.0.0.1', 8080))
         self.assertIsInstance(f, futures.Future)
         self.assertEqual(
-            (f, False, sock, ('127.0.0.1',8080)),
+            (f, False, sock, ('127.0.0.1', 8080)),
             self.event_loop._sock_connect.call_args[0])
 
     def test__sock_connect(self):
@@ -285,7 +286,7 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         sock = unittest.mock.Mock()
         sock.fileno.return_value = 10
 
-        self.event_loop._sock_connect(f, False, sock, ('127.0.0.1',8080))
+        self.event_loop._sock_connect(f, False, sock, ('127.0.0.1', 8080))
         self.assertTrue(f.done())
         self.assertTrue(sock.connect.called)
 
@@ -295,7 +296,7 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         f = futures.Future()
         f.cancel()
 
-        self.event_loop._sock_connect(f, False, sock, ('127.0.0.1',8080))
+        self.event_loop._sock_connect(f, False, sock, ('127.0.0.1', 8080))
         self.assertFalse(sock.connect.called)
 
     def test__sock_connect_unregister(self):
@@ -306,7 +307,7 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         f.cancel()
 
         self.event_loop.remove_writer = unittest.mock.Mock()
-        self.event_loop._sock_connect(f, True, sock, ('127.0.0.1',8080))
+        self.event_loop._sock_connect(f, True, sock, ('127.0.0.1', 8080))
         self.assertEqual((10,), self.event_loop.remove_writer.call_args[0])
 
     def test__sock_connect_tryagain(self):
@@ -318,10 +319,10 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         self.event_loop.add_writer = unittest.mock.Mock()
         self.event_loop.remove_writer = unittest.mock.Mock()
 
-        self.event_loop._sock_connect(f, True, sock, ('127.0.0.1',8080))
+        self.event_loop._sock_connect(f, True, sock, ('127.0.0.1', 8080))
         self.assertEqual(
             (10, self.event_loop._sock_connect, f,
-             True, sock, ('127.0.0.1',8080)),
+             True, sock, ('127.0.0.1', 8080)),
             self.event_loop.add_writer.call_args[0])
 
     def test__sock_connect_exception(self):
@@ -331,7 +332,7 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         sock.getsockopt.return_value = errno.ENOTCONN
 
         self.event_loop.remove_writer = unittest.mock.Mock()
-        self.event_loop._sock_connect(f, True, sock, ('127.0.0.1',8080))
+        self.event_loop._sock_connect(f, True, sock, ('127.0.0.1', 8080))
         self.assertIsInstance(f.exception(), socket.error)
 
     def test_sock_accept(self):
@@ -561,15 +562,14 @@ class SelectorSocketTransportTests(unittest.TestCase):
         self.protocol = unittest.mock.Mock()
 
     def test_ctor(self):
-        transport = _SelectorSocketTransport(
-            self.event_loop, self.sock, self.protocol)
+        _SelectorSocketTransport(self.event_loop, self.sock, self.protocol)
         self.assertTrue(self.event_loop.add_reader.called)
         self.assertTrue(self.event_loop.call_soon.called)
 
     def test_ctor_with_waiter(self):
         fut = futures.Future()
 
-        transport = _SelectorSocketTransport(
+        _SelectorSocketTransport(
             self.event_loop, self.sock, self.protocol, fut)
         self.assertEqual(2, self.event_loop.call_soon.call_count)
         self.assertEqual(fut.set_result,
@@ -1104,3 +1104,318 @@ class SelectorSslTransportTests(unittest.TestCase):
         self.transport._on_ready()
         self.assertTrue(self.transport._fatal_error.called)
         self.assertEqual([], self.transport._buffer)
+
+
+class SelectorDatagramTransportTests(unittest.TestCase):
+
+    def setUp(self):
+        self.event_loop = unittest.mock.Mock()
+        self.sock = unittest.mock.Mock()
+        self.protocol = unittest.mock.Mock()
+
+    def test_read_ready(self):
+        datagram_received = unittest.mock.Mock()
+        self.protocol.datagram_received = datagram_received
+
+        transport = _SelectorDatagramTransport(
+            self.event_loop, self.sock, self.protocol)
+
+        self.sock.recvfrom.return_value = (b'data', ('0.0.0.0', 1234))
+        transport._read_ready()
+
+        self.assertTrue(self.event_loop.call_soon.called)
+        self.assertEqual(
+            (datagram_received, b'data', ('0.0.0.0', 1234)),
+            self.event_loop.call_soon.call_args[0])
+
+    def test_read_ready_tryagain(self):
+        transport = _SelectorDatagramTransport(
+            self.event_loop, self.sock, self.protocol)
+
+        class Err(socket.error):
+            errno = errno.EAGAIN
+
+        self.sock.recvfrom.side_effect = Err
+        transport._fatal_error = unittest.mock.Mock()
+        transport._read_ready()
+
+        self.assertFalse(transport._fatal_error.called)
+
+    def test_read_ready_err(self):
+        transport = _SelectorDatagramTransport(
+            self.event_loop, self.sock, self.protocol)
+
+        class Err(socket.error):
+            pass
+
+        self.sock.recvfrom.side_effect = Err
+        transport._fatal_error = unittest.mock.Mock()
+        transport._read_ready()
+
+        self.assertTrue(transport._fatal_error.called)
+        self.assertIsInstance(transport._fatal_error.call_args[0][0], Err)
+
+    def test_abort(self):
+        transport = _SelectorDatagramTransport(
+            self.event_loop, self.sock, self.protocol)
+        transport._fatal_error = unittest.mock.Mock()
+
+        transport.abort()
+        self.assertTrue(transport._fatal_error.called)
+        self.assertIsNone(transport._fatal_error.call_args[0][0])
+
+    def test_sendto(self):
+        data = b'data'
+        transport = _SelectorDatagramTransport(
+            self.event_loop, self.sock, self.protocol)
+        transport.sendto(data, ('0.0.0.0', 1234))
+        self.assertTrue(self.sock.sendto.called)
+        self.assertEqual(
+            self.sock.sendto.call_args[0], (data, ('0.0.0.0', 1234)))
+
+    def test_sendto_no_data(self):
+        transport = _SelectorDatagramTransport(
+            self.event_loop, self.sock, self.protocol)
+        transport._buffer.append((b'data', ('0.0.0.0', 12345)))
+        transport.sendto(b'', ())
+        self.assertFalse(self.sock.sendto.called)
+        self.assertEqual(
+            [(b'data', ('0.0.0.0', 12345))], list(transport._buffer))
+
+    def test_sendto_buffer(self):
+        transport = _SelectorDatagramTransport(
+            self.event_loop, self.sock, self.protocol)
+        transport._buffer.append((b'data1', ('0.0.0.0', 12345)))
+        transport.sendto(b'data2', ('0.0.0.0', 12345))
+        self.assertFalse(self.sock.sendto.called)
+        self.assertEqual(
+            [(b'data1', ('0.0.0.0', 12345)),
+             (b'data2', ('0.0.0.0', 12345))],
+            list(transport._buffer))
+
+    def test_sendto_tryagain(self):
+        data = b'data'
+
+        class Err(socket.error):
+            errno = errno.EAGAIN
+
+        self.sock.sendto.side_effect = Err
+
+        transport = _SelectorDatagramTransport(
+            self.event_loop, self.sock, self.protocol)
+        transport.sendto(data, ('0.0.0.0', 12345))
+
+        self.assertTrue(self.event_loop.add_writer.called)
+        self.assertEqual(
+            transport._sendto_ready,
+            self.event_loop.add_writer.call_args[0][1])
+
+        self.assertEqual(
+            [(b'data', ('0.0.0.0', 12345))], list(transport._buffer))
+
+    def test_sendto_exception(self):
+        data = b'data'
+
+        class Err(socket.error):
+            pass
+
+        self.sock.sendto.side_effect = Err
+
+        transport = _SelectorDatagramTransport(
+            self.event_loop, self.sock, self.protocol)
+        transport._fatal_error = unittest.mock.Mock()
+        transport.sendto(data, ())
+
+        self.assertTrue(transport._fatal_error.called)
+        self.assertIsInstance(transport._fatal_error.call_args[0][0], Err)
+
+    def test_sendto_connection_refused(self):
+        data = b'data'
+
+        self.sock.sendto.side_effect = ConnectionRefusedError
+
+        transport = _SelectorDatagramTransport(
+            self.event_loop, self.sock, self.protocol)
+        transport._fatal_error = unittest.mock.Mock()
+        transport.sendto(data, ())
+
+        self.assertFalse(transport._fatal_error.called)
+
+    def test_sendto_connection_refused_connected(self):
+        data = b'data'
+
+        self.sock.send.side_effect = ConnectionRefusedError
+
+        transport = _SelectorDatagramTransport(
+            self.event_loop, self.sock, self.protocol, ('0.0.0.0', 1))
+        transport._fatal_error = unittest.mock.Mock()
+        transport.sendto(data)
+
+        self.assertTrue(transport._fatal_error.called)
+
+    def test_sendto_str(self):
+        transport = _SelectorDatagramTransport(
+            self.event_loop, self.sock, self.protocol)
+        self.assertRaises(AssertionError, transport.sendto, 'str', ())
+
+    def test_sendto_connected_addr(self):
+        transport = _SelectorDatagramTransport(
+            self.event_loop, self.sock, self.protocol, ('0.0.0.0', 1))
+        self.assertRaises(
+            AssertionError, transport.sendto, b'str', ('0.0.0.0', 2))
+
+    def test_sendto_closing(self):
+        transport = _SelectorDatagramTransport(
+            self.event_loop, self.sock, self.protocol)
+        transport.close()
+        self.assertRaises(AssertionError, transport.sendto, b'data', ())
+
+    def test_sendto_ready(self):
+        data = b'data'
+        self.sock.sendto.return_value = len(data)
+
+        transport = _SelectorDatagramTransport(
+            self.event_loop, self.sock, self.protocol)
+        transport._buffer.append((data, ('0.0.0.0', 12345)))
+        transport._sendto_ready()
+        self.assertTrue(self.sock.sendto.called)
+        self.assertEqual(
+            self.sock.sendto.call_args[0], (data, ('0.0.0.0', 12345)))
+        self.assertTrue(self.event_loop.remove_writer.called)
+
+    def test_sendto_ready_closing(self):
+        data = b'data'
+        self.sock.send.return_value = len(data)
+
+        transport = _SelectorDatagramTransport(
+            self.event_loop, self.sock, self.protocol)
+        transport._closing = True
+        transport._buffer.append((data, ()))
+        transport._sendto_ready()
+        self.assertTrue(self.sock.sendto.called)
+        self.assertEqual(self.sock.sendto.call_args[0], (data, ()))
+        self.assertTrue(self.event_loop.remove_writer.called)
+        self.assertTrue(self.event_loop.call_soon.called)
+        self.assertEqual(
+            (transport._call_connection_lost, None),
+            self.event_loop.call_soon.call_args[0])
+
+    def test_sendto_ready_no_data(self):
+        transport = _SelectorDatagramTransport(
+            self.event_loop, self.sock, self.protocol)
+        transport._sendto_ready()
+        self.assertFalse(self.sock.sendto.called)
+        self.assertTrue(self.event_loop.remove_writer.called)
+
+    def test_sendto_ready_tryagain(self):
+        class Err(socket.error):
+            errno = errno.EAGAIN
+
+        self.sock.sendto.side_effect = Err
+
+        transport = _SelectorDatagramTransport(
+            self.event_loop, self.sock, self.protocol)
+        transport._buffer.extend([(b'data1', ()), (b'data2', ())])
+        transport._sendto_ready()
+
+        self.assertFalse(self.event_loop.remove_writer.called)
+        self.assertEqual(
+            [(b'data1', ()), (b'data2', ())],
+            list(transport._buffer))
+
+    def test_sendto_ready_exception(self):
+        class Err(socket.error):
+            pass
+
+        self.sock.sendto.side_effect = Err
+
+        transport = _SelectorDatagramTransport(
+            self.event_loop, self.sock, self.protocol)
+        transport._fatal_error = unittest.mock.Mock()
+        transport._buffer.append((b'data', ()))
+        transport._sendto_ready()
+
+        self.assertTrue(transport._fatal_error.called)
+        self.assertIsInstance(transport._fatal_error.call_args[0][0], Err)
+
+    def test_sendto_ready_connection_refused(self):
+        self.sock.sendto.side_effect = ConnectionRefusedError
+
+        transport = _SelectorDatagramTransport(
+            self.event_loop, self.sock, self.protocol)
+        transport._fatal_error = unittest.mock.Mock()
+        transport._buffer.append((b'data', ()))
+        transport._sendto_ready()
+
+        self.assertFalse(transport._fatal_error.called)
+
+    def test_sendto_ready_connection_refused_connection(self):
+        self.sock.send.side_effect = ConnectionRefusedError
+
+        transport = _SelectorDatagramTransport(
+            self.event_loop, self.sock, self.protocol, ('0.0.0.0', 1))
+        transport._fatal_error = unittest.mock.Mock()
+        transport._buffer.append((b'data', ()))
+        transport._sendto_ready()
+
+        self.assertTrue(transport._fatal_error.called)
+
+    def test_close(self):
+        transport = _SelectorDatagramTransport(
+            self.event_loop, self.sock, self.protocol)
+        transport.close()
+
+        self.assertTrue(transport._closing)
+        self.assertTrue(self.event_loop.remove_reader.called)
+        self.assertTrue(self.event_loop.call_soon.called)
+        self.assertEqual(
+            (transport._call_connection_lost, None),
+            self.event_loop.call_soon.call_args[0])
+
+    def test_close_write_buffer(self):
+        transport = _SelectorDatagramTransport(
+            self.event_loop, self.sock, self.protocol)
+        self.event_loop.reset_mock()
+        transport._buffer.append((b'data', ()))
+        transport.close()
+
+        self.assertTrue(self.event_loop.remove_reader.called)
+        self.assertFalse(self.event_loop.call_soon.called)
+
+    def test_fatal_error(self):
+        exc = object()
+        transport = _SelectorDatagramTransport(
+            self.event_loop, self.sock, self.protocol)
+        self.event_loop.reset_mock()
+        transport._buffer.append((b'data', ()))
+        transport._fatal_error(exc)
+
+        self.assertEqual([], list(transport._buffer))
+        self.assertTrue(self.event_loop.remove_writer.called)
+        self.assertTrue(self.event_loop.remove_reader.called)
+        self.assertTrue(self.event_loop.call_soon.called)
+        self.assertEqual(
+            (transport._call_connection_lost, exc),
+            self.event_loop.call_soon.call_args[0])
+
+    def test_fatal_error_connected(self):
+        transport = _SelectorDatagramTransport(
+            self.event_loop, self.sock, self.protocol, ('0.0.0.0', 1))
+        self.event_loop.reset_mock()
+        transport._fatal_error(ConnectionRefusedError())
+
+        self.assertEqual(
+            2, self.event_loop.call_soon.call_count)
+
+    def test_transport_closing(self):
+        exc = object()
+        transport = _SelectorDatagramTransport(
+            self.event_loop, self.sock, self.protocol)
+        self.sock.reset_mock()
+        self.protocol.reset_mock()
+        transport._call_connection_lost(exc)
+
+        self.assertTrue(self.protocol.connection_lost.called)
+        self.assertEqual(
+            (exc,), self.protocol.connection_lost.call_args[0])
+        self.assertTrue(self.sock.close.called)

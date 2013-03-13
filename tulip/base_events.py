@@ -50,12 +50,18 @@ class BaseEventLoop(events.AbstractEventLoop):
         self._internal_fds = 0
         self._signal_handlers = {}
 
-    def _make_socket_transport(self, sock, protocol, waiter=None):
+    def _make_socket_transport(self, sock, protocol, waiter=None, extra=None):
         """Create socket transport."""
         raise NotImplementedError
 
-    def _make_ssl_transport(self, rawsock, protocol, sslcontext, waiter):
+    def _make_ssl_transport(self, rawsock, protocol,
+                            sslcontext, waiter, extra=None):
         """Create SSL transport."""
+        raise NotImplementedError
+
+    def _make_datagram_transport(self, sock, protocol,
+                                 address=None, extra=None):
+        """Create datagram transport."""
         raise NotImplementedError
 
     def _read_from_self(self):
@@ -121,14 +127,17 @@ class BaseEventLoop(events.AbstractEventLoop):
             handler_called = True
             raise _StopError
         future.add_done_callback(_raise_stop_error)
+
         if timeout is None:
             self.run_forever()
         else:
             handler = self.call_later(timeout, stop_loop)
             self.run()
             handler.cancel()
+
         if handler_called:
             raise futures.TimeoutError
+
         return future.result()
 
     def stop(self):
@@ -286,6 +295,52 @@ class BaseEventLoop(events.AbstractEventLoop):
         yield from waiter
         return transport, protocol
 
+    @tasks.task
+    def create_datagram_connection(self, protocol_factory,
+                                   host=None, port=None, *,
+                                   family=socket.AF_INET, proto=0, flags=0):
+        """Create datagram connection."""
+
+        addr = None
+        if host is not None or port is not None:
+            infos = yield from self.getaddrinfo(
+                host, port, family=family,
+                type=socket.SOCK_DGRAM, proto=proto, flags=flags)
+
+            if not infos:
+                raise socket.error('getaddrinfo() returned empty list')
+
+            exceptions = []
+            for family, type, proto, cname, address in infos:
+                sock = socket.socket(family=family, type=type, proto=proto)
+
+                try:
+                    yield from self.sock_connect(sock, address)
+                    addr = address
+                except socket.error as exc:
+                    sock.close()
+                    exceptions.append(exc)
+                else:
+                    break
+            else:
+                if exceptions:
+                    raise exceptions[0]
+        else:
+            sock = socket.socket(
+                family=family, type=socket.SOCK_DGRAM, proto=proto)
+
+        try:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.setblocking(False)
+        except socket.error:
+            sock.close()
+            raise
+
+        protocol = protocol_factory()
+        transport = self._make_datagram_transport(sock, protocol, addr)
+
+        return transport, protocol
+
     # TODO: Or create_server()?
     @tasks.task
     def start_serving(self, protocol_factory, host=None, port=None, *,
@@ -326,6 +381,37 @@ class BaseEventLoop(events.AbstractEventLoop):
         sock.listen(backlog)
         sock.setblocking(False)
         self._start_serving(protocol_factory, sock)
+        return sock
+
+    @tasks.task
+    def start_serving_datagram(self, protocol_factory, host, port, *,
+                               family=0, proto=0, flags=0):
+        """XXX"""
+        infos = yield from self.getaddrinfo(
+            host, port, family=family,
+            type=socket.SOCK_DGRAM, proto=proto, flags=flags)
+
+        if not infos:
+            raise socket.error('getaddrinfo() returned empty list')
+
+        exceptions = []
+        for family, type, proto, cname, address in infos:
+            sock = socket.socket(family=family, type=type, proto=proto)
+            try:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                sock.bind(address)
+            except socket.error as exc:
+                sock.close()
+                exceptions.append(exc)
+            else:
+                sock.setblocking(False)
+                break
+        else:
+            raise exceptions[0]
+
+        self._make_datagram_transport(
+            sock, protocol_factory(), extra={'addr': sock.getsockname()})
+
         return sock
 
     def _add_callback(self, handler):

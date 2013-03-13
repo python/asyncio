@@ -4,7 +4,6 @@ import concurrent.futures
 import errno
 import gc
 import os
-import select
 import signal
 import socket
 try:
@@ -18,7 +17,6 @@ import unittest
 import unittest.mock
 
 from tulip import events
-from tulip import futures
 from tulip import transports
 from tulip import protocols
 from tulip import selector_events
@@ -51,6 +49,29 @@ class MyProto(protocols.Protocol):
         self.state = 'CLOSED'
 
 
+class MyDatagramProto(protocols.DatagramProtocol):
+
+    def __init__(self):
+        self.state = 'INITIAL'
+        self.nbytes = 0
+
+    def connection_made(self, transport):
+        self.transport = transport
+        assert self.state == 'INITIAL', self.state
+        self.state = 'INITIALIZED'
+
+    def datagram_received(self, data, addr):
+        assert self.state == 'INITIALIZED', self.state
+        self.nbytes += len(data)
+
+    def connection_refused(self, exc):
+        assert self.state == 'INITIALIZED', self.state
+
+    def connection_lost(self, exc):
+        assert self.state == 'INITIALIZED', self.state
+        self.state = 'CLOSED'
+
+
 class EventLoopTestsMixin:
 
     def setUp(self):
@@ -68,8 +89,10 @@ class EventLoopTestsMixin:
 
     def test_call_later(self):
         results = []
+
         def callback(arg):
             results.append(arg)
+
         self.event_loop.call_later(0.1, callback, 'hello world')
         t0 = time.monotonic()
         self.event_loop.run()
@@ -79,8 +102,10 @@ class EventLoopTestsMixin:
 
     def test_call_repeatedly(self):
         results = []
+
         def callback(arg):
             results.append(arg)
+
         self.event_loop.call_repeatedly(0.03, callback, 'ho')
         self.event_loop.call_later(0.1, self.event_loop.stop)
         self.event_loop.run()
@@ -88,16 +113,20 @@ class EventLoopTestsMixin:
 
     def test_call_soon(self):
         results = []
+
         def callback(arg1, arg2):
             results.append((arg1, arg2))
+
         self.event_loop.call_soon(callback, 'hello', 'world')
         self.event_loop.run()
         self.assertEqual(results, [('hello', 'world')])
 
     def test_call_soon_with_handler(self):
         results = []
+
         def callback():
             results.append('yeah')
+
         handler = events.Handler(callback, ())
         self.assertIs(self.event_loop.call_soon(handler), handler)
         self.event_loop.run()
@@ -105,10 +134,13 @@ class EventLoopTestsMixin:
 
     def test_call_soon_threadsafe(self):
         results = []
+
         def callback(arg):
             results.append(arg)
+
         def run():
             self.event_loop.call_soon_threadsafe(callback, 'hello')
+
         t = threading.Thread(target=run)
         self.event_loop.call_later(0.1, callback, 'world')
         t0 = time.monotonic()
@@ -121,8 +153,10 @@ class EventLoopTestsMixin:
 
     def test_call_soon_threadsafe_same_thread(self):
         results = []
+
         def callback(arg):
             results.append(arg)
+
         self.event_loop.call_later(0.1, callback, 'world')
         self.event_loop.call_soon_threadsafe(callback, 'hello')
         self.event_loop.run()
@@ -130,12 +164,15 @@ class EventLoopTestsMixin:
 
     def test_call_soon_threadsafe_with_handler(self):
         results = []
+
         def callback(arg):
             results.append(arg)
 
         handler = events.Handler(callback, ('hello',))
+
         def run():
-            self.assertIs(self.event_loop.call_soon_threadsafe(handler),handler)
+            self.assertIs(
+                self.event_loop.call_soon_threadsafe(handler), handler)
 
         t = threading.Thread(target=run)
         self.event_loop.call_later(0.1, callback, 'world')
@@ -178,6 +215,7 @@ class EventLoopTestsMixin:
     def test_reader_callback(self):
         r, w = test_utils.socketpair()
         bytes_read = []
+
         def reader():
             try:
                 data = r.recv(1024)
@@ -190,6 +228,7 @@ class EventLoopTestsMixin:
             else:
                 self.assertTrue(self.event_loop.remove_reader(r.fileno()))
                 r.close()
+
         self.event_loop.add_reader(r.fileno(), reader)
         self.event_loop.call_later(0.05, w.send, b'abc')
         self.event_loop.call_later(0.1, w.send, b'def')
@@ -200,6 +239,7 @@ class EventLoopTestsMixin:
     def test_reader_callback_with_handler(self):
         r, w = test_utils.socketpair()
         bytes_read = []
+
         def reader():
             try:
                 data = r.recv(1024)
@@ -225,6 +265,7 @@ class EventLoopTestsMixin:
     def test_reader_callback_cancel(self):
         r, w = test_utils.socketpair()
         bytes_read = []
+
         def reader():
             try:
                 data = r.recv(1024)
@@ -236,6 +277,7 @@ class EventLoopTestsMixin:
                 handler.cancel()
             if not data:
                 r.close()
+
         handler = self.event_loop.add_reader(r.fileno(), reader)
         self.event_loop.call_later(0.05, w.send, b'abc')
         self.event_loop.call_later(0.1, w.send, b'def')
@@ -247,8 +289,10 @@ class EventLoopTestsMixin:
         r, w = test_utils.socketpair()
         w.setblocking(False)
         self.event_loop.add_writer(w.fileno(), w.send, b'x'*(256*1024))
+
         def remove_writer():
             self.assertTrue(self.event_loop.remove_writer(w.fileno()))
+
         self.event_loop.call_later(0.1, remove_writer)
         self.event_loop.run()
         w.close()
@@ -261,8 +305,10 @@ class EventLoopTestsMixin:
         w.setblocking(False)
         handler = events.Handler(w.send, (b'x'*(256*1024),))
         self.assertIs(self.event_loop.add_writer(w.fileno(), handler), handler)
+
         def remove_writer():
             self.assertTrue(self.event_loop.remove_writer(w.fileno()))
+
         self.event_loop.call_later(0.1, remove_writer)
         self.event_loop.run()
         w.close()
@@ -273,9 +319,11 @@ class EventLoopTestsMixin:
     def test_writer_callback_cancel(self):
         r, w = test_utils.socketpair()
         w.setblocking(False)
+
         def sender():
             w.send(b'x'*256)
             handler.cancel()
+
         handler = self.event_loop.add_writer(w.fileno(), sender)
         self.event_loop.run()
         w.close()
@@ -308,7 +356,6 @@ class EventLoopTestsMixin:
         sock.close()
 
     def test_sock_accept(self):
-        el = events.get_event_loop()
         listener = socket.socket()
         listener.setblocking(False)
         listener.bind(('127.0.0.1', 0))
@@ -328,6 +375,7 @@ class EventLoopTestsMixin:
     @unittest.skipUnless(hasattr(signal, 'SIGKILL'), 'No SIGKILL')
     def test_add_signal_handler(self):
         caught = 0
+
         def my_handler():
             nonlocal caught
             caught += 1
@@ -372,6 +420,7 @@ class EventLoopTestsMixin:
     def test_cancel_signal_handler(self):
         # Cancelling the handler should remove it (eventually).
         caught = 0
+
         def my_handler():
             nonlocal caught
             caught += 1
@@ -386,11 +435,14 @@ class EventLoopTestsMixin:
     def test_signal_handling_while_selecting(self):
         # Test with a signal actually arriving during a select() call.
         caught = 0
+
         def my_handler():
             nonlocal caught
             caught += 1
 
-        handler = self.event_loop.add_signal_handler(signal.SIGALRM, my_handler)
+        self.event_loop.add_signal_handler(
+            signal.SIGALRM, my_handler)
+
         signal.setitimer(signal.ITIMER_REAL, 0.1, 0)  # Send SIGALRM once.
         self.event_loop.call_later(0.15, self.event_loop.stop)
         self.event_loop.run_forever()
@@ -400,14 +452,15 @@ class EventLoopTestsMixin:
     def test_signal_handling_args(self):
         some_args = (42,)
         caught = 0
+
         def my_handler(*args):
             nonlocal caught
             caught += 1
             self.assertEqual(args, some_args)
 
-        handler = self.event_loop.add_signal_handler(signal.SIGALRM,
-                                                     my_handler,
-                                                     *some_args)
+        self.event_loop.add_signal_handler(
+            signal.SIGALRM, my_handler, *some_args)
+
         signal.setitimer(signal.ITIMER_REAL, 0.1, 0)  # Send SIGALRM once.
         self.event_loop.call_later(0.15, self.event_loop.stop)
         self.event_loop.run_forever()
@@ -426,7 +479,8 @@ class EventLoopTestsMixin:
         # TODO: This depends on xkcd.com behavior!
         sock = None
         infos = self.event_loop.run_until_complete(
-            self.event_loop.getaddrinfo('xkcd.com', 80,type=socket.SOCK_STREAM))
+            self.event_loop.getaddrinfo(
+                'xkcd.com', 80, type=socket.SOCK_STREAM))
         for family, type, proto, cname, address in infos:
             try:
                 sock = socket.socket(family=family, type=type, proto=proto)
@@ -492,8 +546,8 @@ class EventLoopTestsMixin:
 
         def getaddrinfo(*args, **kw):
             yield from []
-            return [(2,1,6,'',('107.6.106.82',80)),
-                    (2,1,6,'',('107.6.106.82',80))]
+            return [(2, 1, 6, '', ('107.6.106.82', 80)),
+                    (2, 1, 6, '', ('107.6.106.82', 80))]
         self.event_loop.getaddrinfo = getaddrinfo
         self.event_loop.sock_connect = unittest.mock.Mock()
         self.event_loop.sock_connect.side_effect = socket.error
@@ -504,6 +558,7 @@ class EventLoopTestsMixin:
 
     def test_start_serving(self):
         proto = None
+
         def factory():
             nonlocal proto
             proto = MyProto()
@@ -564,7 +619,8 @@ class EventLoopTestsMixin:
 
     def test_start_serving_host_port_sock(self):
         self.suppress_log_errors()
-        fut = self.event_loop.start_serving(MyProto,'0.0.0.0',0,sock=object())
+        fut = self.event_loop.start_serving(
+            MyProto, '0.0.0.0', 0, sock=object())
         self.assertRaises(ValueError, self.event_loop.run_until_complete, fut)
 
     def test_start_serving_no_host_port_sock(self):
@@ -589,11 +645,210 @@ class EventLoopTestsMixin:
             pass
 
         m_socket.error = socket.error
-        m_socket.getaddrinfo.return_value = [(2, 1, 6, '', ('127.0.0.1',10100))]
+        m_socket.getaddrinfo.return_value = [
+            (2, 1, 6, '', ('127.0.0.1', 10100))]
         m_sock = m_socket.socket.return_value = unittest.mock.Mock()
         m_sock.setsockopt.side_effect = Err
 
         fut = self.event_loop.start_serving(MyProto, '0.0.0.0', 0)
+        self.assertRaises(Err, self.event_loop.run_until_complete, fut)
+        self.assertTrue(m_sock.close.called)
+
+    def test_create_datagram_connection(self):
+        server = None
+
+        def factory():
+            nonlocal server
+            server = TestMyDatagramProto()
+            return server
+
+        class TestMyDatagramProto(MyDatagramProto):
+            def datagram_received(self, data, addr):
+                super().datagram_received(data, addr)
+                self.transport.sendto(b'resp:'+data, addr)
+
+        f = self.event_loop.start_serving_datagram(factory, '0.0.0.0', 0)
+        sock = self.event_loop.run_until_complete(f)
+        host, port = sock.getsockname()
+
+        f = self.event_loop.create_datagram_connection(
+            MyDatagramProto, host, port)
+        transport, protocol = self.event_loop.run_until_complete(f)
+
+        self.assertEqual('INITIALIZED', protocol.state)
+        transport.sendto(b'xxx')
+        self.event_loop.run_once()
+        self.assertEqual(0, server.nbytes)
+        self.event_loop.run_once()
+        self.assertEqual(3, server.nbytes)
+        self.event_loop.run_once()
+
+        # received
+        self.event_loop.run_once()
+        self.assertEqual(8, protocol.nbytes)
+
+        # extra info is available
+        self.assertIsNotNone(transport.get_extra_info('socket'))
+        conn = transport.get_extra_info('socket')
+        self.assertTrue(hasattr(conn, 'getsockname'))
+
+        # close connection
+        transport.close()
+
+        self.event_loop.run_once()
+        self.assertEqual('CLOSED', protocol.state)
+
+        server.transport.close()
+
+    def test_create_datagram_connection_no_connection(self):
+        server = None
+
+        def factory():
+            nonlocal server
+            server = TestMyDatagramProto()
+            return server
+
+        class TestMyDatagramProto(MyDatagramProto):
+            def datagram_received(self, data, addr):
+                super().datagram_received(data, addr)
+                self.transport.sendto(b'resp:'+data, addr)
+
+        f = self.event_loop.start_serving_datagram(factory, '0.0.0.0', 0)
+        sock = self.event_loop.run_until_complete(f)
+        host, port = sock.getsockname()
+
+        f = self.event_loop.create_datagram_connection(MyDatagramProto)
+        transport, protocol = self.event_loop.run_until_complete(f)
+
+        self.assertEqual('INITIALIZED', protocol.state)
+        transport.sendto(b'xxx', (host, port))
+        self.event_loop.run_once()
+        self.assertEqual(0, server.nbytes)
+        self.event_loop.run_once()
+        self.assertEqual(3, server.nbytes)
+        self.event_loop.run_once()
+
+        # received
+        self.event_loop.run_once()
+        self.assertEqual(8, protocol.nbytes)
+
+        # extra info is available
+        self.assertIsNotNone(transport.get_extra_info('socket'))
+        conn = transport.get_extra_info('socket')
+        self.assertTrue(hasattr(conn, 'getsockname'))
+
+        # close connection
+        transport.close()
+
+        self.event_loop.run_once()
+        self.assertEqual('CLOSED', protocol.state)
+
+        server.transport.close()
+
+    def test_create_datagram_connection_no_getaddrinfo(self):
+        self.suppress_log_errors()
+        getaddrinfo = self.event_loop.getaddrinfo = unittest.mock.Mock()
+        getaddrinfo.return_value = []
+
+        fut = self.event_loop.create_datagram_connection(
+            protocols.DatagramProtocol, 'xkcd.com', 80)
+        self.assertRaises(
+            socket.error, self.event_loop.run_until_complete, fut)
+
+    def test_create_datagram_connection_connect_err(self):
+        self.suppress_log_errors()
+        self.event_loop.sock_connect = unittest.mock.Mock()
+        self.event_loop.sock_connect.side_effect = socket.error
+
+        fut = self.event_loop.create_datagram_connection(
+            protocols.DatagramProtocol, 'xkcd.com', 80)
+        self.assertRaises(
+            socket.error, self.event_loop.run_until_complete, fut)
+
+    @unittest.mock.patch('tulip.base_events.socket')
+    def test_create_datagram_connection_sockopt_err(self, m_socket):
+        self.suppress_log_errors()
+
+        m_socket.error = socket.error
+        m_socket.socket.return_value.setsockopt.side_effect = socket.error
+
+        fut = self.event_loop.create_datagram_connection(
+            protocols.DatagramProtocol)
+        self.assertRaises(
+            socket.error, self.event_loop.run_until_complete, fut)
+        self.assertTrue(
+            m_socket.socket.return_value.close.called)
+
+    def test_start_serving_datagram(self):
+        class TestMyDatagramProto(MyDatagramProto):
+            def datagram_received(self, data, addr):
+                super().datagram_received(data, addr)
+                self.transport.sendto(b'resp:'+data, addr)
+
+        proto = None
+
+        def factory():
+            nonlocal proto
+            proto = TestMyDatagramProto()
+            return proto
+
+        f = self.event_loop.start_serving_datagram(factory, '0.0.0.0', 0)
+        sock = self.event_loop.run_until_complete(f)
+        self.assertEqual('INITIALIZED', proto.state)
+
+        host, port = sock.getsockname()
+        self.assertEqual(host, '0.0.0.0')
+        client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        client.sendto(b'xxx', ('127.0.0.1', port))
+        self.event_loop.run_once()
+        self.assertEqual(0, proto.nbytes)
+        self.event_loop.run_once()
+        self.assertEqual(3, proto.nbytes)
+
+        data, server = client.recvfrom(4096)
+        self.assertEqual(b'resp:xxx', data)
+
+        # extra info is available
+        self.assertIsNotNone(proto.transport.get_extra_info('socket'))
+        conn = proto.transport.get_extra_info('socket')
+        self.assertTrue(hasattr(conn, 'getsockname'))
+        self.assertEqual(
+            '0.0.0.0', proto.transport.get_extra_info('addr')[0])
+
+        # close connection
+        proto.transport.close()
+
+        self.event_loop.run_once()
+        self.assertEqual('CLOSED', proto.state)
+
+        client.close()
+
+    def test_start_serving_datagram_no_getaddrinfoc(self):
+        self.suppress_log_errors()
+        getaddrinfo = self.event_loop.getaddrinfo = unittest.mock.Mock()
+        getaddrinfo.return_value = []
+
+        f = self.event_loop.start_serving_datagram(
+            MyDatagramProto, '0.0.0.0', 0)
+
+        self.assertRaises(
+            socket.error, self.event_loop.run_until_complete, f)
+
+    @unittest.mock.patch('tulip.base_events.socket')
+    def test_start_serving_datagram_cant_bind(self, m_socket):
+        self.suppress_log_errors()
+
+        class Err(socket.error):
+            pass
+
+        m_socket.error = socket.error
+        m_socket.getaddrinfo.return_value = [
+            (2, 1, 6, '', ('127.0.0.1', 10100))]
+        m_sock = m_socket.socket.return_value = unittest.mock.Mock()
+        m_sock.setsockopt.side_effect = Err
+
+        fut = self.event_loop.start_serving_datagram(
+            MyDatagramProto, '0.0.0.0', 0)
         self.assertRaises(Err, self.event_loop.run_until_complete, fut)
         self.assertTrue(m_sock.close.called)
 
@@ -660,6 +915,18 @@ if sys.platform == 'win32':
         def test_accept_connection_exception(self):
             raise unittest.SkipTest(
                 "IocpEventLoop does not have _accept_connection()")
+        def test_create_datagram_connection(self):
+            raise unittest.SkipTest(
+                "IocpEventLoop does not have create_datagram_connection()")
+        def test_start_serving_datagram(self):
+            raise unittest.SkipTest(
+                "IocpEventLoop does not have start_serving_datagram()")
+        def test_start_serving_datagram_no_getaddrinfoc(self):
+            raise unittest.SkipTest(
+                "IocpEventLoop does not have start_serving_datagram()")
+        def test_start_serving_datagram_cant_bind(self, m_socket):
+            raise unittest.SkipTest(
+                "IocpEventLoop does not have start_serving_udp()")
 
 else:
     from tulip import selectors
@@ -669,7 +936,8 @@ else:
         class KqueueEventLoopTests(EventLoopTestsMixin,
                                    test_utils.LogTrackingTestCase):
             def create_event_loop(self):
-                return unix_events.SelectorEventLoop(selectors.KqueueSelector())
+                return unix_events.SelectorEventLoop(
+                    selectors.KqueueSelector())
 
     if hasattr(selectors, 'EpollSelector'):
         class EPollEventLoopTests(EventLoopTestsMixin,
@@ -724,8 +992,8 @@ class HandlerTests(unittest.TestCase):
         h2 = events.make_handler(h1, ())
         self.assertIs(h1, h2)
 
-        self.assertRaises(AssertionError,
-                          events.make_handler, h1, (1,2,))
+        self.assertRaises(
+            AssertionError, events.make_handler, h1, (1, 2))
 
 
 class TimerTests(unittest.TestCase):
@@ -828,6 +1096,11 @@ class AbstractEventLoopTests(unittest.TestCase):
         self.assertRaises(
             NotImplementedError, ev_loop.start_serving, f)
         self.assertRaises(
+            NotImplementedError, ev_loop.create_datagram_connection, f)
+        self.assertRaises(
+            NotImplementedError, ev_loop.start_serving_datagram,
+            f, 'localhost', 8080)
+        self.assertRaises(
             NotImplementedError, ev_loop.add_reader, 1, f)
         self.assertRaises(
             NotImplementedError, ev_loop.remove_reader, 1)
@@ -847,6 +1120,23 @@ class AbstractEventLoopTests(unittest.TestCase):
             NotImplementedError, ev_loop.add_signal_handler, 1, f)
         self.assertRaises(
             NotImplementedError, ev_loop.remove_signal_handler, 1)
+
+
+class ProtocolsAbsTests(unittest.TestCase):
+
+    def test_empty(self):
+        f = unittest.mock.Mock()
+        p = protocols.Protocol()
+        self.assertIsNone(p.connection_made(f))
+        self.assertIsNone(p.connection_lost(f))
+        self.assertIsNone(p.data_received(f))
+        self.assertIsNone(p.eof_received())
+
+        dp = protocols.DatagramProtocol()
+        self.assertIsNone(dp.connection_made(f))
+        self.assertIsNone(dp.connection_lost(f))
+        self.assertIsNone(dp.connection_refused(f))
+        self.assertIsNone(dp.datagram_received(f, f))
 
 
 class PolicyTests(unittest.TestCase):
@@ -906,6 +1196,7 @@ class PolicyTests(unittest.TestCase):
         policy = events.DefaultEventLoopPolicy()
         events.set_event_loop_policy(policy)
         self.assertIs(policy, events.get_event_loop_policy())
+        self.assertIsNot(policy, old_policy)
 
 
 if __name__ == '__main__':

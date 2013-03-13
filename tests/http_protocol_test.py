@@ -489,3 +489,47 @@ class HttpStreamReaderTests(LogTrackingTestCase):
 
         payload = self.loop.run_until_complete(tulip.Task(msg.payload.read()))
         self.assertEqual(b'dataline', payload)
+
+
+class HttpStreamWriterTests(unittest.TestCase):
+
+    def setUp(self):
+        self.transport = unittest.mock.Mock()
+        self.writer = protocol.HttpStreamWriter(self.transport)
+
+    def test_ctor(self):
+        transport = unittest.mock.Mock()
+        writer = protocol.HttpStreamWriter(transport, 'latin-1')
+        self.assertIs(writer.transport, transport)
+        self.assertEqual(writer.encoding, 'latin-1')
+
+    def test_encode(self):
+        self.assertEqual(b'test', self.writer.encode('test'))
+        self.assertEqual(b'test', self.writer.encode(b'test'))
+
+    def test_decode(self):
+        self.assertEqual('test', self.writer.decode('test'))
+        self.assertEqual('test', self.writer.decode(b'test'))
+
+    def test_write(self):
+        self.writer.write(b'test')
+        self.assertTrue(self.transport.write.called)
+        self.assertEqual((b'test',), self.transport.write.call_args[0])
+
+    def test_write_str(self):
+        self.writer.write_str('test')
+        self.assertTrue(self.transport.write.called)
+        self.assertEqual((b'test',), self.transport.write.call_args[0])
+
+    def test_write_cunked(self):
+        self.writer.write_chunked('')
+        self.assertFalse(self.transport.write.called)
+
+        self.writer.write_chunked('data')
+        self.assertEqual(
+            [(b'4\r\n',), (b'data',), (b'\r\n',)],
+            [c[0] for c in self.transport.write.call_args_list])
+
+    def test_write_eof(self):
+        self.writer.write_chunked_eof()
+        self.assertEqual((b'0\r\n\r\n',), self.transport.write.call_args[0])

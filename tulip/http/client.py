@@ -124,45 +124,25 @@ class HttpClientProtocol:
         sts = '{} {}'.format(status, reason)
         return (sts, headers, message.payload)
 
-    def encode(self, s):
-        if isinstance(s, bytes):
-            return s
-        return s.encode(self.encoding)
-
-    def decode(self, s):
-        if isinstance(s, str):
-            return s
-        return s.decode(self.encoding)
-
-    def write_str(self, s):
-        self.transport.write(self.encode(s))
-
-    def write_chunked(self, s):
-        if not s:
-            return
-        data = self.encode(s)
-        self.write_str('{:x}\r\n'.format(len(data)))
-        self.transport.write(data)
-        self.transport.write(b'\r\n')
-
-    def write_chunked_eof(self):
-        self.transport.write(b'0\r\n\r\n')
-
     def connection_made(self, transport):
         self.transport = transport
+        self.stream = protocol.HttpStreamReader()
+        self.wstream = protocol.HttpStreamWriter(transport)
+
         line = '{} {} HTTP/{}\r\n'.format(self.method,
                                           self.path,
                                           self.version)
-        self.write_str(line)
+        self.wstream.write_str(line)
         for key, value in self.headers.items():
-            self.write_str('{}: {}\r\n'.format(key, value))
-        self.transport.write(b'\r\n')
-        self.stream = protocol.HttpStreamReader()
+            self.wstream.write_str('{}: {}\r\n'.format(key, value))
+        self.wstream.write(b'\r\n')
         if self.make_body is not None:
             if self.chunked:
-                self.make_body(self.write_chunked, self.write_chunked_eof)
+                self.make_body(
+                    self.wstream.write_chunked, self.wstream.write_chunked_eof)
             else:
-                self.make_body(self.write_str, self.transport.write_eof)
+                self.make_body(
+                    self.wstream.write_str, self.wstream.write_eof)
 
     def data_received(self, data):
         self.stream.feed_data(data)

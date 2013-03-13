@@ -1,6 +1,7 @@
 """Http related helper utils."""
 
-__all__ = ['HttpStreamReader', 'HttpMessage', 'RequestLine', 'ResponseStatus']
+__all__ = ['HttpStreamReader', 'HttpStreamWriter',
+           'HttpMessage', 'RequestLine', 'ResponseStatus']
 
 import collections
 import functools
@@ -471,3 +472,37 @@ class HttpStreamReader(tulip.StreamReader):
                 payload = self.read_length_payload(0, encoding=encoding)
 
         return HttpMessage(headers, payload, close_conn, encoding)
+
+
+class HttpStreamWriter:
+
+    def __init__(self, transport, encoding='utf-8'):
+        self.transport = transport
+        self.encoding = encoding
+
+    def encode(self, s):
+        if isinstance(s, bytes):
+            return s
+        return s.encode(self.encoding)
+
+    def decode(self, s):
+        if isinstance(s, str):
+            return s
+        return s.decode(self.encoding)
+
+    def write(self, b):
+        self.transport.write(b)
+
+    def write_str(self, s):
+        self.transport.write(self.encode(s))
+
+    def write_chunked(self, chunk):
+        if not chunk:
+            return
+        data = self.encode(chunk)
+        self.write_str('{:x}\r\n'.format(len(data)))
+        self.transport.write(data)
+        self.transport.write(b'\r\n')
+
+    def write_chunked_eof(self):
+        self.transport.write(b'0\r\n\r\n')

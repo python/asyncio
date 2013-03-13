@@ -71,8 +71,8 @@ class Crawler:
                 path = '/'
             if query:
                 path = '?'.join([path, query])
-            p = tulip.http.HttpClientProtocol(netloc, path=path,
-                                              ssl=(scheme=='https'))
+            p = tulip.http.HttpClientProtocol(
+                netloc, path=path, ssl=(scheme=='https'))
             delay = 1
             while True:
                 try:
@@ -85,6 +85,7 @@ class Crawler:
                           'retrying after sleep', delay, '...', end=END)
                     yield from tulip.sleep(delay)
                     delay *= 2
+
             if status[:3] in ('301', '302'):
                 # Redirect.
                 u = headers.get('location') or headers.get('uri')

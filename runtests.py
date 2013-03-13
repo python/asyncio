@@ -180,9 +180,14 @@ def runcoverage(sdir, args):
     mods = [source for _, source in load_modules(sdir)]
     coverage = [sys.executable, '-m', 'coverage']
 
-    subprocess.check_call(coverage + ['run', '--branch', 'runtests.py'] + args)
-    subprocess.check_call(coverage + ['html'] + mods)
-    subprocess.check_call(coverage + ['report'] + mods)
+    try:
+        subprocess.check_call(
+            coverage + ['run', '--branch', 'runtests.py'] + args)
+    except:
+        pass
+    else:
+        subprocess.check_call(coverage + ['html'] + mods)
+        subprocess.check_call(coverage + ['report'] + mods)
 
 
 if __name__ == '__main__':

@@ -1,6 +1,6 @@
 """Abstract Protocol class."""
 
-__all__ = ['Protocol']
+__all__ = ['Protocol', 'DatagramProtocol']
 
 
 class Protocol:
@@ -56,3 +56,19 @@ class Protocol:
         meaning a regular EOF is received or the connection was
         aborted or closed).
         """
+
+
+class DatagramProtocol:
+    """ABC representing a datagram protocol."""
+
+    def connection_made(self, transport):
+        """Called when a datagram transport is ready."""
+
+    def datagram_received(self, data, addr):
+        """Called when some datagram is received."""
+
+    def connection_refused(self, exc):
+        """Connection is refused."""
+
+    def connection_lost(self, exc):
+        """Called when the connection is lost or closed."""

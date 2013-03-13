@@ -44,8 +44,10 @@ class HttpServer(tulip.Protocol):
             self.transport.close()
             return
 
+        message = yield from self.reader.read_message()
+
         headers = email.message.Message()
-        for hdr, val in (yield from self.reader.read_headers()):
+        for hdr, val in message.headers:
             print(hdr, val)
             headers.add_header(hdr, val)
 

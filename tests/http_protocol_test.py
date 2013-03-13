@@ -347,3 +347,145 @@ class HttpStreamReaderTests(LogTrackingTestCase):
 
         data = self.loop.run_until_complete(tulip.Task(stream.read()))
         self.assertEqual(b'data', data)
+
+    def test_read_message_should_close(self):
+        self.stream.feed_data(
+            b'Host: example.com\r\nConnection: close\r\n\r\n')
+
+        msg = self.loop.run_until_complete(
+            tulip.Task(self.stream.read_message()))
+        self.assertTrue(msg.should_close)
+
+    def test_read_message_should_close_http11(self):
+        self.stream.feed_data(
+            b'Host: example.com\r\n\r\n')
+
+        msg = self.loop.run_until_complete(
+            tulip.Task(self.stream.read_message(version=(1, 1))))
+        self.assertFalse(msg.should_close)
+
+    def test_read_message_should_close_http10(self):
+        self.stream.feed_data(
+            b'Host: example.com\r\n\r\n')
+
+        msg = self.loop.run_until_complete(
+            tulip.Task(self.stream.read_message(version=(1, 0))))
+        self.assertTrue(msg.should_close)
+
+    def test_read_message_should_close_keep_alive(self):
+        self.stream.feed_data(
+            b'Host: example.com\r\nConnection: keep-alive\r\n\r\n')
+
+        msg = self.loop.run_until_complete(
+            tulip.Task(self.stream.read_message()))
+        self.assertFalse(msg.should_close)
+
+    def test_read_message_content_length_broken(self):
+        self.stream.feed_data(
+            b'Host: example.com\r\nContent-Length: qwe\r\n\r\n')
+
+        self.assertRaises(
+            http.client.HTTPException,
+            self.loop.run_until_complete,
+            tulip.Task(self.stream.read_message()))
+
+    def test_read_message_content_length_wrong(self):
+        self.stream.feed_data(
+            b'Host: example.com\r\nContent-Length: -1\r\n\r\n')
+
+        self.assertRaises(
+            http.client.HTTPException,
+            self.loop.run_until_complete,
+            tulip.Task(self.stream.read_message()))
+
+    def test_read_message_content_length(self):
+        self.stream.feed_data(
+            b'Host: example.com\r\nContent-Length: 2\r\n\r\n12')
+
+        msg = self.loop.run_until_complete(
+            tulip.Task(self.stream.read_message()))
+
+        payload = self.loop.run_until_complete(tulip.Task(msg.payload.read()))
+        self.assertEqual(b'12', payload)
+
+    def test_read_message_content_length_no_val(self):
+        self.stream.feed_data(b'Host: example.com\r\n\r\n12')
+
+        msg = self.loop.run_until_complete(
+            tulip.Task(self.stream.read_message(readall=False)))
+
+        payload = self.loop.run_until_complete(tulip.Task(msg.payload.read()))
+        self.assertEqual(b'', payload)
+
+    _comp = zlib.compressobj(wbits=-zlib.MAX_WBITS)
+    _COMPRESSED = b''.join([_comp.compress(b'data'), _comp.flush()])
+
+    def test_read_message_deflate(self):
+        self.stream.feed_data(
+            ('Host: example.com\r\nContent-Length: %s\r\n'
+             'Content-Encoding: deflate\r\n\r\n' %
+             len(self._COMPRESSED)).encode())
+        self.stream.feed_data(self._COMPRESSED)
+
+        msg = self.loop.run_until_complete(
+            tulip.Task(self.stream.read_message()))
+        payload = self.loop.run_until_complete(tulip.Task(msg.payload.read()))
+        self.assertEqual(b'data', payload)
+
+    def test_read_message_deflate_disabled(self):
+        self.stream.feed_data(
+            ('Host: example.com\r\nContent-Encoding: deflate\r\n'
+             'Content-Length: %s\r\n\r\n' %
+             len(self._COMPRESSED)).encode())
+        self.stream.feed_data(self._COMPRESSED)
+
+        msg = self.loop.run_until_complete(
+            tulip.Task(self.stream.read_message(compression=False)))
+        payload = self.loop.run_until_complete(tulip.Task(msg.payload.read()))
+        self.assertEqual(self._COMPRESSED, payload)
+
+    def test_read_message_deflate_unknown(self):
+        self.stream.feed_data(
+            ('Host: example.com\r\nContent-Encoding: compress\r\n'
+             'Content-Length: %s\r\n\r\n' % len(self._COMPRESSED)).encode())
+        self.stream.feed_data(self._COMPRESSED)
+
+        msg = self.loop.run_until_complete(
+            tulip.Task(self.stream.read_message(compression=False)))
+        payload = self.loop.run_until_complete(tulip.Task(msg.payload.read()))
+        self.assertEqual(self._COMPRESSED, payload)
+
+    def test_read_message_websocket(self):
+        self.stream.feed_data(
+            b'Host: example.com\r\nSec-Websocket-Key1: 13\r\n\r\n1234567890')
+
+        msg = self.loop.run_until_complete(
+            tulip.Task(self.stream.read_message()))
+
+        payload = self.loop.run_until_complete(tulip.Task(msg.payload.read()))
+        self.assertEqual(b'12345678', payload)
+
+    def test_read_message_chunked(self):
+        self.stream.feed_data(
+            b'Host: example.com\r\nTransfer-Encoding: chunked\r\n\r\n')
+        self.stream.feed_data(
+            b'4;test\r\ndata\r\n4\r\nline\r\n0\r\ntest\r\n\r\n')
+
+        msg = self.loop.run_until_complete(
+            tulip.Task(self.stream.read_message()))
+
+        payload = self.loop.run_until_complete(tulip.Task(msg.payload.read()))
+        self.assertEqual(b'dataline', payload)
+
+    def test_read_message_readall(self):
+        self.stream.feed_data(
+            b'Host: example.com\r\n\r\n')
+        self.stream.feed_data(b'data')
+        self.stream.feed_data(b'line')
+        self.stream.feed_eof()
+
+        msg = self.loop.run_until_complete(
+            tulip.Task(self.stream.read_message(readall=True)))
+
+        payload = self.loop.run_until_complete(tulip.Task(msg.payload.read()))
+        self.assertEqual(b'dataline', payload)

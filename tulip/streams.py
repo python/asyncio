@@ -14,7 +14,6 @@ class StreamReader:
         self.limit = limit  # Max line length.  (Security feature.)
         self.buffer = collections.deque()  # Deque of bytes objects.
         self.byte_count = 0  # Bytes in buffer.
-        self.line_count = 0  # Number of complete lines in buffer.
         self.eof = False  # Whether we're done.
         self.waiter = None  # A future.
         self._exception = None
@@ -40,7 +39,6 @@ class StreamReader:
             return
 
         self.buffer.append(data)
-        self.line_count += data.count(b'\n')
         self.byte_count += len(data)
 
         waiter = self.waiter
@@ -69,7 +67,6 @@ class StreamReader:
                     head, tail = data[:ichar], data[ichar:]
                     if tail:
                         self.buffer.appendleft(tail)
-                    self.line_count -= 1
                     not_enough = False
                     parts.append(head)
                     parts_size += len(head)
@@ -114,7 +111,6 @@ class StreamReader:
             data = b''.join(self.buffer)
             self.buffer.clear()
             self.byte_count = 0
-            self.line_count = 0
             return data
 
         parts = []
@@ -130,8 +126,6 @@ class StreamReader:
             parts.append(data)
             parts_bytes += data_bytes
             self.byte_count -= data_bytes
-            if self.line_count:
-                self.line_count -= data.count(b'\n')
 
         return b''.join(parts)
 

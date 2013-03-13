@@ -114,49 +114,15 @@ class HttpClientProtocol:
         # read response status
         version, status, reason = yield from self.stream.read_response_status()
 
-        # read headers
-        headers = yield from self.stream.read_headers()
-        msg_headers = email.message.Message()
-        for hdr, val in headers:
-            msg_headers.add_header(hdr, val)
+        message = yield from self.stream.read_message(version)
 
-        # TODO: A wrapping stream that limits how much it can read
-        # without reading it all into memory at once.
-
-        # read payload
-        chunked = False
-        length = None
-        encoding = None
-
-        for (name, value) in headers:
-            if name == 'CONTENT-LENGTH':
-                length = value
-            elif name == 'TRANSFER-ENCODING':
-                chunked = value.lower() == 'chunked'
-            elif name == 'CONTENT-ENCODING':
-                enc = value.lower()
-                if enc in ('gzip', 'deflate'):
-                    encoding = enc
-
-        # payload
-        if chunked:
-            payload = self.stream.read_chunked_payload(encoding=encoding)
-
-        elif length is not None:
-            try:
-                length = int(length)
-            except ValueError:
-                raise ValueError('CONTENT-LENGTH')
-
-            if length < 0:
-                raise ValueError('CONTENT-LENGTH')
-
-            payload = self.stream.read_length_payload(length, encoding=encoding)
-        else:
-            payload = self.stream.read_length_payload(0, encoding=encoding)
+        # headers
+        headers = email.message.Message()
+        for hdr, val in message.headers:
+            headers.add_header(hdr, val)
 
         sts = '{} {}'.format(status, reason)
-        return (sts, msg_headers, payload)
+        return (sts, headers, message.payload)
 
     def encode(self, s):
         if isinstance(s, bytes):

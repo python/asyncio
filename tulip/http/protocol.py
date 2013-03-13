@@ -1,6 +1,6 @@
 """Http related helper utils."""
 
-__all__ = ['HttpStreamReader', 'RequestLine', 'ResponseStatus']
+__all__ = ['HttpStreamReader', 'HttpMessage', 'RequestLine', 'ResponseStatus']
 
 import collections
 import functools
@@ -22,6 +22,10 @@ RequestLine = collections.namedtuple(
 
 ResponseStatus = collections.namedtuple(
     'ResponseStatus', ['version', 'code', 'reason'])
+
+
+HttpMessage = collections.namedtuple(
+    'HttpMessage', ['headers', 'payload', 'should_close', 'compression'])
 
 
 class StreamEofException(http.client.HTTPException):
@@ -405,3 +409,65 @@ class HttpStreamReader(tulip.StreamReader):
                 stream.feed_data((yield))
         except StreamEofException:
             stream.feed_eof()
+
+    @tulip.coroutine
+    def read_message(self, version=(1, 1),
+                     length=None, compression=True, readall=False):
+        """Read RFC2822 headers and message payload from a stream.
+
+        read_message() automatically decompress gzip and deflate content
+        encoding. To prevent decompression pass compression=False.
+
+        Returns tuple of headers, payload stream, should close flag,
+        compression type.
+        """
+        # load headers
+        headers = yield from self.read_headers()
+
+        # payload params
+        chunked = False
+        encoding = None
+        close_conn = None
+
+        for name, value in headers:
+            if name == 'CONTENT-LENGTH':
+                length = value
+            elif name == 'TRANSFER-ENCODING':
+                chunked = value.lower() == 'chunked'
+            elif name == 'SEC-WEBSOCKET-KEY1':
+                length = 8
+            elif name == "CONNECTION":
+                v = value.lower()
+                if v == "close":
+                    close_conn = True
+                elif v == "keep-alive":
+                    close_conn = False
+            elif compression and name == 'CONTENT-ENCODING':
+                enc = value.lower()
+                if enc in ('gzip', 'deflate'):
+                    encoding = enc
+
+        if close_conn is None:
+            close_conn = version <= (1, 0)
+
+        # payload stream
+        if chunked:
+            payload = self.read_chunked_payload(encoding=encoding)
+
+        elif length is not None:
+            try:
+                length = int(length)
+            except ValueError:
+                raise http.client.HTTPException('CONTENT-LENGTH') from None
+
+            if length < 0:
+                raise http.client.HTTPException('CONTENT-LENGTH')
+
+            payload = self.read_length_payload(length, encoding=encoding)
+        else:
+            if readall:
+                payload = self.read_eof_payload(encoding=encoding)
+            else:
+                payload = self.read_length_payload(0, encoding=encoding)
+
+        return HttpMessage(headers, payload, close_conn, encoding)

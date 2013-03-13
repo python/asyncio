@@ -25,14 +25,12 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         stream = streams.StreamReader()
 
         stream.feed_data(b'')
-        self.assertEqual(0, stream.line_count)
         self.assertEqual(0, stream.byte_count)
 
-    def test_feed_data_line_byte_count(self):
+    def test_feed_data_byte_count(self):
         stream = streams.StreamReader()
 
         stream.feed_data(self.DATA)
-        self.assertEqual(self.DATA.count(b'\n'), stream.line_count)
         self.assertEqual(len(self.DATA), stream.byte_count)
 
     def test_read_zero(self):
@@ -44,7 +42,6 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         data = self.event_loop.run_until_complete(read_task)
         self.assertEqual(b'', data)
         self.assertEqual(len(self.DATA), stream.byte_count)
-        self.assertEqual(self.DATA.count(b'\n'), stream.line_count)
 
     def test_read(self):
         """Read bytes."""
@@ -58,7 +55,6 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         data = self.event_loop.run_until_complete(read_task)
         self.assertEqual(self.DATA, data)
         self.assertFalse(stream.byte_count)
-        self.assertFalse(stream.line_count)
 
     def test_read_line_breaks(self):
         """Read bytes without line breaks."""
@@ -71,7 +67,6 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
 
         self.assertEqual(b'line1', data)
         self.assertEqual(5, stream.byte_count)
-        self.assertFalse(stream.line_count)
 
     def test_read_eof(self):
         """Read bytes, stop at eof."""
@@ -85,7 +80,6 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         data = self.event_loop.run_until_complete(read_task)
         self.assertEqual(b'', data)
         self.assertFalse(stream.byte_count)
-        self.assertFalse(stream.line_count)
 
     def test_read_until_eof(self):
         """Read all bytes until eof."""
@@ -102,7 +96,6 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
 
         self.assertEqual(b'chunk1\nchunk2', data)
         self.assertFalse(stream.byte_count)
-        self.assertFalse(stream.line_count)
 
     def test_read_exception(self):
         stream = streams.StreamReader()
@@ -130,7 +123,6 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
 
         line = self.event_loop.run_until_complete(read_task)
         self.assertEqual(b'chunk1 chunk2 chunk3 \n', line)
-        self.assertFalse(stream.line_count)
         self.assertEqual(len(b'\n chunk4')-1, stream.byte_count)
 
     def test_readline_limit_with_existing_data(self):
@@ -183,7 +175,6 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         line = self.event_loop.run_until_complete(read_task)
 
         self.assertEqual(b'line1\n', line)
-        self.assertEqual(self.DATA.count(b'\n')-1, stream.line_count)
         self.assertEqual(len(self.DATA) - len(b'line1\n'), stream.byte_count)
 
     def test_readline_eof(self):
@@ -217,8 +208,6 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
 
         self.assertEqual(b'line2\nl', data)
         self.assertEqual(
-            1, stream.line_count)
-        self.assertEqual(
             len(self.DATA) - len(b'line1\n') - len(b'line2\nl'),
             stream.byte_count)
 
@@ -244,13 +233,11 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         data = self.event_loop.run_until_complete(read_task)
         self.assertEqual(b'', data)
         self.assertEqual(len(self.DATA), stream.byte_count)
-        self.assertEqual(self.DATA.count(b'\n'), stream.line_count)
 
         read_task = tasks.Task(stream.readexactly(-1))
         data = self.event_loop.run_until_complete(read_task)
         self.assertEqual(b'', data)
         self.assertEqual(len(self.DATA), stream.byte_count)
-        self.assertEqual(self.DATA.count(b'\n'), stream.line_count)
 
     def test_readexactly(self):
         """Read exact number of bytes."""
@@ -268,7 +255,6 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         data = self.event_loop.run_until_complete(read_task)
         self.assertEqual(self.DATA + self.DATA, data)
         self.assertEqual(len(self.DATA), stream.byte_count)
-        self.assertEqual(self.DATA.count(b'\n'), stream.line_count)
 
     def test_readexactly_eof(self):
         """Read exact number of bytes (eof)."""
@@ -284,7 +270,6 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         data = self.event_loop.run_until_complete(read_task)
         self.assertEqual(self.DATA, data)
         self.assertFalse(stream.byte_count)
-        self.assertFalse(stream.line_count)
 
     def test_readexactly_exception(self):
         stream = streams.StreamReader()

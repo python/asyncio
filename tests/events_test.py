@@ -124,7 +124,8 @@ class EventLoopTestsMixin:
         # Run the test WSGI server in a separate thread in order not to
         # interfere with event handling in the main thread
         server_class = SSLWSGIServer if use_ssl else WSGIServer
-        httpd = make_server('', 0, app, server_class, SilentWSGIRequestHandler)
+        httpd = make_server('127.0.0.1', 0, app,
+                            server_class, SilentWSGIRequestHandler)
         server_thread = threading.Thread(target=httpd.serve_forever)
         server_thread.start()
         try:
@@ -400,7 +401,7 @@ class EventLoopTestsMixin:
         address = None
         try:
             s = socket.socket()
-            s.bind(('', 0))
+            s.bind(('127.0.0.1', 0))
             address = s.getsockname()
         finally:
             s.close()

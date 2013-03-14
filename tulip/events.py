@@ -283,11 +283,10 @@ class DefaultEventLoopPolicy(threading.local, EventLoopPolicy):
         You must call set_event_loop() to make this the current event
         loop.
         """
-        # TODO: Do something else for Windows.
         if sys.platform == 'win32':  # pragma: no cover
             from . import windows_events
             return windows_events.SelectorEventLoop()
-        else:
+        else:  # pragma: no cover
             from . import unix_events
             return unix_events.SelectorEventLoop()
 

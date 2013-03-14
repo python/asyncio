@@ -7,7 +7,7 @@ import errno
 import socket
 import sys
 
-if sys.platform != 'win32':
+if sys.platform != 'win32':  # pragma: no cover
     raise ImportError('winsocketpair is win32 only')
 
 

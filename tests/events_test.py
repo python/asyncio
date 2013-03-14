@@ -667,7 +667,7 @@ class EventLoopTestsMixin:
                 super().datagram_received(data, addr)
                 self.transport.sendto(b'resp:'+data, addr)
 
-        f = self.event_loop.start_serving_datagram(factory, '0.0.0.0', 0)
+        f = self.event_loop.start_serving_datagram(factory, '127.0.0.1', 0)
         sock = self.event_loop.run_until_complete(f)
         host, port = sock.getsockname()
 
@@ -713,7 +713,7 @@ class EventLoopTestsMixin:
                 super().datagram_received(data, addr)
                 self.transport.sendto(b'resp:'+data, addr)
 
-        f = self.event_loop.start_serving_datagram(factory, '0.0.0.0', 0)
+        f = self.event_loop.start_serving_datagram(factory, '127.0.0.1', 0)
         sock = self.event_loop.run_until_complete(f)
         host, port = sock.getsockname()
 
@@ -792,12 +792,12 @@ class EventLoopTestsMixin:
             proto = TestMyDatagramProto()
             return proto
 
-        f = self.event_loop.start_serving_datagram(factory, '0.0.0.0', 0)
+        f = self.event_loop.start_serving_datagram(factory, '127.0.0.1', 0)
         sock = self.event_loop.run_until_complete(f)
         self.assertEqual('INITIALIZED', proto.state)
 
         host, port = sock.getsockname()
-        self.assertEqual(host, '0.0.0.0')
+        self.assertEqual(host, '127.0.0.1')
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         client.sendto(b'xxx', ('127.0.0.1', port))
         self.event_loop.run_once()
@@ -813,7 +813,7 @@ class EventLoopTestsMixin:
         conn = proto.transport.get_extra_info('socket')
         self.assertTrue(hasattr(conn, 'getsockname'))
         self.assertEqual(
-            '0.0.0.0', proto.transport.get_extra_info('addr')[0])
+            '127.0.0.1', proto.transport.get_extra_info('addr')[0])
 
         # close connection
         proto.transport.close()
@@ -918,13 +918,17 @@ if sys.platform == 'win32':
         def test_create_datagram_connection(self):
             raise unittest.SkipTest(
                 "IocpEventLoop does not have create_datagram_connection()")
+        def test_create_datagram_connection_no_connection(self):
+            raise unittest.SkipTest(
+                "IocpEventLoop does not have "
+                "create_datagram_connection_no_connection()")
         def test_start_serving_datagram(self):
             raise unittest.SkipTest(
                 "IocpEventLoop does not have start_serving_datagram()")
         def test_start_serving_datagram_no_getaddrinfoc(self):
             raise unittest.SkipTest(
                 "IocpEventLoop does not have start_serving_datagram()")
-        def test_start_serving_datagram_cant_bind(self, m_socket):
+        def test_start_serving_datagram_cant_bind(self):
             raise unittest.SkipTest(
                 "IocpEventLoop does not have start_serving_udp()")
 

@@ -14,7 +14,7 @@ from .tasks import *
 if sys.platform == 'win32':  # pragma: no cover
     from .windows_events import *
 else:
-    from .unix_events import *
+    from .unix_events import *  # pragma: no cover
 
 
 __all__ = (futures.__all__ +

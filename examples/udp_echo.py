@@ -9,7 +9,7 @@ Start server:
 import sys
 import tulip
 
-ADDRESS = ('localhost', 10000)
+ADDRESS = ('127.0.0.1', 10000)
 
 
 class MyUdpEchoProtocol:

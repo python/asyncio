@@ -9,7 +9,7 @@ import unittest
 if sys.platform == 'win32':  # pragma: no cover
     from .winsocketpair import socketpair
 else:
-    from socket import socketpair
+    from socket import socketpair  # pragma: no cover
 
 
 class LogTrackingTestCase(unittest.TestCase):

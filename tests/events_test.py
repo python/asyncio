@@ -4,6 +4,7 @@ import concurrent.futures
 import errno
 import gc
 import os
+import re
 import signal
 import socket
 try:
@@ -343,7 +344,7 @@ class EventLoopTestsMixin:
         data = self.event_loop.run_until_complete(
             self.event_loop.sock_recv(sock, 1024))
         sock.close()
-        self.assertTrue(data.startswith(b'HTTP/1.1 302 Found\r\n'))
+        self.assertTrue(re.match(rb'HTTP/1.\d 302', data), data)
 
     def test_sock_client_fail(self):
         sock = socket.socket()

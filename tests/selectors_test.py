@@ -3,7 +3,6 @@
 import unittest
 import unittest.mock
 
-from tulip import events
 from tulip import selectors
 
 
@@ -43,7 +42,7 @@ class BaseSelectorTests(unittest.TestCase):
         fobj.fileno.return_value = 10
 
         s = selectors._BaseSelector()
-        key = s.register(fobj, selectors.EVENT_READ)
+        s.register(fobj, selectors.EVENT_READ)
         self.assertRaises(ValueError, s.register, fobj, selectors.EVENT_READ)
 
     def test_unregister(self):
@@ -51,7 +50,7 @@ class BaseSelectorTests(unittest.TestCase):
         fobj.fileno.return_value = 10
 
         s = selectors._BaseSelector()
-        key = s.register(fobj, selectors.EVENT_READ)
+        s.register(fobj, selectors.EVENT_READ)
         s.unregister(fobj)
         self.assertFalse(s._fd_to_key)
         self.assertFalse(s._fileobj_to_key)
@@ -105,7 +104,7 @@ class BaseSelectorTests(unittest.TestCase):
 
     def test_close(self):
         s = selectors._BaseSelector()
-        key = s.register(1, selectors.EVENT_READ)
+        s.register(1, selectors.EVENT_READ)
 
         s.close()
         self.assertFalse(s._fd_to_key)

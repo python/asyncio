@@ -29,8 +29,8 @@ Notes from PyCon 2013 sprints
   but if someone thinks it's interesting we could imagine having some
   kind of notion of context part of the event loop state,
   e.g. associated with a Task (see Cancellation point above).  He
-  brought up UTP, a reimplementation of TCP over UDP with more refined
-  congestion control.
+  brought up uTP (Micro Transport Protocol), a reimplementation of TCP
+  over UDP with more refined congestion control.
 
 - Mumblings about UNIX domain sockets and IPv6 addresses being
   4-tuples.  The former can be handled by passing in a socket.  There

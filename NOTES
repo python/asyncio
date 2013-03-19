@@ -1,3 +1,16 @@
+Notes from PyCon 2013 sprints
+=============================
+
+- Cancellation.  If a task creates several subtasks, and then the
+  parent task fails, should the subtasks be cancelled?  (How do we
+  even establish the parent/subtask relationship?)
+
+- Adam Sah suggests that there might be a need for scheduling
+  (especially when multiple frameworks share an event loop).  He
+  points to lottery scheduling but also mentions that's just one of
+  the options.
+
+
 Notes from the second Tulip/Twisted meet-up
 ===========================================
 

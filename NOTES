@@ -10,6 +10,37 @@ Notes from PyCon 2013 sprints
   points to lottery scheduling but also mentions that's just one of
   the options.
 
+- Feedback from Bram Cohen (Bittorrent creator) about UDP.  He doesn't
+  think connected UDP is worth supporting, it doesn't do anything
+  except tell the kernel about the default target address for
+  sendto().  Basically he says all UDP end points are servers.  He
+  sent me his own UDP event loop so I might glean some tricks from it.
+  He says we should treat EINTR the same as EAGAIN and friends.  (We
+  should use the exceptions dedicated to errno checking, BTW.)  HE
+  said to make sure we use SO_REUSEADDR (I think we already do).  He
+  said to set the max datagram sizes pretty large (anything larger
+  than the declared limit is dropped on the floor).  He reminds us of
+  the importance of being able to pick a valid, unused port by binding
+  to port 0 and then using getsockname().  He has an idea where he's
+  like to be able to kill all registered callbacks (i.e. Handles)
+  belonging to a certain "context".  I think this can be done at the
+  application level (you'd have to wrap everything that returns a
+  Handle and collect these handles in some set or other datastructure)
+  but if someone thinks it's interesting we could imagine having some
+  kind of notion of context part of the event loop state,
+  e.g. associated with a Task (see Cancellation point above).  He
+  brought up UTP, a reimplementation of TCP over UDP with more refined
+  congestion control.
+
+- Mumblings about UNIX domain sockets and IPv6 addresses being
+  4-tuples.  The former can be handled by passing in a socket.  There
+  seem to be no real use cases for the latter that can't be dealt with
+  by passing in suitably esoteric strings for the hostname.
+  getaddrinfo() will produce the appropriate 4-tuple and connect()
+  will accept it.
+
+- Mumblings on the list about add vs. set.
+
 
 Notes from the second Tulip/Twisted meet-up
 ===========================================

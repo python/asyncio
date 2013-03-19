@@ -5,7 +5,7 @@ Beyond the PEP:
 """
 
 __all__ = ['EventLoopPolicy', 'DefaultEventLoopPolicy',
-           'AbstractEventLoop', 'Timer', 'Handler', 'make_handler',
+           'AbstractEventLoop', 'Timer', 'Handle', 'make_handle',
            'get_event_loop_policy', 'set_event_loop_policy',
            'get_event_loop', 'set_event_loop', 'new_event_loop',
            ]
@@ -15,7 +15,7 @@ import sys
 import threading
 
 
-class Handler:
+class Handle:
     """Object returned by callback registration methods."""
 
     def __init__(self, callback, args):
@@ -24,7 +24,7 @@ class Handler:
         self._cancelled = False
 
     def __repr__(self):
-        res = 'Handler({}, {})'.format(self._callback, self._args)
+        res = 'Handle({}, {})'.format(self._callback, self._args)
         if self._cancelled:
             res += '<cancelled>'
         return res
@@ -52,19 +52,20 @@ class Handler:
                               self._callback, self._args)
 
 
-def make_handler(callback, args):
-    if isinstance(callback, Handler):
+def make_handle(callback, args):
+    if isinstance(callback, Handle):
         assert not args
         return callback
-    return Handler(callback, args)
+    return Handle(callback, args)
 
 
-class Timer(Handler):
+class Timer(Handle):
     """Object returned by timed callback registration methods."""
 
     def __init__(self, when, callback, args):
         assert when is not None
         super().__init__(callback, args)
+
         self._when = when
 
     def __repr__(self):
@@ -73,6 +74,7 @@ class Timer(Handler):
                                          self._args)
         if self._cancelled:
             res += '<cancelled>'
+
         return res
 
     @property
@@ -144,7 +146,7 @@ class AbstractEventLoop:
         """
         raise NotImplementedError
 
-    # Methods returning Handlers for scheduling callbacks.
+    # Methods returning Handles for scheduling callbacks.
 
     def call_later(self, delay, callback, *args):
         raise NotImplementedError
@@ -192,7 +194,7 @@ class AbstractEventLoop:
         raise NotImplementedError
 
     # Ready-based callback registration methods.
-    # The add_*() methods return a Handler.
+    # The add_*() methods return a Handle.
     # The remove_*() methods return True if something was removed,
     # False if there was nothing to delete.
 

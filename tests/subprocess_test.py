@@ -46,7 +46,7 @@ class FutureTests(unittest.TestCase):
 
     def test_unix_subprocess(self):
         p = MyProto()
-        t = subprocess_transport.UnixSubprocessTransport(p, ['/bin/ls', '-lR'])
+        subprocess_transport.UnixSubprocessTransport(p, ['/bin/ls', '-lR'])
         self.event_loop.run()
 
 

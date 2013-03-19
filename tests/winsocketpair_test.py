@@ -22,6 +22,7 @@ class WinsocketpairTests(unittest.TestCase):
     @unittest.mock.patch('tulip.winsocketpair.socket')
     def test_winsocketpair_exc(self, m_socket):
         m_socket.error = socket.error
+
         class Err(socket.error):
             errno = errno.WSAEWOULDBLOCK + 1
 

@@ -1,8 +1,10 @@
 """Tests for events.py."""
 
 import concurrent.futures
+import contextlib
 import errno
 import gc
+import io
 import os
 import re
 import signal
@@ -16,6 +18,8 @@ import threading
 import time
 import unittest
 import unittest.mock
+
+from wsgiref.simple_server import make_server, WSGIRequestHandler, WSGIServer
 
 from tulip import events
 from tulip import transports
@@ -84,6 +88,50 @@ class EventLoopTestsMixin:
         self.event_loop.close()
         gc.collect()
         super().tearDown()
+
+    @contextlib.contextmanager
+    def run_test_server(self, *, use_ssl=False):
+
+        class SilentWSGIRequestHandler(WSGIRequestHandler):
+            def get_stderr(self):
+                return io.StringIO()
+
+            def log_message(self, format, *args):
+                pass
+
+        class SSLWSGIServer(WSGIServer):
+            def finish_request(self, request, client_address):
+                here = os.path.dirname(__file__)
+                keyfile = os.path.join(here, 'sample.key')
+                certfile = os.path.join(here, 'sample.crt')
+                ssock = ssl.wrap_socket(request,
+                                        keyfile=keyfile,
+                                        certfile=certfile,
+                                        server_side=True)
+                try:
+                    self.RequestHandlerClass(ssock, client_address, self)
+                    ssock.close()
+                except OSError:
+                    # maybe socket has been closed by peer
+                    pass
+
+        def app(environ, start_response):
+            status = '302 Found'
+            headers = [('Content-type', 'text/plain')]
+            start_response(status, headers)
+            return [b'Test message']
+
+        # Run the test WSGI server in a separate thread in order not to
+        # interfere with event handling in the main thread
+        server_class = SSLWSGIServer if use_ssl else WSGIServer
+        httpd = make_server('', 0, app, server_class, SilentWSGIRequestHandler)
+        server_thread = threading.Thread(target=httpd.serve_forever)
+        server_thread.start()
+        try:
+            yield httpd
+        finally:
+            httpd.shutdown()
+            server_thread.join()
 
     def test_run(self):
         self.event_loop.run()  # Returns immediately.
@@ -333,24 +381,32 @@ class EventLoopTestsMixin:
         self.assertTrue(data == b'x'*256)
 
     def test_sock_client_ops(self):
-        sock = socket.socket()
-        sock.setblocking(False)
-        # TODO: This depends on python.org behavior!
-        address = socket.getaddrinfo('python.org', 80, socket.AF_INET)[0][4]
-        self.event_loop.run_until_complete(
-            self.event_loop.sock_connect(sock, address))
-        self.event_loop.run_until_complete(
-            self.event_loop.sock_sendall(sock, b'GET / HTTP/1.0\r\n\r\n'))
-        data = self.event_loop.run_until_complete(
-            self.event_loop.sock_recv(sock, 1024))
-        sock.close()
-        self.assertTrue(re.match(rb'HTTP/1.\d 302', data), data)
+        with self.run_test_server() as httpd:
+            sock = socket.socket()
+            sock.setblocking(False)
+            address = httpd.socket.getsockname()
+            self.event_loop.run_until_complete(
+                self.event_loop.sock_connect(sock, address))
+            self.event_loop.run_until_complete(
+                self.event_loop.sock_sendall(sock, b'GET / HTTP/1.0\r\n\r\n'))
+            data = self.event_loop.run_until_complete(
+                self.event_loop.sock_recv(sock, 1024))
+            sock.close()
+
+        self.assertTrue(re.match(rb'HTTP/1.0 302 Found', data), data)
 
     def test_sock_client_fail(self):
+        # Make sure that we will get an unused port
+        address = None
+        try:
+            s = socket.socket()
+            s.bind(('', 0))
+            address = s.getsockname()
+        finally:
+            s.close()
+
         sock = socket.socket()
         sock.setblocking(False)
-        # TODO: This depends on python.org behavior!
-        address = socket.getaddrinfo('python.org', 12345, socket.AF_INET)[0][4]
         with self.assertRaises(ConnectionRefusedError):
             self.event_loop.run_until_complete(
                 self.event_loop.sock_connect(sock, address))
@@ -468,50 +524,38 @@ class EventLoopTestsMixin:
         self.assertEqual(caught, 1)
 
     def test_create_connection(self):
-        # TODO: This depends on xkcd.com behavior!
-        f = self.event_loop.create_connection(MyProto, 'xkcd.com', 80)
-        tr, pr = self.event_loop.run_until_complete(f)
-        self.assertTrue(isinstance(tr, transports.Transport))
-        self.assertTrue(isinstance(pr, protocols.Protocol))
-        self.event_loop.run()
-        self.assertTrue(pr.nbytes > 0)
+        with self.run_test_server() as httpd:
+            host, port = httpd.socket.getsockname()
+            f = self.event_loop.create_connection(MyProto, host, port)
+            tr, pr = self.event_loop.run_until_complete(f)
+            self.assertTrue(isinstance(tr, transports.Transport))
+            self.assertTrue(isinstance(pr, protocols.Protocol))
+            self.event_loop.run()
+            self.assertTrue(pr.nbytes > 0)
 
     def test_create_connection_sock(self):
-        # TODO: This depends on xkcd.com behavior!
-        sock = None
-        infos = self.event_loop.run_until_complete(
-            self.event_loop.getaddrinfo(
-                'xkcd.com', 80, type=socket.SOCK_STREAM))
-        for family, type, proto, cname, address in infos:
-            try:
-                sock = socket.socket(family=family, type=type, proto=proto)
-                sock.setblocking(False)
-                self.event_loop.run_until_complete(
-                    self.event_loop.sock_connect(sock, address))
-            except:
-                pass
-            else:
-                break
-
-        f = self.event_loop.create_connection(MyProto, sock=sock)
-        tr, pr = self.event_loop.run_until_complete(f)
-        self.assertTrue(isinstance(tr, transports.Transport))
-        self.assertTrue(isinstance(pr, protocols.Protocol))
-        self.event_loop.run()
-        self.assertTrue(pr.nbytes > 0)
+        with self.run_test_server() as httpd:
+            host, port = httpd.socket.getsockname()
+            f = self.event_loop.create_connection(MyProto, host, port)
+            tr, pr = self.event_loop.run_until_complete(f)
+            self.assertTrue(isinstance(tr, transports.Transport))
+            self.assertTrue(isinstance(pr, protocols.Protocol))
+            self.event_loop.run()
+            self.assertTrue(pr.nbytes > 0)
 
     @unittest.skipIf(ssl is None, 'No ssl module')
     def test_create_ssl_connection(self):
-        # TODO: This depends on xkcd.com behavior!
-        f = self.event_loop.create_connection(
-            MyProto, 'xkcd.com', 443, ssl=True)
-        tr, pr = self.event_loop.run_until_complete(f)
-        self.assertTrue(isinstance(tr, transports.Transport))
-        self.assertTrue(isinstance(pr, protocols.Protocol))
-        self.assertTrue('ssl' in tr.__class__.__name__.lower())
-        self.assertTrue(hasattr(tr.get_extra_info('socket'), 'getsockname'))
-        self.event_loop.run()
-        self.assertTrue(pr.nbytes > 0)
+        with self.run_test_server(use_ssl=True) as httpsd:
+            host, port = httpsd.socket.getsockname()
+            f = self.event_loop.create_connection(
+                MyProto, host, port, ssl=True)
+            tr, pr = self.event_loop.run_until_complete(f)
+            self.assertTrue(isinstance(tr, transports.Transport))
+            self.assertTrue(isinstance(pr, protocols.Protocol))
+            self.assertTrue('ssl' in tr.__class__.__name__.lower())
+            self.assertTrue(hasattr(tr.get_extra_info('socket'), 'getsockname'))
+            self.event_loop.run()
+            self.assertTrue(pr.nbytes > 0)
 
     def test_create_connection_host_port_sock(self):
         self.suppress_log_errors()

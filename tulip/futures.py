@@ -52,7 +52,7 @@ class Future:
     _result = None
     _exception = None
 
-    _blocking = False # proper use of future (yield vs yield from)
+    _blocking = False  # proper use of future (yield vs yield from)
 
     def __init__(self, *, event_loop=None):
         """Initialize the future.
@@ -83,7 +83,7 @@ class Future:
             else:
                 res += '<{}, {}>'.format(self._state, self._callbacks)
         else:
-            res +='<{}>'.format(self._state)
+            res += '<{}>'.format(self._state)
         return res
 
     def cancel(self):

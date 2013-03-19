@@ -171,14 +171,14 @@ class EventLoopTestsMixin:
         self.event_loop.run()
         self.assertEqual(results, [('hello', 'world')])
 
-    def test_call_soon_with_handler(self):
+    def test_call_soon_with_handle(self):
         results = []
 
         def callback():
             results.append('yeah')
 
-        handler = events.Handler(callback, ())
-        self.assertIs(self.event_loop.call_soon(handler), handler)
+        handle = events.Handle(callback, ())
+        self.assertIs(self.event_loop.call_soon(handle), handle)
         self.event_loop.run()
         self.assertEqual(results, ['yeah'])
 
@@ -212,17 +212,17 @@ class EventLoopTestsMixin:
         self.event_loop.run()
         self.assertEqual(results, ['hello', 'world'])
 
-    def test_call_soon_threadsafe_with_handler(self):
+    def test_call_soon_threadsafe_with_handle(self):
         results = []
 
         def callback(arg):
             results.append(arg)
 
-        handler = events.Handler(callback, ('hello',))
+        handle = events.Handle(callback, ('hello',))
 
         def run():
             self.assertIs(
-                self.event_loop.call_soon_threadsafe(handler), handler)
+                self.event_loop.call_soon_threadsafe(handle), handle)
 
         t = threading.Thread(target=run)
         self.event_loop.call_later(0.1, callback, 'world')
@@ -253,12 +253,12 @@ class EventLoopTestsMixin:
         res = self.event_loop.run_until_complete(f2)
         self.assertEqual(res, 'yo')
 
-    def test_run_in_executor_with_handler(self):
+    def test_run_in_executor_with_handle(self):
         def run(arg):
             time.sleep(0.1)
             return arg
-        handler = events.Handler(run, ('yo',))
-        f2 = self.event_loop.run_in_executor(None, handler)
+        handle = events.Handle(run, ('yo',))
+        f2 = self.event_loop.run_in_executor(None, handle)
         res = self.event_loop.run_until_complete(f2)
         self.assertEqual(res, 'yo')
 
@@ -286,7 +286,7 @@ class EventLoopTestsMixin:
         self.event_loop.run()
         self.assertEqual(b''.join(bytes_read), b'abcdef')
 
-    def test_reader_callback_with_handler(self):
+    def test_reader_callback_with_handle(self):
         r, w = test_utils.socketpair()
         bytes_read = []
 
@@ -303,8 +303,8 @@ class EventLoopTestsMixin:
                 self.assertTrue(self.event_loop.remove_reader(r.fileno()))
                 r.close()
 
-        handler = events.Handler(reader, ())
-        self.assertIs(handler, self.event_loop.add_reader(r.fileno(), handler))
+        handle = events.Handle(reader, ())
+        self.assertIs(handle, self.event_loop.add_reader(r.fileno(), handle))
 
         self.event_loop.call_later(0.05, w.send, b'abc')
         self.event_loop.call_later(0.1, w.send, b'def')
@@ -324,11 +324,11 @@ class EventLoopTestsMixin:
             if data:
                 bytes_read.append(data)
             if sum(len(b) for b in bytes_read) >= 6:
-                handler.cancel()
+                handle.cancel()
             if not data:
                 r.close()
 
-        handler = self.event_loop.add_reader(r.fileno(), reader)
+        handle = self.event_loop.add_reader(r.fileno(), reader)
         self.event_loop.call_later(0.05, w.send, b'abc')
         self.event_loop.call_later(0.1, w.send, b'def')
         self.event_loop.call_later(0.15, w.close)
@@ -350,11 +350,11 @@ class EventLoopTestsMixin:
         r.close()
         self.assertTrue(len(data) >= 200)
 
-    def test_writer_callback_with_handler(self):
+    def test_writer_callback_with_handle(self):
         r, w = test_utils.socketpair()
         w.setblocking(False)
-        handler = events.Handler(w.send, (b'x'*(256*1024),))
-        self.assertIs(self.event_loop.add_writer(w.fileno(), handler), handler)
+        handle = events.Handle(w.send, (b'x'*(256*1024),))
+        self.assertIs(self.event_loop.add_writer(w.fileno(), handle), handle)
 
         def remove_writer():
             self.assertTrue(self.event_loop.remove_writer(w.fileno()))
@@ -372,9 +372,9 @@ class EventLoopTestsMixin:
 
         def sender():
             w.send(b'x'*256)
-            handler.cancel()
+            handle.cancel()
 
-        handler = self.event_loop.add_writer(w.fileno(), sender)
+        handle = self.event_loop.add_writer(w.fileno(), sender)
         self.event_loop.run()
         w.close()
         data = r.recv(1024)
@@ -483,8 +483,8 @@ class EventLoopTestsMixin:
             nonlocal caught
             caught += 1
 
-        handler = self.event_loop.add_signal_handler(signal.SIGINT, my_handler)
-        handler.cancel()
+        handle = self.event_loop.add_signal_handler(signal.SIGINT, my_handler)
+        handle.cancel()
         os.kill(os.getpid(), signal.SIGINT)
         self.event_loop.run_once()
         self.assertEqual(caught, 0)
@@ -947,13 +947,13 @@ if sys.platform == 'win32':
             raise unittest.SkipTest("IocpEventLoop does not have add_reader()")
         def test_reader_callback_cancel(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_reader()")
-        def test_reader_callback_with_handler(self):
+        def test_reader_callback_with_handle(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_reader()")
         def test_writer_callback(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_writer()")
         def test_writer_callback_cancel(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_writer()")
-        def test_writer_callback_with_handler(self):
+        def test_writer_callback_with_handle(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_writer()")
         def test_accept_connection_retry(self):
             raise unittest.SkipTest(
@@ -1008,22 +1008,22 @@ else:
             return unix_events.SelectorEventLoop(selectors.SelectSelector())
 
 
-class HandlerTests(unittest.TestCase):
+class HandleTests(unittest.TestCase):
 
-    def test_handler(self):
+    def test_handle(self):
         def callback(*args):
             return args
 
         args = ()
-        h = events.Handler(callback, args)
+        h = events.Handle(callback, args)
         self.assertIs(h.callback, callback)
         self.assertIs(h.args, args)
         self.assertFalse(h.cancelled)
 
         r = repr(h)
         self.assertTrue(r.startswith(
-            'Handler('
-            '<function HandlerTests.test_handler.<locals>.callback'))
+            'Handle('
+            '<function HandleTests.test_handle.<locals>.callback'))
         self.assertTrue(r.endswith('())'))
 
         h.cancel()
@@ -1031,19 +1031,19 @@ class HandlerTests(unittest.TestCase):
 
         r = repr(h)
         self.assertTrue(r.startswith(
-            'Handler('
-            '<function HandlerTests.test_handler.<locals>.callback'))
+            'Handle('
+            '<function HandleTests.test_handle.<locals>.callback'))
         self.assertTrue(r.endswith('())<cancelled>'))
 
-    def test_make_handler(self):
+    def test_make_handle(self):
         def callback(*args):
             return args
-        h1 = events.Handler(callback, ())
-        h2 = events.make_handler(h1, ())
+        h1 = events.Handle(callback, ())
+        h2 = events.make_handle(h1, ())
         self.assertIs(h1, h2)
 
         self.assertRaises(
-            AssertionError, events.make_handler, h1, (1, 2))
+            AssertionError, events.make_handle, h1, (1, 2))
 
 
 class TimerTests(unittest.TestCase):
@@ -1105,7 +1105,7 @@ class TimerTests(unittest.TestCase):
         self.assertFalse(h1 == h2)
         self.assertTrue(h1 != h2)
 
-        h3 = events.Handler(callback, ())
+        h3 = events.Handle(callback, ())
         self.assertIs(NotImplemented, h1.__eq__(h3))
         self.assertIs(NotImplemented, h1.__ne__(h3))
 

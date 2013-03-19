@@ -52,7 +52,7 @@ class SelectorEventLoopTests(unittest.TestCase):
         m_signal.NSIG = signal.NSIG
 
         h = self.event_loop.add_signal_handler(signal.SIGHUP, lambda: True)
-        self.assertIsInstance(h, events.Handler)
+        self.assertIsInstance(h, events.Handle)
 
     @unittest.mock.patch('tulip.unix_events.signal')
     def test_add_signal_handler_install_error(self, m_signal):
@@ -108,7 +108,7 @@ class SelectorEventLoopTests(unittest.TestCase):
     def test_remove_signal_handler(self, m_signal):
         m_signal.NSIG = signal.NSIG
 
-        h = self.event_loop.add_signal_handler(signal.SIGHUP, lambda: True)
+        self.event_loop.add_signal_handler(signal.SIGHUP, lambda: True)
 
         self.assertTrue(
             self.event_loop.remove_signal_handler(signal.SIGHUP))
@@ -122,7 +122,7 @@ class SelectorEventLoopTests(unittest.TestCase):
         m_signal.NSIG = signal.NSIG
         m_signal.SIGINT = signal.SIGINT
 
-        h = self.event_loop.add_signal_handler(signal.SIGINT, lambda: True)
+        self.event_loop.add_signal_handler(signal.SIGINT, lambda: True)
         self.event_loop._signal_handlers[signal.SIGHUP] = object()
         m_signal.set_wakeup_fd.reset_mock()
 
@@ -138,7 +138,7 @@ class SelectorEventLoopTests(unittest.TestCase):
     @unittest.mock.patch('tulip.unix_events.logging')
     def test_remove_signal_handler_cleanup_error(self, m_logging, m_signal):
         m_signal.NSIG = signal.NSIG
-        h = self.event_loop.add_signal_handler(signal.SIGHUP, lambda: True)
+        self.event_loop.add_signal_handler(signal.SIGHUP, lambda: True)
 
         m_signal.set_wakeup_fd.side_effect = ValueError
 
@@ -148,7 +148,7 @@ class SelectorEventLoopTests(unittest.TestCase):
     @unittest.mock.patch('tulip.unix_events.signal')
     def test_remove_signal_handler_error(self, m_signal):
         m_signal.NSIG = signal.NSIG
-        h = self.event_loop.add_signal_handler(signal.SIGHUP, lambda: True)
+        self.event_loop.add_signal_handler(signal.SIGHUP, lambda: True)
 
         m_signal.signal.side_effect = OSError
 
@@ -158,7 +158,7 @@ class SelectorEventLoopTests(unittest.TestCase):
     @unittest.mock.patch('tulip.unix_events.signal')
     def test_remove_signal_handler_error2(self, m_signal):
         m_signal.NSIG = signal.NSIG
-        h = self.event_loop.add_signal_handler(signal.SIGHUP, lambda: True)
+        self.event_loop.add_signal_handler(signal.SIGHUP, lambda: True)
 
         class Err(OSError):
             errno = errno.EINVAL

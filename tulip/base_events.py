@@ -48,7 +48,6 @@ class BaseEventLoop(events.AbstractEventLoop):
         self._scheduled = []
         self._default_executor = None
         self._internal_fds = 0
-        self._signal_handlers = {}
 
     def _make_socket_transport(self, sock, protocol, waiter=None, extra=None):
         """Create socket transport."""
@@ -99,11 +98,11 @@ class BaseEventLoop(events.AbstractEventLoop):
         This only makes sense over run() if you have another thread
         scheduling callbacks using call_soon_threadsafe().
         """
-        handler = self.call_repeatedly(24*3600, lambda: None)
+        handle = self.call_repeatedly(24*3600, lambda: None)
         try:
             self.run()
         finally:
-            handler.cancel()
+            handle.cancel()
 
     def run_once(self, timeout=None):
         """Run through all callbacks and all I/O polls once.
@@ -121,21 +120,23 @@ class BaseEventLoop(events.AbstractEventLoop):
         Return the Future's result, or raise its exception.  If the
         timeout is reached or stop() is called, raise TimeoutError.
         """
-        handler_called = False
+        handle_called = False
+
         def stop_loop():
-            nonlocal handler_called
-            handler_called = True
+            nonlocal handle_called
+            handle_called = True
             raise _StopError
+
         future.add_done_callback(_raise_stop_error)
 
         if timeout is None:
             self.run_forever()
         else:
-            handler = self.call_later(timeout, stop_loop)
+            handle = self.call_later(timeout, stop_loop)
             self.run()
-            handler.cancel()
+            handle.cancel()
 
-        if handler_called:
+        if handle_called:
             raise futures.TimeoutError
 
         return future.result()
@@ -175,19 +176,21 @@ class BaseEventLoop(events.AbstractEventLoop):
         """
         if delay <= 0:
             return self.call_soon(callback, *args)
-        handler = events.Timer(time.monotonic() + delay, callback, args)
-        heapq.heappush(self._scheduled, handler)
-        return handler
+
+        handle = events.Timer(time.monotonic() + delay, callback, args)
+        heapq.heappush(self._scheduled, handle)
+        return handle
 
     def call_repeatedly(self, interval, callback, *args):
         """Call a callback every 'interval' seconds."""
         def wrapper():
             callback(*args)  # If this fails, the chain is broken.
-            handler._when = time.monotonic() + interval
-            heapq.heappush(self._scheduled, handler)
-        handler = events.Timer(time.monotonic() + interval, wrapper, ())
-        heapq.heappush(self._scheduled, handler)
-        return handler
+            handle._when = time.monotonic() + interval
+            heapq.heappush(self._scheduled, handle)
+
+        handle = events.Timer(time.monotonic() + interval, wrapper, ())
+        heapq.heappush(self._scheduled, handle)
+        return handle
 
     def call_soon(self, callback, *args):
         """Arrange for a callback to be called as soon as possible.
@@ -199,18 +202,18 @@ class BaseEventLoop(events.AbstractEventLoop):
         Any positional arguments after the callback will be passed to
         the callback when it is called.
         """
-        handler = events.make_handler(callback, args)
-        self._ready.append(handler)
-        return handler
+        handle = events.make_handle(callback, args)
+        self._ready.append(handle)
+        return handle
 
     def call_soon_threadsafe(self, callback, *args):
         """XXX"""
-        handler = self.call_soon(callback, *args)
+        handle = self.call_soon(callback, *args)
         self._write_to_self()
-        return handler
+        return handle
 
     def run_in_executor(self, executor, callback, *args):
-        if isinstance(callback, events.Handler):
+        if isinstance(callback, events.Handle):
             assert not args
             assert not isinstance(callback, events.Timer)
             if callback.cancelled:
@@ -414,14 +417,14 @@ class BaseEventLoop(events.AbstractEventLoop):
 
         return sock
 
-    def _add_callback(self, handler):
-        """Add a Handler to ready or scheduled."""
-        if handler.cancelled:
+    def _add_callback(self, handle):
+        """Add a Handle to ready or scheduled."""
+        if handle.cancelled:
             return
-        if isinstance(handler, events.Timer):
-            heapq.heappush(self._scheduled, handler)
+        if isinstance(handle, events.Timer):
+            heapq.heappush(self._scheduled, handle)
         else:
-            self._ready.append(handler)
+            self._ready.append(handle)
 
     def wrap_future(self, future):
         """XXX"""
@@ -479,11 +482,11 @@ class BaseEventLoop(events.AbstractEventLoop):
         # Handle 'later' callbacks that are ready.
         now = time.monotonic()
         while self._scheduled:
-            handler = self._scheduled[0]
-            if handler.when > now:
+            handle = self._scheduled[0]
+            if handle.when > now:
                 break
-            handler = heapq.heappop(self._scheduled)
-            self._ready.append(handler)
+            handle = heapq.heappop(self._scheduled)
+            self._ready.append(handle)
 
         # This is the only place where callbacks are actually *called*.
         # All other places just add them to ready.
@@ -493,6 +496,6 @@ class BaseEventLoop(events.AbstractEventLoop):
         # Use an idiom that is threadsafe without using locks.
         ntodo = len(self._ready)
         for i in range(ntodo):
-            handler = self._ready.popleft()
-            if not handler.cancelled:
-                handler.run()
+            handle = self._ready.popleft()
+            if not handle.cancelled:
+                handle.run()

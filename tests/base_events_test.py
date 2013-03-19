@@ -41,8 +41,8 @@ class BaseEventLoopTests(test_utils.LogTrackingTestCase):
         self.assertRaises(
             NotImplementedError, self.event_loop._read_from_self)
 
-    def test_add_callback_handler(self):
-        h = events.Handler(lambda: False, ())
+    def test_add_callback_handle(self):
+        h = events.Handle(lambda: False, ())
 
         self.event_loop._add_callback(h)
         self.assertFalse(self.event_loop._scheduled)
@@ -59,8 +59,8 @@ class BaseEventLoopTests(test_utils.LogTrackingTestCase):
         self.assertEqual([h1, h2], self.event_loop._scheduled)
         self.assertFalse(self.event_loop._ready)
 
-    def test_add_callback_cancelled_handler(self):
-        h = events.Handler(lambda: False, ())
+    def test_add_callback_cancelled_handle(self):
+        h = events.Handle(lambda: False, ())
         h.cancel()
 
         self.event_loop._add_callback(h)
@@ -94,7 +94,7 @@ class BaseEventLoopTests(test_utils.LogTrackingTestCase):
 
         h = self.event_loop.call_soon(cb)
         self.assertEqual(h._callback, cb)
-        self.assertIsInstance(h, events.Handler)
+        self.assertIsInstance(h, events.Handle)
         self.assertIn(h, self.event_loop._ready)
 
     def test_call_later(self):
@@ -114,13 +114,13 @@ class BaseEventLoopTests(test_utils.LogTrackingTestCase):
         self.assertIn(h, self.event_loop._ready)
         self.assertNotIn(h, self.event_loop._scheduled)
 
-    def test_run_once_in_executor_handler(self):
+    def test_run_once_in_executor_handle(self):
         def cb():
             pass
 
         self.assertRaises(
             AssertionError, self.event_loop.run_in_executor,
-            None, events.Handler(cb, ()), ('',))
+            None, events.Handle(cb, ()), ('',))
         self.assertRaises(
             AssertionError, self.event_loop.run_in_executor,
             None, events.Timer(10, cb, ()))
@@ -128,7 +128,7 @@ class BaseEventLoopTests(test_utils.LogTrackingTestCase):
     def test_run_once_in_executor_canceled(self):
         def cb():
             pass
-        h = events.Handler(cb, ())
+        h = events.Handle(cb, ())
         h.cancel()
 
         f = self.event_loop.run_in_executor(None, h)
@@ -138,7 +138,7 @@ class BaseEventLoopTests(test_utils.LogTrackingTestCase):
     def test_run_once_in_executor(self):
         def cb():
             pass
-        h = events.Handler(cb, ())
+        h = events.Handle(cb, ())
         f = futures.Future()
         executor = unittest.mock.Mock()
         executor.submit.return_value = f
@@ -222,14 +222,14 @@ class BaseEventLoopTests(test_utils.LogTrackingTestCase):
         self.event_loop._run_once()
         self.assertEqual(logging.DEBUG, m_logging.log.call_args[0][0])
 
-    def test__run_once_schedule_handler(self):
-        handler = None
+    def test__run_once_schedule_handle(self):
+        handle = None
         processed = False
 
         def cb(event_loop):
-            nonlocal processed, handler
+            nonlocal processed, handle
             processed = True
-            handler = event_loop.call_soon(lambda: True)
+            handle = event_loop.call_soon(lambda: True)
 
         h = events.Timer(time.monotonic() - 1, cb, (self.event_loop,))
 
@@ -238,7 +238,7 @@ class BaseEventLoopTests(test_utils.LogTrackingTestCase):
         self.event_loop._run_once()
 
         self.assertTrue(processed)
-        self.assertEqual([handler], list(self.event_loop._ready))
+        self.assertEqual([handle], list(self.event_loop._ready))
 
     @unittest.mock.patch('tulip.base_events.socket')
     def test_create_connection_mutiple_errors(self, m_socket):

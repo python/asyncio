@@ -245,7 +245,8 @@ class EventWaiterTests(unittest.TestCase):
 
         ev = locks.EventWaiter()
         self.event_loop.call_later(0.1, ev.set)
-        acquired = self.event_loop.run_until_complete(tasks.Task(ev.wait(10.1)))
+        acquired = self.event_loop.run_until_complete(
+            tasks.Task(ev.wait(10.1)))
         self.assertTrue(acquired)
 
     def test_wait_timeout_mixed(self):
@@ -411,8 +412,8 @@ class ConditionTests(test_utils.LogTrackingTestCase):
 
     def test_wait_for(self):
         cond = locks.Condition()
-
         presult = False
+
         def predicate():
             return presult
 
@@ -487,8 +488,8 @@ class ConditionTests(test_utils.LogTrackingTestCase):
 
         # predicate can return true immediately
         res = self.event_loop.run_until_complete(tasks.Task(
-            cond.wait_for(lambda: [1,2,3])))
-        self.assertEqual([1,2,3], res)
+            cond.wait_for(lambda: [1, 2, 3])))
+        self.assertEqual([1, 2, 3], res)
 
         self.assertRaises(
             RuntimeError,
@@ -538,7 +539,7 @@ class ConditionTests(test_utils.LogTrackingTestCase):
         cond.notify(2048)
         cond.release()
         self.event_loop.run_once()
-        self.assertEqual([1,2,3], result)
+        self.assertEqual([1, 2, 3], result)
 
     def test_notify_all(self):
         cond = locks.Condition()
@@ -569,7 +570,7 @@ class ConditionTests(test_utils.LogTrackingTestCase):
         cond.notify_all()
         cond.release()
         self.event_loop.run_once()
-        self.assertEqual([1,2], result)
+        self.assertEqual([1, 2], result)
 
     def test_notify_unacquired(self):
         cond = locks.Condition()
@@ -629,12 +630,12 @@ class SemaphoreTests(unittest.TestCase):
 
         @tasks.coroutine
         def c1(result):
-            res = yield from sem.acquire()
+            yield from sem.acquire()
             result.append(1)
 
         @tasks.coroutine
         def c2(result):
-            res = yield from sem.acquire()
+            yield from sem.acquire()
             result.append(2)
 
         @tasks.coroutine

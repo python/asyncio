@@ -12,8 +12,10 @@ from tulip import test_utils
 
 
 class Dummy:
+
     def __repr__(self):
         return 'Dummy()'
+
     def __call__(self, *args):
         pass
 
@@ -92,14 +94,17 @@ class TaskTests(test_utils.LogTrackingTestCase):
             a = yield from inner1()
             b = yield from inner2()
             return a+b
+
         @tasks.task
         def inner1():
             yield from []
             return 42
+
         @tasks.task
         def inner2():
             yield from []
             return 1000
+
         t = outer()
         self.assertEqual(self.event_loop.run_until_complete(t), 1042)
 
@@ -133,6 +138,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
 
     def test_stop_while_run_in_complete(self):
         x = 0
+
         @tasks.coroutine
         def task():
             nonlocal x
@@ -184,12 +190,14 @@ class TaskTests(test_utils.LogTrackingTestCase):
     def test_wait(self):
         a = tasks.sleep(0.1)
         b = tasks.sleep(0.15)
+
         @tasks.coroutine
         def foo():
             done, pending = yield from tasks.wait([b, a])
             self.assertEqual(done, set([a, b]))
             self.assertEqual(pending, set())
             return 42
+
         t0 = time.monotonic()
         res = self.event_loop.run_until_complete(tasks.Task(foo()))
         t1 = time.monotonic()
@@ -206,7 +214,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
         a = tasks.sleep(10.0)
         b = tasks.sleep(0.1)
         task = tasks.Task(tasks.wait(
-                [b, a], return_when=tasks.FIRST_COMPLETED))
+            [b, a], return_when=tasks.FIRST_COMPLETED))
 
         done, pending = self.event_loop.run_until_complete(task)
         self.assertEqual({b}, done)
@@ -220,13 +228,15 @@ class TaskTests(test_utils.LogTrackingTestCase):
         @tasks.coroutine
         def coro1():
             yield from [None]
+
         @tasks.coroutine
         def coro2():
             yield from [None, None]
 
         a = tasks.Task(coro1())
         b = tasks.Task(coro2())
-        task = tasks.Task(tasks.wait([b, a], return_when=tasks.FIRST_COMPLETED))
+        task = tasks.Task(
+            tasks.wait([b, a], return_when=tasks.FIRST_COMPLETED))
 
         done, pending = self.event_loop.run_until_complete(task)
         self.assertEqual({a, b}, done)
@@ -235,6 +245,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.suppress_log_errors()
 
         a = tasks.sleep(10.0)
+
         @tasks.coroutine
         def exc():
             yield from []
@@ -242,7 +253,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
 
         b = tasks.Task(exc())
         task = tasks.Task(tasks.wait(
-                [b, a], return_when=tasks.FIRST_EXCEPTION))
+            [b, a], return_when=tasks.FIRST_EXCEPTION))
 
         done, pending = self.event_loop.run_until_complete(task)
         self.assertEqual({b}, done)
@@ -251,11 +262,14 @@ class TaskTests(test_utils.LogTrackingTestCase):
     def test_wait_with_exception(self):
         self.suppress_log_errors()
         a = tasks.sleep(0.1)
+
         @tasks.coroutine
         def sleeper():
             yield from tasks.sleep(0.15)
             raise ZeroDivisionError('really')
+
         b = tasks.Task(sleeper())
+
         @tasks.coroutine
         def foo():
             done, pending = yield from tasks.wait([b, a])
@@ -263,25 +277,28 @@ class TaskTests(test_utils.LogTrackingTestCase):
             self.assertEqual(pending, set())
             errors = set(f for f in done if f.exception() is not None)
             self.assertEqual(len(errors), 1)
+
         t0 = time.monotonic()
-        res = self.event_loop.run_until_complete(tasks.Task(foo()))
+        self.event_loop.run_until_complete(tasks.Task(foo()))
         t1 = time.monotonic()
         self.assertTrue(t1-t0 >= 0.14)
         t0 = time.monotonic()
-        res = self.event_loop.run_until_complete(tasks.Task(foo()))
+        self.event_loop.run_until_complete(tasks.Task(foo()))
         t1 = time.monotonic()
         self.assertTrue(t1-t0 <= 0.01)
 
     def test_wait_with_timeout(self):
         a = tasks.sleep(0.1)
         b = tasks.sleep(0.15)
+
         @tasks.coroutine
         def foo():
             done, pending = yield from tasks.wait([b, a], timeout=0.11)
             self.assertEqual(done, set([a]))
             self.assertEqual(pending, set([b]))
+
         t0 = time.monotonic()
-        res = self.event_loop.run_until_complete(tasks.Task(foo()))
+        self.event_loop.run_until_complete(tasks.Task(foo()))
         t1 = time.monotonic()
         self.assertTrue(t1-t0 >= 0.1)
         self.assertTrue(t1-t0 <= 0.13)
@@ -291,15 +308,18 @@ class TaskTests(test_utils.LogTrackingTestCase):
         def sleeper(dt, x):
             yield from tasks.sleep(dt)
             return x
+
         a = sleeper(0.1, 'a')
         b = sleeper(0.1, 'b')
         c = sleeper(0.15, 'c')
+
         @tasks.coroutine
         def foo():
             values = []
             for f in tasks.as_completed([b, c, a]):
                 values.append((yield from f))
             return values
+
         t0 = time.monotonic()
         res = self.event_loop.run_until_complete(tasks.Task(foo()))
         t1 = time.monotonic()
@@ -317,6 +337,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.suppress_log_errors()
         a = tasks.sleep(0.1, 'a')
         b = tasks.sleep(0.15, 'b')
+
         @tasks.coroutine
         def foo():
             values = []
@@ -327,6 +348,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
                 except futures.TimeoutError as exc:
                     values.append((2, exc))
             return values
+
         t0 = time.monotonic()
         res = self.event_loop.run_until_complete(tasks.Task(foo()))
         t1 = time.monotonic()
@@ -342,6 +364,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
             yield from tasks.sleep(dt/2)
             res = yield from tasks.sleep(dt/2, arg)
             return res
+
         t = tasks.Task(sleeper(0.1, 'yeah'))
         t0 = time.monotonic()
         self.event_loop.run()
@@ -352,27 +375,30 @@ class TaskTests(test_utils.LogTrackingTestCase):
 
     def test_task_cancel_sleeping_task(self):
         sleepfut = None
+
         @tasks.task
         def sleep(dt):
             nonlocal sleepfut
             sleepfut = tasks.sleep(dt)
             try:
-                t0 = time.monotonic()
+                time.monotonic()
                 yield from sleepfut
             finally:
-                t1 = time.monotonic()
+                time.monotonic()
+
         @tasks.task
         def doit():
             sleeper = sleep(5000)
             self.event_loop.call_later(0.1, sleeper.cancel)
             try:
-                t0 = time.monotonic()
+                time.monotonic()
                 yield from sleeper
             except futures.CancelledError:
-                t1 = time.monotonic()
+                time.monotonic()
                 return 'cancelled'
             else:
                 return 'slept in'
+
         t0 = time.monotonic()
         doer = doit()
         self.assertEqual(self.event_loop.run_until_complete(doer), 'cancelled')
@@ -420,6 +446,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
             def __init__(self, *args):
                 self.cb_added = False
                 super().__init__(*args)
+
             def add_done_callback(self, fn):
                 self.cb_added = True
                 super().add_done_callback(fn)
@@ -432,7 +459,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
             nonlocal result
             result = yield from fut
 
-        task = wait_for_future()
+        wait_for_future()
         self.event_loop.run_once()
         self.assertTrue(fut.cb_added)
 
@@ -449,6 +476,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
             def __init__(self):
                 self.cb_added = False
                 super().__init__()
+
             def add_done_callback(self, fn):
                 self.cb_added = True
                 super().add_done_callback(fn)

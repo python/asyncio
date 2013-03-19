@@ -11,7 +11,7 @@ from select import *
 
 # generic events, that must be mapped to implementation-specific ones
 # read event
-EVENT_READ  = (1 << 0)
+EVENT_READ = (1 << 0)
 # write event
 EVENT_WRITE = (1 << 1)
 
@@ -361,7 +361,6 @@ if 'kqueue' in globals():
 
         def unregister(self, fileobj):
             key = super().unregister(fileobj)
-            mask = 0
             if key.events & EVENT_READ:
                 kev = kevent(key.fd, KQ_FILTER_READ, KQ_EV_DELETE)
                 self._kqueue.control([kev], 0, 0)

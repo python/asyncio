@@ -127,20 +127,20 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         # It's now up to the protocol to handle the connection.
 
     def add_reader(self, fd, callback, *args):
-        """Add a reader callback.  Return a Handler instance."""
-        handler = events.make_handler(callback, args)
+        """Add a reader callback.  Return a Handle instance."""
+        handle = events.make_handle(callback, args)
         try:
             mask, (reader, writer) = self._selector.get_info(fd)
         except KeyError:
             self._selector.register(fd, selectors.EVENT_READ,
-                                    (handler, None))
+                                    (handle, None))
         else:
             self._selector.modify(fd, mask | selectors.EVENT_READ,
-                                  (handler, writer))
+                                  (handle, writer))
             if reader is not None:
                 reader.cancel()
 
-        return handler
+        return handle
 
     def remove_reader(self, fd):
         """Remove a reader callback."""
@@ -162,20 +162,20 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
                 return False
 
     def add_writer(self, fd, callback, *args):
-        """Add a writer callback.  Return a Handler instance."""
-        handler = events.make_handler(callback, args)
+        """Add a writer callback.  Return a Handle instance."""
+        handle = events.make_handle(callback, args)
         try:
             mask, (reader, writer) = self._selector.get_info(fd)
         except KeyError:
             self._selector.register(fd, selectors.EVENT_WRITE,
-                                    (None, handler))
+                                    (None, handle))
         else:
             self._selector.modify(fd, mask | selectors.EVENT_WRITE,
-                                  (reader, handler))
+                                  (reader, handle))
             if writer is not None:
                 writer.cancel()
 
-        return handler
+        return handle
 
     def remove_writer(self, fd):
         """Remove a writer callback."""

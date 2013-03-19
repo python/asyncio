@@ -203,12 +203,12 @@ def _wait(fs, timeout=None, return_when=ALL_COMPLETED):
         return done, pending
 
     bail = futures.Future()  # Will always be cancelled eventually.
-    timeout_handler = None
+    timeout_handle = None
     debugstuff = locals()
 
     if timeout is not None:
         loop = events.get_event_loop()
-        timeout_handler = loop.call_later(timeout, bail.cancel)
+        timeout_handle = loop.call_later(timeout, bail.cancel)
 
     def _on_completion(f):
         pending.remove(f)
@@ -230,8 +230,8 @@ def _wait(fs, timeout=None, return_when=ALL_COMPLETED):
     finally:
         for f in pending:
             f.remove_done_callback(_on_completion)
-        if timeout_handler is not None:
-            timeout_handler.cancel()
+        if timeout_handle is not None:
+            timeout_handle.cancel()
 
     really_done = set(f for f in pending if f.done())
     if really_done:
@@ -259,11 +259,14 @@ def as_completed(fs, timeout=None):
     deadline = None
     if timeout is not None:
         deadline = time.monotonic() + timeout
+
     done = None  # Make nonlocal happy.
     fs = _wrap_coroutines(fs)
+
     while fs:
         if deadline is not None:
             timeout = deadline - time.monotonic()
+
         @coroutine
         def _wait_for_some():
             nonlocal done, fs
@@ -273,6 +276,7 @@ def as_completed(fs, timeout=None):
                 fs = set()
                 raise futures.TimeoutError()
             return done.pop().result()  # May raise.
+
         yield Task(_wait_for_some())
         for f in done:
             yield f

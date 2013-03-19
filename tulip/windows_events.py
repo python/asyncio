@@ -1,17 +1,13 @@
-"""Selector and proactor eventloops for Windows.
-"""
+"""Selector and proactor eventloops for Windows."""
 
-import errno
 import logging
 import socket
 import weakref
 import struct
 import _winapi
 
-
 from . import futures
 from . import proactor_events
-from . import selectors
 from . import selector_events
 from . import winsocketpair
 from . import _overlapped
@@ -77,6 +73,7 @@ class IocpProactor:
         conn = self._get_accept_socket()
         ov = _overlapped.Overlapped(NULL)
         ov.AcceptEx(listener.fileno(), conn.fileno())
+
         def finish_accept():
             addr = ov.getresult()
             buf = struct.pack('@P', listener.fileno())
@@ -85,6 +82,7 @@ class IocpProactor:
                             buf)
             conn.settimeout(listener.gettimeout())
             return conn, conn.getpeername()
+
         return self._register(ov, listener, finish_accept)
 
     def connect(self, conn, address):
@@ -92,12 +90,14 @@ class IocpProactor:
         _overlapped.BindLocal(conn.fileno(), len(address))
         ov = _overlapped.Overlapped(NULL)
         ov.ConnectEx(conn.fileno(), address)
+
         def finish_connect():
             ov.getresult()
             conn.setsockopt(socket.SOL_SOCKET,
                             _overlapped.SO_UPDATE_CONNECT_CONTEXT,
                             0)
             return conn
+
         return self._register(ov, conn, finish_connect)
 
     def _register_with_iocp(self, obj):

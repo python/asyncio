@@ -1,8 +1,10 @@
 """Tests for events.py."""
 
 import concurrent.futures
+import contextlib
 import errno
 import gc
+import io
 import os
 import re
 import signal
@@ -16,6 +18,8 @@ import threading
 import time
 import unittest
 import unittest.mock
+
+from wsgiref.simple_server import make_server, WSGIRequestHandler, WSGIServer
 
 from tulip import events
 from tulip import transports
@@ -85,6 +89,51 @@ class EventLoopTestsMixin:
         gc.collect()
         super().tearDown()
 
+    @contextlib.contextmanager
+    def run_test_server(self, *, use_ssl=False):
+
+        class SilentWSGIRequestHandler(WSGIRequestHandler):
+            def get_stderr(self):
+                return io.StringIO()
+
+            def log_message(self, format, *args):
+                pass
+
+        class SSLWSGIServer(WSGIServer):
+            def finish_request(self, request, client_address):
+                here = os.path.dirname(__file__)
+                keyfile = os.path.join(here, 'sample.key')
+                certfile = os.path.join(here, 'sample.crt')
+                ssock = ssl.wrap_socket(request,
+                                        keyfile=keyfile,
+                                        certfile=certfile,
+                                        server_side=True)
+                try:
+                    self.RequestHandlerClass(ssock, client_address, self)
+                    ssock.close()
+                except OSError:
+                    # maybe socket has been closed by peer
+                    pass
+
+        def app(environ, start_response):
+            status = '302 Found'
+            headers = [('Content-type', 'text/plain')]
+            start_response(status, headers)
+            return [b'Test message']
+
+        # Run the test WSGI server in a separate thread in order not to
+        # interfere with event handling in the main thread
+        server_class = SSLWSGIServer if use_ssl else WSGIServer
+        httpd = make_server('127.0.0.1', 0, app,
+                            server_class, SilentWSGIRequestHandler)
+        server_thread = threading.Thread(target=httpd.serve_forever)
+        server_thread.start()
+        try:
+            yield httpd
+        finally:
+            httpd.shutdown()
+            server_thread.join()
+
     def test_run(self):
         self.event_loop.run()  # Returns immediately.
 
@@ -122,14 +171,14 @@ class EventLoopTestsMixin:
         self.event_loop.run()
         self.assertEqual(results, [('hello', 'world')])
 
-    def test_call_soon_with_handler(self):
+    def test_call_soon_with_handle(self):
         results = []
 
         def callback():
             results.append('yeah')
 
-        handler = events.Handler(callback, ())
-        self.assertIs(self.event_loop.call_soon(handler), handler)
+        handle = events.Handle(callback, ())
+        self.assertIs(self.event_loop.call_soon(handle), handle)
         self.event_loop.run()
         self.assertEqual(results, ['yeah'])
 
@@ -163,17 +212,17 @@ class EventLoopTestsMixin:
         self.event_loop.run()
         self.assertEqual(results, ['hello', 'world'])
 
-    def test_call_soon_threadsafe_with_handler(self):
+    def test_call_soon_threadsafe_with_handle(self):
         results = []
 
         def callback(arg):
             results.append(arg)
 
-        handler = events.Handler(callback, ('hello',))
+        handle = events.Handle(callback, ('hello',))
 
         def run():
             self.assertIs(
-                self.event_loop.call_soon_threadsafe(handler), handler)
+                self.event_loop.call_soon_threadsafe(handle), handle)
 
         t = threading.Thread(target=run)
         self.event_loop.call_later(0.1, callback, 'world')
@@ -204,12 +253,12 @@ class EventLoopTestsMixin:
         res = self.event_loop.run_until_complete(f2)
         self.assertEqual(res, 'yo')
 
-    def test_run_in_executor_with_handler(self):
+    def test_run_in_executor_with_handle(self):
         def run(arg):
             time.sleep(0.1)
             return arg
-        handler = events.Handler(run, ('yo',))
-        f2 = self.event_loop.run_in_executor(None, handler)
+        handle = events.Handle(run, ('yo',))
+        f2 = self.event_loop.run_in_executor(None, handle)
         res = self.event_loop.run_until_complete(f2)
         self.assertEqual(res, 'yo')
 
@@ -237,7 +286,7 @@ class EventLoopTestsMixin:
         self.event_loop.run()
         self.assertEqual(b''.join(bytes_read), b'abcdef')
 
-    def test_reader_callback_with_handler(self):
+    def test_reader_callback_with_handle(self):
         r, w = test_utils.socketpair()
         bytes_read = []
 
@@ -254,8 +303,8 @@ class EventLoopTestsMixin:
                 self.assertTrue(self.event_loop.remove_reader(r.fileno()))
                 r.close()
 
-        handler = events.Handler(reader, ())
-        self.assertIs(handler, self.event_loop.add_reader(r.fileno(), handler))
+        handle = events.Handle(reader, ())
+        self.assertIs(handle, self.event_loop.add_reader(r.fileno(), handle))
 
         self.event_loop.call_later(0.05, w.send, b'abc')
         self.event_loop.call_later(0.1, w.send, b'def')
@@ -275,11 +324,11 @@ class EventLoopTestsMixin:
             if data:
                 bytes_read.append(data)
             if sum(len(b) for b in bytes_read) >= 6:
-                handler.cancel()
+                handle.cancel()
             if not data:
                 r.close()
 
-        handler = self.event_loop.add_reader(r.fileno(), reader)
+        handle = self.event_loop.add_reader(r.fileno(), reader)
         self.event_loop.call_later(0.05, w.send, b'abc')
         self.event_loop.call_later(0.1, w.send, b'def')
         self.event_loop.call_later(0.15, w.close)
@@ -301,11 +350,11 @@ class EventLoopTestsMixin:
         r.close()
         self.assertTrue(len(data) >= 200)
 
-    def test_writer_callback_with_handler(self):
+    def test_writer_callback_with_handle(self):
         r, w = test_utils.socketpair()
         w.setblocking(False)
-        handler = events.Handler(w.send, (b'x'*(256*1024),))
-        self.assertIs(self.event_loop.add_writer(w.fileno(), handler), handler)
+        handle = events.Handle(w.send, (b'x'*(256*1024),))
+        self.assertIs(self.event_loop.add_writer(w.fileno(), handle), handle)
 
         def remove_writer():
             self.assertTrue(self.event_loop.remove_writer(w.fileno()))
@@ -323,9 +372,9 @@ class EventLoopTestsMixin:
 
         def sender():
             w.send(b'x'*256)
-            handler.cancel()
+            handle.cancel()
 
-        handler = self.event_loop.add_writer(w.fileno(), sender)
+        handle = self.event_loop.add_writer(w.fileno(), sender)
         self.event_loop.run()
         w.close()
         data = r.recv(1024)
@@ -333,24 +382,32 @@ class EventLoopTestsMixin:
         self.assertTrue(data == b'x'*256)
 
     def test_sock_client_ops(self):
-        sock = socket.socket()
-        sock.setblocking(False)
-        # TODO: This depends on python.org behavior!
-        address = socket.getaddrinfo('python.org', 80, socket.AF_INET)[0][4]
-        self.event_loop.run_until_complete(
-            self.event_loop.sock_connect(sock, address))
-        self.event_loop.run_until_complete(
-            self.event_loop.sock_sendall(sock, b'GET / HTTP/1.0\r\n\r\n'))
-        data = self.event_loop.run_until_complete(
-            self.event_loop.sock_recv(sock, 1024))
-        sock.close()
-        self.assertTrue(re.match(rb'HTTP/1.\d 302', data), data)
+        with self.run_test_server() as httpd:
+            sock = socket.socket()
+            sock.setblocking(False)
+            address = httpd.socket.getsockname()
+            self.event_loop.run_until_complete(
+                self.event_loop.sock_connect(sock, address))
+            self.event_loop.run_until_complete(
+                self.event_loop.sock_sendall(sock, b'GET / HTTP/1.0\r\n\r\n'))
+            data = self.event_loop.run_until_complete(
+                self.event_loop.sock_recv(sock, 1024))
+            sock.close()
+
+        self.assertTrue(re.match(rb'HTTP/1.0 302 Found', data), data)
 
     def test_sock_client_fail(self):
+        # Make sure that we will get an unused port
+        address = None
+        try:
+            s = socket.socket()
+            s.bind(('127.0.0.1', 0))
+            address = s.getsockname()
+        finally:
+            s.close()
+
         sock = socket.socket()
         sock.setblocking(False)
-        # TODO: This depends on python.org behavior!
-        address = socket.getaddrinfo('python.org', 12345, socket.AF_INET)[0][4]
         with self.assertRaises(ConnectionRefusedError):
             self.event_loop.run_until_complete(
                 self.event_loop.sock_connect(sock, address))
@@ -426,8 +483,8 @@ class EventLoopTestsMixin:
             nonlocal caught
             caught += 1
 
-        handler = self.event_loop.add_signal_handler(signal.SIGINT, my_handler)
-        handler.cancel()
+        handle = self.event_loop.add_signal_handler(signal.SIGINT, my_handler)
+        handle.cancel()
         os.kill(os.getpid(), signal.SIGINT)
         self.event_loop.run_once()
         self.assertEqual(caught, 0)
@@ -468,50 +525,38 @@ class EventLoopTestsMixin:
         self.assertEqual(caught, 1)
 
     def test_create_connection(self):
-        # TODO: This depends on xkcd.com behavior!
-        f = self.event_loop.create_connection(MyProto, 'xkcd.com', 80)
-        tr, pr = self.event_loop.run_until_complete(f)
-        self.assertTrue(isinstance(tr, transports.Transport))
-        self.assertTrue(isinstance(pr, protocols.Protocol))
-        self.event_loop.run()
-        self.assertTrue(pr.nbytes > 0)
+        with self.run_test_server() as httpd:
+            host, port = httpd.socket.getsockname()
+            f = self.event_loop.create_connection(MyProto, host, port)
+            tr, pr = self.event_loop.run_until_complete(f)
+            self.assertTrue(isinstance(tr, transports.Transport))
+            self.assertTrue(isinstance(pr, protocols.Protocol))
+            self.event_loop.run()
+            self.assertTrue(pr.nbytes > 0)
 
     def test_create_connection_sock(self):
-        # TODO: This depends on xkcd.com behavior!
-        sock = None
-        infos = self.event_loop.run_until_complete(
-            self.event_loop.getaddrinfo(
-                'xkcd.com', 80, type=socket.SOCK_STREAM))
-        for family, type, proto, cname, address in infos:
-            try:
-                sock = socket.socket(family=family, type=type, proto=proto)
-                sock.setblocking(False)
-                self.event_loop.run_until_complete(
-                    self.event_loop.sock_connect(sock, address))
-            except:
-                pass
-            else:
-                break
-
-        f = self.event_loop.create_connection(MyProto, sock=sock)
-        tr, pr = self.event_loop.run_until_complete(f)
-        self.assertTrue(isinstance(tr, transports.Transport))
-        self.assertTrue(isinstance(pr, protocols.Protocol))
-        self.event_loop.run()
-        self.assertTrue(pr.nbytes > 0)
+        with self.run_test_server() as httpd:
+            host, port = httpd.socket.getsockname()
+            f = self.event_loop.create_connection(MyProto, host, port)
+            tr, pr = self.event_loop.run_until_complete(f)
+            self.assertTrue(isinstance(tr, transports.Transport))
+            self.assertTrue(isinstance(pr, protocols.Protocol))
+            self.event_loop.run()
+            self.assertTrue(pr.nbytes > 0)
 
     @unittest.skipIf(ssl is None, 'No ssl module')
     def test_create_ssl_connection(self):
-        # TODO: This depends on xkcd.com behavior!
-        f = self.event_loop.create_connection(
-            MyProto, 'xkcd.com', 443, ssl=True)
-        tr, pr = self.event_loop.run_until_complete(f)
-        self.assertTrue(isinstance(tr, transports.Transport))
-        self.assertTrue(isinstance(pr, protocols.Protocol))
-        self.assertTrue('ssl' in tr.__class__.__name__.lower())
-        self.assertTrue(hasattr(tr.get_extra_info('socket'), 'getsockname'))
-        self.event_loop.run()
-        self.assertTrue(pr.nbytes > 0)
+        with self.run_test_server(use_ssl=True) as httpsd:
+            host, port = httpsd.socket.getsockname()
+            f = self.event_loop.create_connection(
+                MyProto, host, port, ssl=True)
+            tr, pr = self.event_loop.run_until_complete(f)
+            self.assertTrue(isinstance(tr, transports.Transport))
+            self.assertTrue(isinstance(pr, protocols.Protocol))
+            self.assertTrue('ssl' in tr.__class__.__name__.lower())
+            self.assertTrue(hasattr(tr.get_extra_info('socket'), 'getsockname'))
+            self.event_loop.run()
+            self.assertTrue(pr.nbytes > 0)
 
     def test_create_connection_host_port_sock(self):
         self.suppress_log_errors()
@@ -902,13 +947,13 @@ if sys.platform == 'win32':
             raise unittest.SkipTest("IocpEventLoop does not have add_reader()")
         def test_reader_callback_cancel(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_reader()")
-        def test_reader_callback_with_handler(self):
+        def test_reader_callback_with_handle(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_reader()")
         def test_writer_callback(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_writer()")
         def test_writer_callback_cancel(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_writer()")
-        def test_writer_callback_with_handler(self):
+        def test_writer_callback_with_handle(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_writer()")
         def test_accept_connection_retry(self):
             raise unittest.SkipTest(
@@ -963,22 +1008,22 @@ else:
             return unix_events.SelectorEventLoop(selectors.SelectSelector())
 
 
-class HandlerTests(unittest.TestCase):
+class HandleTests(unittest.TestCase):
 
-    def test_handler(self):
+    def test_handle(self):
         def callback(*args):
             return args
 
         args = ()
-        h = events.Handler(callback, args)
+        h = events.Handle(callback, args)
         self.assertIs(h.callback, callback)
         self.assertIs(h.args, args)
         self.assertFalse(h.cancelled)
 
         r = repr(h)
         self.assertTrue(r.startswith(
-            'Handler('
-            '<function HandlerTests.test_handler.<locals>.callback'))
+            'Handle('
+            '<function HandleTests.test_handle.<locals>.callback'))
         self.assertTrue(r.endswith('())'))
 
         h.cancel()
@@ -986,19 +1031,19 @@ class HandlerTests(unittest.TestCase):
 
         r = repr(h)
         self.assertTrue(r.startswith(
-            'Handler('
-            '<function HandlerTests.test_handler.<locals>.callback'))
+            'Handle('
+            '<function HandleTests.test_handle.<locals>.callback'))
         self.assertTrue(r.endswith('())<cancelled>'))
 
-    def test_make_handler(self):
+    def test_make_handle(self):
         def callback(*args):
             return args
-        h1 = events.Handler(callback, ())
-        h2 = events.make_handler(h1, ())
+        h1 = events.Handle(callback, ())
+        h2 = events.make_handle(h1, ())
         self.assertIs(h1, h2)
 
         self.assertRaises(
-            AssertionError, events.make_handler, h1, (1, 2))
+            AssertionError, events.make_handle, h1, (1, 2))
 
 
 class TimerTests(unittest.TestCase):
@@ -1060,7 +1105,7 @@ class TimerTests(unittest.TestCase):
         self.assertFalse(h1 == h2)
         self.assertTrue(h1 != h2)
 
-        h3 = events.Handler(callback, ())
+        h3 = events.Handle(callback, ())
         self.assertIs(NotImplemented, h1.__eq__(h3))
         self.assertIs(NotImplemented, h1.__ne__(h3))
 

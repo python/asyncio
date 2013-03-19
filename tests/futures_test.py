@@ -66,12 +66,14 @@ class FutureTests(unittest.TestCase):
 
     def test_yield_from_twice(self):
         f = futures.Future()
+
         def fixture():
             yield 'A'
             x = yield from f
             yield 'B', x
             y = yield from f
             yield 'C', y
+
         g = fixture()
         self.assertEqual(next(g), 'A')  # yield 'A'.
         self.assertEqual(next(g), f)  # First yield from f.

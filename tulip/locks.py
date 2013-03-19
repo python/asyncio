@@ -69,7 +69,8 @@ class Lock:
 
     def __repr__(self):
         res = super().__repr__()
-        return '<%s [%s]>'%(res[1:-1], 'locked' if self._locked else 'unlocked')
+        return '<%s [%s]>' % (
+            res[1:-1], 'locked' if self._locked else 'unlocked')
 
     def locked(self):
         """Return true if lock is acquired."""
@@ -95,9 +96,9 @@ class Lock:
 
         fut = futures.Future(event_loop=self._event_loop)
         if timeout is not None:
-            handler = self._event_loop.call_later(timeout, fut.cancel)
+            handle = self._event_loop.call_later(timeout, fut.cancel)
         else:
-            handler = None
+            handle = None
 
         self._waiters.append(fut)
         try:
@@ -109,8 +110,8 @@ class Lock:
             f = self._waiters.popleft()
             assert f is fut
 
-        if handler is not None:
-            handler.cancel()
+        if handle is not None:
+            handle.cancel()
 
         self._locked = True
         return True
@@ -163,7 +164,7 @@ class EventWaiter:
 
     def __repr__(self):
         res = super().__repr__()
-        return '<%s [%s]>'%(res[1:-1], 'set' if self._value else 'unset')
+        return '<%s [%s]>' % (res[1:-1], 'set' if self._value else 'unset')
 
     def is_set(self):
         """Return true if and only if the internal flag is true."""
@@ -210,9 +211,9 @@ class EventWaiter:
 
         fut = futures.Future(event_loop=self._event_loop)
         if timeout is not None:
-            handler = self._event_loop.call_later(timeout, fut.cancel)
+            handle = self._event_loop.call_later(timeout, fut.cancel)
         else:
-            handler = None
+            handle = None
 
         self._waiters.append(fut)
         try:
@@ -224,8 +225,8 @@ class EventWaiter:
             f = self._waiters.popleft()
             assert f is fut
 
-        if handler is not None:
-            handler.cancel()
+        if handle is not None:
+            handle.cancel()
 
         return True
 
@@ -268,9 +269,9 @@ class Condition(Lock):
 
         fut = futures.Future(event_loop=self._event_loop)
         if timeout is not None:
-            handler = self._event_loop.call_later(timeout, fut.cancel)
+            handle = self._event_loop.call_later(timeout, fut.cancel)
         else:
-            handler = None
+            handle = None
 
         self._condition_waiters.append(fut)
         try:
@@ -284,8 +285,8 @@ class Condition(Lock):
         finally:
             yield from self.acquire()
 
-        if handler is not None:
-            handler.cancel()
+        if handle is not None:
+            handle.cancel()
 
         return True
 
@@ -378,9 +379,9 @@ class Semaphore:
 
     def __repr__(self):
         res = super().__repr__()
-        return '<%s [%s]>'%(
+        return '<%s [%s]>' % (
             res[1:-1],
-            'locked' if self._locked else 'unlocked,value:%s'%self._value)
+            'locked' if self._locked else 'unlocked,value:%s' % self._value)
 
     def locked(self):
         """Returns True if semaphore can not be acquired immediately."""
@@ -407,9 +408,9 @@ class Semaphore:
 
         fut = futures.Future(event_loop=self._event_loop)
         if timeout is not None:
-            handler = self._event_loop.call_later(timeout, fut.cancel)
+            handle = self._event_loop.call_later(timeout, fut.cancel)
         else:
-            handler = None
+            handle = None
 
         self._waiters.append(fut)
         try:
@@ -421,8 +422,8 @@ class Semaphore:
             f = self._waiters.popleft()
             assert f is fut
 
-        if handler is not None:
-            handler.cancel()
+        if handle is not None:
+            handle.cancel()
 
         self._value -= 1
         if self._value == 0:

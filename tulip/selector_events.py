@@ -352,7 +352,7 @@ class _SelectorSocketTransport(transports.Transport):
                 self._event_loop.call_soon(self._protocol.eof_received)
 
     def write(self, data):
-        assert isinstance(data, bytes)
+        assert isinstance(data, (bytes, bytearray)), repr(data)
         assert not self._closing
         if not data:
             return

@@ -51,22 +51,36 @@ class HttpServer(tulip.Protocol):
             print(hdr, val)
             headers.add_header(hdr, val)
 
-        write = self.transport.write
         if isdir and not path.endswith('/'):
-            bpath = path.encode('ascii')
-            write(b'HTTP/1.0 302 Redirected\r\n'
-                  b'URI: ' + bpath + b'/\r\n'
-                  b'Location: ' + bpath + b'/\r\n'
-                  b'\r\n')
+            path = path + '/'
+            response = tulip.http.Response(self.transport, 302)
+            response.add_headers(
+                ('URI', path),
+                ('Location', path))
+            response.send_headers()
+            response.write_eof()
+            self.transport.close()
             return
-        write(b'HTTP/1.0 200 Ok\r\n')
+
+        response = tulip.http.Response(self.transport, 200)
+        response.add_header('Transfer-Encoding', 'chunked')
+
+        # content encoding
+        accept_encoding = headers.get('accept-encoding', '').lower()
+        if 'deflate' in accept_encoding:
+            response.add_header('Content-Encoding', 'deflate')
+            response.add_compression_filter('deflate')
+        elif 'gzip' in accept_encoding:
+            response.add_header('Content-Encoding', 'gzip')
+            response.add_compression_filter('gzip')
+
+        response.add_chunking_filter(1025)
+
         if isdir:
-            write(b'Content-type: text/html\r\n')
-        else:
-            write(b'Content-type: text/plain\r\n')
-        write(b'\r\n')
-        if isdir:
-            write(b'<ul>\r\n')
+            response.add_header('Content-type', 'text/html')
+            response.send_headers()
+
+            response.write(b'<ul>\r\n')
             for name in sorted(os.listdir(path)):
                 if name.isprintable() and not name.startswith('.'):
                     try:
@@ -75,18 +89,27 @@ class HttpServer(tulip.Protocol):
                         pass
                     else:
                         if os.path.isdir(os.path.join(path, name)):
-                            write(b'<li><a href="' + bname +
-                                  b'/">' + bname + b'/</a></li>\r\n')
+                            response.write(b'<li><a href="' + bname +
+                                           b'/">' + bname + b'/</a></li>\r\n')
                         else:
-                            write(b'<li><a href="' + bname +
-                                  b'">' + bname + b'</a></li>\r\n')
-            write(b'</ul>')
+                            response.write(b'<li><a href="' + bname +
+                                           b'">' + bname + b'</a></li>\r\n')
+            response.write(b'</ul>')
         else:
+            response.add_header('Content-type', 'text/plain')
+            response.send_headers()
+
             try:
-                with open(path, 'rb') as f:
-                    write(f.read())
+                with open(path, 'rb') as fp:
+                    chunk = fp.read(8196)
+                    while chunk:
+                        if not response.write(chunk):
+                            break
+                        chunk = fp.read(8196)
             except OSError:
-                write(b'Cannot open\r\n')
+                response.write(b'Cannot open')
+
+        response.write_eof()
         self.transport.close()
 
     def connection_made(self, transport):

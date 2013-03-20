@@ -25,6 +25,7 @@ from tulip import events
 from tulip import transports
 from tulip import protocols
 from tulip import selector_events
+from tulip import tasks
 from tulip import test_utils
 
 
@@ -531,7 +532,8 @@ class EventLoopTestsMixin:
     def test_create_connection(self):
         with self.run_test_server() as httpd:
             host, port = httpd.socket.getsockname()
-            f = self.event_loop.create_connection(MyProto, host, port)
+            f = tasks.Task(
+                self.event_loop.create_connection(MyProto, host, port))
             tr, pr = self.event_loop.run_until_complete(f)
             self.assertTrue(isinstance(tr, transports.Transport))
             self.assertTrue(isinstance(pr, protocols.Protocol))
@@ -541,7 +543,8 @@ class EventLoopTestsMixin:
     def test_create_connection_sock(self):
         with self.run_test_server() as httpd:
             host, port = httpd.socket.getsockname()
-            f = self.event_loop.create_connection(MyProto, host, port)
+            f = tasks.Task(
+                self.event_loop.create_connection(MyProto, host, port))
             tr, pr = self.event_loop.run_until_complete(f)
             self.assertTrue(isinstance(tr, transports.Transport))
             self.assertTrue(isinstance(pr, protocols.Protocol))
@@ -552,25 +555,26 @@ class EventLoopTestsMixin:
     def test_create_ssl_connection(self):
         with self.run_test_server(use_ssl=True) as httpsd:
             host, port = httpsd.socket.getsockname()
-            f = self.event_loop.create_connection(
-                MyProto, host, port, ssl=True)
+            f = tasks.Task(self.event_loop.create_connection(
+                MyProto, host, port, ssl=True))
             tr, pr = self.event_loop.run_until_complete(f)
             self.assertTrue(isinstance(tr, transports.Transport))
             self.assertTrue(isinstance(pr, protocols.Protocol))
             self.assertTrue('ssl' in tr.__class__.__name__.lower())
-            self.assertTrue(hasattr(tr.get_extra_info('socket'), 'getsockname'))
+            self.assertTrue(
+                hasattr(tr.get_extra_info('socket'), 'getsockname'))
             self.event_loop.run()
             self.assertTrue(pr.nbytes > 0)
 
     def test_create_connection_host_port_sock(self):
         self.suppress_log_errors()
-        fut = self.event_loop.create_connection(
-            MyProto, 'xkcd.com', 80, sock=object())
+        fut = tasks.Task(self.event_loop.create_connection(
+            MyProto, 'xkcd.com', 80, sock=object()))
         self.assertRaises(ValueError, self.event_loop.run_until_complete, fut)
 
     def test_create_connection_no_host_port_sock(self):
         self.suppress_log_errors()
-        fut = self.event_loop.create_connection(MyProto)
+        fut = tasks.Task(self.event_loop.create_connection(MyProto))
         self.assertRaises(ValueError, self.event_loop.run_until_complete, fut)
 
     def test_create_connection_no_getaddrinfo(self):
@@ -578,7 +582,8 @@ class EventLoopTestsMixin:
         getaddrinfo = self.event_loop.getaddrinfo = unittest.mock.Mock()
         getaddrinfo.return_value = []
 
-        fut = self.event_loop.create_connection(MyProto, 'xkcd.com', 80)
+        fut = tasks.Task(
+            self.event_loop.create_connection(MyProto, 'xkcd.com', 80))
         self.assertRaises(
             socket.error, self.event_loop.run_until_complete, fut)
 
@@ -587,7 +592,8 @@ class EventLoopTestsMixin:
         self.event_loop.sock_connect = unittest.mock.Mock()
         self.event_loop.sock_connect.side_effect = socket.error
 
-        fut = self.event_loop.create_connection(MyProto, 'xkcd.com', 80)
+        fut = tasks.Task(
+            self.event_loop.create_connection(MyProto, 'xkcd.com', 80))
         self.assertRaises(
             socket.error, self.event_loop.run_until_complete, fut)
 
@@ -602,7 +608,8 @@ class EventLoopTestsMixin:
         self.event_loop.sock_connect = unittest.mock.Mock()
         self.event_loop.sock_connect.side_effect = socket.error
 
-        fut = self.event_loop.create_connection(MyProto, 'xkcd.com', 80)
+        fut = tasks.Task(
+            self.event_loop.create_connection(MyProto, 'xkcd.com', 80))
         self.assertRaises(
             socket.error, self.event_loop.run_until_complete, fut)
 
@@ -721,8 +728,8 @@ class EventLoopTestsMixin:
         sock = self.event_loop.run_until_complete(f)
         host, port = sock.getsockname()
 
-        f = self.event_loop.create_datagram_connection(
-            MyDatagramProto, host, port)
+        f = tasks.Task(self.event_loop.create_datagram_connection(
+            MyDatagramProto, host, port))
         transport, protocol = self.event_loop.run_until_complete(f)
 
         self.assertEqual('INITIALIZED', protocol.state)
@@ -767,7 +774,8 @@ class EventLoopTestsMixin:
         sock = self.event_loop.run_until_complete(f)
         host, port = sock.getsockname()
 
-        f = self.event_loop.create_datagram_connection(MyDatagramProto)
+        f = tasks.Task(
+            self.event_loop.create_datagram_connection(MyDatagramProto))
         transport, protocol = self.event_loop.run_until_complete(f)
 
         self.assertEqual('INITIALIZED', protocol.state)
@@ -800,8 +808,8 @@ class EventLoopTestsMixin:
         getaddrinfo = self.event_loop.getaddrinfo = unittest.mock.Mock()
         getaddrinfo.return_value = []
 
-        fut = self.event_loop.create_datagram_connection(
-            protocols.DatagramProtocol, 'xkcd.com', 80)
+        fut = tasks.Task(self.event_loop.create_datagram_connection(
+            protocols.DatagramProtocol, 'xkcd.com', 80))
         self.assertRaises(
             socket.error, self.event_loop.run_until_complete, fut)
 
@@ -810,8 +818,8 @@ class EventLoopTestsMixin:
         self.event_loop.sock_connect = unittest.mock.Mock()
         self.event_loop.sock_connect.side_effect = socket.error
 
-        fut = self.event_loop.create_datagram_connection(
-            protocols.DatagramProtocol, 'xkcd.com', 80)
+        fut = tasks.Task(self.event_loop.create_datagram_connection(
+            protocols.DatagramProtocol, 'xkcd.com', 80))
         self.assertRaises(
             socket.error, self.event_loop.run_until_complete, fut)
 
@@ -822,8 +830,8 @@ class EventLoopTestsMixin:
         m_socket.error = socket.error
         m_socket.socket.return_value.setsockopt.side_effect = socket.error
 
-        fut = self.event_loop.create_datagram_connection(
-            protocols.DatagramProtocol)
+        fut = tasks.Task(self.event_loop.create_datagram_connection(
+            protocols.DatagramProtocol))
         self.assertRaises(
             socket.error, self.event_loop.run_until_complete, fut)
         self.assertTrue(

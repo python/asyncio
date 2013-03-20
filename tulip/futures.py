@@ -51,10 +51,11 @@ class Future:
     _state = _PENDING
     _result = None
     _exception = None
+    _timeout_handle = None
 
     _blocking = False  # proper use of future (yield vs yield from)
 
-    def __init__(self, *, event_loop=None):
+    def __init__(self, *, event_loop=None, timeout=None):
         """Initialize the future.
 
         The optional event_loop argument allows to explicitly set the event
@@ -66,6 +67,10 @@ class Future:
         else:
             self._event_loop = event_loop
         self._callbacks = []
+
+        if timeout is not None:
+            self._timeout_handle = self._event_loop.call_later(
+                timeout, self.cancel)
 
     def __repr__(self):
         res = self.__class__.__name__
@@ -105,9 +110,15 @@ class Future:
         The callbacks are scheduled to be called as soon as possible. Also
         clears the callback list.
         """
+        # Cancel timeout handle
+        if self._timeout_handle is not None:
+            self._timeout_handle.cancel()
+            self._timeout_handle = None
+
         callbacks = self._callbacks[:]
         if not callbacks:
             return
+
         self._callbacks[:] = []
         for callback in callbacks:
             self._event_loop.call_soon(callback, self)

@@ -122,6 +122,39 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertTrue(t.done())
         self.assertFalse(t.cancel())
 
+    def test_future_timeout(self):
+        @tasks.coroutine
+        def coro():
+            yield from tasks.sleep(10.0)
+            return 12
+
+        t = tasks.Task(coro(), timeout=0.1)
+
+        self.assertRaises(
+            futures.CancelledError,
+            self.event_loop.run_until_complete, t)
+        self.assertTrue(t.done())
+        self.assertFalse(t.cancel())
+
+    def test_future_timeout_catch(self):
+        @tasks.coroutine
+        def coro():
+            yield from tasks.sleep(10.0)
+            return 12
+
+        err = None
+
+        @tasks.coroutine
+        def coro2():
+            nonlocal err
+            try:
+                yield from tasks.Task(coro(), timeout=0.1)
+            except futures.CancelledError as exc:
+                err = exc
+
+        self.event_loop.run_until_complete(tasks.Task(coro2()))
+        self.assertIsInstance(err, futures.CancelledError)
+
     def test_cancel_in_coro(self):
         @tasks.coroutine
         def task():

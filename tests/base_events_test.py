@@ -11,6 +11,7 @@ from tulip import base_events
 from tulip import events
 from tulip import futures
 from tulip import protocols
+from tulip import tasks
 from tulip import test_utils
 
 
@@ -265,7 +266,8 @@ class BaseEventLoopTests(test_utils.LogTrackingTestCase):
 
         self.event_loop.getaddrinfo = getaddrinfo
 
-        task = self.event_loop.create_connection(MyProto, 'xkcd.com', 80)
+        task = tasks.Task(
+            self.event_loop.create_connection(MyProto, 'xkcd.com', 80))
         task._step()
         exc = task.exception()
         self.assertEqual("Multiple exceptions: err1, err2", str(exc))

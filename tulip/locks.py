@@ -94,11 +94,7 @@ class Lock:
             self._locked = True
             return True
 
-        fut = futures.Future(event_loop=self._event_loop)
-        if timeout is not None:
-            handle = self._event_loop.call_later(timeout, fut.cancel)
-        else:
-            handle = None
+        fut = futures.Future(event_loop=self._event_loop, timeout=timeout)
 
         self._waiters.append(fut)
         try:
@@ -109,9 +105,6 @@ class Lock:
         else:
             f = self._waiters.popleft()
             assert f is fut
-
-        if handle is not None:
-            handle.cancel()
 
         self._locked = True
         return True
@@ -209,11 +202,7 @@ class EventWaiter:
         if self._value:
             return True
 
-        fut = futures.Future(event_loop=self._event_loop)
-        if timeout is not None:
-            handle = self._event_loop.call_later(timeout, fut.cancel)
-        else:
-            handle = None
+        fut = futures.Future(event_loop=self._event_loop, timeout=timeout)
 
         self._waiters.append(fut)
         try:
@@ -224,9 +213,6 @@ class EventWaiter:
         else:
             f = self._waiters.popleft()
             assert f is fut
-
-        if handle is not None:
-            handle.cancel()
 
         return True
 
@@ -267,11 +253,7 @@ class Condition(Lock):
 
         self.release()
 
-        fut = futures.Future(event_loop=self._event_loop)
-        if timeout is not None:
-            handle = self._event_loop.call_later(timeout, fut.cancel)
-        else:
-            handle = None
+        fut = futures.Future(event_loop=self._event_loop, timeout=timeout)
 
         self._condition_waiters.append(fut)
         try:
@@ -284,9 +266,6 @@ class Condition(Lock):
             assert fut is f
         finally:
             yield from self.acquire()
-
-        if handle is not None:
-            handle.cancel()
 
         return True
 
@@ -406,11 +385,7 @@ class Semaphore:
                 self._locked = True
             return True
 
-        fut = futures.Future(event_loop=self._event_loop)
-        if timeout is not None:
-            handle = self._event_loop.call_later(timeout, fut.cancel)
-        else:
-            handle = None
+        fut = futures.Future(event_loop=self._event_loop, timeout=timeout)
 
         self._waiters.append(fut)
         try:
@@ -421,9 +396,6 @@ class Semaphore:
         else:
             f = self._waiters.popleft()
             assert f is fut
-
-        if handle is not None:
-            handle.cancel()
 
         self._value -= 1
         if self._value == 0:

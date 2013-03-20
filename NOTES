@@ -8,7 +8,9 @@ Notes from PyCon 2013 sprints
 - Adam Sah suggests that there might be a need for scheduling
   (especially when multiple frameworks share an event loop).  He
   points to lottery scheduling but also mentions that's just one of
-  the options.
+  the options.  However, after posting on python-tulip, it appears
+  none of the other frameworks have scheduling, and nobody seems to
+  miss it.
 
 - Feedback from Bram Cohen (Bittorrent creator) about UDP.  He doesn't
   think connected UDP is worth supporting, it doesn't do anything

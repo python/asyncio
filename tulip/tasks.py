@@ -10,7 +10,6 @@ import inspect
 import logging
 import time
 
-from . import events
 from . import futures
 
 
@@ -46,9 +45,9 @@ def task(func):
 class Task(futures.Future):
     """A coroutine wrapped in a Future."""
 
-    def __init__(self, coro, event_loop=None):
+    def __init__(self, coro, event_loop=None, timeout=None):
         assert inspect.isgenerator(coro)  # Must be a coroutine *object*.
-        super().__init__(event_loop=event_loop)  # Sets self._event_loop.
+        super().__init__(event_loop=event_loop, timeout=timeout)
         self._coro = coro
         self._must_cancel = False
         self._event_loop.call_soon(self._step)
@@ -202,13 +201,8 @@ def _wait(fs, timeout=None, return_when=ALL_COMPLETED):
         return_when == FIRST_EXCEPTION and errors):
         return done, pending
 
-    bail = futures.Future()  # Will always be cancelled eventually.
-    timeout_handle = None
-    debugstuff = locals()
-
-    if timeout is not None:
-        loop = events.get_event_loop()
-        timeout_handle = loop.call_later(timeout, bail.cancel)
+    # Will always be cancelled eventually.
+    bail = futures.Future(timeout=timeout)
 
     def _on_completion(f):
         pending.remove(f)
@@ -230,8 +224,6 @@ def _wait(fs, timeout=None, return_when=ALL_COMPLETED):
     finally:
         for f in pending:
             f.remove_done_callback(_on_completion)
-        if timeout_handle is not None:
-            timeout_handle.cancel()
 
     really_done = set(f for f in pending if f.done())
     if really_done:

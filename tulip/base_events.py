@@ -239,7 +239,7 @@ class BaseEventLoop(events.AbstractEventLoop):
     def getnameinfo(self, sockaddr, flags=0):
         return self.run_in_executor(None, socket.getnameinfo, sockaddr, flags)
 
-    @tasks.task
+    @tasks.coroutine
     def create_connection(self, protocol_factory, host=None, port=None, *,
                           ssl=False, family=0, proto=0, flags=0, sock=None):
         """XXX"""
@@ -298,7 +298,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         yield from waiter
         return transport, protocol
 
-    @tasks.task
+    @tasks.coroutine
     def create_datagram_connection(self, protocol_factory,
                                    host=None, port=None, *,
                                    family=socket.AF_INET, proto=0, flags=0):

@@ -472,7 +472,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertEqual(1, m_logging.warn.call_args[0][1])
 
     def test_step_result_future(self):
-        """If coroutine returns future, task waits on this future."""
+        # If coroutine returns future, task waits on this future.
         self.suppress_log_warnings()
 
         class Fut(futures.Future):

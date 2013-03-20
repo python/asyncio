@@ -99,7 +99,11 @@ class EventLoopTestsMixin:
             def log_message(self, format, *args):
                 pass
 
-        class SSLWSGIServer(WSGIServer):
+        class SilentWSGIServer(WSGIServer):
+            def handle_error(self, request, client_address):
+                pass
+
+        class SSLWSGIServer(SilentWSGIServer):
             def finish_request(self, request, client_address):
                 here = os.path.dirname(__file__)
                 keyfile = os.path.join(here, 'sample.key')
@@ -123,7 +127,7 @@ class EventLoopTestsMixin:
 
         # Run the test WSGI server in a separate thread in order not to
         # interfere with event handling in the main thread
-        server_class = SSLWSGIServer if use_ssl else WSGIServer
+        server_class = SSLWSGIServer if use_ssl else SilentWSGIServer
         httpd = make_server('127.0.0.1', 0, app,
                             server_class, SilentWSGIRequestHandler)
         server_thread = threading.Thread(target=httpd.serve_forever)

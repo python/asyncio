@@ -38,8 +38,7 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         stream = streams.StreamReader()
         stream.feed_data(self.DATA)
 
-        read_task = tasks.Task(stream.read(0))
-        data = self.event_loop.run_until_complete(read_task)
+        data = self.event_loop.run_until_complete(stream.read(0))
         self.assertEqual(b'', data)
         self.assertEqual(len(self.DATA), stream.byte_count)
 
@@ -62,8 +61,7 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         stream.feed_data(b'line1')
         stream.feed_data(b'line2')
 
-        read_task = tasks.Task(stream.read(5))
-        data = self.event_loop.run_until_complete(read_task)
+        data = self.event_loop.run_until_complete(stream.read(5))
 
         self.assertEqual(b'line1', data)
         self.assertEqual(5, stream.byte_count)
@@ -101,13 +99,13 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         stream = streams.StreamReader()
         stream.feed_data(b'line\n')
 
-        data = self.event_loop.run_until_complete(tasks.Task(stream.read(2)))
+        data = self.event_loop.run_until_complete(stream.read(2))
         self.assertEqual(b'li', data)
 
         stream.set_exception(ValueError())
         self.assertRaises(
             ValueError,
-            self.event_loop.run_until_complete, tasks.Task(stream.read(2)))
+            self.event_loop.run_until_complete, stream.read(2))
 
     def test_readline(self):
         # Read one line.
@@ -132,9 +130,8 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         stream.feed_data(b'li')
         stream.feed_data(b'ne1\nline2\n')
 
-        read_task = tasks.Task(stream.readline())
         self.assertRaises(
-            ValueError, self.event_loop.run_until_complete, read_task)
+            ValueError, self.event_loop.run_until_complete, stream.readline())
         self.assertEqual([b'line2\n'], list(stream.buffer))
 
         stream = streams.StreamReader(3)
@@ -142,9 +139,8 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         stream.feed_data(b'ne1')
         stream.feed_data(b'li')
 
-        read_task = tasks.Task(stream.readline())
         self.assertRaises(
-            ValueError, self.event_loop.run_until_complete, read_task)
+            ValueError, self.event_loop.run_until_complete, stream.readline())
         self.assertEqual([b'li'], list(stream.buffer))
         self.assertEqual(2, stream.byte_count)
 
@@ -160,9 +156,8 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
             stream.feed_eof()
         self.event_loop.call_soon(cb)
 
-        read_task = tasks.Task(stream.readline())
         self.assertRaises(
-            ValueError, self.event_loop.run_until_complete, read_task)
+            ValueError, self.event_loop.run_until_complete, stream.readline())
         self.assertEqual([b'chunk3\n'], list(stream.buffer))
         self.assertEqual(7, stream.byte_count)
 
@@ -171,8 +166,7 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         stream.feed_data(self.DATA[:6])
         stream.feed_data(self.DATA[6:])
 
-        read_task = tasks.Task(stream.readline())
-        line = self.event_loop.run_until_complete(read_task)
+        line = self.event_loop.run_until_complete(stream.readline())
 
         self.assertEqual(b'line1\n', line)
         self.assertEqual(len(self.DATA) - len(b'line1\n'), stream.byte_count)
@@ -182,29 +176,23 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         stream.feed_data(b'some data')
         stream.feed_eof()
 
-        read_task = tasks.Task(stream.readline())
-        line = self.event_loop.run_until_complete(read_task)
-
+        line = self.event_loop.run_until_complete(stream.readline())
         self.assertEqual(b'some data', line)
 
     def test_readline_empty_eof(self):
         stream = streams.StreamReader()
         stream.feed_eof()
 
-        read_task = tasks.Task(stream.readline())
-        line = self.event_loop.run_until_complete(read_task)
-
+        line = self.event_loop.run_until_complete(stream.readline())
         self.assertEqual(b'', line)
 
     def test_readline_read_byte_count(self):
         stream = streams.StreamReader()
         stream.feed_data(self.DATA)
 
-        read_task = tasks.Task(stream.readline())
-        self.event_loop.run_until_complete(read_task)
+        self.event_loop.run_until_complete(stream.readline())
 
-        read_task = tasks.Task(stream.read(7))
-        data = self.event_loop.run_until_complete(read_task)
+        data = self.event_loop.run_until_complete(stream.read(7))
 
         self.assertEqual(b'line2\nl', data)
         self.assertEqual(
@@ -215,27 +203,24 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         stream = streams.StreamReader()
         stream.feed_data(b'line\n')
 
-        data = self.event_loop.run_until_complete(
-            tasks.Task(stream.readline()))
+        data = self.event_loop.run_until_complete(stream.readline())
         self.assertEqual(b'line\n', data)
 
         stream.set_exception(ValueError())
         self.assertRaises(
             ValueError,
-            self.event_loop.run_until_complete, tasks.Task(stream.readline()))
+            self.event_loop.run_until_complete, stream.readline())
 
     def test_readexactly_zero_or_less(self):
         # Read exact number of bytes (zero or less).
         stream = streams.StreamReader()
         stream.feed_data(self.DATA)
 
-        read_task = tasks.Task(stream.readexactly(0))
-        data = self.event_loop.run_until_complete(read_task)
+        data = self.event_loop.run_until_complete(stream.readexactly(0))
         self.assertEqual(b'', data)
         self.assertEqual(len(self.DATA), stream.byte_count)
 
-        read_task = tasks.Task(stream.readexactly(-1))
-        data = self.event_loop.run_until_complete(read_task)
+        data = self.event_loop.run_until_complete(stream.readexactly(-1))
         self.assertEqual(b'', data)
         self.assertEqual(len(self.DATA), stream.byte_count)
 
@@ -275,15 +260,14 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         stream = streams.StreamReader()
         stream.feed_data(b'line\n')
 
-        data = self.event_loop.run_until_complete(
-            tasks.Task(stream.readexactly(2)))
+        data = self.event_loop.run_until_complete(stream.readexactly(2))
         self.assertEqual(b'li', data)
 
         stream.set_exception(ValueError())
         self.assertRaises(
             ValueError,
             self.event_loop.run_until_complete,
-            tasks.Task(stream.readexactly(2)))
+            stream.readexactly(2))
 
     def test_exception(self):
         stream = streams.StreamReader()
@@ -306,7 +290,7 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         t1 = tasks.Task(stream.readline())
         t2 = tasks.Task(set_err())
 
-        self.event_loop.run_until_complete(tasks.Task(tasks.wait([t1, t2])))
+        self.event_loop.run_until_complete(tasks.wait([t1, t2]))
 
         self.assertRaises(ValueError, t1.result)
 

@@ -30,22 +30,19 @@ class HttpStreamReaderTests(LogTrackingTestCase):
         self.stream.feed_data(b'get /path HTTP/1.1\r\n')
         self.assertEqual(
             ('GET', '/path', (1, 1)),
-            self.loop.run_until_complete(
-                tulip.Task(self.stream.read_request_line())))
+            self.loop.run_until_complete(self.stream.read_request_line()))
 
     def test_request_line_two_slashes(self):
         self.stream.feed_data(b'get //path HTTP/1.1\r\n')
         self.assertEqual(
             ('GET', '//path', (1, 1)),
-            self.loop.run_until_complete(
-                tulip.Task(self.stream.read_request_line())))
+            self.loop.run_until_complete(self.stream.read_request_line()))
 
     def test_request_line_non_ascii(self):
         self.stream.feed_data(b'get /path\xd0\xb0 HTTP/1.1\r\n')
 
         with self.assertRaises(http.client.BadStatusLine) as cm:
-            self.loop.run_until_complete(
-                tulip.Task(self.stream.read_request_line()))
+            self.loop.run_until_complete(self.stream.read_request_line())
 
         self.assertEqual(
             b'get /path\xd0\xb0 HTTP/1.1\r\n', cm.exception.args[0])
@@ -55,49 +52,47 @@ class HttpStreamReaderTests(LogTrackingTestCase):
         self.assertRaises(
             http.client.BadStatusLine,
             self.loop.run_until_complete,
-            tulip.Task(self.stream.read_request_line()))
+            self.stream.read_request_line())
 
     def test_request_line_bad_method(self):
         self.stream.feed_data(b'!12%()+=~$ /get HTTP/1.1\r\n')
         self.assertRaises(
             http.client.BadStatusLine,
             self.loop.run_until_complete,
-            tulip.Task(self.stream.read_request_line()))
+            self.stream.read_request_line())
 
     def test_request_line_bad_version(self):
         self.stream.feed_data(b'GET //get HT/11\r\n')
         self.assertRaises(
             http.client.BadStatusLine,
             self.loop.run_until_complete,
-            tulip.Task(self.stream.read_request_line()))
+            self.stream.read_request_line())
 
     def test_response_status_bad_status_line(self):
         self.stream.feed_data(b'\r\n')
         self.assertRaises(
             http.client.BadStatusLine,
             self.loop.run_until_complete,
-            tulip.Task(self.stream.read_response_status()))
+            self.stream.read_response_status())
 
     def test_response_status_bad_status_line_eof(self):
         self.stream.feed_eof()
         self.assertRaises(
             http.client.BadStatusLine,
             self.loop.run_until_complete,
-            tulip.Task(self.stream.read_response_status()))
+            self.stream.read_response_status())
 
     def test_response_status_bad_status_non_ascii(self):
         self.stream.feed_data(b'HTTP/1.1 200 \xd0\xb0\r\n')
         with self.assertRaises(http.client.BadStatusLine) as cm:
-            self.loop.run_until_complete(
-                tulip.Task(self.stream.read_response_status()))
+            self.loop.run_until_complete(self.stream.read_response_status())
 
         self.assertEqual(b'HTTP/1.1 200 \xd0\xb0\r\n', cm.exception.args[0])
 
     def test_response_status_bad_version(self):
         self.stream.feed_data(b'HT/11 200 Ok\r\n')
         with self.assertRaises(http.client.BadStatusLine) as cm:
-            self.loop.run_until_complete(
-                tulip.Task(self.stream.read_response_status()))
+            self.loop.run_until_complete(self.stream.read_response_status())
 
         self.assertEqual('HT/11 200 Ok', cm.exception.args[0])
 
@@ -105,7 +100,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
         self.stream.feed_data(b'HTTP/1.1 200\r\n')
 
         v, s, r = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_response_status()))
+            self.stream.read_response_status())
         self.assertEqual(v, (1, 1))
         self.assertEqual(s, 200)
         self.assertEqual(r, '')
@@ -114,7 +109,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
         self.stream.feed_data(b'HTT/1\r\n')
         with self.assertRaises(http.client.BadStatusLine) as cm:
             self.loop.run_until_complete(
-                tulip.Task(self.stream.read_response_status()))
+                self.stream.read_response_status())
 
         self.assertIn('HTT/1', str(cm.exception))
 
@@ -122,7 +117,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
         self.stream.feed_data(b'HTTP/1.1 99 test\r\n')
         with self.assertRaises(http.client.BadStatusLine) as cm:
             self.loop.run_until_complete(
-                tulip.Task(self.stream.read_response_status()))
+                self.stream.read_response_status())
 
         self.assertIn('HTTP/1.1 99 test', str(cm.exception))
 
@@ -130,7 +125,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
         self.stream.feed_data(b'HTTP/1.1 9999 test\r\n')
         with self.assertRaises(http.client.BadStatusLine) as cm:
             self.loop.run_until_complete(
-                tulip.Task(self.stream.read_response_status()))
+                self.stream.read_response_status())
 
         self.assertIn('HTTP/1.1 9999 test', str(cm.exception))
 
@@ -138,7 +133,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
         self.stream.feed_data(b'HTTP/1.1 ttt test\r\n')
         with self.assertRaises(http.client.BadStatusLine) as cm:
             self.loop.run_until_complete(
-                tulip.Task(self.stream.read_response_status()))
+                self.stream.read_response_status())
 
         self.assertIn('HTTP/1.1 ttt test', str(cm.exception))
 
@@ -148,8 +143,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
                               b'test2: data\r\n'
                               b'\r\n')
 
-        headers = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_headers()))
+        headers = self.loop.run_until_complete(self.stream.read_headers())
         self.assertEqual(headers,
                          [('TEST', 'line\r\n continue'), ('TEST2', 'data')])
 
@@ -163,14 +157,13 @@ class HttpStreamReaderTests(LogTrackingTestCase):
         self.assertRaises(
             http.client.LineTooLong,
             self.loop.run_until_complete,
-            tulip.Task(self.stream.read_headers()))
+            self.stream.read_headers())
 
     def test_read_headers_invalid_header(self):
         self.stream.feed_data(b'test line\r\n')
 
         with self.assertRaises(ValueError) as cm:
-            self.loop.run_until_complete(
-                tulip.Task(self.stream.read_headers()))
+            self.loop.run_until_complete(self.stream.read_headers())
 
         self.assertIn("Invalid header b'test line'", str(cm.exception))
 
@@ -178,8 +171,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
         self.stream.feed_data(b'test[]: line\r\n')
 
         with self.assertRaises(ValueError) as cm:
-            self.loop.run_until_complete(
-                tulip.Task(self.stream.read_headers()))
+            self.loop.run_until_complete(self.stream.read_headers())
 
         self.assertIn("Invalid header name b'TEST[]'", str(cm.exception))
 
@@ -188,8 +180,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
         self.stream.feed_data(b'test: line data data\r\ndata\r\n')
 
         with self.assertRaises(http.client.LineTooLong) as cm:
-            self.loop.run_until_complete(
-                tulip.Task(self.stream.read_headers()))
+            self.loop.run_until_complete(self.stream.read_headers())
 
         self.assertIn("limit request headers fields size", str(cm.exception))
 
@@ -198,8 +189,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
         self.stream.feed_data(b'test: line\r\n test\r\n')
 
         with self.assertRaises(http.client.LineTooLong) as cm:
-            self.loop.run_until_complete(
-                tulip.Task(self.stream.read_headers()))
+            self.loop.run_until_complete(self.stream.read_headers())
 
         self.assertIn("limit request headers fields size", str(cm.exception))
 
@@ -207,8 +197,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
         self.stream.feed_data(
             b'Host: example.com\r\nConnection: close\r\n\r\n')
 
-        msg = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_message()))
+        msg = self.loop.run_until_complete(self.stream.read_message())
         self.assertTrue(msg.should_close)
 
     def test_read_message_should_close_http11(self):
@@ -216,7 +205,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
             b'Host: example.com\r\n\r\n')
 
         msg = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_message(version=(1, 1))))
+            self.stream.read_message(version=(1, 1)))
         self.assertFalse(msg.should_close)
 
     def test_read_message_should_close_http10(self):
@@ -224,15 +213,14 @@ class HttpStreamReaderTests(LogTrackingTestCase):
             b'Host: example.com\r\n\r\n')
 
         msg = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_message(version=(1, 0))))
+            self.stream.read_message(version=(1, 0)))
         self.assertTrue(msg.should_close)
 
     def test_read_message_should_close_keep_alive(self):
         self.stream.feed_data(
             b'Host: example.com\r\nConnection: keep-alive\r\n\r\n')
 
-        msg = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_message()))
+        msg = self.loop.run_until_complete(self.stream.read_message())
         self.assertFalse(msg.should_close)
 
     def test_read_message_content_length_broken(self):
@@ -242,7 +230,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
         self.assertRaises(
             http.client.HTTPException,
             self.loop.run_until_complete,
-            tulip.Task(self.stream.read_message()))
+            self.stream.read_message())
 
     def test_read_message_content_length_wrong(self):
         self.stream.feed_data(
@@ -251,25 +239,24 @@ class HttpStreamReaderTests(LogTrackingTestCase):
         self.assertRaises(
             http.client.HTTPException,
             self.loop.run_until_complete,
-            tulip.Task(self.stream.read_message()))
+            self.stream.read_message())
 
     def test_read_message_content_length(self):
         self.stream.feed_data(
             b'Host: example.com\r\nContent-Length: 2\r\n\r\n12')
 
-        msg = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_message()))
+        msg = self.loop.run_until_complete(self.stream.read_message())
 
-        payload = self.loop.run_until_complete(tulip.Task(msg.payload.read()))
+        payload = self.loop.run_until_complete(msg.payload.read())
         self.assertEqual(b'12', payload)
 
     def test_read_message_content_length_no_val(self):
         self.stream.feed_data(b'Host: example.com\r\n\r\n12')
 
         msg = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_message(readall=False)))
+            self.stream.read_message(readall=False))
 
-        payload = self.loop.run_until_complete(tulip.Task(msg.payload.read()))
+        payload = self.loop.run_until_complete(msg.payload.read())
         self.assertEqual(b'', payload)
 
     _comp = zlib.compressobj(wbits=-zlib.MAX_WBITS)
@@ -282,9 +269,8 @@ class HttpStreamReaderTests(LogTrackingTestCase):
              len(self._COMPRESSED)).encode())
         self.stream.feed_data(self._COMPRESSED)
 
-        msg = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_message()))
-        payload = self.loop.run_until_complete(tulip.Task(msg.payload.read()))
+        msg = self.loop.run_until_complete(self.stream.read_message())
+        payload = self.loop.run_until_complete(msg.payload.read())
         self.assertEqual(b'data', payload)
 
     def test_read_message_deflate_disabled(self):
@@ -295,8 +281,8 @@ class HttpStreamReaderTests(LogTrackingTestCase):
         self.stream.feed_data(self._COMPRESSED)
 
         msg = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_message(compression=False)))
-        payload = self.loop.run_until_complete(tulip.Task(msg.payload.read()))
+            self.stream.read_message(compression=False))
+        payload = self.loop.run_until_complete(msg.payload.read())
         self.assertEqual(self._COMPRESSED, payload)
 
     def test_read_message_deflate_unknown(self):
@@ -306,18 +292,17 @@ class HttpStreamReaderTests(LogTrackingTestCase):
         self.stream.feed_data(self._COMPRESSED)
 
         msg = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_message(compression=False)))
-        payload = self.loop.run_until_complete(tulip.Task(msg.payload.read()))
+            self.stream.read_message(compression=False))
+        payload = self.loop.run_until_complete(msg.payload.read())
         self.assertEqual(self._COMPRESSED, payload)
 
     def test_read_message_websocket(self):
         self.stream.feed_data(
             b'Host: example.com\r\nSec-Websocket-Key1: 13\r\n\r\n1234567890')
 
-        msg = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_message()))
+        msg = self.loop.run_until_complete(self.stream.read_message())
 
-        payload = self.loop.run_until_complete(tulip.Task(msg.payload.read()))
+        payload = self.loop.run_until_complete(msg.payload.read())
         self.assertEqual(b'12345678', payload)
 
     def test_read_message_chunked(self):
@@ -326,10 +311,9 @@ class HttpStreamReaderTests(LogTrackingTestCase):
         self.stream.feed_data(
             b'4;test\r\ndata\r\n4\r\nline\r\n0\r\ntest\r\n\r\n')
 
-        msg = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_message()))
+        msg = self.loop.run_until_complete(self.stream.read_message())
 
-        payload = self.loop.run_until_complete(tulip.Task(msg.payload.read()))
+        payload = self.loop.run_until_complete(msg.payload.read())
         self.assertEqual(b'dataline', payload)
 
     def test_read_message_readall_eof(self):
@@ -340,9 +324,9 @@ class HttpStreamReaderTests(LogTrackingTestCase):
         self.stream.feed_eof()
 
         msg = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_message(readall=True)))
+            self.stream.read_message(readall=True))
 
-        payload = self.loop.run_until_complete(tulip.Task(msg.payload.read()))
+        payload = self.loop.run_until_complete(msg.payload.read())
         self.assertEqual(b'dataline', payload)
 
     def test_read_message_payload(self):
@@ -353,9 +337,9 @@ class HttpStreamReaderTests(LogTrackingTestCase):
         self.stream.feed_data(b'data')
 
         msg = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_message(readall=True)))
+            self.stream.read_message(readall=True))
 
-        data = self.loop.run_until_complete(tulip.Task(msg.payload.read()))
+        data = self.loop.run_until_complete(msg.payload.read())
         self.assertEqual(b'datadata', data)
 
     def test_read_message_payload_eof(self):
@@ -366,11 +350,11 @@ class HttpStreamReaderTests(LogTrackingTestCase):
         self.stream.feed_eof()
 
         msg = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_message(readall=True)))
+            self.stream.read_message(readall=True))
 
         self.assertRaises(
             http.client.IncompleteRead,
-            self.loop.run_until_complete, tulip.Task(msg.payload.read()))
+            self.loop.run_until_complete, msg.payload.read())
 
     def test_read_message_length_payload_zero(self):
         self.stream.feed_data(
@@ -378,10 +362,8 @@ class HttpStreamReaderTests(LogTrackingTestCase):
             b'Content-Length: 0\r\n\r\n')
         self.stream.feed_data(b'data')
 
-        msg = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_message()))
-
-        data = self.loop.run_until_complete(tulip.Task(msg.payload.read()))
+        msg = self.loop.run_until_complete(self.stream.read_message())
+        data = self.loop.run_until_complete(msg.payload.read())
         self.assertEqual(b'', data)
 
     def test_read_message_length_payload_incomplete(self):
@@ -389,8 +371,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
             b'Host: example.com\r\n'
             b'Content-Length: 8\r\n\r\n')
 
-        msg = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_message()))
+        msg = self.loop.run_until_complete(self.stream.read_message())
 
         def coro():
             self.stream.feed_data(b'data')
@@ -399,20 +380,20 @@ class HttpStreamReaderTests(LogTrackingTestCase):
 
         self.assertRaises(
             http.client.IncompleteRead,
-            self.loop.run_until_complete, tulip.Task(coro()))
+            self.loop.run_until_complete, coro())
 
     def test_read_message_eof_payload(self):
         self.stream.feed_data(b'Host: example.com\r\n\r\n')
 
         msg = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_message(readall=True)))
+            self.stream.read_message(readall=True))
 
         def coro():
             self.stream.feed_data(b'data')
             self.stream.feed_eof()
             return (yield from msg.payload.read())
 
-        data = self.loop.run_until_complete(tulip.Task(coro()))
+        data = self.loop.run_until_complete(coro())
         self.assertEqual(b'data', data)
 
     def test_read_message_length_payload(self):
@@ -425,11 +406,11 @@ class HttpStreamReaderTests(LogTrackingTestCase):
         self.stream.feed_data(b'ne')
 
         msg = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_message(readall=True)))
+            self.stream.read_message(readall=True))
 
         self.assertIsInstance(msg.payload, tulip.StreamReader)
 
-        data = self.loop.run_until_complete(tulip.Task(msg.payload.read()))
+        data = self.loop.run_until_complete(msg.payload.read())
         self.assertEqual(b'data', data)
         self.assertEqual(b'line', b''.join(self.stream.buffer))
 
@@ -438,8 +419,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
             b'Host: example.com\r\n'
             b'Content-Length: 4\r\n\r\n')
 
-        msg = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_message()))
+        msg = self.loop.run_until_complete(self.stream.read_message())
 
         def coro():
             self.stream.feed_data(b'da')
@@ -448,7 +428,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
             self.stream.feed_data(b'ne')
             return (yield from msg.payload.read())
 
-        data = self.loop.run_until_complete(tulip.Task(coro()))
+        data = self.loop.run_until_complete(coro())
         self.assertEqual(b'data', data)
         self.assertEqual(b'line', b''.join(self.stream.buffer))
 
@@ -468,7 +448,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
         t1 = tulip.Task(stream.read())
         t2 = tulip.Task(eof())
 
-        self.loop.run_until_complete(tulip.Task(tulip.wait([t1, t2])))
+        self.loop.run_until_complete(tulip.wait([t1, t2]))
         self.assertRaises(http.client.IncompleteRead, t1.result)
         self.assertIsNone(self.stream._parser)
 
@@ -483,13 +463,13 @@ class HttpStreamReaderTests(LogTrackingTestCase):
             ('Content-Length: %s\r\n\r\n' % len(data)).encode())
 
         msg = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_message(readall=True)))
+            self.stream.read_message(readall=True))
 
         def coro():
             self.stream.feed_data(data)
             return (yield from msg.payload.read())
 
-        data = self.loop.run_until_complete(tulip.Task(coro()))
+        data = self.loop.run_until_complete(coro())
         self.assertEqual(b'data', data)
 
     def test_read_message_chunked_payload(self):
@@ -497,15 +477,14 @@ class HttpStreamReaderTests(LogTrackingTestCase):
             b'Host: example.com\r\n'
             b'Transfer-Encoding: chunked\r\n\r\n')
 
-        msg = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_message()))
+        msg = self.loop.run_until_complete(self.stream.read_message())
 
         def coro():
             self.stream.feed_data(
                 b'4\r\ndata\r\n4\r\nline\r\n0\r\ntest\r\n\r\n')
             return (yield from msg.payload.read())
 
-        data = self.loop.run_until_complete(tulip.Task(coro()))
+        data = self.loop.run_until_complete(coro())
         self.assertEqual(b'dataline', data)
 
     def test_read_message_chunked_payload_chunks(self):
@@ -513,8 +492,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
             b'Host: example.com\r\n'
             b'Transfer-Encoding: chunked\r\n\r\n')
 
-        msg = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_message()))
+        msg = self.loop.run_until_complete(self.stream.read_message())
 
         def coro():
             self.stream.feed_data(b'4\r\ndata\r')
@@ -525,7 +503,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
             self.stream.feed_data(b'test\r\n\r\n')
             return (yield from msg.payload.read())
 
-        data = self.loop.run_until_complete(tulip.Task(coro()))
+        data = self.loop.run_until_complete(coro())
         self.assertEqual(b'dataline', data)
 
     def test_read_message_chunked_payload_incomplete(self):
@@ -533,8 +511,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
             b'Host: example.com\r\n'
             b'Transfer-Encoding: chunked\r\n\r\n')
 
-        msg = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_message()))
+        msg = self.loop.run_until_complete(self.stream.read_message())
 
         def coro():
             self.stream.feed_data(b'4\r\ndata\r\n')
@@ -543,22 +520,21 @@ class HttpStreamReaderTests(LogTrackingTestCase):
 
         self.assertRaises(
             http.client.IncompleteRead,
-            self.loop.run_until_complete, tulip.Task(coro()))
+            self.loop.run_until_complete, coro())
 
     def test_read_message_chunked_payload_extension(self):
         self.stream.feed_data(
             b'Host: example.com\r\n'
             b'Transfer-Encoding: chunked\r\n\r\n')
 
-        msg = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_message()))
+        msg = self.loop.run_until_complete(self.stream.read_message())
 
         def coro():
             self.stream.feed_data(
                 b'4;test\r\ndata\r\n4\r\nline\r\n0\r\ntest\r\n\r\n')
             return (yield from msg.payload.read())
 
-        data = self.loop.run_until_complete(tulip.Task(coro()))
+        data = self.loop.run_until_complete(coro())
         self.assertEqual(b'dataline', data)
 
     def test_read_message_chunked_payload_size_error(self):
@@ -566,8 +542,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
             b'Host: example.com\r\n'
             b'Transfer-Encoding: chunked\r\n\r\n')
 
-        msg = self.loop.run_until_complete(
-            tulip.Task(self.stream.read_message()))
+        msg = self.loop.run_until_complete(self.stream.read_message())
 
         def coro():
             self.stream.feed_data(b'blah\r\n')
@@ -575,7 +550,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
 
         self.assertRaises(
             http.client.IncompleteRead,
-            self.loop.run_until_complete, tulip.Task(coro()))
+            self.loop.run_until_complete, coro())
 
     def test_deflate_stream_set_exception(self):
         stream = tulip.StreamReader()

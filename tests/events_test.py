@@ -555,8 +555,8 @@ class EventLoopTestsMixin:
     def test_create_ssl_connection(self):
         with self.run_test_server(use_ssl=True) as httpsd:
             host, port = httpsd.socket.getsockname()
-            f = tasks.Task(self.event_loop.create_connection(
-                MyProto, host, port, ssl=True))
+            f = self.event_loop.create_connection(
+                MyProto, host, port, ssl=True)
             tr, pr = self.event_loop.run_until_complete(f)
             self.assertTrue(isinstance(tr, transports.Transport))
             self.assertTrue(isinstance(pr, protocols.Protocol))
@@ -568,34 +568,32 @@ class EventLoopTestsMixin:
 
     def test_create_connection_host_port_sock(self):
         self.suppress_log_errors()
-        fut = tasks.Task(self.event_loop.create_connection(
-            MyProto, 'xkcd.com', 80, sock=object()))
-        self.assertRaises(ValueError, self.event_loop.run_until_complete, fut)
+        coro = self.event_loop.create_connection(
+            MyProto, 'xkcd.com', 80, sock=object())
+        self.assertRaises(ValueError, self.event_loop.run_until_complete, coro)
 
     def test_create_connection_no_host_port_sock(self):
         self.suppress_log_errors()
-        fut = tasks.Task(self.event_loop.create_connection(MyProto))
-        self.assertRaises(ValueError, self.event_loop.run_until_complete, fut)
+        coro = self.event_loop.create_connection(MyProto)
+        self.assertRaises(ValueError, self.event_loop.run_until_complete, coro)
 
     def test_create_connection_no_getaddrinfo(self):
         self.suppress_log_errors()
         getaddrinfo = self.event_loop.getaddrinfo = unittest.mock.Mock()
         getaddrinfo.return_value = []
 
-        fut = tasks.Task(
-            self.event_loop.create_connection(MyProto, 'xkcd.com', 80))
+        coro = self.event_loop.create_connection(MyProto, 'xkcd.com', 80)
         self.assertRaises(
-            socket.error, self.event_loop.run_until_complete, fut)
+            socket.error, self.event_loop.run_until_complete, coro)
 
     def test_create_connection_connect_err(self):
         self.suppress_log_errors()
         self.event_loop.sock_connect = unittest.mock.Mock()
         self.event_loop.sock_connect.side_effect = socket.error
 
-        fut = tasks.Task(
-            self.event_loop.create_connection(MyProto, 'xkcd.com', 80))
+        coro = self.event_loop.create_connection(MyProto, 'xkcd.com', 80)
         self.assertRaises(
-            socket.error, self.event_loop.run_until_complete, fut)
+            socket.error, self.event_loop.run_until_complete, coro)
 
     def test_create_connection_mutiple_errors(self):
         self.suppress_log_errors()
@@ -608,10 +606,9 @@ class EventLoopTestsMixin:
         self.event_loop.sock_connect = unittest.mock.Mock()
         self.event_loop.sock_connect.side_effect = socket.error
 
-        fut = tasks.Task(
-            self.event_loop.create_connection(MyProto, 'xkcd.com', 80))
+        coro = self.event_loop.create_connection(MyProto, 'xkcd.com', 80)
         self.assertRaises(
-            socket.error, self.event_loop.run_until_complete, fut)
+            socket.error, self.event_loop.run_until_complete, coro)
 
     def test_start_serving(self):
         proto = None
@@ -728,9 +725,9 @@ class EventLoopTestsMixin:
         sock = self.event_loop.run_until_complete(f)
         host, port = sock.getsockname()
 
-        f = tasks.Task(self.event_loop.create_datagram_connection(
-            MyDatagramProto, host, port))
-        transport, protocol = self.event_loop.run_until_complete(f)
+        coro = self.event_loop.create_datagram_connection(
+            MyDatagramProto, host, port)
+        transport, protocol = self.event_loop.run_until_complete(coro)
 
         self.assertEqual('INITIALIZED', protocol.state)
         transport.sendto(b'xxx')
@@ -774,9 +771,8 @@ class EventLoopTestsMixin:
         sock = self.event_loop.run_until_complete(f)
         host, port = sock.getsockname()
 
-        f = tasks.Task(
-            self.event_loop.create_datagram_connection(MyDatagramProto))
-        transport, protocol = self.event_loop.run_until_complete(f)
+        coro = self.event_loop.create_datagram_connection(MyDatagramProto)
+        transport, protocol = self.event_loop.run_until_complete(coro)
 
         self.assertEqual('INITIALIZED', protocol.state)
         transport.sendto(b'xxx', (host, port))
@@ -808,20 +804,20 @@ class EventLoopTestsMixin:
         getaddrinfo = self.event_loop.getaddrinfo = unittest.mock.Mock()
         getaddrinfo.return_value = []
 
-        fut = tasks.Task(self.event_loop.create_datagram_connection(
-            protocols.DatagramProtocol, 'xkcd.com', 80))
+        coro = self.event_loop.create_datagram_connection(
+            protocols.DatagramProtocol, 'xkcd.com', 80)
         self.assertRaises(
-            socket.error, self.event_loop.run_until_complete, fut)
+            socket.error, self.event_loop.run_until_complete, coro)
 
     def test_create_datagram_connection_connect_err(self):
         self.suppress_log_errors()
         self.event_loop.sock_connect = unittest.mock.Mock()
         self.event_loop.sock_connect.side_effect = socket.error
 
-        fut = tasks.Task(self.event_loop.create_datagram_connection(
-            protocols.DatagramProtocol, 'xkcd.com', 80))
+        coro = self.event_loop.create_datagram_connection(
+            protocols.DatagramProtocol, 'xkcd.com', 80)
         self.assertRaises(
-            socket.error, self.event_loop.run_until_complete, fut)
+            socket.error, self.event_loop.run_until_complete, coro)
 
     @unittest.mock.patch('tulip.base_events.socket')
     def test_create_datagram_connection_sockopt_err(self, m_socket):
@@ -830,10 +826,10 @@ class EventLoopTestsMixin:
         m_socket.error = socket.error
         m_socket.socket.return_value.setsockopt.side_effect = socket.error
 
-        fut = tasks.Task(self.event_loop.create_datagram_connection(
-            protocols.DatagramProtocol))
+        coro = self.event_loop.create_datagram_connection(
+            protocols.DatagramProtocol)
         self.assertRaises(
-            socket.error, self.event_loop.run_until_complete, fut)
+            socket.error, self.event_loop.run_until_complete, coro)
         self.assertTrue(
             m_socket.socket.return_value.close.called)
 

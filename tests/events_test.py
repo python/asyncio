@@ -142,6 +142,38 @@ class EventLoopTestsMixin:
     def test_run(self):
         self.event_loop.run()  # Returns immediately.
 
+    def test_run_nesting(self):
+        err = None
+
+        @tasks.coroutine
+        def coro():
+            nonlocal err
+            yield from []
+            try:
+                self.event_loop.run_until_complete(
+                    tasks.sleep(0.1))
+            except Exception as exc:
+                err = exc
+
+        self.event_loop.run_until_complete(tasks.Task(coro()))
+        self.assertIsInstance(err, RuntimeError)
+
+    def test_run_once_nesting(self):
+        err = None
+
+        @tasks.coroutine
+        def coro():
+            nonlocal err
+            yield from []
+            tasks.sleep(0.1)
+            try:
+                self.event_loop.run_once()
+            except Exception as exc:
+                err = exc
+
+        self.event_loop.run_until_complete(tasks.Task(coro()))
+        self.assertIsInstance(err, RuntimeError)
+
     def test_call_later(self):
         results = []
 

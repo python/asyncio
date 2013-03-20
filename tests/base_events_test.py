@@ -186,7 +186,7 @@ class BaseEventLoopTests(test_utils.LogTrackingTestCase):
         self.assertEqual((1.0,), self.event_loop._selector.select.call_args[0])
 
     def test__run_once_timeout_with_ready(self):
-        """If event loop has ready callbacks, select timeout is always 0."""
+        # If event loop has ready callbacks, select timeout is always 0.
         h = events.Timer(time.monotonic() + 10.0, lambda: True, ())
 
         self.event_loop._process_events = unittest.mock.Mock()
@@ -199,7 +199,7 @@ class BaseEventLoopTests(test_utils.LogTrackingTestCase):
     @unittest.mock.patch('tulip.base_events.time')
     @unittest.mock.patch('tulip.base_events.logging')
     def test__run_once_logging(self, m_logging, m_time):
-        """Log to INFO level if timeout > 1.0 sec."""
+        # Log to INFO level if timeout > 1.0 sec.
         idx = -1
         data = [10.0, 10.0, 12.0, 13.0]
 

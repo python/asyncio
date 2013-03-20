@@ -89,7 +89,7 @@ def load_modules(basedir, suffix='.py'):
             loader = importlib.machinery.SourceFileLoader(modname, sourcefile)
             mods.append((loader.load_module(), sourcefile))
         except Exception as err:
-            print("Skipping '%s': %s" % (modname, err))
+            print("Skipping '%s': %s" % (modname, err), file=sys.stderr)
 
     return mods
 

@@ -10,15 +10,6 @@ Most basic usage:
   headers['status'] == '200 Ok'  # or some such
   assert isinstance(response, bytes)
 
-However you can also open a stream:
-
-  f, wstream = http_client.open_stream(url, method, headers)
-  wstream.write(b'abc')
-  wstream.writelines([b'def', b'ghi'])
-  wstream.write_eof()
-  sts, headers, rstream = yield from f
-  response = yield from rstream.read()
-
 TODO: Reuse email.Message class (or its subclass, http.client.HTTPMessage).
 TODO: How do we do connection keep alive?  Pooling?
 """
@@ -45,7 +36,7 @@ class HttpClientProtocol:
 
     def __init__(self, host, port=None, *,
                  path='/', method='GET', headers=None, ssl=None,
-                 make_body=None, encoding='utf-8', version='1.1',
+                 make_body=None, encoding='utf-8', version=(1, 1),
                  chunked=False):
         host = self.validate(host, 'host')
         if ':' in host:
@@ -70,7 +61,7 @@ class HttpClientProtocol:
                 self.validate(value, 'header value', True)
                 self.headers[key] = value
         self.encoding = self.validate(encoding, 'encoding')
-        self.version = self.validate(version, 'version')
+        self.version = version
         self.make_body = make_body
         self.chunked = chunked
         self.ssl = ssl
@@ -127,22 +118,22 @@ class HttpClientProtocol:
     def connection_made(self, transport):
         self.transport = transport
         self.stream = protocol.HttpStreamReader()
-        self.wstream = protocol.HttpStreamWriter(transport)
 
-        line = '{} {} HTTP/{}\r\n'.format(self.method,
-                                          self.path,
-                                          self.version)
-        self.wstream.write_str(line)
-        for key, value in self.headers.items():
-            self.wstream.write_str('{}: {}\r\n'.format(key, value))
-        self.wstream.write(b'\r\n')
+        self.request = protocol.Request(
+            transport, self.method, self.path, self.version)
+
+        self.request.add_headers(*self.headers.items())
+        self.request.send_headers()
+
         if self.make_body is not None:
             if self.chunked:
                 self.make_body(
-                    self.wstream.write_chunked, self.wstream.write_chunked_eof)
+                    self.request.write, self.request.eof)
             else:
                 self.make_body(
-                    self.wstream.write_str, self.wstream.write_eof)
+                    self.request.write, self.request.eof)
+        else:
+            self.request.write_eof()
 
     def data_received(self, data):
         self.stream.feed_data(data)

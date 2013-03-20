@@ -48,6 +48,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         self._scheduled = []
         self._default_executor = None
         self._internal_fds = 0
+        self._running = False
 
     def _make_socket_transport(self, sock, protocol, waiter=None, extra=None):
         """Create socket transport."""
@@ -75,6 +76,10 @@ class BaseEventLoop(events.AbstractEventLoop):
         """Process selector events."""
         raise NotImplementedError
 
+    def is_running(self):
+        """Returns running status of event loop."""
+        return self._running
+
     def run(self):
         """Run the event loop until nothing left to do or stop() called.
 
@@ -84,13 +89,20 @@ class BaseEventLoop(events.AbstractEventLoop):
 
         TODO: Give this a timeout too?
         """
-        while (self._ready or
-               self._scheduled or
-               self._selector.registered_count() > 1):
-            try:
-                self._run_once()
-            except _StopError:
-                break
+        if self._running:
+            raise RuntimeError('Event loop is running.')
+
+        self._running = True
+        try:
+            while (self._ready or
+                   self._scheduled or
+                   self._selector.registered_count() > 1):
+                try:
+                    self._run_once()
+                except _StopError:
+                    break
+        finally:
+            self._running = False
 
     def run_forever(self):
         """Run until stop() is called.
@@ -109,10 +121,16 @@ class BaseEventLoop(events.AbstractEventLoop):
 
         Calling stop() will break out of this too.
         """
+        if self._running:
+            raise RuntimeError('Event loop is running.')
+
+        self._running = True
         try:
             self._run_once(timeout)
         except _StopError:
             pass
+        finally:
+            self._running = False
 
     def run_until_complete(self, future, timeout=None):
         """Run until the Future is done, or until a timeout.

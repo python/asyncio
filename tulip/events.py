@@ -193,6 +193,35 @@ class AbstractEventLoop:
                                family=0, proto=0, flags=0):
         raise NotImplementedError
 
+    def connect_read_pipe(self, protocol_factory, pipe):
+        """Register read pipe in eventloop.
+
+        protocol_factory should instantiate object with Protocol interface.
+        pipe is file-like object already switched to nonblocking.
+        Return pair (transport, protocol), where transport support
+        ReadTransport ABC"""
+        # The reason to accept file-like object instead of just file descriptor
+        # is: we need to own pipe and close it at transport finishing
+        # Can got complicated errors if pass f.fileno(),
+        # close fd in pipe transport then close f and vise versa.
+        raise NotImplementedError
+
+    def connect_write_pipe(self, protocol_factory, pipe):
+        """Register write pipe in eventloop.
+
+        protocol_factory should instantiate object with BaseProtocol interface.
+        Pipe is file-like object already switched to nonblocking.
+        Return pair (transport, protocol), where transport support
+        WriteTransport ABC"""
+        # The reason to accept file-like object instead of just file descriptor
+        # is: we need to own pipe and close it at transport finishing
+        # Can got complicated errors if pass f.fileno(),
+        # close fd in pipe transport then close f and vise versa.
+        raise NotImplementedError
+
+    #def spawn_subprocess(self, protocol_factory, pipe):
+    #    raise NotImplementedError
+
     # Ready-based callback registration methods.
     # The add_*() methods return a Handle.
     # The remove_*() methods return True if something was removed,

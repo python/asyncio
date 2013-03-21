@@ -1,28 +1,10 @@
 """Abstract Transport class."""
 
-__all__ = ['Transport']
+__all__ = ['ReadTransport', 'WriteTransport', 'Transport']
 
 
-class Transport:
-    """ABC representing a transport.
-
-    There may be several implementations, but typically, the user does
-    not implement new transports; rather, the platform provides some
-    useful transports that are implemented using the platform's best
-    practices.
-
-    The user never instantiates a transport directly; they call a
-    utility function, passing it a protocol factory and other
-    information necessary to create the transport and protocol.  (E.g.
-    EventLoop.create_connection() or EventLoop.start_serving().)
-
-    The utility function will asynchronously create a transport and a
-    protocol and hook them up by calling the protocol's
-    connection_made() method, passing it the transport.
-
-    The implementation here raises NotImplemented for every method
-    except writelines(), which calls write() in a loop.
-    """
+class BaseTransport:
+    """Base ABC for transports."""
 
     def __init__(self, extra=None):
         if extra is None:
@@ -32,6 +14,40 @@ class Transport:
     def get_extra_info(self, name, default=None):
         """Get optional transport information."""
         return self._extra.get(name, default)
+
+    def close(self):
+        """Closes the transport.
+
+        Buffered data will be flushed asynchronously.  No more data
+        will be received.  After all buffered data is flushed, the
+        protocol's connection_lost() method will (eventually) called
+        with None as its argument.
+        """
+        raise NotImplementedError
+
+
+class ReadTransport(BaseTransport):
+    """ABC for read-only transports."""
+
+    def pause(self):
+        """Pause the receiving end.
+
+        No data will be passed to the protocol's data_received()
+        method until resume() is called.
+        """
+        raise NotImplementedError
+
+    def resume(self):
+        """Resume the receiving end.
+
+        Data received will once again be passed to the protocol's
+        data_received() method.
+        """
+        raise NotImplementedError
+
+
+class WriteTransport(BaseTransport):
+    """ABC for write-only transports."""
 
     def write(self, data):
         """Write some data bytes to the transport.
@@ -63,32 +79,6 @@ class Transport:
         """Return True if this protocol supports write_eof(), False if not."""
         raise NotImplementedError
 
-    def pause(self):
-        """Pause the receiving end.
-
-        No data will be passed to the protocol's data_received()
-        method until resume() is called.
-        """
-        raise NotImplementedError
-
-    def resume(self):
-        """Resume the receiving end.
-
-        Data received will once again be passed to the protocol's
-        data_received() method.
-        """
-        raise NotImplementedError
-
-    def close(self):
-        """Closes the transport.
-
-        Buffered data will be flushed asynchronously.  No more data
-        will be received.  After all buffered data is flushed, the
-        protocol's connection_lost() method will (eventually) called
-        with None as its argument.
-        """
-        raise NotImplementedError
-
     def abort(self):
         """Closes the transport immediately.
 
@@ -97,3 +87,25 @@ class Transport:
         called with None as its argument.
         """
         raise NotImplementedError
+
+
+class Transport(ReadTransport, WriteTransport):
+    """ABC representing a bidirectional transport.
+
+    There may be several implementations, but typically, the user does
+    not implement new transports; rather, the platform provides some
+    useful transports that are implemented using the platform's best
+    practices.
+
+    The user never instantiates a transport directly; they call a
+    utility function, passing it a protocol factory and other
+    information necessary to create the transport and protocol.  (E.g.
+    EventLoop.create_connection() or EventLoop.start_serving().)
+
+    The utility function will asynchronously create a transport and a
+    protocol and hook them up by calling the protocol's
+    connection_made() method, passing it the transport.
+
+    The implementation here raises NotImplemented for every method
+    except writelines(), which calls write() in a loop.
+    """

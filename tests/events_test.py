@@ -3,6 +3,7 @@
 import concurrent.futures
 import contextlib
 import errno
+import fcntl
 import gc
 import io
 import os
@@ -75,6 +76,48 @@ class MyDatagramProto(protocols.DatagramProtocol):
 
     def connection_lost(self, exc):
         assert self.state == 'INITIALIZED', self.state
+        self.state = 'CLOSED'
+
+
+class MyReadPipeProto(protocols.Protocol):
+
+    def __init__(self):
+        self.state = ['INITIAL']
+        self.nbytes = 0
+        self.transport = None
+
+    def connection_made(self, transport):
+        self.transport = transport
+        assert self.state == ['INITIAL'], self.state
+        self.state.append('CONNECTED')
+
+    def data_received(self, data):
+        assert self.state == ['INITIAL', 'CONNECTED'], self.state
+        self.nbytes += len(data)
+
+    def eof_received(self):
+        assert self.state == ['INITIAL', 'CONNECTED'], self.state
+        self.state.append('EOF')
+        self.transport.close()
+
+    def connection_lost(self, exc):
+        assert self.state == ['INITIAL', 'CONNECTED', 'EOF'], self.state
+        self.state.append('CLOSED')
+
+
+class MyWritePipeProto(protocols.Protocol):
+
+    def __init__(self):
+        self.state = 'INITIAL'
+        self.transport = None
+
+    def connection_made(self, transport):
+        self.transport = transport
+        assert self.state == 'INITIAL', self.state
+        self.state = 'CONNECTED'
+
+    def connection_lost(self, exc):
+        assert self.state == 'CONNECTED', self.state
         self.state = 'CLOSED'
 
 
@@ -968,6 +1011,92 @@ class EventLoopTestsMixin:
         self.assertIsNone(event_loop._csock)
         self.assertIsNone(event_loop._ssock)
 
+    @unittest.skipUnless(sys.platform != 'win32',
+                         "Don't support pipes for Windows")
+    def test_read_pipe(self):
+        proto = None
+
+        def factory():
+            nonlocal proto
+            proto = MyReadPipeProto()
+            return proto
+
+        rpipe, wpipe = os.pipe()
+        pipeobj = io.open(rpipe, 'rb', 1024)
+
+        @tasks.task
+        def connect():
+            t, p = yield from self.event_loop.connect_read_pipe(factory,
+                                                                pipeobj)
+            self.assertIs(p, proto)
+            self.assertIs(t, proto.transport)
+            self.assertEqual(['INITIAL', 'CONNECTED'], proto.state)
+            self.assertEqual(0, proto.nbytes)
+
+        self.event_loop.run_until_complete(connect())
+
+        os.write(wpipe, b'1')
+        self.event_loop.run_once()
+        self.assertEqual(1, proto.nbytes)
+
+        os.write(wpipe, b'2345')
+        self.event_loop.run_once()
+        self.assertEqual(['INITIAL', 'CONNECTED'], proto.state)
+        self.assertEqual(5, proto.nbytes)
+
+        os.close(wpipe)
+        self.event_loop.run_once()
+        self.assertEqual(['INITIAL', 'CONNECTED', 'EOF', 'CLOSED'], proto.state)
+        # extra info is available
+        self.assertIsNotNone(proto.transport.get_extra_info('pipe'))
+
+    @unittest.skipUnless(sys.platform != 'win32',
+                         "Don't support pipes for Windows")
+    def test_write_pipe(self):
+        proto = None
+        transport = None
+
+        def factory():
+            nonlocal proto
+            proto = MyWritePipeProto()
+            return proto
+
+        rpipe, wpipe = os.pipe()
+        pipeobj = io.open(wpipe, 'wb', 1024)
+
+        @tasks.task
+        def connect():
+            nonlocal transport
+            t, p = yield from self.event_loop.connect_write_pipe(factory,
+                                                                 pipeobj)
+            self.assertIs(p, proto)
+            self.assertIs(t, proto.transport)
+            self.assertEqual('CONNECTED', proto.state)
+            transport = t
+
+        self.event_loop.run_until_complete(connect())
+
+        transport.write(b'1')
+        self.event_loop.run_once()
+        data = os.read(rpipe, 1024)
+        self.assertEqual(b'1', data)
+
+        transport.write(b'2345')
+        self.event_loop.run_once()
+        data = os.read(rpipe, 1024)
+        self.assertEqual(b'2345', data)
+        self.assertEqual('CONNECTED', proto.state)
+
+        os.close(rpipe)
+
+        # extra info is available
+        self.assertIsNotNone(proto.transport.get_extra_info('pipe'))
+
+        # close connection
+        proto.transport.close()
+        self.event_loop.run_once()
+        self.assertEqual('CLOSED', proto.state)
+
 
 if sys.platform == 'win32':
     from tulip import windows_events
@@ -1210,6 +1339,14 @@ class AbstractEventLoopTests(unittest.TestCase):
             NotImplementedError, ev_loop.add_signal_handler, 1, f)
         self.assertRaises(
             NotImplementedError, ev_loop.remove_signal_handler, 1)
+        self.assertRaises(
+            NotImplementedError, ev_loop.remove_signal_handler, 1)
+        self.assertRaises(
+            NotImplementedError, ev_loop.connect_read_pipe, f,
+            unittest.mock.sentinel.pipe)
+        self.assertRaises(
+            NotImplementedError, ev_loop.connect_write_pipe, f,
+            unittest.mock.sentinel.pipe)
 
 
 class ProtocolsAbsTests(unittest.TestCase):

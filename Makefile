@@ -25,5 +25,6 @@ clean:
 	rm -f `find . -type f -name '@*' `
 	rm -f `find . -type f -name '#*#' `
 	rm -f `find . -type f -name '*.orig' `
+	rm -f `find . -type f -name '*.rej' `
 	rm -f .coverage
 	rm -rf htmlcov

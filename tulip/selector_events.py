@@ -659,5 +659,3 @@ class _SelectorDatagramTransport(transports.Transport):
             self._protocol.connection_lost(exc)
         finally:
             self._sock.close()
-
-

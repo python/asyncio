@@ -245,7 +245,7 @@ class JoinableQueue(Queue):
         self._unfinished_tasks = 0
         self._finished = locks.EventWaiter()
         self._finished.set()
-        super(JoinableQueue, self).__init__(maxsize=maxsize)
+        super().__init__(maxsize=maxsize)
 
     def _format(self):
         result = Queue._format(self)
@@ -254,7 +254,7 @@ class JoinableQueue(Queue):
         return result
 
     def _put(self, item):
-        super(JoinableQueue, self)._put(item)
+        super()._put(item)
         self._unfinished_tasks += 1
         self._finished.clear()
 

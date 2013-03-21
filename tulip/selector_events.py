@@ -554,7 +554,7 @@ class _SelectorSslTransport(transports.Transport):
         self._event_loop.call_soon(self._protocol.connection_lost, exc)
 
 
-class _SelectorDatagramTransport(transports.Transport):
+class _SelectorDatagramTransport(transports.DatagramTransport):
 
     max_size = 256 * 1024  # max bytes we read in one eventloop iteration
 

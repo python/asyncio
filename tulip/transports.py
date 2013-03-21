@@ -109,3 +109,25 @@ class Transport(ReadTransport, WriteTransport):
     The implementation here raises NotImplemented for every method
     except writelines(), which calls write() in a loop.
     """
+
+
+class DatagramTransport(BaseTransport):
+    """ABC for datagram (UDP) transports."""
+
+    def sendto(self, data, addr=None):
+        """Send data to the transport.
+
+        This does not block; it buffers the data and arranges for it
+        to be sent out asynchronously.
+        addr is target socket address.
+        If addr is None use target address pointed on transport creation.
+        """
+
+    def abort(self):
+        """Closes the transport immediately.
+
+        Buffered data will be lost.  No more data will be received.
+        The protocol's connection_lost() method will (eventually) be
+        called with None as its argument.
+        """
+        raise NotImplementedError

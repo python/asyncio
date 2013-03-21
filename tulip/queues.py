@@ -30,9 +30,9 @@ class Queue:
         self._maxsize = maxsize
 
         # Futures.
-        self._getters = collections.deque([])
+        self._getters = collections.deque()
         # Pairs of (item, Future).
-        self._putters = collections.deque([])
+        self._putters = collections.deque()
         self._init(maxsize)
 
     def _init(self, maxsize):

@@ -1,32 +1,19 @@
 """Simple server written using an event loop."""
 
-import http.client
 import email.message
-import email.parser
 import os
 
 import tulip
 import tulip.http
 
 
-class HttpServer(tulip.Protocol):
+class HttpServer(tulip.http.ServerHttpProtocol):
 
-    def __init__(self):
-        super().__init__()
-        self.transport = None
-        self.reader = None
-        self.handler = None
-
-    @tulip.task
-    def handle_request(self):
-        try:
-            method, path, version = yield from self.reader.read_request_line()
-        except http.client.BadStatusLine:
-            self.transport.close()
-            return
-
+    def handle_request(self, request_info, message):
         print('method = {!r}; path = {!r}; version = {!r}'.format(
-            method, path, version))
+            request_info.method, request_info.uri, request_info.version))
+
+        path = request_info.uri
 
         if (not (path.isprintable() and path.startswith('/')) or '/.' in path):
             print('bad path', repr(path))
@@ -40,11 +27,7 @@ class HttpServer(tulip.Protocol):
                 isdir = os.path.isdir(path)
 
         if not path:
-            self.transport.write(b'HTTP/1.0 404 Not found\r\n\r\n')
-            self.transport.close()
-            return
-
-        message = yield from self.reader.read_message()
+            raise tulip.http.HttpStatusException(404)
 
         headers = email.message.Message()
         for hdr, val in message.headers:
@@ -53,14 +36,8 @@ class HttpServer(tulip.Protocol):
 
         if isdir and not path.endswith('/'):
             path = path + '/'
-            response = tulip.http.Response(self.transport, 302)
-            response.add_headers(
-                ('URI', path),
-                ('Location', path))
-            response.send_headers()
-            response.write_eof()
-            self.transport.close()
-            return
+            raise tulip.http.HttpStatusException(
+                302, headers=(('URI', path), ('Location', path)))
 
         response = tulip.http.Response(self.transport, 200)
         response.add_header('Transfer-Encoding', 'chunked')
@@ -110,33 +87,12 @@ class HttpServer(tulip.Protocol):
                 response.write(b'Cannot open')
 
         response.write_eof()
-        self.transport.close()
-
-    def connection_made(self, transport):
-        self.transport = transport
-        print('connection made', transport, transport.get_extra_info('socket'))
-        self.reader = tulip.http.HttpStreamReader()
-        self.handler = self.handle_request()
-
-    def data_received(self, data):
-        print('data received', data)
-        self.reader.feed_data(data)
-
-    def eof_received(self):
-        print('eof received')
-        self.reader.feed_eof()
-
-    def connection_lost(self, exc):
-        print('connection lost', exc)
-        if (self.handler.done() and
-            not self.handler.cancelled() and
-            self.handler.exception() is not None):
-            print('handler exception:', self.handler.exception())
+        self.close()
 
 
 def main():
     loop = tulip.get_event_loop()
-    f = loop.start_serving(HttpServer, '127.0.0.1', 8080)
+    f = loop.start_serving(lambda: HttpServer(debug=True), '127.0.0.1', 8080)
     x = loop.run_until_complete(f)
     print('serving on', x.getsockname())
     loop.run_forever()

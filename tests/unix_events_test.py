@@ -1,6 +1,7 @@
 """Tests for unix_events.py."""
 
 import errno
+import io
 import unittest
 import unittest.mock
 
@@ -10,6 +11,8 @@ except ImportError:
     signal = None
 
 from tulip import events
+from tulip import futures
+from tulip import protocols
 from tulip import unix_events
 
 
@@ -166,3 +169,406 @@ class SelectorEventLoopTests(unittest.TestCase):
 
         self.assertRaises(
             RuntimeError, self.event_loop.remove_signal_handler, signal.SIGHUP)
+
+
+class UnixReadPipeTransportTests(unittest.TestCase):
+
+    def setUp(self):
+        self.event_loop = unittest.mock.Mock(spec_set=events.AbstractEventLoop)
+        self.pipe = unittest.mock.Mock(spec_set=io.RawIOBase)
+        self.pipe.fileno.return_value = 5
+        self.protocol = unittest.mock.Mock(spec_set=protocols.Protocol)
+
+    @unittest.mock.patch('fcntl.fcntl')
+    def test_ctor(self, m_fcntl):
+        tr = unix_events._UnixReadPipeTransport(self.event_loop, self.pipe,
+                                                self.protocol)
+        self.event_loop.add_reader.assert_called_with(5, tr._read_ready)
+        self.event_loop.call_soon.assert_called_with(
+            self.protocol.connection_made, tr)
+
+    @unittest.mock.patch('fcntl.fcntl')
+    def test_ctor_with_waiter(self, m_fcntl):
+        fut = futures.Future()
+        tr = unix_events._UnixReadPipeTransport(self.event_loop, self.pipe,
+                                                self.protocol, fut)
+        self.event_loop.call_soon.assert_called_with(fut.set_result, None)
+
+    @unittest.mock.patch('os.read')
+    @unittest.mock.patch('fcntl.fcntl')
+    def test__read_ready(self, m_fcntl, m_read):
+        tr = unix_events._UnixReadPipeTransport(self.event_loop, self.pipe,
+                                                self.protocol)
+        m_read.return_value = b'data'
+        tr._read_ready()
+
+        m_read.assert_called_with(5, tr.max_size)
+        self.protocol.data_received.assert_called_with(b'data')
+
+    @unittest.mock.patch('os.read')
+    @unittest.mock.patch('fcntl.fcntl')
+    def test__read_ready_eof(self, m_fcntl, m_read):
+        tr = unix_events._UnixReadPipeTransport(self.event_loop, self.pipe,
+                                                self.protocol)
+        m_read.return_value = b''
+        tr._read_ready()
+
+        m_read.assert_called_with(5, tr.max_size)
+        self.protocol.eof_received.assert_called_with()
+        self.event_loop.remove_reader.assert_called_with(5)
+
+    @unittest.mock.patch('os.read')
+    @unittest.mock.patch('fcntl.fcntl')
+    def test__read_ready_blocked(self, m_fcntl, m_read):
+        tr = unix_events._UnixReadPipeTransport(self.event_loop, self.pipe,
+                                                self.protocol)
+        self.event_loop.reset_mock()
+        m_read.side_effect = BlockingIOError
+        tr._read_ready()
+
+        m_read.assert_called_with(5, tr.max_size)
+        self.assertFalse(self.protocol.data_received.called)
+
+    @unittest.mock.patch('logging.exception')
+    @unittest.mock.patch('os.read')
+    @unittest.mock.patch('fcntl.fcntl')
+    def test__read_ready_error(self, m_fcntl, m_read, m_logexc):
+        tr = unix_events._UnixReadPipeTransport(self.event_loop, self.pipe,
+                                                self.protocol)
+        err = OSError()
+        m_read.side_effect = err
+        tr._close = unittest.mock.Mock()
+        tr._read_ready()
+
+        m_read.assert_called_with(5, tr.max_size)
+        tr._close.assert_called_with(err)
+        m_logexc.assert_called_with('Fatal error for %s', tr)
+
+    @unittest.mock.patch('os.read')
+    @unittest.mock.patch('fcntl.fcntl')
+    def test_pause(self, m_fcntl, m_read):
+        tr = unix_events._UnixReadPipeTransport(self.event_loop, self.pipe,
+                                                self.protocol)
+
+        tr.pause()
+        self.event_loop.remove_reader.assert_called_with(5)
+
+    @unittest.mock.patch('os.read')
+    @unittest.mock.patch('fcntl.fcntl')
+    def test_resume(self, m_fcntl, m_read):
+        tr = unix_events._UnixReadPipeTransport(self.event_loop, self.pipe,
+                                                self.protocol)
+
+        tr.resume()
+        self.event_loop.add_reader.assert_called_with(5, tr._read_ready)
+
+    @unittest.mock.patch('os.read')
+    @unittest.mock.patch('fcntl.fcntl')
+    def test_close(self, m_fcntl, m_read):
+        tr = unix_events._UnixReadPipeTransport(self.event_loop, self.pipe,
+                                                self.protocol)
+
+        tr._close = unittest.mock.Mock()
+        tr.close()
+        tr._close.assert_called_with(None)
+
+    @unittest.mock.patch('os.read')
+    @unittest.mock.patch('fcntl.fcntl')
+    def test_close_already_closing(self, m_fcntl, m_read):
+        tr = unix_events._UnixReadPipeTransport(self.event_loop, self.pipe,
+                                                self.protocol)
+
+        tr._closing = True
+        tr._close = unittest.mock.Mock()
+        tr.close()
+        self.assertFalse(tr._close.called)
+
+
+    @unittest.mock.patch('os.read')
+    @unittest.mock.patch('fcntl.fcntl')
+    def test__close(self, m_fcntl, m_read):
+        tr = unix_events._UnixReadPipeTransport(self.event_loop, self.pipe,
+                                                self.protocol)
+
+        err = object()
+        tr._close(err)
+        self.assertTrue(tr._closing)
+        self.event_loop.remove_reader.assert_called_with(5)
+        self.protocol.connection_lost.assert_called_with(err)
+
+    @unittest.mock.patch('fcntl.fcntl')
+    def test__call_connection_lost(self, m_fcntl):
+        tr = unix_events._UnixReadPipeTransport(self.event_loop, self.pipe,
+                                                self.protocol)
+
+        err = None
+        tr._call_connection_lost(err)
+        self.protocol.connection_lost.assert_called_with(err)
+        self.pipe.close.assert_called_with()
+
+    @unittest.mock.patch('fcntl.fcntl')
+    def test__call_connection_lost_with_err(self, m_fcntl):
+        tr = unix_events._UnixReadPipeTransport(self.event_loop, self.pipe,
+                                                self.protocol)
+
+        err = OSError()
+        tr._call_connection_lost(err)
+        self.protocol.connection_lost.assert_called_with(err)
+        self.pipe.close.assert_called_with()
+
+
+class UnixWritePipeTransportTests(unittest.TestCase):
+
+    def setUp(self):
+        self.event_loop = unittest.mock.Mock(spec_set=events.AbstractEventLoop)
+        self.pipe = unittest.mock.Mock(spec_set=io.RawIOBase)
+        self.pipe.fileno.return_value = 5
+        self.protocol = unittest.mock.Mock(spec_set=protocols.Protocol)
+
+    @unittest.mock.patch('fcntl.fcntl')
+    def test_ctor(self, m_fcntl):
+        tr = unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
+                                                 self.protocol)
+        self.event_loop.call_soon.assert_called_with(
+            self.protocol.connection_made, tr)
+
+    @unittest.mock.patch('fcntl.fcntl')
+    def test_ctor_with_waiter(self, m_fcntl):
+        fut = futures.Future()
+        tr = unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
+                                                 self.protocol, fut)
+        self.event_loop.call_soon.assert_called_with(fut.set_result, None)
+
+    @unittest.mock.patch('fcntl.fcntl')
+    def test_can_write_eof(self, m_fcntl):
+        tr = unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
+                                                 self.protocol)
+        self.assertTrue(tr.can_write_eof())
+
+    @unittest.mock.patch('os.write')
+    @unittest.mock.patch('fcntl.fcntl')
+    def test_write(self, m_fcntl, m_write):
+        tr = unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
+                                                 self.protocol)
+
+        m_write.return_value = 4
+        tr.write(b'data')
+        m_write.assert_called_with(5, b'data')
+        self.assertFalse(self.event_loop.add_writer.called)
+        self.assertEqual([], tr._buffer)
+
+    @unittest.mock.patch('os.write')
+    @unittest.mock.patch('fcntl.fcntl')
+    def test_write_no_data(self, m_fcntl, m_write):
+        tr = unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
+                                                 self.protocol)
+
+        tr.write(b'')
+        self.assertFalse(m_write.called)
+        self.assertFalse(self.event_loop.add_writer.called)
+        self.assertEqual([], tr._buffer)
+
+    @unittest.mock.patch('os.write')
+    @unittest.mock.patch('fcntl.fcntl')
+    def test_write_partial(self, m_fcntl, m_write):
+        tr = unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
+                                                 self.protocol)
+
+        m_write.return_value = 2
+        tr.write(b'data')
+        m_write.assert_called_with(5, b'data')
+        self.event_loop.add_writer.assert_called_with(5, tr._write_ready)
+        self.assertEqual([b'ta'], tr._buffer)
+
+    @unittest.mock.patch('os.write')
+    @unittest.mock.patch('fcntl.fcntl')
+    def test_write_buffer(self, m_fcntl, m_write):
+        tr = unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
+                                                 self.protocol)
+
+        tr._buffer = [b'previous']
+        tr.write(b'data')
+        self.assertFalse(m_write.called)
+        self.assertFalse(self.event_loop.add_writer.called)
+        self.assertEqual([b'previous', b'data'], tr._buffer)
+
+    @unittest.mock.patch('os.write')
+    @unittest.mock.patch('fcntl.fcntl')
+    def test_write_again(self, m_fcntl, m_write):
+        tr = unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
+                                                 self.protocol)
+
+        m_write.side_effect = BlockingIOError()
+        tr.write(b'data')
+        m_write.assert_called_with(5, b'data')
+        self.event_loop.add_writer.assert_called_with(5, tr._write_ready)
+        self.assertEqual([b'data'], tr._buffer)
+
+    @unittest.mock.patch('os.write')
+    @unittest.mock.patch('fcntl.fcntl')
+    def test_write_err(self, m_fcntl, m_write):
+        tr = unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
+                                                 self.protocol)
+
+        err = OSError()
+        m_write.side_effect = err
+        tr._fatal_error = unittest.mock.Mock()
+        tr.write(b'data')
+        m_write.assert_called_with(5, b'data')
+        self.assertFalse(self.event_loop.called)
+        self.assertEqual([], tr._buffer)
+        tr._fatal_error.assert_called_with(err)
+
+    @unittest.mock.patch('os.write')
+    @unittest.mock.patch('fcntl.fcntl')
+    def test__write_ready(self, m_fcntl, m_write):
+        tr = unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
+                                                 self.protocol)
+        tr._buffer = [b'da', b'ta']
+        m_write.return_value = 4
+        tr._write_ready()
+        m_write.assert_called_with(5, b'data')
+        self.event_loop.remove_writer.assert_called_with(5)
+        self.assertEqual([], tr._buffer)
+
+    @unittest.mock.patch('os.write')
+    @unittest.mock.patch('fcntl.fcntl')
+    def test__write_ready_partial(self, m_fcntl, m_write):
+        tr = unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
+                                                 self.protocol)
+
+        tr._buffer = [b'da', b'ta']
+        m_write.return_value = 3
+        tr._write_ready()
+        m_write.assert_called_with(5, b'data')
+        self.assertFalse(self.event_loop.remove_writer.called)
+        self.assertEqual([b'a'], tr._buffer)
+
+    @unittest.mock.patch('os.write')
+    @unittest.mock.patch('fcntl.fcntl')
+    def test__write_ready_again(self, m_fcntl, m_write):
+        tr = unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
+                                                 self.protocol)
+
+        tr._buffer = [b'da', b'ta']
+        m_write.side_effect = BlockingIOError()
+        tr._write_ready()
+        m_write.assert_called_with(5, b'data')
+        self.assertFalse(self.event_loop.remove_writer.called)
+        self.assertEqual([b'data'], tr._buffer)
+
+    @unittest.mock.patch('os.write')
+    @unittest.mock.patch('fcntl.fcntl')
+    def test__write_ready_empty(self, m_fcntl, m_write):
+        tr = unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
+                                                 self.protocol)
+
+        tr._buffer = [b'da', b'ta']
+        m_write.return_value = 0
+        tr._write_ready()
+        m_write.assert_called_with(5, b'data')
+        self.assertFalse(self.event_loop.remove_writer.called)
+        self.assertEqual([b'data'], tr._buffer)
+
+    @unittest.mock.patch('logging.exception')
+    @unittest.mock.patch('os.write')
+    @unittest.mock.patch('fcntl.fcntl')
+    def test__write_ready_err(self, m_fcntl, m_write, m_logexc):
+        tr = unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
+                                                 self.protocol)
+
+        tr._buffer = [b'da', b'ta']
+        m_write.side_effect = err = OSError()
+        tr._write_ready()
+        m_write.assert_called_with(5, b'data')
+        self.event_loop.remove_writer.assert_called_with(5)
+        self.assertEqual([], tr._buffer)
+        self.assertTrue(tr._closing)
+        self.protocol.connection_lost.assert_called_with(err)
+        m_logexc.assert_called_with('Fatal error for %s', tr)
+
+    @unittest.mock.patch('os.write')
+    @unittest.mock.patch('fcntl.fcntl')
+    def test__write_ready_closing(self, m_fcntl, m_write):
+        tr = unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
+                                                 self.protocol)
+
+        tr._closing = True
+        tr._buffer = [b'da', b'ta']
+        m_write.return_value = 4
+        tr._write_ready()
+        m_write.assert_called_with(5, b'data')
+        self.event_loop.remove_writer.assert_called_with(5)
+        self.assertEqual([], tr._buffer)
+        self.protocol.connection_lost.assert_called_with(None)
+
+    @unittest.mock.patch('os.write')
+    @unittest.mock.patch('fcntl.fcntl')
+    def test_abort(self, m_fcntl, m_write):
+        tr = unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
+                                                 self.protocol)
+
+        tr._buffer = [b'da', b'ta']
+        tr.abort()
+        self.assertFalse(m_write.called)
+        self.event_loop.remove_writer.assert_called_with(5)
+        self.assertEqual([], tr._buffer)
+        self.assertTrue(tr._closing)
+        self.protocol.connection_lost.assert_called_with(None)
+
+    @unittest.mock.patch('fcntl.fcntl')
+    def test__call_connection_lost(self, m_fcntl):
+        tr = unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
+                                                 self.protocol)
+
+        err = None
+        tr._call_connection_lost(err)
+        self.protocol.connection_lost.assert_called_with(err)
+        self.pipe.close.assert_called_with()
+
+    @unittest.mock.patch('fcntl.fcntl')
+    def test__call_connection_lost_with_err(self, m_fcntl):
+        tr = unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
+                                                 self.protocol)
+
+        err = OSError()
+        tr._call_connection_lost(err)
+        self.protocol.connection_lost.assert_called_with(err)
+        self.pipe.close.assert_called_with()
+
+    @unittest.mock.patch('fcntl.fcntl')
+    def test_close(self, m_fcntl):
+        tr = unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
+                                                 self.protocol)
+
+        tr.write_eof = unittest.mock.Mock()
+        tr.close()
+        tr.write_eof.assert_called_with()
+
+    @unittest.mock.patch('fcntl.fcntl')
+    def test_close_closing(self, m_fcntl):
+        tr = unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
+                                                 self.protocol)
+
+        tr.write_eof = unittest.mock.Mock()
+        tr._closing = True
+        tr.close()
+        self.assertFalse(tr.write_eof.called)
+
+    @unittest.mock.patch('fcntl.fcntl')
+    def test_write_eof(self, m_fcntl):
+        tr = unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
+                                                 self.protocol)
+
+        tr.write_eof()
+        self.assertTrue(tr._closing)
+        self.protocol.connection_lost.assert_called_with(None)
+
+    @unittest.mock.patch('fcntl.fcntl')
+    def test_write_eof_pending(self, m_fcntl):
+        tr = unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
+                                                 self.protocol)
+        tr._buffer = [b'data']
+        tr.write_eof()
+        self.assertTrue(tr._closing)
+        self.assertFalse(self.protocol.connection_lost.called)

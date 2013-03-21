@@ -3,7 +3,34 @@
 __all__ = ['Protocol', 'DatagramProtocol']
 
 
-class Protocol:
+class BaseProtocol:
+    """ABC for base protocol class.
+
+    Usually user implements protocols that derived from BaseProtocol
+    like Protocol or ProcessProtocol.
+
+    The only case when BaseProtocol should be implemented directly is
+    write-only transport like write pipe
+    """
+
+    def connection_made(self, transport):
+        """Called when a connection is made.
+
+        The argument is the transport representing the pipe connection.
+        To receive data, wait for data_received() calls.
+        When the connection is closed, connection_lost() is called.
+        """
+
+    def connection_lost(self, exc):
+        """Called when the connection is lost or closed.
+
+        The argument is an exception object or None (the latter
+        meaning a regular EOF is received or the connection was
+        aborted or closed).
+        """
+
+
+class Protocol(BaseProtocol):
     """ABC representing a protocol.
 
     The user should implement this interface.  They can inherit from
@@ -16,22 +43,13 @@ class Protocol:
     When the connection is made successfully, connection_made() is
     called with a suitable transport object.  Then data_received()
     will be called 0 or more times with data (bytes) received from the
-    transport; finally, connection_list() will be called exactly once
+    transport; finally, connection_lost() will be called exactly once
     with either an exception object or None as an argument.
 
     State machine of calls:
 
       start -> CM [-> DR*] [-> ER?] -> CL -> end
     """
-
-    def connection_made(self, transport):
-        """Called when a connection is made.
-
-        The argument is the transport representing the connection.
-        To send data, call its write() or writelines() method.
-        To receive data, wait for data_received() calls.
-        When the connection is closed, connection_lost() is called.
-        """
 
     def data_received(self, data):
         """Called when some data is received.
@@ -49,26 +67,12 @@ class Protocol:
         set it).
         """
 
-    def connection_lost(self, exc):
-        """Called when the connection is lost or closed.
 
-        The argument is an exception object or None (the latter
-        meaning a regular EOF is received or the connection was
-        aborted or closed).
-        """
-
-
-class DatagramProtocol:
+class DatagramProtocol(BaseProtocol):
     """ABC representing a datagram protocol."""
-
-    def connection_made(self, transport):
-        """Called when a datagram transport is ready."""
 
     def datagram_received(self, data, addr):
         """Called when some datagram is received."""
 
     def connection_refused(self, exc):
         """Connection is refused."""
-
-    def connection_lost(self, exc):
-        """Called when the connection is lost or closed."""

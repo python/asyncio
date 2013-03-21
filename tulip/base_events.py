@@ -64,6 +64,16 @@ class BaseEventLoop(events.AbstractEventLoop):
         """Create datagram transport."""
         raise NotImplementedError
 
+    def _make_read_pipe_transport(self, pipe, protocol, waiter=None,
+                                  extra=None):
+        """Create read pipe transport."""
+        raise NotImplementedError
+
+    def _make_write_pipe_transport(self, pipe, protocol, waiter=None,
+                                  extra=None):
+        """Create write pipe transport."""
+        raise NotImplementedError
+
     def _read_from_self(self):
         """XXX"""
         raise NotImplementedError
@@ -440,6 +450,24 @@ class BaseEventLoop(events.AbstractEventLoop):
             sock, protocol_factory(), extra={'addr': sock.getsockname()})
 
         return sock
+
+    @tasks.coroutine
+    def connect_read_pipe(self, protocol_factory, pipe):
+        protocol = protocol_factory()
+        waiter = futures.Future()
+        transport = self._make_read_pipe_transport(pipe, protocol, waiter,
+                                                   extra={})
+        yield from waiter
+        return transport, protocol
+
+    @tasks.coroutine
+    def connect_write_pipe(self, protocol_factory, pipe):
+        protocol = protocol_factory()
+        waiter = futures.Future()
+        transport = self._make_write_pipe_transport(pipe, protocol, waiter,
+                                                    extra={})
+        yield from waiter
+        return transport, protocol
 
     def _add_callback(self, handle):
         """Add a Handle to ready or scheduled."""

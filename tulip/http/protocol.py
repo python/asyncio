@@ -7,7 +7,6 @@ __all__ = ['HttpStreamReader',
 import collections
 import email.utils
 import functools
-import http.client
 import http.server
 import itertools
 import re
@@ -15,6 +14,7 @@ import sys
 import zlib
 
 import tulip
+from . import errors
 
 METHRE = re.compile('[A-Z0-9$-_.]+')
 VERSRE = re.compile('HTTP/(\d+).(\d+)')
@@ -70,7 +70,7 @@ class HttpStreamReader(tulip.StreamReader):
 
     @tulip.coroutine
     def read_request_line(self):
-        """Read request status line. Exception http.client.BadStatusLine
+        """Read request status line. Exception errors.BadStatusLine
         could be raised in case of any errors in status line.
         Returns three values (method, uri, version)
 
@@ -86,29 +86,29 @@ class HttpStreamReader(tulip.StreamReader):
         try:
             line = bline.decode('ascii').rstrip()
         except UnicodeDecodeError:
-            raise http.client.BadStatusLine(bline) from None
+            raise errors.BadStatusLine(bline) from None
 
         try:
             method, uri, version = line.split(None, 2)
         except ValueError:
-            raise http.client.BadStatusLine(line) from None
+            raise errors.BadStatusLine(line) from None
 
         # method
         method = method.upper()
         if not METHRE.match(method):
-            raise http.client.BadStatusLine(method)
+            raise errors.BadStatusLine(method)
 
         # version
         match = VERSRE.match(version)
         if match is None:
-            raise http.client.BadStatusLine(version)
+            raise errors.BadStatusLine(version)
         version = (int(match.group(1)), int(match.group(2)))
 
         return RequestLine(method, uri, version)
 
     @tulip.coroutine
     def read_response_status(self):
-        """Read response status line. Exception http.client.BadStatusLine
+        """Read response status line. Exception errors.BadStatusLine
         could be raised in case of any errors in status line.
         Returns three values (version, status_code, reason)
 
@@ -124,17 +124,17 @@ class HttpStreamReader(tulip.StreamReader):
         if not bline:
             # Presumably, the server closed the connection before
             # sending a valid response.
-            raise http.client.BadStatusLine(bline)
+            raise errors.BadStatusLine(bline)
 
         try:
             line = bline.decode('ascii').rstrip()
         except UnicodeDecodeError:
-            raise http.client.BadStatusLine(bline) from None
+            raise errors.BadStatusLine(bline) from None
 
         try:
             version, status = line.split(None, 1)
         except ValueError:
-            raise http.client.BadStatusLine(line) from None
+            raise errors.BadStatusLine(line) from None
         else:
             try:
                 status, reason = status.split(None, 1)
@@ -144,17 +144,17 @@ class HttpStreamReader(tulip.StreamReader):
         # version
         match = VERSRE.match(version)
         if match is None:
-            raise http.client.BadStatusLine(line)
+            raise errors.BadStatusLine(line)
         version = (int(match.group(1)), int(match.group(2)))
 
         # The status code is a three-digit number
         try:
             status = int(status)
         except ValueError:
-            raise http.client.BadStatusLine(line) from None
+            raise errors.BadStatusLine(line) from None
 
         if status < 100 or status > 999:
-            raise http.client.BadStatusLine(line)
+            raise errors.BadStatusLine(line)
 
         return ResponseStatus(version, status, reason.strip())
 
@@ -196,7 +196,7 @@ class HttpStreamReader(tulip.StreamReader):
                 while continuation:
                     header_length += len(line)
                     if header_length > self.MAX_HEADERFIELD_SIZE:
-                        raise http.client.LineTooLong(
+                        raise errors.LineTooLong(
                             'limit request headers fields size')
                     value.append(line)
 
@@ -204,13 +204,13 @@ class HttpStreamReader(tulip.StreamReader):
                     continuation = line.startswith(CONTINUATION)
             else:
                 if header_length > self.MAX_HEADERFIELD_SIZE:
-                    raise http.client.LineTooLong(
+                    raise errors.LineTooLong(
                         'limit request headers fields size')
 
             # total headers size
             size += header_length
             if size >= self.MAX_HEADERS:
-                raise http.client.LineTooLong('limit request headers fields')
+                raise errors.LineTooLong('limit request headers fields')
 
             headers.append(
                 (name,
@@ -240,7 +240,7 @@ class HttpStreamReader(tulip.StreamReader):
                 try:
                     size = int(line, 16)
                 except ValueError:
-                    raise http.client.IncompleteRead(b'') from None
+                    raise errors.IncompleteRead(b'') from None
 
                 if size == 0:
                     break
@@ -274,8 +274,8 @@ class HttpStreamReader(tulip.StreamReader):
             return data
 
         except StreamEofException:
-            stream.set_exception(http.client.IncompleteRead(b''))
-        except http.client.IncompleteRead as exc:
+            stream.set_exception(errors.IncompleteRead(b''))
+        except errors.IncompleteRead as exc:
             stream.set_exception(exc)
 
     def _parse_length_payload(self, length):
@@ -300,7 +300,7 @@ class HttpStreamReader(tulip.StreamReader):
             stream.feed_eof()
             return data
         except StreamEofException:
-            stream.set_exception(http.client.IncompleteRead(b''))
+            stream.set_exception(errors.IncompleteRead(b''))
 
     def _parse_eof_payload(self):
         """Read all bytes untile eof."""
@@ -360,10 +360,10 @@ class HttpStreamReader(tulip.StreamReader):
             try:
                 length = int(length)
             except ValueError:
-                raise http.client.HTTPException('CONTENT-LENGTH') from None
+                raise errors.InvalidHeader('CONTENT-LENGTH') from None
 
             if length < 0:
-                raise http.client.HTTPException('CONTENT-LENGTH')
+                raise errors.InvalidHeader('CONTENT-LENGTH')
 
             parser = self._parse_length_payload(length)
         else:
@@ -421,8 +421,8 @@ class HttpStreamReader(tulip.StreamReader):
         return RawHttpMessage(headers, payload, close_conn, encoding)
 
 
-class StreamEofException(http.client.HTTPException):
-    """eof received"""
+class StreamEofException(Exception):
+    """Internal exception: eof received."""
 
 
 class DeflateStream:
@@ -442,7 +442,7 @@ class DeflateStream:
         try:
             chunk = self.zlib.decompress(chunk)
         except:
-            self.stream.set_exception(http.client.IncompleteRead(b''))
+            self.stream.set_exception(errors.IncompleteRead(b''))
 
         if chunk:
             self.stream.feed_data(chunk)
@@ -450,7 +450,7 @@ class DeflateStream:
     def feed_eof(self):
         self.stream.feed_data(self.zlib.flush())
         if not self.zlib.eof:
-            self.stream.set_exception(http.client.IncompleteRead(b''))
+            self.stream.set_exception(errors.IncompleteRead(b''))
 
         self.stream.feed_eof()
 

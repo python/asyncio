@@ -70,7 +70,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         raise NotImplementedError
 
     def _make_write_pipe_transport(self, pipe, protocol, waiter=None,
-                                  extra=None):
+                                   extra=None):
         """Create write pipe transport."""
         raise NotImplementedError
 
@@ -340,48 +340,72 @@ class BaseEventLoop(events.AbstractEventLoop):
 
     @tasks.coroutine
     def create_datagram_connection(self, protocol_factory,
-                                   host=None, port=None, *,
-                                   family=socket.AF_INET, proto=0, flags=0):
+                                   local_addr=None, remote_addr=None, *,
+                                   family=0, proto=0, flags=0):
         """Create datagram connection."""
-
-        addr = None
-        if host is not None or port is not None:
-            infos = yield from self.getaddrinfo(
-                host, port, family=family,
-                type=socket.SOCK_DGRAM, proto=proto, flags=flags)
-
-            if not infos:
-                raise socket.error('getaddrinfo() returned empty list')
-
-            exceptions = []
-            for family, type, proto, cname, address in infos:
-                sock = socket.socket(family=family, type=type, proto=proto)
-
-                try:
-                    yield from self.sock_connect(sock, address)
-                    addr = address
-                except socket.error as exc:
-                    sock.close()
-                    exceptions.append(exc)
-                else:
-                    break
-            else:
-                if exceptions:
-                    raise exceptions[0]
+        if not (local_addr or remote_addr):
+            if family == 0:
+                raise ValueError('unexpected address family')
+            addr_pairs_info = (((family, proto), (None, None)),)
         else:
-            sock = socket.socket(
-                family=family, type=socket.SOCK_DGRAM, proto=proto)
+            # join addresss by (family, protocol)
+            addr_infos = collections.OrderedDict()
+            for idx, addr in ((0, local_addr), (1, remote_addr)):
+                if addr is not None:
+                    assert isinstance(addr, tuple) and len(addr) == 2, (
+                        '2-tuple is expected')
 
-        try:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            sock.setblocking(False)
-        except socket.error:
-            sock.close()
-            raise
+                    infos = yield from self.getaddrinfo(
+                        *addr, family=family, type=socket.SOCK_DGRAM,
+                        proto=proto, flags=flags)
+                    if not infos:
+                        raise socket.error('getaddrinfo() returned empty list')
+
+                    for fam, _, pro, _, address in infos:
+                        key = (fam, pro)
+                        if key not in addr_infos:
+                            addr_infos[key] = [None, None]
+                        addr_infos[key][idx] = address
+
+            # each addr has to have info for each (family, proto) pair
+            addr_pairs_info = [
+                (key, addr_pair) for key, addr_pair in addr_infos.items()
+                if not ((local_addr and addr_pair[0] is None) or
+                        (remote_addr and addr_pair[1] is None))]
+
+            if not addr_pairs_info:
+                raise ValueError('can not get address information')
+
+        exceptions = []
+
+        for (family, proto), (local_address, remote_address) in addr_pairs_info:
+            sock = None
+            l_addr = None
+            r_addr = None
+            try:
+                sock = socket.socket(
+                    family=family, type=socket.SOCK_DGRAM, proto=proto)
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                sock.setblocking(False)
+
+                if local_addr:
+                    sock.bind(local_address)
+                    l_addr = sock.getsockname()
+                if remote_addr:
+                    yield from self.sock_connect(sock, remote_address)
+                    r_addr = remote_address
+            except socket.error as exc:
+                if sock is not None:
+                    sock.close()
+                exceptions.append(exc)
+            else:
+                break
+        else:
+            raise exceptions[0]
 
         protocol = protocol_factory()
-        transport = self._make_datagram_transport(sock, protocol, addr)
-
+        transport = self._make_datagram_transport(
+            sock, protocol, r_addr, extra={'addr': l_addr})
         return transport, protocol
 
     # TODO: Or create_server()?
@@ -424,37 +448,6 @@ class BaseEventLoop(events.AbstractEventLoop):
         sock.listen(backlog)
         sock.setblocking(False)
         self._start_serving(protocol_factory, sock)
-        return sock
-
-    @tasks.task
-    def start_serving_datagram(self, protocol_factory, host, port, *,
-                               family=0, proto=0, flags=0):
-        """XXX"""
-        infos = yield from self.getaddrinfo(
-            host, port, family=family,
-            type=socket.SOCK_DGRAM, proto=proto, flags=flags)
-
-        if not infos:
-            raise socket.error('getaddrinfo() returned empty list')
-
-        exceptions = []
-        for family, type, proto, cname, address in infos:
-            sock = socket.socket(family=family, type=type, proto=proto)
-            try:
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                sock.bind(address)
-            except socket.error as exc:
-                sock.close()
-                exceptions.append(exc)
-            else:
-                sock.setblocking(False)
-                break
-        else:
-            raise exceptions[0]
-
-        self._make_datagram_transport(
-            sock, protocol_factory(), extra={'addr': sock.getsockname()})
-
         return sock
 
     @tasks.coroutine

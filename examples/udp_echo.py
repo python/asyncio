@@ -12,7 +12,7 @@ import tulip
 ADDRESS = ('127.0.0.1', 10000)
 
 
-class MyUdpEchoProtocol:
+class MyServerUdpEchoProtocol:
 
     def connection_made(self, transport):
         print('start', transport)
@@ -54,13 +54,15 @@ class MyClientUdpEchoProtocol:
 
 def start_server():
     loop = tulip.get_event_loop()
-    loop.start_serving_datagram(MyUdpEchoProtocol, *ADDRESS)
+    tulip.Task(loop.create_datagram_connection(
+        MyServerUdpEchoProtocol, local_addr=ADDRESS))
     loop.run_forever()
 
 
 def start_client():
     loop = tulip.get_event_loop()
-    loop.create_datagram_connection(MyClientUdpEchoProtocol, *ADDRESS)
+    tulip.Task(loop.create_datagram_connection(
+        MyClientUdpEchoProtocol, remote_addr=ADDRESS))
     loop.run_forever()
 
 

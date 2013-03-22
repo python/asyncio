@@ -3,7 +3,6 @@
 import concurrent.futures
 import contextlib
 import errno
-import fcntl
 import gc
 import io
 import os
@@ -779,35 +778,53 @@ class EventLoopTestsMixin:
         self.assertRaises(Err, self.event_loop.run_until_complete, fut)
         self.assertTrue(m_sock.close.called)
 
+    @unittest.mock.patch('tulip.base_events.socket')
+    def test_create_datagram_connection_no_addrinfo(self, m_socket):
+        self.suppress_log_errors()
+
+        m_socket.error = socket.error
+        m_socket.getaddrinfo.return_value = []
+
+        coro = self.event_loop.create_datagram_connection(
+            MyDatagramProto, local_addr=('localhost', 0))
+        self.assertRaises(
+            socket.error, self.event_loop.run_until_complete, coro)
+
+    def test_create_datagram_connection_addr_error(self):
+        self.suppress_log_errors()
+
+        coro = self.event_loop.create_datagram_connection(
+            MyDatagramProto, local_addr='localhost')
+        self.assertRaises(
+            AssertionError, self.event_loop.run_until_complete, coro)
+        coro = self.event_loop.create_datagram_connection(
+            MyDatagramProto, local_addr=('localhost', 1, 2, 3))
+        self.assertRaises(
+            AssertionError, self.event_loop.run_until_complete, coro)
+
     def test_create_datagram_connection(self):
-        server = None
-
-        def factory():
-            nonlocal server
-            server = TestMyDatagramProto()
-            return server
-
         class TestMyDatagramProto(MyDatagramProto):
             def datagram_received(self, data, addr):
                 super().datagram_received(data, addr)
                 self.transport.sendto(b'resp:'+data, addr)
 
-        f = self.event_loop.start_serving_datagram(factory, '127.0.0.1', 0)
-        sock = self.event_loop.run_until_complete(f)
-        host, port = sock.getsockname()
+        coro = self.event_loop.create_datagram_connection(
+            TestMyDatagramProto, local_addr=('127.0.0.1', 0))
+        s_transport, server = self.event_loop.run_until_complete(coro)
+        host, port = s_transport.get_extra_info('addr')
 
         coro = self.event_loop.create_datagram_connection(
-            MyDatagramProto, host, port)
-        transport, protocol = self.event_loop.run_until_complete(coro)
+            MyDatagramProto, remote_addr=(host, port))
+        transport, client = self.event_loop.run_until_complete(coro)
 
-        self.assertEqual('INITIALIZED', protocol.state)
+        self.assertEqual('INITIALIZED', client.state)
         transport.sendto(b'xxx')
         self.event_loop.run_once()
         self.assertEqual(3, server.nbytes)
         self.event_loop.run_once()
 
         # received
-        self.assertEqual(8, protocol.nbytes)
+        self.assertEqual(8, client.nbytes)
 
         # extra info is available
         self.assertIsNotNone(transport.get_extra_info('socket'))
@@ -816,57 +833,9 @@ class EventLoopTestsMixin:
 
         # close connection
         transport.close()
-        self.assertEqual('CLOSED', protocol.state)
+
+        self.assertEqual('CLOSED', client.state)
         server.transport.close()
-
-    def test_create_datagram_connection_no_connection(self):
-        server = None
-
-        def factory():
-            nonlocal server
-            server = TestMyDatagramProto()
-            return server
-
-        class TestMyDatagramProto(MyDatagramProto):
-            def datagram_received(self, data, addr):
-                super().datagram_received(data, addr)
-                self.transport.sendto(b'resp:'+data, addr)
-
-        f = self.event_loop.start_serving_datagram(factory, '127.0.0.1', 0)
-        sock = self.event_loop.run_until_complete(f)
-        host, port = sock.getsockname()
-
-        coro = self.event_loop.create_datagram_connection(MyDatagramProto)
-        transport, protocol = self.event_loop.run_until_complete(coro)
-
-        self.assertEqual('INITIALIZED', protocol.state)
-        transport.sendto(b'xxx', (host, port))
-        self.event_loop.run_once()
-        self.assertEqual(3, server.nbytes)
-        self.event_loop.run_once()
-
-        # received
-        self.assertEqual(8, protocol.nbytes)
-
-        # extra info is available
-        self.assertIsNotNone(transport.get_extra_info('socket'))
-        conn = transport.get_extra_info('socket')
-        self.assertTrue(hasattr(conn, 'getsockname'))
-
-        # close connection
-        transport.close()
-        self.assertEqual('CLOSED', protocol.state)
-        server.transport.close()
-
-    def test_create_datagram_connection_no_getaddrinfo(self):
-        self.suppress_log_errors()
-        getaddrinfo = self.event_loop.getaddrinfo = unittest.mock.Mock()
-        getaddrinfo.return_value = []
-
-        coro = self.event_loop.create_datagram_connection(
-            protocols.DatagramProtocol, 'xkcd.com', 80)
-        self.assertRaises(
-            socket.error, self.event_loop.run_until_complete, coro)
 
     def test_create_datagram_connection_connect_err(self):
         self.suppress_log_errors()
@@ -874,92 +843,74 @@ class EventLoopTestsMixin:
         self.event_loop.sock_connect.side_effect = socket.error
 
         coro = self.event_loop.create_datagram_connection(
-            protocols.DatagramProtocol, 'xkcd.com', 80)
+            protocols.DatagramProtocol, remote_addr=('127.0.0.1', 0))
         self.assertRaises(
             socket.error, self.event_loop.run_until_complete, coro)
 
     @unittest.mock.patch('tulip.base_events.socket')
-    def test_create_datagram_connection_sockopt_err(self, m_socket):
+    def test_create_datagram_connection_socket_err(self, m_socket):
         self.suppress_log_errors()
 
         m_socket.error = socket.error
-        m_socket.socket.return_value.setsockopt.side_effect = socket.error
+        m_socket.getaddrinfo = socket.getaddrinfo
+        m_socket.socket.side_effect = socket.error
 
         coro = self.event_loop.create_datagram_connection(
-            protocols.DatagramProtocol)
+            protocols.DatagramProtocol, family=socket.AF_INET)
+        self.assertRaises(
+            socket.error, self.event_loop.run_until_complete, coro)
+
+        coro = self.event_loop.create_datagram_connection(
+            protocols.DatagramProtocol, local_addr=('127.0.0.1', 0))
+        self.assertRaises(
+            socket.error, self.event_loop.run_until_complete, coro)
+
+    def test_create_datagram_connection_no_matching_family(self):
+        self.suppress_log_errors()
+
+        coro = self.event_loop.create_datagram_connection(
+            protocols.DatagramProtocol,
+            remote_addr=('127.0.0.1', 0), local_addr=('::1', 0))
+        self.assertRaises(
+            ValueError, self.event_loop.run_until_complete, coro)
+
+    @unittest.mock.patch('tulip.base_events.socket')
+    def test_create_datagram_connection_setblk_err(self, m_socket):
+        self.suppress_log_errors()
+
+        m_socket.error = socket.error
+        m_socket.socket.return_value.setblocking.side_effect = socket.error
+
+        coro = self.event_loop.create_datagram_connection(
+            protocols.DatagramProtocol, family=socket.AF_INET)
         self.assertRaises(
             socket.error, self.event_loop.run_until_complete, coro)
         self.assertTrue(
             m_socket.socket.return_value.close.called)
 
-    def test_start_serving_datagram(self):
-        class TestMyDatagramProto(MyDatagramProto):
-            def datagram_received(self, data, addr):
-                super().datagram_received(data, addr)
-                self.transport.sendto(b'resp:'+data, addr)
-
-        proto = None
-
-        def factory():
-            nonlocal proto
-            proto = TestMyDatagramProto()
-            return proto
-
-        f = self.event_loop.start_serving_datagram(factory, '127.0.0.1', 0)
-        sock = self.event_loop.run_until_complete(f)
-        self.assertEqual('INITIALIZED', proto.state)
-
-        host, port = sock.getsockname()
-        self.assertEqual(host, '127.0.0.1')
-        client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        client.sendto(b'xxx', ('127.0.0.1', port))
-        self.event_loop.run_once()
-        self.assertEqual(3, proto.nbytes)
-
-        data, server = client.recvfrom(4096)
-        self.assertEqual(b'resp:xxx', data)
-
-        # extra info is available
-        self.assertIsNotNone(proto.transport.get_extra_info('socket'))
-        conn = proto.transport.get_extra_info('socket')
-        self.assertTrue(hasattr(conn, 'getsockname'))
-        self.assertEqual(
-            '127.0.0.1', proto.transport.get_extra_info('addr')[0])
-
-        # close connection
-        proto.transport.close()
-
-        self.event_loop.run_once()
-        self.assertEqual('CLOSED', proto.state)
-
-        client.close()
-
-    def test_start_serving_datagram_no_getaddrinfoc(self):
+    def test_create_datagram_connection_noaddr_nofamily(self):
         self.suppress_log_errors()
-        getaddrinfo = self.event_loop.getaddrinfo = unittest.mock.Mock()
-        getaddrinfo.return_value = []
 
-        f = self.event_loop.start_serving_datagram(
-            MyDatagramProto, '0.0.0.0', 0)
-
-        self.assertRaises(
-            socket.error, self.event_loop.run_until_complete, f)
+        coro = self.event_loop.create_datagram_connection(
+            protocols.DatagramProtocol)
+        self.assertRaises(ValueError, self.event_loop.run_until_complete, coro)
 
     @unittest.mock.patch('tulip.base_events.socket')
-    def test_start_serving_datagram_cant_bind(self, m_socket):
+    def test_create_datagram_connection_cant_bind(self, m_socket):
         self.suppress_log_errors()
 
         class Err(socket.error):
             pass
 
         m_socket.error = socket.error
-        m_socket.getaddrinfo.return_value = [
-            (2, 1, 6, '', ('127.0.0.1', 10100))]
+        m_socket.AF_INET6 = socket.AF_INET6
+        m_socket.getaddrinfo = socket.getaddrinfo
         m_sock = m_socket.socket.return_value = unittest.mock.Mock()
-        m_sock.setsockopt.side_effect = Err
+        m_sock.bind.side_effect = Err
 
-        fut = self.event_loop.start_serving_datagram(
-            MyDatagramProto, '0.0.0.0', 0)
+        fut = self.event_loop.create_datagram_connection(
+            MyDatagramProto,
+            local_addr=('127.0.0.1', 0), family=socket.AF_INET)
         self.assertRaises(Err, self.event_loop.run_until_complete, fut)
         self.assertTrue(m_sock.close.called)
 
@@ -1028,7 +979,8 @@ class EventLoopTestsMixin:
 
         os.close(wpipe)
         self.event_loop.run_once()
-        self.assertEqual(['INITIAL', 'CONNECTED', 'EOF', 'CLOSED'], proto.state)
+        self.assertEqual(
+            ['INITIAL', 'CONNECTED', 'EOF', 'CLOSED'], proto.state)
         # extra info is available
         self.assertIsNotNone(proto.transport.get_extra_info('pipe'))
 
@@ -1119,13 +1071,7 @@ if sys.platform == 'win32':
             raise unittest.SkipTest(
                 "IocpEventLoop does not have "
                 "create_datagram_connection_no_connection()")
-        def test_start_serving_datagram(self):
-            raise unittest.SkipTest(
-                "IocpEventLoop does not have start_serving_datagram()")
-        def test_start_serving_datagram_no_getaddrinfoc(self):
-            raise unittest.SkipTest(
-                "IocpEventLoop does not have start_serving_datagram()")
-        def test_start_serving_datagram_cant_bind(self):
+        def test_create_datagram_connection_cant_bind(self):
             raise unittest.SkipTest(
                 "IocpEventLoop does not have start_serving_udp()")
 
@@ -1298,9 +1244,6 @@ class AbstractEventLoopTests(unittest.TestCase):
             NotImplementedError, ev_loop.start_serving, f)
         self.assertRaises(
             NotImplementedError, ev_loop.create_datagram_connection, f)
-        self.assertRaises(
-            NotImplementedError, ev_loop.start_serving_datagram,
-            f, 'localhost', 8080)
         self.assertRaises(
             NotImplementedError, ev_loop.add_reader, 1, f)
         self.assertRaises(

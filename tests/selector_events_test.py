@@ -11,6 +11,8 @@ except ImportError:
 
 from tulip import futures
 from tulip import selectors
+from tulip.events import AbstractEventLoop
+from tulip.protocols import DatagramProtocol, Protocol
 from tulip.selector_events import BaseSelectorEventLoop
 from tulip.selector_events import _SelectorSslTransport
 from tulip.selector_events import _SelectorSocketTransport
@@ -49,7 +51,9 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
 
     def test_close(self):
         ssock = self.event_loop._ssock
+        ssock.fileno.return_value = 7
         csock = self.event_loop._csock
+        csock.fileno.return_value = 1
         remove_reader = self.event_loop.remove_reader = unittest.mock.Mock()
 
         self.event_loop._selector.close()
@@ -58,10 +62,10 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         self.assertIsNone(self.event_loop._selector)
         self.assertIsNone(self.event_loop._csock)
         self.assertIsNone(self.event_loop._ssock)
-        self.assertTrue(selector.close.called)
-        self.assertTrue(ssock.close.called)
-        self.assertTrue(csock.close.called)
-        self.assertTrue(remove_reader.called)
+        selector.close.assert_called_with()
+        ssock.close.assert_called_with()
+        csock.close.assert_called_with()
+        remove_reader.assert_called_with(7)
 
         self.event_loop.close()
         self.event_loop.close()
@@ -116,9 +120,8 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
 
         f = self.event_loop.sock_recv(sock, 1024)
         self.assertIsInstance(f, futures.Future)
-        self.assertEqual(
-            (f, False, sock, 1024),
-            self.event_loop._sock_recv.call_args[0])
+        self.event_loop._sock_recv.assert_called_with(
+            f, False, sock, 1024)
 
     def test__sock_recv_canceled_fut(self):
         sock = unittest.mock.Mock()
@@ -521,7 +524,7 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         self.event_loop._process_events(
             ((1, selectors.EVENT_READ, (reader, None)),))
         self.assertTrue(self.event_loop._add_callback.called)
-        self.assertEqual((reader,), self.event_loop._add_callback.call_args[0])
+        self.event_loop._add_callback.assert_called_with(reader)
 
     def test_process_events_read_cancelled(self):
         reader = unittest.mock.Mock()
@@ -530,8 +533,7 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         self.event_loop.remove_reader = unittest.mock.Mock()
         self.event_loop._process_events(
             ((1, selectors.EVENT_READ, (reader, None)),))
-        self.assertTrue(self.event_loop.remove_reader.called)
-        self.assertEqual((1,), self.event_loop.remove_reader.call_args[0])
+        self.event_loop.remove_reader.assert_called_with(1)
 
     def test_process_events_write(self):
         writer = unittest.mock.Mock()
@@ -540,31 +542,31 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         self.event_loop._add_callback = unittest.mock.Mock()
         self.event_loop._process_events(
             ((1, selectors.EVENT_WRITE, (None, writer)),))
-        self.assertTrue(self.event_loop._add_callback.called)
-        self.assertEqual((writer,), self.event_loop._add_callback.call_args[0])
+        self.event_loop._add_callback.assert_called_with(writer)
 
     def test_process_events_write_cancelled(self):
         writer = unittest.mock.Mock()
         writer.cancelled = True
-
         self.event_loop.remove_writer = unittest.mock.Mock()
+
         self.event_loop._process_events(
             ((1, selectors.EVENT_WRITE, (None, writer)),))
-        self.assertTrue(self.event_loop.remove_writer.called)
-        self.assertEqual((1,), self.event_loop.remove_writer.call_args[0])
+        self.event_loop.remove_writer.assert_called_with(1)
 
 
 class SelectorSocketTransportTests(unittest.TestCase):
 
     def setUp(self):
-        self.event_loop = unittest.mock.Mock()
-        self.sock = unittest.mock.Mock()
-        self.protocol = unittest.mock.Mock()
+        self.event_loop = unittest.mock.Mock(spec_set=AbstractEventLoop)
+        self.sock = unittest.mock.Mock(socket.socket)
+        self.sock.fileno.return_value = 7
+        self.protocol = unittest.mock.Mock(Protocol)
 
     def test_ctor(self):
-        _SelectorSocketTransport(self.event_loop, self.sock, self.protocol)
-        self.assertTrue(self.event_loop.add_reader.called)
-        self.assertTrue(self.event_loop.call_soon.called)
+        tr = _SelectorSocketTransport(self.event_loop, self.sock, self.protocol)
+        self.event_loop.add_reader.assert_called_with(7, tr._read_ready)
+        self.event_loop.call_soon.assert_called_with(
+            self.protocol.connection_made, tr)
 
     def test_ctor_with_waiter(self):
         fut = futures.Future()
@@ -576,24 +578,15 @@ class SelectorSocketTransportTests(unittest.TestCase):
                          self.event_loop.call_soon.call_args[0][0])
 
     def test_read_ready(self):
-        data_received = unittest.mock.Mock()
-        self.protocol.data_received = data_received
-
         transport = _SelectorSocketTransport(
             self.event_loop, self.sock, self.protocol)
 
         self.sock.recv.return_value = b'data'
         transport._read_ready()
 
-        self.assertTrue(self.event_loop.call_soon.called)
-        self.assertEqual(
-            (data_received, b'data'),
-            self.event_loop.call_soon.call_args[0])
+        self.protocol.data_received.assert_called_with(b'data')
 
     def test_read_ready_eof(self):
-        eof_received = unittest.mock.Mock()
-        self.protocol.eof_received = eof_received
-
         transport = _SelectorSocketTransport(
             self.event_loop, self.sock, self.protocol)
 
@@ -601,44 +594,43 @@ class SelectorSocketTransportTests(unittest.TestCase):
         transport._read_ready()
 
         self.assertTrue(self.event_loop.remove_reader.called)
-        self.assertEqual(
-            (eof_received,), self.event_loop.call_soon.call_args[0])
+        self.protocol.eof_received.assert_called_with()
 
-    def test_read_ready_tryagain(self):
+    @unittest.mock.patch('logging.exception')
+    def test_read_ready_tryagain(self, m_exc):
         transport = _SelectorSocketTransport(
             self.event_loop, self.sock, self.protocol)
 
         class Err(socket.error):
             errno = errno.EAGAIN
 
-        self.sock.recv.side_effect = Err
+        err = self.sock.recv.side_effect = Err()
         transport._fatal_error = unittest.mock.Mock()
         transport._read_ready()
 
         self.assertFalse(transport._fatal_error.called)
 
-    def test_read_ready_err(self):
+    @unittest.mock.patch('logging.exception')
+    def test_read_ready_err(self, m_exc):
         transport = _SelectorSocketTransport(
             self.event_loop, self.sock, self.protocol)
 
         class Err(socket.error):
             pass
 
-        self.sock.recv.side_effect = Err
+        err = self.sock.recv.side_effect = Err()
         transport._fatal_error = unittest.mock.Mock()
         transport._read_ready()
 
-        self.assertTrue(transport._fatal_error.called)
-        self.assertIsInstance(transport._fatal_error.call_args[0][0], Err)
+        transport._fatal_error.assert_called_with(err)
 
     def test_abort(self):
         transport = _SelectorSocketTransport(
             self.event_loop, self.sock, self.protocol)
-        transport._fatal_error = unittest.mock.Mock()
+        transport._close = unittest.mock.Mock()
 
         transport.abort()
-        self.assertTrue(transport._fatal_error.called)
-        self.assertIsNone(transport._fatal_error.call_args[0][0])
+        transport._close.assert_called_with(None)
 
     def test_write(self):
         data = b'data'
@@ -647,8 +639,7 @@ class SelectorSocketTransportTests(unittest.TestCase):
         transport = _SelectorSocketTransport(
             self.event_loop, self.sock, self.protocol)
         transport.write(data)
-        self.assertTrue(self.sock.send.called)
-        self.assertEqual(self.sock.send.call_args[0], (data,))
+        self.sock.send.assert_called_with(data)
 
     def test_write_no_data(self):
         transport = _SelectorSocketTransport(
@@ -688,10 +679,7 @@ class SelectorSocketTransportTests(unittest.TestCase):
             self.event_loop, self.sock, self.protocol)
         transport.write(data)
 
-        self.assertTrue(self.event_loop.add_writer.called)
-        self.assertEqual(
-            transport._write_ready, self.event_loop.add_writer.call_args[0][1])
-
+        self.event_loop.add_writer.assert_called_with(7, transport._write_ready)
         self.assertEqual([b'data'], transport._buffer)
 
     def test_write_tryagain(self):
@@ -760,13 +748,9 @@ class SelectorSocketTransportTests(unittest.TestCase):
         transport._closing = True
         transport._buffer.append(data)
         transport._write_ready()
-        self.assertTrue(self.sock.send.called)
-        self.assertEqual(self.sock.send.call_args[0], (data,))
-        self.assertTrue(self.event_loop.remove_writer.called)
-        self.assertTrue(self.event_loop.call_soon.called)
-        self.assertEqual(
-            (transport._call_connection_lost, None),
-            self.event_loop.call_soon.call_args[0])
+        self.sock.send.assert_called_with(data)
+        self.event_loop.remove_writer.assert_called_with(7)
+        self.protocol.connection_lost.assert_called_with(None)
 
     def test_write_ready_no_data(self):
         transport = _SelectorSocketTransport(
@@ -815,16 +799,14 @@ class SelectorSocketTransportTests(unittest.TestCase):
         class Err(socket.error):
             pass
 
-        self.sock.send.side_effect = Err
+        err = self.sock.send.side_effect = Err()
 
         transport = _SelectorSocketTransport(
             self.event_loop, self.sock, self.protocol)
         transport._fatal_error = unittest.mock.Mock()
         transport._buffer.append(b'data')
         transport._write_ready()
-
-        self.assertTrue(transport._fatal_error.called)
-        self.assertIsInstance(transport._fatal_error.call_args[0][0], Err)
+        transport._fatal_error.assert_called_with(err)
 
     def test_close(self):
         transport = _SelectorSocketTransport(
@@ -832,11 +814,8 @@ class SelectorSocketTransportTests(unittest.TestCase):
         transport.close()
 
         self.assertTrue(transport._closing)
-        self.assertTrue(self.event_loop.remove_reader.called)
-        self.assertTrue(self.event_loop.call_soon.called)
-        self.assertEqual(
-            (transport._call_connection_lost, None),
-            self.event_loop.call_soon.call_args[0])
+        self.event_loop.remove_reader.assert_called_with(7)
+        self.protocol.connection_lost(None)
 
     def test_close_write_buffer(self):
         transport = _SelectorSocketTransport(
@@ -848,43 +827,38 @@ class SelectorSocketTransportTests(unittest.TestCase):
         self.assertTrue(self.event_loop.remove_reader.called)
         self.assertFalse(self.event_loop.call_soon.called)
 
-    def test_fatal_error(self):
-        exc = object()
+    @unittest.mock.patch('logging.exception')
+    def test_fatal_error(self, m_exc):
+        exc = OSError()
         transport = _SelectorSocketTransport(
             self.event_loop, self.sock, self.protocol)
-        self.event_loop.reset_mock()
         transport._buffer.append(b'data')
         transport._fatal_error(exc)
 
         self.assertEqual([], transport._buffer)
-        self.assertTrue(self.event_loop.remove_writer.called)
-        self.assertTrue(self.event_loop.remove_reader.called)
-        self.assertTrue(self.event_loop.call_soon.called)
-        self.assertEqual(
-            (transport._call_connection_lost, exc),
-            self.event_loop.call_soon.call_args[0])
+        self.event_loop.remove_reader.assert_called_with(7)
+        self.event_loop.remove_writer.assert_called_with(7)
+        self.protocol.connection_lost.assert_called_with(exc)
+        m_exc.assert_called_with('Fatal error for %s', transport)
 
     def test_connection_lost(self):
         exc = object()
         transport = _SelectorSocketTransport(
             self.event_loop, self.sock, self.protocol)
-        self.sock.reset_mock()
-        self.protocol.reset_mock()
         transport._call_connection_lost(exc)
 
-        self.assertTrue(self.protocol.connection_lost.called)
-        self.assertEqual(
-            (exc,), self.protocol.connection_lost.call_args[0])
-        self.assertTrue(self.sock.close.called)
+        self.protocol.connection_lost.assert_called_with(exc)
+        self.sock.close.assert_called_with()
 
 
 @unittest.skipIf(ssl is None, 'No ssl module')
 class SelectorSslTransportTests(unittest.TestCase):
 
     def setUp(self):
-        self.event_loop = unittest.mock.Mock()
-        self.sock = unittest.mock.Mock()
-        self.protocol = unittest.mock.Mock()
+        self.event_loop = unittest.mock.Mock(spec_set=AbstractEventLoop)
+        self.sock = unittest.mock.Mock(socket.socket)
+        self.sock.fileno.return_value = 7
+        self.protocol = unittest.mock.Mock(spec_set=Protocol)
         self.sslsock = unittest.mock.Mock()
         self.sslsock.fileno.return_value = 1
         self.sslcontext = unittest.mock.Mock()
@@ -948,34 +922,27 @@ class SelectorSslTransportTests(unittest.TestCase):
         self.assertRaises(AssertionError, self.transport.write, b'data')
 
     def test_abort(self):
-        self.transport._fatal_error = unittest.mock.Mock()
-
+        self.transport._close = unittest.mock.Mock()
         self.transport.abort()
-        self.assertTrue(self.transport._fatal_error.called)
-        self.assertEqual((None,), self.transport._fatal_error.call_args[0])
+        self.transport._close.assert_called_with(None)
 
-    def test_fatal_error(self):
-        exc = object()
+    @unittest.mock.patch('logging.exception')
+    def test_fatal_error(self, m_exc):
+        exc = OSError()
         self.transport._buffer.append(b'data')
         self.transport._fatal_error(exc)
 
         self.assertEqual([], self.transport._buffer)
         self.assertTrue(self.event_loop.remove_writer.called)
         self.assertTrue(self.event_loop.remove_reader.called)
-        self.assertTrue(self.event_loop.call_soon.called)
-        self.assertEqual(
-            (self.protocol.connection_lost, exc),
-            self.event_loop.call_soon.call_args[0])
+        self.protocol.connection_lost.assert_called_with(exc)
+        m_exc.assert_called_with('Fatal error for %s', self.transport)
 
     def test_close(self):
         self.transport.close()
-
         self.assertTrue(self.transport._closing)
         self.assertTrue(self.event_loop.remove_reader.called)
-        self.assertTrue(self.event_loop.call_soon.called)
-        self.assertEqual(
-            (self.protocol.connection_lost, None),
-            self.event_loop.call_soon.call_args[0])
+        self.protocol.connection_lost.assert_called_with(None)
 
     def test_close_write_buffer(self):
         self.transport._buffer.append(b'data')
@@ -1109,24 +1076,20 @@ class SelectorSslTransportTests(unittest.TestCase):
 class SelectorDatagramTransportTests(unittest.TestCase):
 
     def setUp(self):
-        self.event_loop = unittest.mock.Mock()
-        self.sock = unittest.mock.Mock()
-        self.protocol = unittest.mock.Mock()
+        self.event_loop = unittest.mock.Mock(spec_set=AbstractEventLoop)
+        self.sock = unittest.mock.Mock(spec_set=socket.socket)
+        self.sock.fileno.return_value = 7
+        self.protocol = unittest.mock.Mock(spec_set=DatagramProtocol)
 
     def test_read_ready(self):
-        datagram_received = unittest.mock.Mock()
-        self.protocol.datagram_received = datagram_received
-
         transport = _SelectorDatagramTransport(
             self.event_loop, self.sock, self.protocol)
 
         self.sock.recvfrom.return_value = (b'data', ('0.0.0.0', 1234))
         transport._read_ready()
 
-        self.assertTrue(self.event_loop.call_soon.called)
-        self.assertEqual(
-            (datagram_received, b'data', ('0.0.0.0', 1234)),
-            self.event_loop.call_soon.call_args[0])
+        self.protocol.datagram_received.assert_called_with(
+            b'data', ('0.0.0.0', 1234))
 
     def test_read_ready_tryagain(self):
         transport = _SelectorDatagramTransport(
@@ -1148,21 +1111,19 @@ class SelectorDatagramTransportTests(unittest.TestCase):
         class Err(socket.error):
             pass
 
-        self.sock.recvfrom.side_effect = Err
+        err = self.sock.recvfrom.side_effect = Err()
         transport._fatal_error = unittest.mock.Mock()
         transport._read_ready()
 
-        self.assertTrue(transport._fatal_error.called)
-        self.assertIsInstance(transport._fatal_error.call_args[0][0], Err)
+        transport._fatal_error.assert_called_with(err)
 
     def test_abort(self):
         transport = _SelectorDatagramTransport(
             self.event_loop, self.sock, self.protocol)
-        transport._fatal_error = unittest.mock.Mock()
+        transport._close = unittest.mock.Mock()
 
         transport.abort()
-        self.assertTrue(transport._fatal_error.called)
-        self.assertIsNone(transport._fatal_error.call_args[0][0])
+        transport._close.assert_called_with(None)
 
     def test_sendto(self):
         data = b'data'
@@ -1292,13 +1253,9 @@ class SelectorDatagramTransportTests(unittest.TestCase):
         transport._closing = True
         transport._buffer.append((data, ()))
         transport._sendto_ready()
-        self.assertTrue(self.sock.sendto.called)
-        self.assertEqual(self.sock.sendto.call_args[0], (data, ()))
-        self.assertTrue(self.event_loop.remove_writer.called)
-        self.assertTrue(self.event_loop.call_soon.called)
-        self.assertEqual(
-            (transport._call_connection_lost, None),
-            self.event_loop.call_soon.call_args[0])
+        self.sock.sendto.assert_called_with(data, ())
+        self.event_loop.remove_writer.assert_called_with(7)
+        self.protocol.connection_lost.assert_called_with(None)
 
     def test_sendto_ready_no_data(self):
         transport = _SelectorDatagramTransport(
@@ -1366,24 +1323,21 @@ class SelectorDatagramTransportTests(unittest.TestCase):
         transport.close()
 
         self.assertTrue(transport._closing)
-        self.assertTrue(self.event_loop.remove_reader.called)
-        self.assertTrue(self.event_loop.call_soon.called)
-        self.assertEqual(
-            (transport._call_connection_lost, None),
-            self.event_loop.call_soon.call_args[0])
+        self.event_loop.remove_reader.assert_called_with(7)
+        self.protocol.connection_lost.assert_called_with(None)
 
     def test_close_write_buffer(self):
         transport = _SelectorDatagramTransport(
             self.event_loop, self.sock, self.protocol)
-        self.event_loop.reset_mock()
         transport._buffer.append((b'data', ()))
         transport.close()
 
-        self.assertTrue(self.event_loop.remove_reader.called)
-        self.assertFalse(self.event_loop.call_soon.called)
+        self.event_loop.remove_reader.assert_called_with(7)
+        self.assertFalse(self.protocol.connection_lost.called)
 
-    def test_fatal_error(self):
-        exc = object()
+    @unittest.mock.patch('logging.exception')
+    def test_fatal_error(self, m_exc):
+        exc = OSError()
         transport = _SelectorDatagramTransport(
             self.event_loop, self.sock, self.protocol)
         self.event_loop.reset_mock()
@@ -1391,31 +1345,25 @@ class SelectorDatagramTransportTests(unittest.TestCase):
         transport._fatal_error(exc)
 
         self.assertEqual([], list(transport._buffer))
-        self.assertTrue(self.event_loop.remove_writer.called)
-        self.assertTrue(self.event_loop.remove_reader.called)
-        self.assertTrue(self.event_loop.call_soon.called)
-        self.assertEqual(
-            (transport._call_connection_lost, exc),
-            self.event_loop.call_soon.call_args[0])
+        self.event_loop.remove_writer.assert_called_with(7)
+        self.event_loop.remove_reader.assert_called_with(7)
+        self.protocol.connection_lost.assert_called_with(exc)
+        m_exc.assert_called_with('Fatal error for %s', transport)
 
-    def test_fatal_error_connected(self):
+    @unittest.mock.patch('logging.exception')
+    def test_fatal_error_connected(self, m_exc):
         transport = _SelectorDatagramTransport(
             self.event_loop, self.sock, self.protocol, ('0.0.0.0', 1))
-        self.event_loop.reset_mock()
-        transport._fatal_error(ConnectionRefusedError())
-
-        self.assertEqual(
-            2, self.event_loop.call_soon.call_count)
+        err = ConnectionRefusedError()
+        transport._fatal_error(err)
+        self.protocol.connection_refused.assert_called_with(err)
+        m_exc.assert_called_with('Fatal error for %s', transport)
 
     def test_transport_closing(self):
         exc = object()
         transport = _SelectorDatagramTransport(
             self.event_loop, self.sock, self.protocol)
-        self.sock.reset_mock()
-        self.protocol.reset_mock()
         transport._call_connection_lost(exc)
 
-        self.assertTrue(self.protocol.connection_lost.called)
-        self.assertEqual(
-            (exc,), self.protocol.connection_lost.call_args[0])
-        self.assertTrue(self.sock.close.called)
+        self.protocol.connection_lost.assert_called_with(exc)
+        self.sock.close.assert_called_with()

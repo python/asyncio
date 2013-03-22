@@ -705,8 +705,6 @@ class EventLoopTestsMixin:
         self.assertEqual('INITIAL', proto.state)
         self.event_loop.run_once()
         self.assertEqual('CONNECTED', proto.state)
-        self.assertEqual(0, proto.nbytes)
-        self.event_loop.run_once()
         self.assertEqual(3, proto.nbytes)
 
         # extra info is available
@@ -719,7 +717,6 @@ class EventLoopTestsMixin:
         # close connection
         proto.transport.close()
 
-        self.event_loop.run_once()
         self.assertEqual('CLOSED', proto.state)
 
         # the client socket must be closed after to avoid ECONNRESET upon
@@ -741,7 +738,6 @@ class EventLoopTestsMixin:
         client.connect(('127.0.0.1', port))
         client.send(b'xxx')
         self.event_loop.run_once()  # This is quite mysterious, but necessary.
-        self.event_loop.run_once()
         self.event_loop.run_once()
         sock.close()
         client.close()
@@ -807,13 +803,10 @@ class EventLoopTestsMixin:
         self.assertEqual('INITIALIZED', protocol.state)
         transport.sendto(b'xxx')
         self.event_loop.run_once()
-        self.assertEqual(0, server.nbytes)
-        self.event_loop.run_once()
         self.assertEqual(3, server.nbytes)
         self.event_loop.run_once()
 
         # received
-        self.event_loop.run_once()
         self.assertEqual(8, protocol.nbytes)
 
         # extra info is available
@@ -823,10 +816,7 @@ class EventLoopTestsMixin:
 
         # close connection
         transport.close()
-
-        self.event_loop.run_once()
         self.assertEqual('CLOSED', protocol.state)
-
         server.transport.close()
 
     def test_create_datagram_connection_no_connection(self):
@@ -852,13 +842,10 @@ class EventLoopTestsMixin:
         self.assertEqual('INITIALIZED', protocol.state)
         transport.sendto(b'xxx', (host, port))
         self.event_loop.run_once()
-        self.assertEqual(0, server.nbytes)
-        self.event_loop.run_once()
         self.assertEqual(3, server.nbytes)
         self.event_loop.run_once()
 
         # received
-        self.event_loop.run_once()
         self.assertEqual(8, protocol.nbytes)
 
         # extra info is available
@@ -868,10 +855,7 @@ class EventLoopTestsMixin:
 
         # close connection
         transport.close()
-
-        self.event_loop.run_once()
         self.assertEqual('CLOSED', protocol.state)
-
         server.transport.close()
 
     def test_create_datagram_connection_no_getaddrinfo(self):
@@ -929,8 +913,6 @@ class EventLoopTestsMixin:
         self.assertEqual(host, '127.0.0.1')
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         client.sendto(b'xxx', ('127.0.0.1', port))
-        self.event_loop.run_once()
-        self.assertEqual(0, proto.nbytes)
         self.event_loop.run_once()
         self.assertEqual(3, proto.nbytes)
 

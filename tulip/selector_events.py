@@ -346,10 +346,10 @@ class _SelectorSocketTransport(transports.Transport):
                 self._fatal_error(exc)
         else:
             if data:
-                self._event_loop.call_soon(self._protocol.data_received, data)
+                self._protocol.data_received(data)
             else:
                 self._event_loop.remove_reader(self._sock.fileno())
-                self._event_loop.call_soon(self._protocol.eof_received)
+                self._protocol.eof_received()
 
     def write(self, data):
         assert isinstance(data, (bytes, bytearray)), repr(data)
@@ -390,7 +390,7 @@ class _SelectorSocketTransport(transports.Transport):
         if n == len(data):
             self._event_loop.remove_writer(self._sock.fileno())
             if self._closing:
-                self._event_loop.call_soon(self._call_connection_lost, None)
+                self._call_connection_lost(None)
             return
         if n:
             data = data[n:]
@@ -399,20 +399,24 @@ class _SelectorSocketTransport(transports.Transport):
     # TODO: write_eof(), can_write_eof().
 
     def abort(self):
-        self._fatal_error(None)
+        self._close(None)
 
     def close(self):
         self._closing = True
         self._event_loop.remove_reader(self._sock.fileno())
         if not self._buffer:
-            self._event_loop.call_soon(self._call_connection_lost, None)
+            self._call_connection_lost(None)
 
     def _fatal_error(self, exc):
+        # should be called from exception handler only
         logging.exception('Fatal error for %s', self)
+        self._close(exc)
+
+    def _close(self, exc):
         self._event_loop.remove_writer(self._sock.fileno())
         self._event_loop.remove_reader(self._sock.fileno())
         self._buffer = []
-        self._event_loop.call_soon(self._call_connection_lost, exc)
+        self._call_connection_lost(exc)
 
     def _call_connection_lost(self, exc):
         try:
@@ -538,20 +542,23 @@ class _SelectorSslTransport(transports.Transport):
     # TODO: write_eof(), can_write_eof().
 
     def abort(self):
-        self._fatal_error(None)
+        self._close(None)
 
     def close(self):
         self._closing = True
         self._event_loop.remove_reader(self._sslsock.fileno())
         if not self._buffer:
-            self._event_loop.call_soon(self._protocol.connection_lost, None)
+            self._protocol.connection_lost(None)
 
     def _fatal_error(self, exc):
         logging.exception('Fatal error for %s', self)
+        self._close(exc)
+
+    def _close(self, exc):
         self._event_loop.remove_writer(self._sslsock.fileno())
         self._event_loop.remove_reader(self._sslsock.fileno())
         self._buffer = []
-        self._event_loop.call_soon(self._protocol.connection_lost, exc)
+        self._protocol.connection_lost(exc)
 
 
 class _SelectorDatagramTransport(transports.DatagramTransport):
@@ -578,8 +585,7 @@ class _SelectorDatagramTransport(transports.DatagramTransport):
             if exc.errno not in _TRYAGAIN:
                 self._fatal_error(exc)
         else:
-            self._event_loop.call_soon(
-                self._protocol.datagram_received, data, addr)
+            self._protocol.datagram_received(data, addr)
 
     def sendto(self, data, addr=None):
         assert isinstance(data, bytes)
@@ -633,26 +639,28 @@ class _SelectorDatagramTransport(transports.DatagramTransport):
         if not self._buffer:
             self._event_loop.remove_writer(self._fileno)
             if self._closing:
-                self._event_loop.call_soon(self._call_connection_lost, None)
+                self._call_connection_lost(None)
 
     def abort(self):
-        self._fatal_error(None)
+        self._close(None)
 
     def close(self):
         self._closing = True
         self._event_loop.remove_reader(self._fileno)
         if not self._buffer:
-            self._event_loop.call_soon(self._call_connection_lost, None)
+            self._call_connection_lost(None)
 
     def _fatal_error(self, exc):
         logging.exception('Fatal error for %s', self)
+        self._close(exc)
 
+    def _close(self, exc):
         self._buffer.clear()
         self._event_loop.remove_writer(self._fileno)
         self._event_loop.remove_reader(self._fileno)
         if self._address and isinstance(exc, ConnectionRefusedError):
-            self._event_loop.call_soon(self._protocol.connection_refused, exc)
-        self._event_loop.call_soon(self._call_connection_lost, exc)
+            self._protocol.connection_refused(exc)
+        self._call_connection_lost(exc)
 
     def _call_connection_lost(self, exc):
         try:

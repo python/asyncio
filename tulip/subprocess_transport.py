@@ -49,21 +49,24 @@ class UnixSubprocessTransport(transports.Transport):
 
     def write(self, data):
         assert not self._eof
+        assert isinstance(data, bytes), repr(data)
         if not data:
             return
+
         if not self._buffer:
             # Attempt to write it right away first.
             try:
                 n = os.write(self._wstdin, data)
             except BlockingIOError:
-                n = 0
+                pass
             except Exception as exc:
                 self._fatal_error(exc)
                 return
-            if n >= len(data):
-                return
-            if n > 0:
-                data = data[n:]
+            else:
+                if n == len(data):
+                    return
+                elif n:
+                    data = data[n:]
             self._event_loop.add_writer(self._wstdin, self._stdin_callback)
         self._buffer.append(data)
 
@@ -94,39 +97,41 @@ class UnixSubprocessTransport(transports.Transport):
 
     def _stdin_callback(self):
         data = b''.join(self._buffer)
+        assert data, "Data shold not be empty"
+
         self._buffer = []
         try:
-            if data:
-                n = os.write(self._wstdin, data)
-            else:
-                n = 0
+            n = os.write(self._wstdin, data)
         except BlockingIOError:
-            n = 0
+            self._buffer.append(data)
         except Exception as exc:
             self._fatal_error(exc)
-            return
-        if n >= len(data):
-            self._event_loop.remove_writer(self._wstdin)
-            if self._eof:
-                os.close(self._wstdin)
-                self._wstdin = -1
-            return
-        if n > 0:
-            data = data[n:]
-        self._buffer.append(data)  # Try again later.
+        else:
+            if n >= len(data):
+                self._event_loop.remove_writer(self._wstdin)
+                if self._eof:
+                    os.close(self._wstdin)
+                    self._wstdin = -1
+                return
+
+            elif n > 0:
+                data = data[n:]
+
+            self._buffer.append(data)  # Try again later.
 
     def _stdout_callback(self):
         try:
             data = os.read(self._rstdout, 1024)
         except BlockingIOError:
-            return
-        if data:
-            self._event_loop.call_soon(self._protocol.data_received, data)
+            pass
         else:
-            self._event_loop.remove_reader(self._rstdout)
-            os.close(self._rstdout)
-            self._rstdout = -1
-            self._event_loop.call_soon(self._protocol.eof_received)
+            if data:
+                self._event_loop.call_soon(self._protocol.data_received, data)
+            else:
+                self._event_loop.remove_reader(self._rstdout)
+                os.close(self._rstdout)
+                self._rstdout = -1
+                self._event_loop.call_soon(self._protocol.eof_received)
 
 
 def _setnonblocking(fd):

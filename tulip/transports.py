@@ -122,6 +122,7 @@ class DatagramTransport(BaseTransport):
         addr is target socket address.
         If addr is None use target address pointed on transport creation.
         """
+        raise NotImplementedError
 
     def abort(self):
         """Closes the transport immediately.

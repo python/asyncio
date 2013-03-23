@@ -563,7 +563,8 @@ class SelectorSocketTransportTests(unittest.TestCase):
         self.protocol = unittest.mock.Mock(Protocol)
 
     def test_ctor(self):
-        tr = _SelectorSocketTransport(self.event_loop, self.sock, self.protocol)
+        tr = _SelectorSocketTransport(
+            self.event_loop, self.sock, self.protocol)
         self.event_loop.add_reader.assert_called_with(7, tr._read_ready)
         self.event_loop.call_soon.assert_called_with(
             self.protocol.connection_made, tr)
@@ -604,7 +605,7 @@ class SelectorSocketTransportTests(unittest.TestCase):
         class Err(socket.error):
             errno = errno.EAGAIN
 
-        err = self.sock.recv.side_effect = Err()
+        self.sock.recv.side_effect = Err()
         transport._fatal_error = unittest.mock.Mock()
         transport._read_ready()
 
@@ -674,12 +675,14 @@ class SelectorSocketTransportTests(unittest.TestCase):
     def test_write_partial_none(self):
         data = b'data'
         self.sock.send.return_value = 0
+        self.sock.fileno.return_value = 7
 
         transport = _SelectorSocketTransport(
             self.event_loop, self.sock, self.protocol)
         transport.write(data)
 
-        self.event_loop.add_writer.assert_called_with(7, transport._write_ready)
+        self.event_loop.add_writer.assert_called_with(
+            7, transport._write_ready)
         self.assertEqual([b'data'], transport._buffer)
 
     def test_write_tryagain(self):
@@ -755,9 +758,7 @@ class SelectorSocketTransportTests(unittest.TestCase):
     def test_write_ready_no_data(self):
         transport = _SelectorSocketTransport(
             self.event_loop, self.sock, self.protocol)
-        transport._write_ready()
-        self.assertFalse(self.sock.send.called)
-        self.assertTrue(self.event_loop.remove_writer.called)
+        self.assertRaises(AssertionError, transport._write_ready)
 
     def test_write_ready_partial(self):
         data = b'data'

@@ -54,7 +54,7 @@ class _ProactorSocketTransport(transports.Transport):
                 self._protocol.eof_received()
 
     def write(self, data):
-        assert isinstance(data, bytes)
+        assert isinstance(data, bytes), repr(data)
         assert not self._closing
         if not data:
             return

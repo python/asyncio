@@ -221,10 +221,11 @@ class _UnixWritePipeTransport(transports.WriteTransport):
             self._event_loop.call_soon(waiter.set_result, None)
 
     def write(self, data):
-        assert isinstance(data, (bytes, bytearray)), repr(data)
+        assert isinstance(data, bytes), repr(data)
         assert not self._closing
         if not data:
             return
+
         if not self._buffer:
             # Attempt to send it right away first.
             try:
@@ -239,29 +240,30 @@ class _UnixWritePipeTransport(transports.WriteTransport):
             elif n > 0:
                 data = data[n:]
             self._event_loop.add_writer(self._fileno, self._write_ready)
-        assert data, "Data shold not be empty"
+
         self._buffer.append(data)
 
     def _write_ready(self):
         data = b''.join(self._buffer)
-        assert data, "Data shold not be empty"
+        assert data, "Data should not be empty"
+
+        self._buffer.clear()
         try:
             n = os.write(self._fileno, data)
         except BlockingIOError:
-            self._buffer = [data]
-            return
+            self._buffer.append(data)
         except Exception as exc:
             self._fatal_error(exc)
-            return
-        if n == len(data):
-            self._buffer = []
-            self._event_loop.remove_writer(self._fileno)
-            if self._closing:
-                self._call_connection_lost(None)
-            return
-        elif n > 0:
-            data = data[n:]
-        self._buffer = [data]  # Try again later.
+        else:
+            if n == len(data):
+                self._event_loop.remove_writer(self._fileno)
+                if self._closing:
+                    self._call_connection_lost(None)
+                return
+            elif n > 0:
+                data = data[n:]
+
+            self._buffer.append(data)  # Try again later.
 
     def can_write_eof(self):
         return True
@@ -288,7 +290,7 @@ class _UnixWritePipeTransport(transports.WriteTransport):
 
     def _close(self, exc=None):
         self._closing = True
-        self._buffer = []
+        self._buffer.clear()
         self._event_loop.remove_writer(self._fileno)
         self._call_connection_lost(exc)
 

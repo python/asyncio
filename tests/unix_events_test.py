@@ -190,8 +190,8 @@ class UnixReadPipeTransportTests(unittest.TestCase):
     @unittest.mock.patch('fcntl.fcntl')
     def test_ctor_with_waiter(self, m_fcntl):
         fut = futures.Future()
-        tr = unix_events._UnixReadPipeTransport(self.event_loop, self.pipe,
-                                                self.protocol, fut)
+        unix_events._UnixReadPipeTransport(self.event_loop, self.pipe,
+                                           self.protocol, fut)
         self.event_loop.call_soon.assert_called_with(fut.set_result, None)
 
     @unittest.mock.patch('os.read')
@@ -283,7 +283,6 @@ class UnixReadPipeTransportTests(unittest.TestCase):
         tr.close()
         self.assertFalse(tr._close.called)
 
-
     @unittest.mock.patch('os.read')
     @unittest.mock.patch('fcntl.fcntl')
     def test__close(self, m_fcntl, m_read):
@@ -335,8 +334,8 @@ class UnixWritePipeTransportTests(unittest.TestCase):
     @unittest.mock.patch('fcntl.fcntl')
     def test_ctor_with_waiter(self, m_fcntl):
         fut = futures.Future()
-        tr = unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
-                                                 self.protocol, fut)
+        unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
+                                            self.protocol, fut)
         self.event_loop.call_soon.assert_called_with(fut.set_result, None)
 
     @unittest.mock.patch('fcntl.fcntl')

@@ -356,6 +356,7 @@ class _SelectorSocketTransport(transports.Transport):
         assert not self._closing
         if not data:
             return
+
         if not self._buffer:
             # Attempt to send it right away first.
             try:
@@ -366,35 +367,37 @@ class _SelectorSocketTransport(transports.Transport):
                 else:
                     self._fatal_error(exc)
                     return
+
             if n == len(data):
                 return
-            if n:
+            elif n:
                 data = data[n:]
             self._event_loop.add_writer(self._sock.fileno(), self._write_ready)
+
         self._buffer.append(data)
 
     def _write_ready(self):
         data = b''.join(self._buffer)
-        self._buffer = []
+        assert data, "Data should not be empty"
+
+        self._buffer.clear()
         try:
-            if data:
-                n = self._sock.send(data)
-            else:
-                n = 0
+            n = self._sock.send(data)
         except socket.error as exc:
             if exc.errno in _TRYAGAIN:
-                n = 0
+                self._buffer.append(data)
             else:
                 self._fatal_error(exc)
+        else:
+            if n == len(data):
+                self._event_loop.remove_writer(self._sock.fileno())
+                if self._closing:
+                    self._call_connection_lost(None)
                 return
-        if n == len(data):
-            self._event_loop.remove_writer(self._sock.fileno())
-            if self._closing:
-                self._call_connection_lost(None)
-            return
-        if n:
-            data = data[n:]
-        self._buffer.append(data)  # Try again later.
+            elif n:
+                data = data[n:]
+
+            self._buffer.append(data)  # Try again later.
 
     # TODO: write_eof(), can_write_eof().
 
@@ -415,7 +418,7 @@ class _SelectorSocketTransport(transports.Transport):
     def _close(self, exc):
         self._event_loop.remove_writer(self._sock.fileno())
         self._event_loop.remove_reader(self._sock.fileno())
-        self._buffer = []
+        self._buffer.clear()
         self._call_connection_lost(exc)
 
     def _call_connection_lost(self, exc):
@@ -532,7 +535,7 @@ class _SelectorSslTransport(transports.Transport):
             self._protocol.connection_lost(None)
 
     def write(self, data):
-        assert isinstance(data, bytes)
+        assert isinstance(data, bytes), repr(data)
         assert not self._closing
         if not data:
             return

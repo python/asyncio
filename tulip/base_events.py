@@ -211,8 +211,6 @@ class BaseEventLoop(events.AbstractEventLoop):
 
         Any positional arguments after the callback will be passed to
         the callback when it is called.
-
-        # TODO: Should delay is None be interpreted as Infinity?
         """
         if delay <= 0:
             return self.call_soon(callback, *args)
@@ -223,6 +221,7 @@ class BaseEventLoop(events.AbstractEventLoop):
 
     def call_repeatedly(self, interval, callback, *args):
         """Call a callback every 'interval' seconds."""
+        assert interval > 0, 'Interval must be > 0: %r' % (interval,)
         def wrapper():
             callback(*args)  # If this fails, the chain is broken.
             handle._when = time.monotonic() + interval

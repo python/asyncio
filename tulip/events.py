@@ -184,9 +184,9 @@ class AbstractEventLoop:
                       family=0, proto=0, flags=0, sock=None):
         raise NotImplementedError
 
-    def create_datagram_connection(self, protocol,
-                                   local_addr=None, remote_addr=None, *,
-                                   family=0, proto=0, flags=0):
+    def create_datagram_endpoint(self, protocol_factory,
+                                 local_addr=None, remote_addr=None, *,
+                                 family=0, proto=0, flags=0):
         raise NotImplementedError
 
     def connect_read_pipe(self, protocol_factory, pipe):

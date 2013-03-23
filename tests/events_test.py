@@ -2,7 +2,6 @@
 
 import concurrent.futures
 import contextlib
-import errno
 import gc
 import io
 import os
@@ -916,11 +915,8 @@ class EventLoopTestsMixin:
         self.assertTrue(m_sock.close.called)
 
     def test_accept_connection_retry(self):
-        class Err(socket.error):
-            errno = errno.EAGAIN
-
         sock = unittest.mock.Mock()
-        sock.accept.side_effect = Err
+        sock.accept.side_effect = BlockingIOError()
 
         self.event_loop._accept_connection(MyProto, sock)
         self.assertFalse(sock.close.called)
@@ -929,7 +925,7 @@ class EventLoopTestsMixin:
         self.suppress_log_errors()
 
         sock = unittest.mock.Mock()
-        sock.accept.side_effect = socket.error
+        sock.accept.side_effect = OSError()
 
         self.event_loop._accept_connection(MyProto, sock)
         self.assertTrue(sock.close.called)

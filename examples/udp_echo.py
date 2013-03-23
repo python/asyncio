@@ -54,14 +54,14 @@ class MyClientUdpEchoProtocol:
 
 def start_server():
     loop = tulip.get_event_loop()
-    tulip.Task(loop.create_datagram_connection(
+    tulip.Task(loop.create_datagram_endpoint(
         MyServerUdpEchoProtocol, local_addr=ADDRESS))
     loop.run_forever()
 
 
 def start_client():
     loop = tulip.get_event_loop()
-    tulip.Task(loop.create_datagram_connection(
+    tulip.Task(loop.create_datagram_endpoint(
         MyClientUdpEchoProtocol, remote_addr=ADDRESS))
     loop.run_forever()
 

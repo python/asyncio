@@ -339,9 +339,9 @@ class BaseEventLoop(events.AbstractEventLoop):
         return transport, protocol
 
     @tasks.coroutine
-    def create_datagram_connection(self, protocol_factory,
-                                   local_addr=None, remote_addr=None, *,
-                                   family=0, proto=0, flags=0):
+    def create_datagram_endpoint(self, protocol_factory,
+                                 local_addr=None, remote_addr=None, *,
+                                 family=0, proto=0, flags=0):
         """Create datagram connection."""
         if not (local_addr or remote_addr):
             if family == 0:

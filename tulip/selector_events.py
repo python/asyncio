@@ -12,7 +12,6 @@ try:
     import ssl
 except ImportError:  # pragma: no cover
     ssl = None
-import sys
 
 from . import base_events
 from . import events
@@ -29,11 +28,6 @@ _DISCONNECTED = frozenset((errno.ECONNRESET,
                            errno.EPIPE,
                            errno.EBADF,
                            ))
-
-# Errno values indicating the socket isn't ready for I/O just yet.
-_TRYAGAIN = frozenset((errno.EAGAIN, errno.EWOULDBLOCK, errno.EINPROGRESS))
-if sys.platform == 'win32':  # pragma: no cover
-    _TRYAGAIN = frozenset(list(_TRYAGAIN) + [errno.WSAEWOULDBLOCK])
 
 
 class BaseSelectorEventLoop(base_events.BaseEventLoop):
@@ -91,18 +85,14 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
     def _read_from_self(self):
         try:
             self._ssock.recv(1)
-        except socket.error as exc:
-            if exc.errno in _TRYAGAIN:
-                return
-            raise  # Halp!
+        except (BlockingIOError, InterruptedError):
+            pass
 
     def _write_to_self(self):
         try:
             self._csock.send(b'x')
-        except socket.error as exc:
-            if exc.errno in _TRYAGAIN:
-                return
-            raise  # Halp!
+        except (BlockingIOError, InterruptedError):
+            pass
 
     def _start_serving(self, protocol_factory, sock):
         self.add_reader(sock.fileno(), self._accept_connection,
@@ -111,19 +101,18 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
     def _accept_connection(self, protocol_factory, sock):
         try:
             conn, addr = sock.accept()
-        except socket.error as exc:
-            if exc.errno in _TRYAGAIN:
-                return  # False alarm.
-            # Bad error.  Stop serving.
+        except (BlockingIOError, InterruptedError):
+            pass  # False alarm.
+        except:
+            # Bad error. Stop serving.
             self.remove_reader(sock.fileno())
             sock.close()
             # There's nowhere to send the error, so just log it.
             # TODO: Someone will want an error handler for this.
             logging.exception('Accept failed')
-            return
-
-        self._make_socket_transport(
-            conn, protocol_factory(), extra={'addr': addr})
+        else:
+            self._make_socket_transport(
+                conn, protocol_factory(), extra={'addr': addr})
         # It's now up to the protocol to handle the connection.
 
     def add_reader(self, fd, callback, *args):
@@ -216,11 +205,10 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         try:
             data = sock.recv(n)
             fut.set_result(data)
-        except socket.error as exc:
-            if exc.errno not in _TRYAGAIN:
-                fut.set_exception(exc)
-            else:
-                self.add_reader(fd, self._sock_recv, fut, True, sock, n)
+        except (BlockingIOError, InterruptedError):
+            self.add_reader(fd, self._sock_recv, fut, True, sock, n)
+        except Exception as exc:
+            fut.set_exception(exc)
 
     def sock_sendall(self, sock, data):
         """XXX"""
@@ -241,11 +229,11 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
 
         try:
             n = sock.send(data)
-        except socket.error as exc:
-            if exc.errno not in _TRYAGAIN:
-                fut.set_exception(exc)
-                return
+        except (BlockingIOError, InterruptedError):
             n = 0
+        except Exception as exc:
+            fut.set_exception(exc)
+            return
 
         if n == len(data):
             fut.set_result(None)
@@ -280,12 +268,10 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
                     # Jump to the except clause below.
                     raise socket.error(err, 'Connect call failed')
             fut.set_result(None)
-        except socket.error as exc:
-            if exc.errno not in _TRYAGAIN:
-                fut.set_exception(exc)
-            else:
-                self.add_writer(fd, self._sock_connect,
-                                fut, True, sock, address)
+        except (BlockingIOError, InterruptedError):
+            self.add_writer(fd, self._sock_connect, fut, True, sock, address)
+        except Exception as exc:
+            fut.set_exception(exc)
 
     def sock_accept(self, sock):
         """XXX"""
@@ -303,11 +289,10 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             conn, address = sock.accept()
             conn.setblocking(False)
             fut.set_result((conn, address))
-        except socket.error as exc:
-            if exc.errno not in _TRYAGAIN:
-                fut.set_exception(exc)
-            else:
-                self.add_reader(fd, self._sock_accept, fut, True, sock)
+        except (BlockingIOError, InterruptedError):
+            self.add_reader(fd, self._sock_accept, fut, True, sock)
+        except Exception as exc:
+            fut.set_exception(exc)
 
     def _process_events(self, event_list):
         for fileobj, mask, (reader, writer) in event_list:
@@ -341,9 +326,10 @@ class _SelectorSocketTransport(transports.Transport):
     def _read_ready(self):
         try:
             data = self._sock.recv(16*1024)
-        except socket.error as exc:
-            if exc.errno not in _TRYAGAIN:
-                self._fatal_error(exc)
+        except (BlockingIOError, InterruptedError):
+            pass
+        except Exception as exc:
+            self._fatal_error(exc)
         else:
             if data:
                 self._protocol.data_received(data)
@@ -361,12 +347,11 @@ class _SelectorSocketTransport(transports.Transport):
             # Attempt to send it right away first.
             try:
                 n = self._sock.send(data)
+            except (BlockingIOError, InterruptedError):
+                n = 0
             except socket.error as exc:
-                if exc.errno in _TRYAGAIN:
-                    n = 0
-                else:
-                    self._fatal_error(exc)
-                    return
+                self._fatal_error(exc)
+                return
 
             if n == len(data):
                 return
@@ -383,11 +368,10 @@ class _SelectorSocketTransport(transports.Transport):
         self._buffer.clear()
         try:
             n = self._sock.send(data)
-        except socket.error as exc:
-            if exc.errno in _TRYAGAIN:
-                self._buffer.append(data)
-            else:
-                self._fatal_error(exc)
+        except (BlockingIOError, InterruptedError):
+            self._buffer.append(data)
+        except Exception as exc:
+            self._fatal_error(exc)
         else:
             if n == len(data):
                 self._event_loop.remove_writer(self._sock.fileno())
@@ -492,10 +476,10 @@ class _SelectorSslTransport(transports.Transport):
             pass
         except ssl.SSLWantWriteError:
             pass
-        except socket.error as exc:
-            if exc.errno not in _TRYAGAIN:
-                self._fatal_error(exc)
-                return
+        except (BlockingIOError, InterruptedError):
+            pass
+        except Exception as exc:
+            self._fatal_error(exc)
         else:
             if data:
                 self._protocol.data_received(data)
@@ -520,12 +504,11 @@ class _SelectorSslTransport(transports.Transport):
             n = 0
         except ssl.SSLWantWriteError:
             n = 0
-        except socket.error as exc:
-            if exc.errno not in _TRYAGAIN:
-                self._fatal_error(exc)
-                return
-            else:
-                n = 0
+        except (BlockingIOError, InterruptedError):
+            n = 0
+        except Exception as exc:
+            self._fatal_error(exc)
+            return
 
         if n < len(data):
             self._buffer.append(data[n:])
@@ -584,9 +567,10 @@ class _SelectorDatagramTransport(transports.DatagramTransport):
     def _read_ready(self):
         try:
             data, addr = self._sock.recvfrom(self.max_size)
-        except socket.error as exc:
-            if exc.errno not in _TRYAGAIN:
-                self._fatal_error(exc)
+        except (BlockingIOError, InterruptedError):
+            pass
+        except Exception as exc:
+            self._fatal_error(exc)
         else:
             self._protocol.datagram_received(data, addr)
 
@@ -610,11 +594,12 @@ class _SelectorDatagramTransport(transports.DatagramTransport):
             except ConnectionRefusedError as exc:
                 if self._address:
                     self._fatal_error(exc)
-            except socket.error as exc:
-                if exc.errno not in _TRYAGAIN:
-                    self._fatal_error(exc)
-
+                    return
+            except (BlockingIOError, InterruptedError):
                 self._event_loop.add_writer(self._fileno, self._sendto_ready)
+            except Exception as exc:
+                self._fatal_error(exc)
+                return
 
         self._buffer.append((data, addr))
 
@@ -630,14 +615,12 @@ class _SelectorDatagramTransport(transports.DatagramTransport):
                 if self._address:
                     self._fatal_error(exc)
                 return
-            except socket.error as exc:
-                if exc.errno not in _TRYAGAIN:
-                    self._fatal_error(exc)
-                    return
-
-                # Try again later.
-                self._buffer.appendleft((data, addr))
+            except (BlockingIOError, InterruptedError):
+                self._buffer.appendleft((data, addr))  # Try again later.
                 break
+            except Exception as exc:
+                self._fatal_error(exc)
+                return
 
         if not self._buffer:
             self._event_loop.remove_writer(self._fileno)

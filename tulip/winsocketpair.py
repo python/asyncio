@@ -3,7 +3,6 @@
 Origin: https://gist.github.com/4325783, by Geert Jansen.  Public domain.
 """
 
-import errno
 import socket
 import sys
 
@@ -23,11 +22,12 @@ def socketpair(family=socket.AF_INET, type=socket.SOCK_STREAM, proto=0):
     csock.setblocking(False)
     try:
         csock.connect((addr, port))
-    except socket.error as e:
-        if e.errno != errno.WSAEWOULDBLOCK:
-            lsock.close()
-            csock.close()
-            raise
+    except (BlockingIOError, InterruptedError):
+        pass
+    except:
+        lsock.close()
+        csock.close()
+        raise
     ssock, _ = lsock.accept()
     csock.setblocking(True)
     lsock.close()

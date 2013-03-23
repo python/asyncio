@@ -23,9 +23,9 @@ class QueueBasicTests(_QueueTestBase):
 
     def _test_repr_or_str(self, fn, expect_id):
         """Test Queue's repr or str.
-        
-        fn is repr or str. expect_id is True if we expect the Queue's id to 
-        appear in fn(Queue()). 
+
+        fn is repr or str. expect_id is True if we expect the Queue's id to
+        appear in fn(Queue()).
         """
         q = queues.Queue()
         self.assertTrue(fn(q).startswith('<Queue'))

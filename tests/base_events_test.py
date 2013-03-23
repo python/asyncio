@@ -41,6 +41,12 @@ class BaseEventLoopTests(test_utils.LogTrackingTestCase):
             NotImplementedError, self.event_loop._write_to_self)
         self.assertRaises(
             NotImplementedError, self.event_loop._read_from_self)
+        self.assertRaises(
+            NotImplementedError,
+            self.event_loop._make_read_pipe_transport, m, m)
+        self.assertRaises(
+            NotImplementedError,
+            self.event_loop._make_write_pipe_transport, m, m)
 
     def test_add_callback_handle(self):
         h = events.Handle(lambda: False, ())
@@ -240,6 +246,10 @@ class BaseEventLoopTests(test_utils.LogTrackingTestCase):
 
         self.assertTrue(processed)
         self.assertEqual([handle], list(self.event_loop._ready))
+
+    def test_run_until_complete_assertion(self):
+        self.assertRaises(
+            AssertionError, self.event_loop.run_until_complete, 'blah')
 
     @unittest.mock.patch('tulip.base_events.socket')
     def test_create_connection_mutiple_errors(self, m_socket):

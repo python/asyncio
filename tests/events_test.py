@@ -191,6 +191,7 @@ class EventLoopTestsMixin:
         def coro():
             nonlocal err
             yield from []
+            self.assertTrue(self.event_loop.is_running())
             try:
                 self.event_loop.run_until_complete(
                     tasks.sleep(0.1))

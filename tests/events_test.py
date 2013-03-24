@@ -216,6 +216,26 @@ class EventLoopTestsMixin:
         self.event_loop.run_until_complete(tasks.Task(coro()))
         self.assertIsInstance(err, RuntimeError)
 
+    def test_run_once_block(self):
+        called = False
+
+        def callback():
+            nonlocal called
+            called = True
+
+        def run():
+            time.sleep(0.1)
+            self.event_loop.call_soon_threadsafe(callback)
+
+        t = threading.Thread(target=run)
+        t0 = time.monotonic()
+        t.start()
+        self.event_loop.run_once(None)
+        t1 = time.monotonic()
+        t.join()
+        self.assertTrue(called)
+        self.assertTrue(0.09 < t1-t0 <= 0.12)
+
     def test_call_later(self):
         results = []
 
@@ -819,9 +839,9 @@ class EventLoopTestsMixin:
 
         self.assertEqual('INITIALIZED', client.state)
         transport.sendto(b'xxx')
-        self.event_loop.run_once()
+        self.event_loop.run_once(None)
         self.assertEqual(3, server.nbytes)
-        self.event_loop.run_once()
+        self.event_loop.run_once(None)
 
         # received
         self.assertEqual(8, client.nbytes)

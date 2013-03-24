@@ -126,7 +126,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         finally:
             handle.cancel()
 
-    def run_once(self, timeout=None):
+    def run_once(self, timeout=0):
         """Run through all callbacks and all I/O polls once.
 
         Calling stop() will break out of this too.
@@ -503,32 +503,27 @@ class BaseEventLoop(events.AbstractEventLoop):
         while self._scheduled and self._scheduled[0].cancelled:
             heapq.heappop(self._scheduled)
 
-        # Inspect the poll queue.  If there's exactly one selectable
-        # file descriptor, it's the self-pipe, and if there's nothing
-        # scheduled, we should ignore it.
-        if (self._scheduled or
-                self._selector.registered_count() > self._internal_fds):
-            if self._ready:
-                timeout = 0
-            elif self._scheduled:
-                # Compute the desired timeout.
-                when = self._scheduled[0].when
-                deadline = max(0, when - time.monotonic())
-                if timeout is None:
-                    timeout = deadline
-                else:
-                    timeout = min(timeout, deadline)
-
-            t0 = time.monotonic()
-            event_list = self._selector.select(timeout)
-            t1 = time.monotonic()
-            argstr = '' if timeout is None else ' %.3f' % timeout
-            if t1-t0 >= 1:
-                level = logging.INFO
+        if self._ready:
+            timeout = 0
+        elif self._scheduled:
+            # Compute the desired timeout.
+            when = self._scheduled[0].when
+            deadline = max(0, when - time.monotonic())
+            if timeout is None:
+                timeout = deadline
             else:
-                level = logging.DEBUG
-            logging.log(level, 'poll%s took %.3f seconds', argstr, t1-t0)
-            self._process_events(event_list)
+                timeout = min(timeout, deadline)
+
+        t0 = time.monotonic()
+        event_list = self._selector.select(timeout)
+        t1 = time.monotonic()
+        argstr = '' if timeout is None else ' %.3f' % timeout
+        if t1-t0 >= 1:
+            level = logging.INFO
+        else:
+            level = logging.DEBUG
+        logging.log(level, 'poll%s took %.3f seconds', argstr, t1-t0)
+        self._process_events(event_list)
 
         # Handle 'later' callbacks that are ready.
         now = time.monotonic()

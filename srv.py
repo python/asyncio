@@ -1,7 +1,11 @@
+#!/usr/bin/env python3
 """Simple server written using an event loop."""
 
 import email.message
 import os
+import sys
+
+assert sys.version >= '3.3', 'Please use Python 3.3 or higher.'
 
 import tulip
 import tulip.http
@@ -91,8 +95,17 @@ class HttpServer(tulip.http.ServerHttpProtocol):
 
 
 def main():
+    host = '127.0.0.1'
+    port = 8080
+    if sys.argv[1:]:
+        host = sys.argv[1]
+        if sys.argv[2:]:
+            port = int(sys.argv[2])
+        elif ':' in host:
+            host, port = host.split(':', 1)
+            port = int(port)
     loop = tulip.get_event_loop()
-    f = loop.start_serving(lambda: HttpServer(debug=True), '127.0.0.1', 8080)
+    f = loop.start_serving(lambda: HttpServer(debug=True), host, port)
     x = loop.run_until_complete(f)
     print('serving on', x.getsockname())
     loop.run_forever()

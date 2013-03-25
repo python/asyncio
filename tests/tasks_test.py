@@ -612,6 +612,36 @@ class TaskTests(test_utils.LogTrackingTestCase):
             RuntimeError,
             self.event_loop.run_until_complete, task)
 
+    def test_coroutine_non_gen_function(self):
+
+        @tasks.coroutine
+        def func():
+            return 'test'
+
+        self.assertTrue(tasks.iscoroutinefunction(func))
+
+        coro = func()
+        self.assertTrue(tasks.iscoroutine(coro))
+
+        res = self.event_loop.run_until_complete(coro)
+        self.assertEqual(res, 'test')
+
+    def test_coroutine_non_gen_function_return_future(self):
+        fut = futures.Future()
+
+        @tasks.coroutine
+        def func():
+            return fut
+
+        @tasks.coroutine
+        def coro():
+            fut.set_result('test')
+
+        t1 = tasks.Task(func())
+        tasks.Task(coro())
+        res = self.event_loop.run_until_complete(t1)
+        self.assertEqual(res, 'test')
+
 
 if __name__ == '__main__':
     unittest.main()

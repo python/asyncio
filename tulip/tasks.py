@@ -6,6 +6,7 @@ __all__ = ['coroutine', 'task', 'Task',
            ]
 
 import concurrent.futures
+import functools
 import inspect
 import logging
 import time
@@ -14,11 +15,30 @@ from . import futures
 
 
 def coroutine(func):
-    """Decorator to mark coroutines."""
-    # TODO: This is a feel-good API only.  It is not enforced.
-    assert inspect.isgeneratorfunction(func)
-    func._is_coroutine = True  # Not sure who can use this.
-    return func
+    """Decorator to mark coroutines.
+
+    Decorator wraps non generator functions and returns generator wrapper.
+    If non generator function returns generator of Future it yield-from it.
+
+    TODO: This is a feel-good API only. It is not enforced.
+    """
+    if inspect.isgeneratorfunction(func):
+        coro = func
+    else:
+        logging.warning(
+            'Coroutine function %s is not a generator.', func.__name__)
+
+        @functools.wraps(func)
+        def coro(*args, **kw):
+            res = func(*args, **kw)
+
+            if isinstance(res, futures.Future) or inspect.isgenerator(res):
+                res = yield from res
+
+            return res
+
+    coro._is_coroutine = True  # Not sure who can use this.
+    return coro
 
 
 # TODO: Do we need this?

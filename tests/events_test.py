@@ -675,6 +675,11 @@ class EventLoopTestsMixin:
 
     def test_create_connection_connect_err(self):
         self.suppress_log_errors()
+
+        def getaddrinfo(*args, **kw):
+            yield from []
+            return [(2, 1, 6, '', ('107.6.106.82', 80))]
+        self.event_loop.getaddrinfo = getaddrinfo
         self.event_loop.sock_connect = unittest.mock.Mock()
         self.event_loop.sock_connect.side_effect = socket.error
 
@@ -693,7 +698,8 @@ class EventLoopTestsMixin:
         self.event_loop.sock_connect = unittest.mock.Mock()
         self.event_loop.sock_connect.side_effect = socket.error
 
-        coro = self.event_loop.create_connection(MyProto, 'example.com', 80)
+        coro = self.event_loop.create_connection(
+            MyProto, 'example.com', 80, family=socket.AF_INET)
         self.assertRaises(
             socket.error, self.event_loop.run_until_complete, coro)
 
@@ -715,6 +721,61 @@ class EventLoopTestsMixin:
         self.event_loop.run_once()
         self.assertIsInstance(proto, MyProto)
         self.assertEqual('INITIAL', proto.state)
+        self.event_loop.run_once()
+        self.assertEqual('CONNECTED', proto.state)
+        self.assertEqual(3, proto.nbytes)
+
+        # extra info is available
+        self.assertIsNotNone(proto.transport.get_extra_info('socket'))
+        conn = proto.transport.get_extra_info('socket')
+        self.assertTrue(hasattr(conn, 'getsockname'))
+        self.assertEqual(
+            '127.0.0.1', proto.transport.get_extra_info('addr')[0])
+
+        # close connection
+        proto.transport.close()
+
+        self.assertEqual('CLOSED', proto.state)
+
+        # the client socket must be closed after to avoid ECONNRESET upon
+        # recv()/send() on the serving socket
+        client.close()
+
+    @unittest.skipIf(ssl is None, 'No ssl module')
+    def test_start_serving_ssl(self):
+        proto = None
+
+        class ClientMyProto(MyProto):
+            def connection_made(self, transport):
+                self.transport = transport
+                assert self.state == 'INITIAL', self.state
+                self.state = 'CONNECTED'
+
+        def factory():
+            nonlocal proto
+            proto = MyProto()
+            return proto
+
+        here = os.path.dirname(__file__)
+        sslcontext = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+        sslcontext.load_cert_chain(
+            certfile=os.path.join(here, 'sample.crt'),
+            keyfile=os.path.join(here, 'sample.key'))
+
+        f = self.event_loop.start_serving(
+            factory, '0.0.0.0', 0, ssl=sslcontext)
+
+        sock = self.event_loop.run_until_complete(f)
+        host, port = sock.getsockname()
+        self.assertEqual(host, '0.0.0.0')
+
+        f_c = self.event_loop.create_connection(
+            ClientMyProto, host, port, ssl=True)
+        client, pr = self.event_loop.run_until_complete(f_c)
+
+        client.write(b'xxx')
+        self.event_loop.run_once()
+        self.assertIsInstance(proto, MyProto)
         self.event_loop.run_once()
         self.assertEqual('CONNECTED', proto.state)
         self.assertEqual(3, proto.nbytes)

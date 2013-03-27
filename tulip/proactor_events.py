@@ -154,18 +154,18 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
         self._ssock.setblocking(False)
         self._csock.setblocking(False)
         self._internal_fds += 1
+        self.call_soon(self._loop_self_reading)
 
-        def loop(f=None):
-            try:
-                if f:
-                    f.result()      # may raise
-                f = self._proactor.recv(self._ssock, 4096)
-            except:
-                self.close()
-                raise
-            else:
-                f.add_done_callback(loop)
-        self.call_soon(loop)
+    def _loop_self_reading(self, f=None):
+        try:
+            if f is not None:
+                f.result()  # may raise
+            f = self._proactor.recv(self._ssock, 4096)
+        except:
+            self.close()
+            raise
+        else:
+            f.add_done_callback(self._loop_self_reading)
 
     def _write_to_self(self):
         self._csock.send(b'x')

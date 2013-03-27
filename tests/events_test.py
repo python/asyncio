@@ -38,7 +38,7 @@ class MyProto(protocols.Protocol):
         self.transport = transport
         assert self.state == 'INITIAL', self.state
         self.state = 'CONNECTED'
-        transport.write(b'GET / HTTP/1.0\r\nHost: xkcd.com\r\n\r\n')
+        transport.write(b'GET / HTTP/1.0\r\nHost: example.com\r\n\r\n')
 
     def data_received(self, data):
         assert self.state == 'CONNECTED', self.state
@@ -663,7 +663,7 @@ class EventLoopTestsMixin:
     def test_create_connection_host_port_sock(self):
         self.suppress_log_errors()
         coro = self.event_loop.create_connection(
-            MyProto, 'xkcd.com', 80, sock=object())
+            MyProto, 'example.com', 80, sock=object())
         self.assertRaises(ValueError, self.event_loop.run_until_complete, coro)
 
     def test_create_connection_no_host_port_sock(self):
@@ -676,7 +676,7 @@ class EventLoopTestsMixin:
         getaddrinfo = self.event_loop.getaddrinfo = unittest.mock.Mock()
         getaddrinfo.return_value = []
 
-        coro = self.event_loop.create_connection(MyProto, 'xkcd.com', 80)
+        coro = self.event_loop.create_connection(MyProto, 'example.com', 80)
         self.assertRaises(
             socket.error, self.event_loop.run_until_complete, coro)
 
@@ -685,7 +685,7 @@ class EventLoopTestsMixin:
         self.event_loop.sock_connect = unittest.mock.Mock()
         self.event_loop.sock_connect.side_effect = socket.error
 
-        coro = self.event_loop.create_connection(MyProto, 'xkcd.com', 80)
+        coro = self.event_loop.create_connection(MyProto, 'example.com', 80)
         self.assertRaises(
             socket.error, self.event_loop.run_until_complete, coro)
 
@@ -700,7 +700,7 @@ class EventLoopTestsMixin:
         self.event_loop.sock_connect = unittest.mock.Mock()
         self.event_loop.sock_connect.side_effect = socket.error
 
-        coro = self.event_loop.create_connection(MyProto, 'xkcd.com', 80)
+        coro = self.event_loop.create_connection(MyProto, 'example.com', 80)
         self.assertRaises(
             socket.error, self.event_loop.run_until_complete, coro)
 

@@ -277,7 +277,7 @@ class BaseEventLoopTests(test_utils.LogTrackingTestCase):
         self.event_loop.getaddrinfo = getaddrinfo
 
         task = tasks.Task(
-            self.event_loop.create_connection(MyProto, 'xkcd.com', 80))
+            self.event_loop.create_connection(MyProto, 'example.com', 80))
         task._step()
         exc = task.exception()
         self.assertEqual("Multiple exceptions: err1, err2", str(exc))

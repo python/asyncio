@@ -24,5 +24,3 @@ TODO in tulip v2 (tulip/ package directory)
 - buffered stream implementation
 
 - Primitives like par() and wait_one()
-
-- Remove test dependency on xkcd.com, write our own test server

@@ -184,37 +184,30 @@ class EventLoopTestsMixin:
         self.event_loop.run()  # Returns immediately.
 
     def test_run_nesting(self):
-        err = None
+        self.suppress_log_errors()
 
         @tasks.coroutine
         def coro():
-            nonlocal err
             yield from []
             self.assertTrue(self.event_loop.is_running())
-            try:
-                self.event_loop.run_until_complete(
-                    tasks.sleep(0.1))
-            except Exception as exc:
-                err = exc
+            self.event_loop.run_until_complete(tasks.sleep(0.1))
 
-        self.event_loop.run_until_complete(tasks.Task(coro()))
-        self.assertIsInstance(err, RuntimeError)
+        self.assertRaises(
+            RuntimeError,
+            self.event_loop.run_until_complete, coro())
 
     def test_run_once_nesting(self):
-        err = None
+        self.suppress_log_errors()
 
         @tasks.coroutine
         def coro():
-            nonlocal err
             yield from []
             tasks.sleep(0.1)
-            try:
-                self.event_loop.run_once()
-            except Exception as exc:
-                err = exc
+            self.event_loop.run_once()
 
-        self.event_loop.run_until_complete(tasks.Task(coro()))
-        self.assertIsInstance(err, RuntimeError)
+        self.assertRaises(
+            RuntimeError,
+            self.event_loop.run_until_complete, coro())
 
     def test_run_once_block(self):
         called = False
@@ -354,7 +347,7 @@ class EventLoopTestsMixin:
 
     def test_run_in_executor_with_handle(self):
         def run(arg):
-            time.sleep(0.1)
+            time.sleep(0.01)
             return arg
         handle = events.Handle(run, ('yo',))
         f2 = self.event_loop.run_in_executor(None, handle)

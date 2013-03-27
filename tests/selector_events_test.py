@@ -788,7 +788,7 @@ class SelectorSocketTransportTests(unittest.TestCase):
         self.event_loop.remove_reader.assert_called_with(7)
         self.event_loop.remove_writer.assert_called_with(7)
         self.protocol.connection_lost.assert_called_with(exc)
-        m_exc.assert_called_with('Fatal error for %s', transport)
+        m_exc.assert_called_with('Fatal error for {}'.format(transport))
 
     def test_connection_lost(self):
         exc = object()
@@ -885,7 +885,7 @@ class SelectorSslTransportTests(unittest.TestCase):
         self.assertTrue(self.event_loop.remove_writer.called)
         self.assertTrue(self.event_loop.remove_reader.called)
         self.protocol.connection_lost.assert_called_with(exc)
-        m_exc.assert_called_with('Fatal error for %s', self.transport)
+        m_exc.assert_called_with('Fatal error for {}'.format(self.transport))
 
     def test_close(self):
         self.transport.close()
@@ -1265,7 +1265,7 @@ class SelectorDatagramTransportTests(unittest.TestCase):
         self.event_loop.remove_writer.assert_called_with(7)
         self.event_loop.remove_reader.assert_called_with(7)
         self.protocol.connection_lost.assert_called_with(exc)
-        m_exc.assert_called_with('Fatal error for %s', transport)
+        m_exc.assert_called_with('Fatal error for {}'.format(transport))
 
     @unittest.mock.patch('logging.exception')
     def test_fatal_error_connected(self, m_exc):
@@ -1274,7 +1274,7 @@ class SelectorDatagramTransportTests(unittest.TestCase):
         err = ConnectionRefusedError()
         transport._fatal_error(err)
         self.protocol.connection_refused.assert_called_with(err)
-        m_exc.assert_called_with('Fatal error for %s', transport)
+        m_exc.assert_called_with('Fatal error for {}'.format(transport))
 
     def test_transport_closing(self):
         exc = object()

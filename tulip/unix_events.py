@@ -64,7 +64,7 @@ class SelectorEventLoop(selector_events.BaseSelectorEventLoop):
                 try:
                     signal.set_wakeup_fd(-1)
                 except ValueError as nexc:
-                    logging.info('set_wakeup_fd(-1) failed: %s', nexc)
+                    logging.info('set_wakeup_fd(-1) failed: {}'.format(nexc))
 
             if exc.errno == errno.EINVAL:
                 raise RuntimeError('sig {} cannot be caught'.format(sig))
@@ -110,7 +110,7 @@ class SelectorEventLoop(selector_events.BaseSelectorEventLoop):
             try:
                 signal.set_wakeup_fd(-1)
             except ValueError as exc:
-                logging.info('set_wakeup_fd(-1) failed: %s', exc)
+                logging.info('set_wakeup_fd(-1) failed: {}'.format(exc))
 
         return True
 
@@ -189,7 +189,7 @@ class _UnixReadPipeTransport(transports.ReadTransport):
 
     def _fatal_error(self, exc):
         # should be called by exception handler only
-        logging.exception('Fatal error for %s', self)
+        logging.exception('Fatal error for {}'.format(self))
         self._close(exc)
 
     def _close(self, exc):
@@ -285,7 +285,7 @@ class _UnixWritePipeTransport(transports.WriteTransport):
 
     def _fatal_error(self, exc):
         # should be called by exception handler only
-        logging.exception('Fatal error for %s', self)
+        logging.exception('Fatal error for {}'.format(self))
         self._close(exc)
 
     def _close(self, exc=None):

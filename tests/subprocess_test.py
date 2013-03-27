@@ -21,7 +21,7 @@ class MyProto(protocols.Protocol):
         transport.write_eof()
 
     def data_received(self, data):
-        logging.info('received: %r', data)
+        logging.info('received: {!r}'.format(data))
         assert self.state == 'CONNECTED', self.state
         self.nbytes += len(data)
 

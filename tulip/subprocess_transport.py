@@ -85,7 +85,7 @@ class UnixSubprocessTransport(transports.Transport):
         # XXX What else?
 
     def _fatal_error(self, exc):
-        logging.error('Fatal error: %r', exc)
+        logging.error('Fatal error: {!r}'.format(exc))
         if self._rstdout >= 0:
             os.close(self._rstdout)
             self._rstdout = -1

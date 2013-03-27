@@ -752,7 +752,7 @@ class HttpMessage:
                 break
 
             self.transport.write('{:x}\r\n'.format(len(chunk)).encode('ascii'))
-            self.transport.write(chunk)
+            self.transport.write(bytes(chunk))
             self.transport.write(b'\r\n')
 
     def _write_length_payload(self, length):
@@ -798,7 +798,8 @@ class HttpMessage:
                 buf.extend(chunk)
 
                 while len(buf) >= chunk_size:
-                    chunk, buf = buf[:chunk_size], buf[chunk_size:]
+                    chunk = bytes(buf[:chunk_size])
+                    del buf[:chunk_size]
                     yield chunk
 
                 chunk = yield EOL_MARKER

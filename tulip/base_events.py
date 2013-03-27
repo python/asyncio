@@ -50,12 +50,13 @@ class BaseEventLoop(events.AbstractEventLoop):
         self._internal_fds = 0
         self._running = False
 
-    def _make_socket_transport(self, sock, protocol, waiter=None, extra=None):
+    def _make_socket_transport(self, sock, protocol, waiter=None, *,
+                               extra=None):
         """Create socket transport."""
         raise NotImplementedError
 
-    def _make_ssl_transport(self, rawsock, protocol,
-                            sslcontext, waiter, extra=None):
+    def _make_ssl_transport(self, rawsock, protocol, sslcontext, waiter, *,
+                            server_side=False, extra=None):
         """Create SSL transport."""
         raise NotImplementedError
 
@@ -326,12 +327,18 @@ class BaseEventLoop(events.AbstractEventLoop):
 
         sock.setblocking(False)
 
+        if ssl:
+            import ssl as sslmod
+            sslcontext = sslmod.SSLContext(sslmod.PROTOCOL_SSLv23)
+            sock = sslcontext.wrap_socket(sock, server_side=False,
+                                          do_handshake_on_connect=False)
+
         protocol = protocol_factory()
         waiter = futures.Future()
         if ssl:
             sslcontext = None if isinstance(ssl, bool) else ssl
             transport = self._make_ssl_transport(
-                sock, protocol, sslcontext, waiter)
+                sock, protocol, sslcontext, waiter, server_side=False)
         else:
             transport = self._make_socket_transport(sock, protocol, waiter)
 
@@ -411,7 +418,8 @@ class BaseEventLoop(events.AbstractEventLoop):
     # TODO: Or create_server()?
     @tasks.task
     def start_serving(self, protocol_factory, host=None, port=None, *,
-                      family=0, proto=0, flags=0, backlog=100, sock=None):
+                      family=0, proto=0, flags=0, backlog=100, sock=None,
+                      ssl=False):
         """XXX"""
         if host is not None or port is not None:
             if sock is not None:
@@ -447,7 +455,7 @@ class BaseEventLoop(events.AbstractEventLoop):
 
         sock.listen(backlog)
         sock.setblocking(False)
-        self._start_serving(protocol_factory, sock)
+        self._start_serving(protocol_factory, sock, ssl)
         return sock
 
     @tasks.coroutine

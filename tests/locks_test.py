@@ -105,7 +105,7 @@ class LockTests(unittest.TestCase):
         lock = locks.Lock()
         self.event_loop.run_until_complete(lock.acquire())
 
-        self.event_loop.call_later(0.1, lock.release)
+        self.event_loop.call_later(0.01, lock.release)
         acquired = self.event_loop.run_until_complete(lock.acquire(10.1))
         self.assertTrue(acquired)
 
@@ -114,15 +114,11 @@ class LockTests(unittest.TestCase):
         self.event_loop.run_until_complete(lock.acquire())
         tasks.Task(lock.acquire())
         tasks.Task(lock.acquire())
-        acquire_task = tasks.Task(lock.acquire(0.1))
+        acquire_task = tasks.Task(lock.acquire(0.01))
         tasks.Task(lock.acquire())
 
-        t0 = time.monotonic()
         acquired = self.event_loop.run_until_complete(acquire_task)
         self.assertFalse(acquired)
-
-        total_time = (time.monotonic() - t0)
-        self.assertTrue(0.08 < total_time < 0.12)
 
         self.assertEqual(3, len(lock._waiters))
 
@@ -241,7 +237,7 @@ class EventWaiterTests(unittest.TestCase):
         self.assertTrue(0.08 < total_time < 0.12)
 
         ev = locks.EventWaiter()
-        self.event_loop.call_later(0.1, ev.set)
+        self.event_loop.call_later(0.01, ev.set)
         acquired = self.event_loop.run_until_complete(ev.wait(10.1))
         self.assertTrue(acquired)
 
@@ -451,7 +447,7 @@ class ConditionTests(test_utils.LogTrackingTestCase):
         @tasks.coroutine
         def c1(result):
             yield from cond.acquire()
-            if (yield from cond.wait_for(predicate, 0.2)):
+            if (yield from cond.wait_for(predicate, 0.1)):
                 result.append(1)
             else:
                 result.append(2)
@@ -475,7 +471,7 @@ class ConditionTests(test_utils.LogTrackingTestCase):
         self.assertEqual(3, predicate.call_count)
 
         total_time = (time.monotonic() - t0)
-        self.assertTrue(0.18 < total_time < 0.22)
+        self.assertTrue(0.08 < total_time < 0.12)
 
     def test_wait_for_unacquired(self):
         self.suppress_log_errors()
@@ -681,7 +677,7 @@ class SemaphoreTests(unittest.TestCase):
         sem = locks.Semaphore()
         self.event_loop.run_until_complete(sem.acquire())
 
-        self.event_loop.call_later(0.1, sem.release)
+        self.event_loop.call_later(0.01, sem.release)
         acquired = self.event_loop.run_until_complete(sem.acquire(10.1))
         self.assertTrue(acquired)
 

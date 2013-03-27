@@ -103,14 +103,14 @@ class QueueBasicTests(_QueueTestBase):
         @tasks.coroutine
         def test():
             tasks.Task(putter())
-            yield from tasks.sleep(0.1)
+            yield from tasks.sleep(0.01)
 
             # The putter is blocked after putting two items.
             self.assertEqual([0, 1], have_been_put)
             self.assertEqual(0, q.get_nowait())
 
             # Let the putter resume and put last item.
-            yield from tasks.sleep(0.1)
+            yield from tasks.sleep(0.01)
             self.assertEqual([0, 1, 2], have_been_put)
             self.assertEqual(1, q.get_nowait())
             self.assertEqual(2, q.get_nowait())
@@ -146,7 +146,7 @@ class QueueGetTests(_QueueTestBase):
 
         @tasks.coroutine
         def queue_put():
-            self.event_loop.call_later(0.1, q.put_nowait, 1)
+            self.event_loop.call_later(0.01, q.put_nowait, 1)
             queue_get_task = tasks.Task(queue_get())
             yield from started.wait()
             self.assertFalse(finished)
@@ -172,7 +172,7 @@ class QueueGetTests(_QueueTestBase):
         @tasks.coroutine
         def queue_get():
             with self.assertRaises(queue.Empty):
-                return (yield from q.get(timeout=0.1))
+                return (yield from q.get(timeout=0.01))
 
             # Get works after timeout, with blocking and non-blocking put.
             q.put_nowait(1)
@@ -188,12 +188,12 @@ class QueueGetTests(_QueueTestBase):
 
         @tasks.coroutine
         def queue_get():
-            return (yield from q.get(timeout=0.2))
+            return (yield from q.get(timeout=0.05))
 
         @tasks.coroutine
         def test():
             get_task = tasks.Task(queue_get())
-            yield from tasks.sleep(0.1)  # let the task start
+            yield from tasks.sleep(0.01)  # let the task start
             q.put_nowait(1)
             return (yield from get_task)
 
@@ -227,7 +227,7 @@ class QueuePutTests(_QueueTestBase):
 
         @tasks.coroutine
         def queue_get():
-            self.event_loop.call_later(0.1, q.get_nowait)
+            self.event_loop.call_later(0.01, q.get_nowait)
             queue_put_task = tasks.Task(queue_put())
             yield from started.wait()
             self.assertFalse(finished)
@@ -253,14 +253,14 @@ class QueuePutTests(_QueueTestBase):
         @tasks.coroutine
         def queue_put():
             with self.assertRaises(queue.Full):
-                return (yield from q.put(1, timeout=0.1))
+                return (yield from q.put(1, timeout=0.01))
 
             self.assertEqual(0, q.get_nowait())
 
             # Put works after timeout, with blocking and non-blocking get.
             get_task = tasks.Task(q.get())
             # Let the get start waiting.
-            yield from tasks.sleep(0.1)
+            yield from tasks.sleep(0.01)
             q.put_nowait(2)
             self.assertEqual(2, (yield from get_task))
 
@@ -274,7 +274,7 @@ class QueuePutTests(_QueueTestBase):
 
         @tasks.coroutine
         def queue_put():
-            yield from q.put(1, timeout=0.1)
+            yield from q.put(1, timeout=0.01)
 
         @tasks.coroutine
         def test():

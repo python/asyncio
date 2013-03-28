@@ -5,13 +5,14 @@ __all__ = ['HttpStreamReader',
            'RawHttpMessage', 'RequestLine', 'ResponseStatus']
 
 import collections
-import email.utils
 import functools
 import http.server
 import itertools
 import re
 import sys
+import time
 import zlib
+from wsgiref.handlers import format_date_time
 
 import tulip
 from . import errors
@@ -852,7 +853,7 @@ class Response(HttpMessage):
 
     def _default_headers(self):
         headers = super()._default_headers()
-        headers.extend((('DATE', email.utils.formatdate()),
+        headers.extend((('DATE', format_date_time(time.time())),
                         ('SERVER', self.SERVER_SOFTWARE)))
 
         return headers

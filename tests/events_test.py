@@ -168,6 +168,8 @@ class EventLoopTestsMixin:
             time.sleep(0.1)
             self.event_loop.call_soon_threadsafe(callback)
 
+        self.event_loop.run_once(0.001)  # windows iocp
+
         t = threading.Thread(target=run)
         t0 = time.monotonic()
         t.start()
@@ -422,6 +424,8 @@ class EventLoopTestsMixin:
         self.assertTrue(data == b'x'*256)
 
     def test_sock_client_ops(self):
+        self.suppress_log_errors()
+
         with test_utils.run_test_server(self.event_loop) as addr:
             sock = socket.socket()
             sock.setblocking(False)
@@ -680,6 +684,7 @@ class EventLoopTestsMixin:
         self.assertEqual('INITIAL', proto.state)
         self.event_loop.run_once()
         self.assertEqual('CONNECTED', proto.state)
+        self.event_loop.run_once(0.001)  # windows iocp
         self.assertEqual(3, proto.nbytes)
 
         # extra info is available
@@ -691,6 +696,7 @@ class EventLoopTestsMixin:
 
         # close connection
         proto.transport.close()
+        self.event_loop.run_once(0.001)  # windows iocp
 
         self.assertEqual('CLOSED', proto.state)
 
@@ -720,11 +726,11 @@ class EventLoopTestsMixin:
             keyfile=os.path.join(here, 'sample.key'))
 
         f = self.event_loop.start_serving(
-            factory, '0.0.0.0', 0, ssl=sslcontext)
+            factory, '127.0.0.1', 0, ssl=sslcontext)
 
         sock = self.event_loop.run_until_complete(f)
         host, port = sock.getsockname()
-        self.assertEqual(host, '0.0.0.0')
+        self.assertEqual(host, '127.0.0.1')
 
         f_c = self.event_loop.create_connection(
             ClientMyProto, host, port, ssl=True)
@@ -1073,6 +1079,8 @@ if sys.platform == 'win32':
         def create_event_loop(self):
             return windows_events.ProactorEventLoop()
         def test_create_ssl_connection(self):
+            raise unittest.SkipTest("IocpEventLoop imcompatible with SSL")
+        def test_start_serving_ssl(self):
             raise unittest.SkipTest("IocpEventLoop imcompatible with SSL")
         def test_reader_callback(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_reader()")

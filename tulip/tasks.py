@@ -102,7 +102,8 @@ class Task(futures.Future):
 
     def _step(self, value=None, exc=None):
         if self.done():
-            tulip_log.warn('_step(): already done: %r, %r, %r', self, value, exc)
+            tulip_log.warning(
+                '_step(): already done: %r, %r, %r', self, value, exc)
             return
         # We'll call either coro.throw(exc) or coro.send(value).
         if self._must_cancel:
@@ -162,7 +163,7 @@ class Task(futures.Future):
                             'generator in task %r with %s' % (self, result)))
                 else:
                     if result is not None:
-                        tulip_log.warn('_step(): bad yield: %r', result)
+                        tulip_log.warning('_step(): bad yield: %r', result)
 
                     self._event_loop.call_soon(self._step)
 

@@ -196,7 +196,7 @@ class _BaseSelector:
         try:
             return self._fd_to_key[fd]
         except KeyError:
-            tulip_log.warn('No key found for fd %r', fd)
+            tulip_log.warning('No key found for fd %r', fd)
             return None
 
 

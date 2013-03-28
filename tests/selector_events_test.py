@@ -776,7 +776,7 @@ class SelectorSocketTransportTests(unittest.TestCase):
         self.assertTrue(self.event_loop.remove_reader.called)
         self.assertFalse(self.event_loop.call_soon.called)
 
-    @unittest.mock.patch('logging.exception')
+    @unittest.mock.patch('tulip.log.tulip_log.exception')
     def test_fatal_error(self, m_exc):
         exc = OSError()
         transport = _SelectorSocketTransport(
@@ -875,7 +875,7 @@ class SelectorSslTransportTests(unittest.TestCase):
         self.transport.abort()
         self.transport._close.assert_called_with(None)
 
-    @unittest.mock.patch('logging.exception')
+    @unittest.mock.patch('tulip.log.tulip_log.exception')
     def test_fatal_error(self, m_exc):
         exc = OSError()
         self.transport._buffer.append(b'data')
@@ -1252,7 +1252,7 @@ class SelectorDatagramTransportTests(unittest.TestCase):
         self.event_loop.remove_reader.assert_called_with(7)
         self.assertFalse(self.protocol.connection_lost.called)
 
-    @unittest.mock.patch('logging.exception')
+    @unittest.mock.patch('tulip.log.tulip_log.exception')
     def test_fatal_error(self, m_exc):
         exc = OSError()
         transport = _SelectorDatagramTransport(
@@ -1267,7 +1267,7 @@ class SelectorDatagramTransportTests(unittest.TestCase):
         self.protocol.connection_lost.assert_called_with(exc)
         m_exc.assert_called_with('Fatal error for %s', transport)
 
-    @unittest.mock.patch('logging.exception')
+    @unittest.mock.patch('tulip.log.tulip_log.exception')
     def test_fatal_error_connected(self, m_exc):
         transport = _SelectorDatagramTransport(
             self.event_loop, self.sock, self.protocol, ('0.0.0.0', 1))

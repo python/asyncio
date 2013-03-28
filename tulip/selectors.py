@@ -3,10 +3,10 @@
 This module supports asynchronous I/O on multiple file descriptors.
 """
 
-import logging
 import sys
-
 from select import *
+
+from .log import tulip_log
 
 
 # generic events, that must be mapped to implementation-specific ones
@@ -196,7 +196,7 @@ class _BaseSelector:
         try:
             return self._fd_to_key[fd]
         except KeyError:
-            logging.warn('No key found for fd %r', fd)
+            tulip_log.warning('No key found for fd %r', fd)
             return None
 
 

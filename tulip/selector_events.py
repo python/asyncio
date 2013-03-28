@@ -6,7 +6,6 @@ also includes support for signal handling, see the unix_events sub-module.
 
 import collections
 import errno
-import logging
 import socket
 try:
     import ssl
@@ -18,6 +17,7 @@ from . import events
 from . import futures
 from . import selectors
 from . import transports
+from .log import tulip_log
 
 
 # Errno values indicating the connection was disconnected.
@@ -41,7 +41,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
 
         if selector is None:
             selector = selectors.Selector()
-        logging.debug('Using selector: %s', selector.__class__.__name__)
+        tulip_log.debug('Using selector: %s', selector.__class__.__name__)
         self._selector = selector
         self._make_self_pipe()
 
@@ -109,7 +109,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             sock.close()
             # There's nowhere to send the error, so just log it.
             # TODO: Someone will want an error handler for this.
-            logging.exception('Accept failed')
+            tulip_log.exception('Accept failed')
         else:
             self._make_socket_transport(
                 conn, protocol_factory(), extra={'addr': addr})
@@ -396,7 +396,7 @@ class _SelectorSocketTransport(transports.Transport):
 
     def _fatal_error(self, exc):
         # should be called from exception handler only
-        logging.exception('Fatal error for %s', self)
+        tulip_log.exception('Fatal error for %s', self)
         self._close(exc)
 
     def _close(self, exc):
@@ -537,7 +537,7 @@ class _SelectorSslTransport(transports.Transport):
             self._protocol.connection_lost(None)
 
     def _fatal_error(self, exc):
-        logging.exception('Fatal error for %s', self)
+        tulip_log.exception('Fatal error for %s', self)
         self._close(exc)
 
     def _close(self, exc):
@@ -637,7 +637,7 @@ class _SelectorDatagramTransport(transports.DatagramTransport):
             self._call_connection_lost(None)
 
     def _fatal_error(self, exc):
-        logging.exception('Fatal error for %s', self)
+        tulip_log.exception('Fatal error for %s', self)
         self._close(exc)
 
     def _close(self, exc):

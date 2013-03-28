@@ -8,10 +8,10 @@ __all__ = ['coroutine', 'task', 'Task',
 import concurrent.futures
 import functools
 import inspect
-import logging
 import time
 
 from . import futures
+from .log import tulip_log
 
 
 def coroutine(func):
@@ -25,7 +25,7 @@ def coroutine(func):
     if inspect.isgeneratorfunction(func):
         coro = func
     else:
-        logging.warning(
+        tulip_log.warning(
             'Coroutine function %s is not a generator.', func.__name__)
 
         @functools.wraps(func)
@@ -102,7 +102,7 @@ class Task(futures.Future):
 
     def _step(self, value=None, exc=None):
         if self.done():
-            logging.warn('_step(): already done: %r, %r, %r', self, value, exc)
+            tulip_log.warn('_step(): already done: %r, %r, %r', self, value, exc)
             return
         # We'll call either coro.throw(exc) or coro.send(value).
         if self._must_cancel:
@@ -125,13 +125,13 @@ class Task(futures.Future):
                 super().cancel()
             else:
                 self.set_exception(exc)
-                logging.exception('Exception in task')
+                tulip_log.exception('Exception in task')
         except BaseException as exc:
             if self._must_cancel:
                 super().cancel()
             else:
                 self.set_exception(exc)
-                logging.exception('BaseException in task')
+                tulip_log.exception('BaseException in task')
             raise
         else:
             # XXX No check for self._must_cancel here?
@@ -162,7 +162,7 @@ class Task(futures.Future):
                             'generator in task %r with %s' % (self, result)))
                 else:
                     if result is not None:
-                        logging.warn('_step(): bad yield: %r', result)
+                        tulip_log.warn('_step(): bad yield: %r', result)
 
                     self._event_loop.call_soon(self._step)
 

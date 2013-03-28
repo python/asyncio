@@ -1,10 +1,10 @@
 import fcntl
-import logging
 import os
 import traceback
 
 from . import transports
 from . import events
+from .log import tulip_log
 
 
 class UnixSubprocessTransport(transports.Transport):
@@ -85,7 +85,7 @@ class UnixSubprocessTransport(transports.Transport):
         # XXX What else?
 
     def _fatal_error(self, exc):
-        logging.error('Fatal error: %r', exc)
+        tulip_log.error('Fatal error: %r', exc)
         if self._rstdout >= 0:
             os.close(self._rstdout)
             self._rstdout = -1

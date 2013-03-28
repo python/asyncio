@@ -438,7 +438,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
         t1 = time.monotonic()
         self.assertTrue(0.09 <= t1-t0 <= 0.13, (t1-t0, sleepfut, doer))
 
-    @unittest.mock.patch('tulip.tasks.logging')
+    @unittest.mock.patch('tulip.tasks.tulip_log')
     def test_step_in_completed_task(self, m_logging):
         @tasks.coroutine
         def notmuch():
@@ -453,7 +453,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertTrue(m_logging.warn.call_args[0][0].startswith(
             '_step(): already done: '))
 
-    @unittest.mock.patch('tulip.tasks.logging')
+    @unittest.mock.patch('tulip.tasks.tulip_log')
     def test_step_result(self, m_logging):
         @tasks.coroutine
         def notmuch():

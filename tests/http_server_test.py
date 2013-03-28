@@ -80,10 +80,10 @@ class HttpServerProtocolTests(LogTrackingTestCase):
 
     def test_close(self):
         srv = server.ServerHttpProtocol()
-        self.assertFalse(srv.closing)
+        self.assertFalse(srv._closing)
 
         srv.close()
-        self.assertTrue(srv.closing)
+        self.assertTrue(srv._closing)
 
     def test_handle_error(self):
         transport = unittest.mock.Mock()

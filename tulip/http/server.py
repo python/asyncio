@@ -36,8 +36,8 @@ class ServerHttpProtocol(tulip.Protocol):
     status line, bad headers or incomplete payload. If any error occurs,
     connection gets closed.
     """
-    closing = False
-    request_count = 0
+    _closing = False
+    _request_count = 0
     _request_handle = None
 
     def __init__(self, log=logging, debug=False):
@@ -61,7 +61,7 @@ class ServerHttpProtocol(tulip.Protocol):
         self.stream.feed_eof()
 
     def close(self):
-        self.closing = True
+        self._closing = True
 
     def log_access(self, status, info, message, *args, **kw):
         pass
@@ -85,7 +85,7 @@ class ServerHttpProtocol(tulip.Protocol):
         while True:
             info = None
             message = None
-            self.request_count += 1
+            self._request_count += 1
 
             try:
                 info = yield from self.stream.read_request_line()
@@ -104,7 +104,7 @@ class ServerHttpProtocol(tulip.Protocol):
             except Exception as exc:
                 self.handle_error(500, info, message, exc)
             finally:
-                if self.closing:
+                if self._closing:
                     self.transport.close()
                     break
 

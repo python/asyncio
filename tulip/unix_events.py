@@ -2,7 +2,6 @@
 
 import errno
 import fcntl
-import logging
 import os
 import socket
 import sys
@@ -15,6 +14,7 @@ except ImportError:  # pragma: no cover
 from . import events
 from . import selector_events
 from . import transports
+from .log import tulip_log
 
 
 __all__ = ['SelectorEventLoop']
@@ -64,7 +64,7 @@ class SelectorEventLoop(selector_events.BaseSelectorEventLoop):
                 try:
                     signal.set_wakeup_fd(-1)
                 except ValueError as nexc:
-                    logging.info('set_wakeup_fd(-1) failed: %s', nexc)
+                    tulip_log.info('set_wakeup_fd(-1) failed: %s', nexc)
 
             if exc.errno == errno.EINVAL:
                 raise RuntimeError('sig {} cannot be caught'.format(sig))
@@ -110,7 +110,7 @@ class SelectorEventLoop(selector_events.BaseSelectorEventLoop):
             try:
                 signal.set_wakeup_fd(-1)
             except ValueError as exc:
-                logging.info('set_wakeup_fd(-1) failed: %s', exc)
+                tulip_log.info('set_wakeup_fd(-1) failed: %s', exc)
 
         return True
 
@@ -189,7 +189,7 @@ class _UnixReadPipeTransport(transports.ReadTransport):
 
     def _fatal_error(self, exc):
         # should be called by exception handler only
-        logging.exception('Fatal error for %s', self)
+        tulip_log.exception('Fatal error for %s', self)
         self._close(exc)
 
     def _close(self, exc):
@@ -285,7 +285,7 @@ class _UnixWritePipeTransport(transports.WriteTransport):
 
     def _fatal_error(self, exc):
         # should be called by exception handler only
-        logging.exception('Fatal error for %s', self)
+        tulip_log.exception('Fatal error for %s', self)
         self._close(exc)
 
     def _close(self, exc=None):

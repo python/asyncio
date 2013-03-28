@@ -1,6 +1,5 @@
 """Selector and proactor eventloops for Windows."""
 
-import logging
 import socket
 import weakref
 import struct
@@ -11,6 +10,7 @@ from . import proactor_events
 from . import selector_events
 from . import winsocketpair
 from . import _overlapped
+from .log import tulip_log
 
 
 __all__ = ['SelectorEventLoop', 'ProactorEventLoop']
@@ -149,7 +149,7 @@ class IocpProactor:
 
         while self._cache:
             if not self._poll(1):
-                logging.debug('taking long time to close proactor')
+                tulip_log.debug('taking long time to close proactor')
 
         self._results = []
         if self._iocp is not None:

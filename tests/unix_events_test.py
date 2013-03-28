@@ -76,7 +76,7 @@ class SelectorEventLoopTests(unittest.TestCase):
             signal.SIGINT, lambda: True)
 
     @unittest.mock.patch('tulip.unix_events.signal')
-    @unittest.mock.patch('tulip.unix_events.logging')
+    @unittest.mock.patch('tulip.unix_events.tulip_log')
     def test_add_signal_handler_install_error2(self, m_logging, m_signal):
         m_signal.NSIG = signal.NSIG
 
@@ -93,7 +93,7 @@ class SelectorEventLoopTests(unittest.TestCase):
         self.assertEqual(1, m_signal.set_wakeup_fd.call_count)
 
     @unittest.mock.patch('tulip.unix_events.signal')
-    @unittest.mock.patch('tulip.unix_events.logging')
+    @unittest.mock.patch('tulip.unix_events.tulip_log')
     def test_add_signal_handler_install_error3(self, m_logging, m_signal):
         class Err(OSError):
             errno = errno.EINVAL
@@ -138,7 +138,7 @@ class SelectorEventLoopTests(unittest.TestCase):
             m_signal.signal.call_args[0])
 
     @unittest.mock.patch('tulip.unix_events.signal')
-    @unittest.mock.patch('tulip.unix_events.logging')
+    @unittest.mock.patch('tulip.unix_events.tulip_log')
     def test_remove_signal_handler_cleanup_error(self, m_logging, m_signal):
         m_signal.NSIG = signal.NSIG
         self.event_loop.add_signal_handler(signal.SIGHUP, lambda: True)
@@ -229,7 +229,7 @@ class UnixReadPipeTransportTests(unittest.TestCase):
         m_read.assert_called_with(5, tr.max_size)
         self.assertFalse(self.protocol.data_received.called)
 
-    @unittest.mock.patch('logging.exception')
+    @unittest.mock.patch('tulip.log.tulip_log.exception')
     @unittest.mock.patch('os.read')
     @unittest.mock.patch('fcntl.fcntl')
     def test__read_ready_error(self, m_fcntl, m_read, m_logexc):
@@ -469,7 +469,7 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         self.assertFalse(self.event_loop.remove_writer.called)
         self.assertEqual([b'data'], tr._buffer)
 
-    @unittest.mock.patch('logging.exception')
+    @unittest.mock.patch('tulip.log.tulip_log.exception')
     @unittest.mock.patch('os.write')
     @unittest.mock.patch('fcntl.fcntl')
     def test__write_ready_err(self, m_fcntl, m_write, m_logexc):

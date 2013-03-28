@@ -203,7 +203,7 @@ class BaseEventLoopTests(test_utils.LogTrackingTestCase):
         self.assertEqual((0,), self.event_loop._selector.select.call_args[0])
 
     @unittest.mock.patch('tulip.base_events.time')
-    @unittest.mock.patch('tulip.base_events.logging')
+    @unittest.mock.patch('tulip.base_events.tulip_log')
     def test__run_once_logging(self, m_logging, m_time):
         # Log to INFO level if timeout > 1.0 sec.
         idx = -1

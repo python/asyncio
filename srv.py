@@ -133,7 +133,7 @@ def main():
 
     if args.ssl:
         here = os.path.join(os.path.dirname(__file__), 'tests')
-        
+
         if args.certfile:
             certfile = args.certfile or os.path.join(here, 'sample.crt')
             keyfile = args.keyfile or os.path.join(here, 'sample.key')

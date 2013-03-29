@@ -426,11 +426,11 @@ class EventLoopTestsMixin:
     def test_sock_client_ops(self):
         self.suppress_log_errors()
 
-        with test_utils.run_test_server(self.event_loop) as addr:
+        with test_utils.run_test_server(self.event_loop) as httpd:
             sock = socket.socket()
             sock.setblocking(False)
             self.event_loop.run_until_complete(
-                self.event_loop.sock_connect(sock, addr))
+                self.event_loop.sock_connect(sock, httpd.address))
             self.event_loop.run_until_complete(
                 self.event_loop.sock_sendall(sock, b'GET / HTTP/1.0\r\n\r\n'))
             data = self.event_loop.run_until_complete(
@@ -568,8 +568,8 @@ class EventLoopTestsMixin:
         self.assertEqual(caught, 1)
 
     def test_create_connection(self):
-        with test_utils.run_test_server(self.event_loop) as addr:
-            f = self.event_loop.create_connection(MyProto, *addr)
+        with test_utils.run_test_server(self.event_loop) as httpd:
+            f = self.event_loop.create_connection(MyProto, *httpd.address)
             tr, pr = self.event_loop.run_until_complete(f)
             self.assertTrue(isinstance(tr, transports.Transport))
             self.assertTrue(isinstance(pr, protocols.Protocol))
@@ -577,10 +577,11 @@ class EventLoopTestsMixin:
             self.assertTrue(pr.nbytes > 0)
 
     def test_create_connection_sock(self):
-        with test_utils.run_test_server(self.event_loop) as addr:
+        with test_utils.run_test_server(self.event_loop) as httpd:
             sock = None
             infos = self.event_loop.run_until_complete(
-                self.event_loop.getaddrinfo(*addr, type=socket.SOCK_STREAM))
+                self.event_loop.getaddrinfo(
+                    *httpd.address, type=socket.SOCK_STREAM))
             for family, type, proto, cname, address in infos:
                 try:
                     sock = socket.socket(family=family, type=type, proto=proto)
@@ -603,8 +604,10 @@ class EventLoopTestsMixin:
 
     @unittest.skipIf(ssl is None, 'No ssl module')
     def test_create_ssl_connection(self):
-        with test_utils.run_test_server(self.event_loop, use_ssl=True) as addr:
-            f = self.event_loop.create_connection(MyProto, *addr, ssl=True)
+        with test_utils.run_test_server(
+                self.event_loop, use_ssl=True) as httpd:
+            f = self.event_loop.create_connection(
+                MyProto, *httpd.address, ssl=True)
             tr, pr = self.event_loop.run_until_complete(f)
             self.assertTrue(isinstance(tr, transports.Transport))
             self.assertTrue(isinstance(pr, protocols.Protocol))

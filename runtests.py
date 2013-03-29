@@ -64,20 +64,20 @@ def load_modules(basedir, suffix='.py'):
         modpath = os.path.join(dir, '__init__.py')
         if os.path.isfile(modpath):
             mod = os.path.split(dir)[-1]
-            files.append(('%s%s' % (prefix, mod), modpath))
+            files.append(('{}{}'.format(prefix, mod), modpath))
 
-            prefix = '%s%s.' % (prefix, mod)
+            prefix = '{}{}.'.format(prefix, mod)
 
         for name in os.listdir(dir):
             path = os.path.join(dir, name)
 
             if os.path.isdir(path):
-                files.extend(list_dir('%s%s.' % (prefix, name), path))
+                files.extend(list_dir('{}{}.'.format(prefix, name), path))
             else:
                 if (name != '__init__.py' and
                     name.endswith(suffix) and
                     not name.startswith(('.', '_'))):
-                    files.append(('%s%s' % (prefix, name[:-3]), path))
+                    files.append(('{}{}'.format(prefix, name[:-3]), path))
 
         return files
 
@@ -89,7 +89,7 @@ def load_modules(basedir, suffix='.py'):
             loader = importlib.machinery.SourceFileLoader(modname, sourcefile)
             mods.append((loader.load_module(), sourcefile))
         except Exception as err:
-            print("Skipping '%s': %s" % (modname, err), file=sys.stderr)
+            print("Skipping '{}': {}".format(modname, err), file=sys.stderr)
 
     return mods
 
@@ -125,7 +125,7 @@ def runtests():
 
     testsdir = os.path.abspath(args.testsdir)
     if not os.path.isdir(testsdir):
-        print("Tests directory is not found: %s\n" % testsdir)
+        print("Tests directory is not found: {}\n".format(testsdir))
         ARGS.print_help()
         return
 
@@ -173,7 +173,7 @@ def runcoverage(sdir, args):
 
     sdir = os.path.abspath(sdir)
     if not os.path.isdir(sdir):
-        print("Python files directory is not found: %s\n" % sdir)
+        print("Python files directory is not found: {}\n".format(sdir))
         ARGS.print_help()
         return
 

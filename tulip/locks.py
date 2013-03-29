@@ -69,7 +69,7 @@ class Lock:
 
     def __repr__(self):
         res = super().__repr__()
-        return '<%s [%s]>' % (
+        return '<{} [{}]>'.format(
             res[1:-1], 'locked' if self._locked else 'unlocked')
 
     def locked(self):
@@ -157,7 +157,7 @@ class EventWaiter:
 
     def __repr__(self):
         res = super().__repr__()
-        return '<%s [%s]>' % (res[1:-1], 'set' if self._value else 'unset')
+        return '<{} [{}]>'.format(res[1:-1], 'set' if self._value else 'unset')
 
     def is_set(self):
         """Return true if and only if the internal flag is true."""
@@ -358,9 +358,10 @@ class Semaphore:
 
     def __repr__(self):
         res = super().__repr__()
-        return '<%s [%s]>' % (
+        return '<{} [{}]>'.format(
             res[1:-1],
-            'locked' if self._locked else 'unlocked,value:%s' % self._value)
+            'locked' if self._locked else 'unlocked,value:{}'.format(
+                self._value))
 
     def locked(self):
         """Returns True if semaphore can not be acquired immediately."""

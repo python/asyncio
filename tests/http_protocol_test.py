@@ -264,9 +264,9 @@ class HttpStreamReaderTests(LogTrackingTestCase):
 
     def test_read_message_deflate(self):
         self.stream.feed_data(
-            ('Host: example.com\r\nContent-Length: %s\r\n'
-             'Content-Encoding: deflate\r\n\r\n' %
-             len(self._COMPRESSED)).encode())
+            ('Host: example.com\r\nContent-Length: {}\r\n'
+             'Content-Encoding: deflate\r\n\r\n'.format(
+             len(self._COMPRESSED)).encode()))
         self.stream.feed_data(self._COMPRESSED)
 
         msg = self.loop.run_until_complete(self.stream.read_message())
@@ -276,8 +276,8 @@ class HttpStreamReaderTests(LogTrackingTestCase):
     def test_read_message_deflate_disabled(self):
         self.stream.feed_data(
             ('Host: example.com\r\nContent-Encoding: deflate\r\n'
-             'Content-Length: %s\r\n\r\n' %
-             len(self._COMPRESSED)).encode())
+             'Content-Length: {}\r\n\r\n'.format(
+             len(self._COMPRESSED)).encode()))
         self.stream.feed_data(self._COMPRESSED)
 
         msg = self.loop.run_until_complete(
@@ -288,7 +288,8 @@ class HttpStreamReaderTests(LogTrackingTestCase):
     def test_read_message_deflate_unknown(self):
         self.stream.feed_data(
             ('Host: example.com\r\nContent-Encoding: compress\r\n'
-             'Content-Length: %s\r\n\r\n' % len(self._COMPRESSED)).encode())
+             'Content-Length: {}\r\n\r\n'.format(
+             len(self._COMPRESSED)).encode()))
         self.stream.feed_data(self._COMPRESSED)
 
         msg = self.loop.run_until_complete(
@@ -460,7 +461,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
         self.stream.feed_data(
             b'Host: example.com\r\n'
             b'Content-Encoding: deflate\r\n' +
-            ('Content-Length: %s\r\n\r\n' % len(data)).encode())
+            ('Content-Length: {}\r\n\r\n'.format(len(data)).encode()))
 
         msg = self.loop.run_until_complete(
             self.stream.read_message(readall=True))
@@ -928,7 +929,7 @@ class HttpMessageTests(unittest.TestCase):
     def test_write_payload_deflate_filter(self):
         write = self.transport.write = unittest.mock.Mock()
         msg = protocol.Response(self.transport, 200)
-        msg.add_headers(('content-length', '%s' % len(self._COMPRESSED)))
+        msg.add_headers(('content-length', '{}'.format(len(self._COMPRESSED))))
         msg.send_headers()
 
         msg.add_compression_filter('deflate')
@@ -958,7 +959,7 @@ class HttpMessageTests(unittest.TestCase):
     def test_write_payload_chunked_and_deflate(self):
         write = self.transport.write = unittest.mock.Mock()
         msg = protocol.Response(self.transport, 200)
-        msg.add_headers(('content-length', '%s' % len(self._COMPRESSED)))
+        msg.add_headers(('content-length', '{}'.format(len(self._COMPRESSED))))
 
         msg.add_chunking_filter(2)
         msg.add_compression_filter('deflate')

@@ -33,7 +33,7 @@ def process(fn):
             line = line.rstrip('\n')
             sline = line.rstrip()
             if len(line) > 80 or line != sline or not isascii(line):
-                print('%s:%d:%s%s' % (
+                print('{}:{:d}:{}{}'.format(
                     fn, i+1, sline, '_' * (len(line) - len(sline))))
     finally:
         f.close()

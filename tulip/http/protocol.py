@@ -176,12 +176,12 @@ class HttpStreamReader(tulip.StreamReader):
             # Parse initial header name : value pair.
             sep_pos = line.find(b':')
             if sep_pos < 0:
-                raise ValueError('Invalid header %s' % line.strip())
+                raise ValueError('Invalid header {}'.format(line.strip()))
 
             name, value = line[:sep_pos], line[sep_pos+1:]
             name = name.rstrip(b' \t').upper()
             if HDRRE.search(name):
-                raise ValueError('Invalid header name %s' % name)
+                raise ValueError('Invalid header name {}'.format(name))
 
             name = name.strip().decode('ascii', 'surrogateescape')
             value = [value.lstrip()]
@@ -629,7 +629,7 @@ class HttpMessage:
         """Analyze headers. Calculate content length,
         removes hop headers, etc."""
         assert not self.headers_sent, 'headers have been sent already'
-        assert isinstance(name, str), '%r is not a string' % name
+        assert isinstance(name, str), '{!r} is not a string'.format(name)
 
         name = name.strip().upper()
 
@@ -692,9 +692,9 @@ class HttpMessage:
 
         # send headers
         self.transport.write(
-            ('%s\r\n\r\n' % '\r\n'.join(
-                ('%s: %s' % (k, v) for k, v in
-                 itertools.chain(self._default_headers(), self.headers)))
+            ('{}\r\n\r\n'.format('\r\n'.join(
+                ('{}: {}'.format(k, v) for k, v in
+                 itertools.chain(self._default_headers(), self.headers))))
              ).encode('ascii'))
 
     def _default_headers(self):

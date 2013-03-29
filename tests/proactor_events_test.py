@@ -169,7 +169,7 @@ class ProactorSocketTransportTests(unittest.TestCase):
 
         self.assertFalse(self.event_loop.call_soon.called)
 
-    @unittest.mock.patch('tulip.proactor_events.logging')
+    @unittest.mock.patch('tulip.proactor_events.tulip_log')
     def test_fatal_error(self, m_logging):
         tr = _ProactorSocketTransport(
             self.event_loop, self.sock, self.protocol)
@@ -184,7 +184,7 @@ class ProactorSocketTransportTests(unittest.TestCase):
             tr._call_connection_lost, None)
         self.assertEqual([], tr._buffer)
 
-    @unittest.mock.patch('tulip.proactor_events.logging')
+    @unittest.mock.patch('tulip.proactor_events.tulip_log')
     def test_fatal_error_2(self, m_logging):
         tr = _ProactorSocketTransport(
             self.event_loop, self.sock, self.protocol)

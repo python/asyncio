@@ -141,8 +141,8 @@ class Task(futures.Future):
                     self._event_loop.call_soon(
                         self._step,
                         None, RuntimeError(
-                            'yield was used instead of yield from in task %r '
-                            'with %r' % (self, result)))
+                            'yield was used instead of yield from in task {!r} '
+                            'with {!r}'.format(self, result)))
                 else:
                     result._blocking = False
                     result.add_done_callback(self._wakeup)
@@ -160,7 +160,8 @@ class Task(futures.Future):
                         self._step,
                         None, RuntimeError(
                             'yield was used instead of yield from for '
-                            'generator in task %r with %s' % (self, result)))
+                            'generator in task {!r} with {}'.format(
+                                self, result)))
                 else:
                     if result is not None:
                         tulip_log.warning('_step(): bad yield: %r', result)

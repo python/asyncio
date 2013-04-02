@@ -223,7 +223,7 @@ class BaseEventLoop(events.AbstractEventLoop):
 
     def call_repeatedly(self, interval, callback, *args):
         """Call a callback every 'interval' seconds."""
-        assert interval > 0, 'Interval must be > 0: %r' % (interval,)
+        assert interval > 0, 'Interval must be > 0: {!r}'.format(interval)
         # TODO: What if callback is already a Handle?
         def wrapper():
             callback(*args)  # If this fails, the chain is broken.
@@ -526,7 +526,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         t0 = time.monotonic()
         event_list = self._selector.select(timeout)
         t1 = time.monotonic()
-        argstr = '' if timeout is None else ' %.3f' % timeout
+        argstr = '' if timeout is None else '{:.3f}'.format(timeout)
         if t1-t0 >= 1:
             level = logging.INFO
         else:

@@ -16,11 +16,11 @@ RESPONSES = http.server.BaseHTTPRequestHandler.responses
 DEFAULT_ERROR_MESSAGE = """
 <html>
   <head>
-    <title>%(status)s %(reason)s</title>
+    <title>{status} {reason}</title>
   </head>
   <body>
-    <h1>%(status)s %(reason)s</h1>
-    %(message)s
+    <h1>{status} {reason}</h1>
+    {message}
   </body>
 </html>"""
 
@@ -129,14 +129,14 @@ class ServerHttpProtocol(tulip.Protocol):
         if self.debug and exc is not None:
             try:
                 tb = traceback.format_exc()
-                msg += '<br><h2>Traceback:</h2>\n<pre>%s</pre>' % tb
+                msg += '<br><h2>Traceback:</h2>\n<pre>{}</pre>'.format(tb)
             except:
                 pass
 
         self.log_access(status, info, message)
 
-        html = DEFAULT_ERROR_MESSAGE % {
-            'status': status, 'reason': reason, 'message': msg}
+        html = DEFAULT_ERROR_MESSAGE.format(
+            status=status, reason=reason, message=msg)
 
         response = tulip.http.Response(self.transport, status, close=True)
         response.add_headers(

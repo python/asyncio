@@ -40,5 +40,5 @@ class LineTooLong(BadRequestException, http.client.LineTooLong):
 class InvalidHeader(BadRequestException):
 
     def __init__(self, hdr):
-        super().__init__('Invalid HTTP Header: %s' % hdr)
+        super().__init__('Invalid HTTP Header: {}'.format(hdr))
         self.hdr = hdr

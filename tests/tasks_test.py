@@ -254,7 +254,6 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertEqual({a}, pending)
 
     def test_wait_really_done(self):
-        self.suppress_log_errors()
         # there is possibility that some tasks in the pending list
         # became done but their callbacks haven't all been called yet
 

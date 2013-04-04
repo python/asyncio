@@ -236,16 +236,15 @@ def _wait(fs, timeout=None, return_when=ALL_COMPLETED):
              f.exception() is not None)):
             bail.cancel()
 
+            for f in pending:
+                f.remove_done_callback(_on_completion)
+
+    for f in pending:
+        f.add_done_callback(_on_completion)
     try:
-        for f in pending:
-            f.add_done_callback(_on_completion)
-        try:
-            yield from bail
-        except futures.CancelledError:
-            pass
-    finally:
-        for f in pending:
-            f.remove_done_callback(_on_completion)
+        yield from bail
+    except futures.CancelledError:
+        pass
 
     really_done = set(f for f in pending if f.done())
     if really_done:

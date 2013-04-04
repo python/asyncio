@@ -215,13 +215,13 @@ class HttpRequestTests(unittest.TestCase):
             return urllib.parse.urljoin('http://python.org/', '/'.join(suffix))
 
         url = 'http://python.org'
-        req = HttpRequest('get', url, params={'foo': 'føø'})
+        req = HttpRequest('get', url, params={'foo': 'f\xf8\xf8'})
         self.assertEqual('/?foo=f%C3%B8%C3%B8', req.path)
-        req = HttpRequest('', url, params={'føø': 'føø'})
+        req = HttpRequest('', url, params={'f\xf8\xf8': 'f\xf8\xf8'})
         self.assertEqual('/?f%C3%B8%C3%B8=f%C3%B8%C3%B8', req.path)
         req = HttpRequest('', url, params={'foo': 'foo'})
         self.assertEqual('/?foo=foo', req.path)
-        req = HttpRequest('', join('ø'), params={'foo': 'foo'})
+        req = HttpRequest('', join('\xf8'), params={'foo': 'foo'})
         self.assertEqual('/%C3%B8?foo=foo', req.path)
 
     def test_query_multivalued_param(self):

@@ -25,7 +25,7 @@ def coroutine(func):
     if inspect.isgeneratorfunction(func):
         coro = func
     else:
-        tulip_log.warning(
+        tulip_log.debug(
             'Coroutine function %s is not a generator.', func.__name__)
 
         @functools.wraps(func)
@@ -69,6 +69,7 @@ class Task(futures.Future):
         assert inspect.isgenerator(coro)  # Must be a coroutine *object*.
         super().__init__(event_loop=event_loop, timeout=timeout)
         self._coro = coro
+        self._fut_waiter = None
         self._must_cancel = False
         self._event_loop.call_soon(self._step)
 
@@ -89,7 +90,11 @@ class Task(futures.Future):
             return False
         self._must_cancel = True
         # _step() will call super().cancel() to call the callbacks.
-        self._event_loop.call_soon(self._step_maybe)
+        if self._fut_waiter is not None:
+            assert not self._fut_waiter.done(), 'Assume it is a race condition.'
+            self._fut_waiter.cancel()
+        else:
+            self._event_loop.call_soon(self._step_maybe)
         return True
 
     def cancelled(self):
@@ -101,10 +106,11 @@ class Task(futures.Future):
             return self._step()
 
     def _step(self, value=None, exc=None):
-        if self.done():
-            tulip_log.warning(
-                '_step(): already done: %r, %r, %r', self, value, exc)
-            return
+        assert not self.done(), \
+            '_step(): already done: {!r}, {!r}, {!r}'.format(self, value, exc)
+
+        self._fut_waiter = None
+
         # We'll call either coro.throw(exc) or coro.send(value).
         if self._must_cancel:
             exc = futures.CancelledError
@@ -139,13 +145,14 @@ class Task(futures.Future):
             if isinstance(result, futures.Future):
                 if not result._blocking:
                     self._event_loop.call_soon(
-                        self._step,
-                        None, RuntimeError(
-                            'yield was used instead of yield from in task {!r} '
-                            'with {!r}'.format(self, result)))
+                        self._step, None,
+                        RuntimeError(
+                            'yield was used instead of yield from '
+                            'in task {!r} with {!r}'.format(self, result)))
                 else:
                     result._blocking = False
                     result.add_done_callback(self._wakeup)
+                    self._fut_waiter = result
 
             elif isinstance(result, concurrent.futures.Future):
                 # This ought to be more efficient than wrap_future(),
@@ -157,16 +164,19 @@ class Task(futures.Future):
             else:
                 if inspect.isgenerator(result):
                     self._event_loop.call_soon(
-                        self._step,
-                        None, RuntimeError(
+                        self._step, None,
+                        RuntimeError(
                             'yield was used instead of yield from for '
                             'generator in task {!r} with {}'.format(
                                 self, result)))
                 else:
                     if result is not None:
-                        tulip_log.warning('_step(): bad yield: %r', result)
-
-                    self._event_loop.call_soon(self._step)
+                        self._event_loop.call_soon(
+                            self._step, None,
+                            RuntimeError(
+                                'Task received bad yield: {!r}'.format(result)))
+                    else:
+                        self._event_loop.call_soon(self._step)
 
     def _wakeup(self, future):
         try:

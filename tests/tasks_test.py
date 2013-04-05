@@ -437,38 +437,47 @@ class TaskTests(test_utils.LogTrackingTestCase):
         t1 = time.monotonic()
         self.assertTrue(0.09 <= t1-t0 <= 0.13, (t1-t0, sleepfut, doer))
 
+    def test_task_cancel_waiter_future(self):
+        fut = futures.Future()
+
+        @tasks.task
+        def coro():
+            try:
+                yield from fut
+            except futures.CancelledError:
+                pass
+
+        task = coro()
+        self.event_loop.run_once()
+        self.assertIs(task._fut_waiter, fut)
+
+        task.cancel()
+        self.assertRaises(
+            futures.CancelledError, self.event_loop.run_until_complete, task)
+        self.assertIsNone(task._fut_waiter)
+        self.assertTrue(fut.cancelled())
+
     @unittest.mock.patch('tulip.tasks.tulip_log')
     def test_step_in_completed_task(self, m_logging):
         @tasks.coroutine
         def notmuch():
-            yield from []
             return 'ko'
 
         task = tasks.Task(notmuch())
         task.set_result('ok')
 
-        task._step()
-        self.assertTrue(m_logging.warning.called)
-        self.assertTrue(m_logging.warning.call_args[0][0].startswith(
-            '_step(): already done: '))
+        self.assertRaises(AssertionError, task._step)
 
     @unittest.mock.patch('tulip.tasks.tulip_log')
     def test_step_result(self, m_logging):
         @tasks.coroutine
         def notmuch():
-            yield from [None, 1]
+            yield None
+            yield 1
             return 'ko'
 
-        task = tasks.Task(notmuch())
-        task._step()
-        self.assertFalse(m_logging.warning.called)
-
-        task._step()
-        self.assertTrue(m_logging.warning.called)
-        self.assertEqual(
-            '_step(): bad yield: %r',
-            m_logging.warning.call_args[0][0])
-        self.assertEqual(1, m_logging.warning.call_args[0][1])
+        self.assertRaises(
+            RuntimeError, self.event_loop.run_until_complete, notmuch())
 
     def test_step_result_future(self):
         # If coroutine returns future, task waits on this future.
@@ -502,7 +511,6 @@ class TaskTests(test_utils.LogTrackingTestCase):
 
     def test_step_result_concurrent_future(self):
         # Coroutine returns concurrent.futures.Future
-        self.suppress_log_warnings()
 
         class Fut(concurrent.futures.Future):
             def __init__(self):
@@ -517,16 +525,15 @@ class TaskTests(test_utils.LogTrackingTestCase):
 
         @tasks.coroutine
         def notmuch():
-            yield from [c_fut]
-            return (yield)
+            return (yield c_fut)
 
         task = tasks.Task(notmuch())
-        task._step()
+        self.event_loop.run_once()
         self.assertTrue(c_fut.cb_added)
 
         res = object()
         c_fut.set_result(res)
-        self.event_loop.run()
+        self.event_loop.run_once()
         self.assertIs(res, task.result())
 
     def test_step_with_baseexception(self):
@@ -584,6 +591,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertTrue(tasks.iscoroutinefunction(fn2))
 
     def test_yield_vs_yield_from(self):
+        self.suppress_log_errors()
         fut = futures.Future()
 
         @tasks.task
@@ -596,6 +604,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
             self.event_loop.run_until_complete, task)
 
     def test_yield_vs_yield_from_generator(self):
+        self.suppress_log_errors()
         fut = futures.Future()
 
         @tasks.coroutine

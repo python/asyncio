@@ -24,6 +24,7 @@ class LockTests(unittest.TestCase):
         lock = locks.Lock()
         self.assertTrue(repr(lock).endswith('[unlocked]>'))
 
+        @tasks.coroutine
         def acquire_lock():
             yield from lock
 
@@ -33,6 +34,7 @@ class LockTests(unittest.TestCase):
     def test_lock(self):
         lock = locks.Lock()
 
+        @tasks.coroutine
         def acquire_lock():
             return (yield from lock)
 

@@ -280,10 +280,11 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
     def test_exception_waiter(self):
         stream = streams.StreamReader()
 
+        @tasks.coroutine
         def set_err():
-            yield from []
             stream.set_exception(ValueError())
 
+        @tasks.coroutine
         def readline():
             yield from stream.readline()
 

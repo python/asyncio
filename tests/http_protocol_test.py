@@ -374,6 +374,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
 
         msg = self.loop.run_until_complete(self.stream.read_message())
 
+        @tulip.coroutine
         def coro():
             self.stream.feed_data(b'data')
             self.stream.feed_eof()
@@ -389,6 +390,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
         msg = self.loop.run_until_complete(
             self.stream.read_message(readall=True))
 
+        @tulip.coroutine
         def coro():
             self.stream.feed_data(b'data')
             self.stream.feed_eof()
@@ -422,6 +424,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
 
         msg = self.loop.run_until_complete(self.stream.read_message())
 
+        @tulip.coroutine
         def coro():
             self.stream.feed_data(b'da')
             self.stream.feed_data(b't')
@@ -442,8 +445,8 @@ class HttpStreamReaderTests(LogTrackingTestCase):
         self.stream._parser = parser
         self.stream.feed_data(b'da')
 
+        @tulip.coroutine
         def eof():
-            yield from []
             self.stream.feed_eof()
 
         t1 = tulip.Task(stream.read())
@@ -466,6 +469,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
         msg = self.loop.run_until_complete(
             self.stream.read_message(readall=True))
 
+        @tulip.coroutine
         def coro():
             self.stream.feed_data(data)
             return (yield from msg.payload.read())
@@ -480,6 +484,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
 
         msg = self.loop.run_until_complete(self.stream.read_message())
 
+        @tulip.coroutine
         def coro():
             self.stream.feed_data(
                 b'4\r\ndata\r\n4\r\nline\r\n0\r\ntest\r\n\r\n')
@@ -495,6 +500,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
 
         msg = self.loop.run_until_complete(self.stream.read_message())
 
+        @tulip.coroutine
         def coro():
             self.stream.feed_data(b'4\r\ndata\r')
             self.stream.feed_data(b'\n4')
@@ -514,6 +520,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
 
         msg = self.loop.run_until_complete(self.stream.read_message())
 
+        @tulip.coroutine
         def coro():
             self.stream.feed_data(b'4\r\ndata\r\n')
             self.stream.feed_eof()
@@ -530,6 +537,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
 
         msg = self.loop.run_until_complete(self.stream.read_message())
 
+        @tulip.coroutine
         def coro():
             self.stream.feed_data(
                 b'4;test\r\ndata\r\n4\r\nline\r\n0\r\ntest\r\n\r\n')
@@ -545,6 +553,7 @@ class HttpStreamReaderTests(LogTrackingTestCase):
 
         msg = self.loop.run_until_complete(self.stream.read_message())
 
+        @tulip.coroutine
         def coro():
             self.stream.feed_data(b'blah\r\n')
             return (yield from msg.payload.read())

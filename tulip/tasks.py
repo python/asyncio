@@ -25,16 +25,11 @@ def coroutine(func):
     if inspect.isgeneratorfunction(func):
         coro = func
     else:
-        tulip_log.debug(
-            'Coroutine function %s is not a generator.', func.__name__)
-
         @functools.wraps(func)
         def coro(*args, **kw):
             res = func(*args, **kw)
-
             if isinstance(res, futures.Future) or inspect.isgenerator(res):
                 res = yield from res
-
             return res
 
     coro._is_coroutine = True  # Not sure who can use this.
@@ -56,9 +51,18 @@ def iscoroutine(obj):
 
 def task(func):
     """Decorator for a coroutine to be wrapped in a Task."""
+    if inspect.isgeneratorfunction(func):
+        coro = func
+    else:
+        def coro(*args, **kw):
+            res = func(*args, **kw)
+            if isinstance(res, futures.Future) or inspect.isgenerator(res):
+                res = yield from res
+            return res
+
     def task_wrapper(*args, **kwds):
-        coro = func(*args, **kwds)
-        return Task(coro)
+        return Task(coro(*args, **kwds))
+
     return task_wrapper
 
 

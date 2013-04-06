@@ -136,7 +136,6 @@ class EventLoopTestsMixin:
 
         @tasks.coroutine
         def coro():
-            yield from []
             self.assertTrue(self.event_loop.is_running())
             self.event_loop.run_until_complete(tasks.sleep(0.1))
 
@@ -149,7 +148,6 @@ class EventLoopTestsMixin:
 
         @tasks.coroutine
         def coro():
-            yield from []
             tasks.sleep(0.1)
             self.event_loop.run_once()
 
@@ -640,6 +638,7 @@ class EventLoopTestsMixin:
     def test_create_connection_connect_err(self):
         self.suppress_log_errors()
 
+        @tasks.coroutine
         def getaddrinfo(*args, **kw):
             yield from []
             return [(2, 1, 6, '', ('107.6.106.82', 80))]
@@ -654,6 +653,7 @@ class EventLoopTestsMixin:
     def test_create_connection_mutiple_errors(self):
         self.suppress_log_errors()
 
+        @tasks.coroutine
         def getaddrinfo(*args, **kw):
             yield from []
             return [(2, 1, 6, '', ('107.6.106.82', 80)),
@@ -1187,6 +1187,15 @@ class HandleTests(unittest.TestCase):
 
         self.assertRaises(
             AssertionError, events.make_handle, h1, (1, 2))
+
+    @unittest.mock.patch('tulip.events.tulip_log')
+    def test_callback_with_exception(self, log):
+        def callback():
+            raise ValueError()
+
+        h = events.Handle(callback, ())
+        h.run()
+        self.assertTrue(log.exception.called)
 
 
 class TimerTests(unittest.TestCase):

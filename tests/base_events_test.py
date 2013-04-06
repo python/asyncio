@@ -258,6 +258,7 @@ class BaseEventLoopTests(test_utils.LogTrackingTestCase):
         class MyProto(protocols.Protocol):
             pass
 
+        @tasks.coroutine
         def getaddrinfo(*args, **kw):
             yield from []
             return [(2, 1, 6, '', ('107.6.106.82', 80)),

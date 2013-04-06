@@ -34,7 +34,6 @@ class TaskTests(test_utils.LogTrackingTestCase):
     def test_task_class(self):
         @tasks.coroutine
         def notmuch():
-            yield from []
             return 'ok'
         t = tasks.Task(notmuch())
         self.event_loop.run()
@@ -51,6 +50,27 @@ class TaskTests(test_utils.LogTrackingTestCase):
         def notmuch():
             yield from []
             return 'ko'
+        t = notmuch()
+        self.event_loop.run()
+        self.assertTrue(t.done())
+        self.assertEqual(t.result(), 'ko')
+
+    def test_task_decorator_func(self):
+        @tasks.task
+        def notmuch():
+            return 'ko'
+        t = notmuch()
+        self.event_loop.run()
+        self.assertTrue(t.done())
+        self.assertEqual(t.result(), 'ko')
+
+    def test_task_decorator_fut(self):
+        fut = futures.Future()
+        fut.set_result('ko')
+
+        @tasks.task
+        def notmuch():
+            return fut
         t = notmuch()
         self.event_loop.run()
         self.assertTrue(t.done())
@@ -74,8 +94,9 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertEqual(repr(t), "Task(<notmuch>)<result='abc'>")
 
     def test_task_repr_custom(self):
+        @tasks.coroutine
         def coro():
-            yield from []
+            pass
 
         class T(futures.Future):
             def __repr__(self):
@@ -97,12 +118,10 @@ class TaskTests(test_utils.LogTrackingTestCase):
 
         @tasks.task
         def inner1():
-            yield from []
             return 42
 
         @tasks.task
         def inner2():
-            yield from []
             return 1000
 
         t = outer()
@@ -137,29 +156,30 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertFalse(t.cancel())
 
     def test_future_timeout_catch(self):
+        self.suppress_log_errors()
+
         @tasks.coroutine
         def coro():
             yield from tasks.sleep(10.0)
             return 12
 
-        err = None
+        class Cancelled(Exception):
+            pass
 
         @tasks.coroutine
         def coro2():
-            nonlocal err
             try:
                 yield from tasks.Task(coro(), timeout=0.1)
-            except futures.CancelledError as exc:
-                err = exc
+            except futures.CancelledError:
+                raise Cancelled()
 
-        self.event_loop.run_until_complete(tasks.Task(coro2()))
-        self.assertIsInstance(err, futures.CancelledError)
+        self.assertRaises(
+            Cancelled, self.event_loop.run_until_complete, coro2())
 
     def test_cancel_in_coro(self):
         @tasks.coroutine
         def task():
             t.cancel()
-            yield from []
             return 12
 
         t = tasks.Task(task())
@@ -259,11 +279,12 @@ class TaskTests(test_utils.LogTrackingTestCase):
 
         @tasks.coroutine
         def coro1():
-            yield from [None]
+            yield
 
         @tasks.coroutine
         def coro2():
-            yield from [None, None]
+            yield
+            yield
 
         a = tasks.Task(coro1())
         b = tasks.Task(coro2())
@@ -280,7 +301,6 @@ class TaskTests(test_utils.LogTrackingTestCase):
 
         @tasks.coroutine
         def exc():
-            yield from []
             raise ZeroDivisionError('err')
 
         b = tasks.Task(exc())
@@ -541,7 +561,6 @@ class TaskTests(test_utils.LogTrackingTestCase):
 
         @tasks.coroutine
         def notmutch():
-            yield from []
             raise BaseException()
 
         task = tasks.Task(notmutch())

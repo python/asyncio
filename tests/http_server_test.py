@@ -160,7 +160,6 @@ class HttpServerProtocolTests(LogTrackingTestCase):
         def coro(rline, message):
             nonlocal called
             called = True
-            yield from []
             srv.eof_received()
 
         srv.handle_request = coro
@@ -198,7 +197,6 @@ class HttpServerProtocolTests(LogTrackingTestCase):
 
         @tulip.task
         def cancel():
-            yield from []
             srv._request_handle.cancel()
 
         srv.close()

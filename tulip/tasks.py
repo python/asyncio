@@ -148,15 +148,14 @@ class Task(futures.Future):
             # XXX No check for self._must_cancel here?
             if isinstance(result, futures.Future):
                 if not result._blocking:
-                    self._event_loop.call_soon(
-                        self._step, None,
+                    result.set_exception(
                         RuntimeError(
                             'yield was used instead of yield from '
                             'in task {!r} with {!r}'.format(self, result)))
-                else:
-                    result._blocking = False
-                    result.add_done_callback(self._wakeup)
-                    self._fut_waiter = result
+
+                result._blocking = False
+                result.add_done_callback(self._wakeup)
+                self._fut_waiter = result
 
             elif isinstance(result, concurrent.futures.Future):
                 # This ought to be more efficient than wrap_future(),

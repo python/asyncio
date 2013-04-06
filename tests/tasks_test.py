@@ -618,9 +618,11 @@ class TaskTests(test_utils.LogTrackingTestCase):
             yield fut
 
         task = wait_for_future()
-        self.assertRaises(
-            RuntimeError,
-            self.event_loop.run_until_complete, task)
+        with self.assertRaises(RuntimeError) as cm:
+            self.event_loop.run_until_complete(task)
+
+        self.assertTrue(fut.done())
+        self.assertIs(fut.exception(), cm.exception)
 
     def test_yield_vs_yield_from_generator(self):
         self.suppress_log_errors()

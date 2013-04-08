@@ -315,6 +315,10 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
                 else:
                     self._add_callback(writer)
 
+    def stop_serving(self, sock):
+        self.remove_reader(sock.fileno())
+        sock.close()
+
 
 class _SelectorSocketTransport(transports.Transport):
 

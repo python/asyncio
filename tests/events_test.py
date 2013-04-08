@@ -781,6 +781,22 @@ class EventLoopTestsMixin:
         sock.close()
         client.close()
 
+    def test_stop_serving(self):
+        f = self.event_loop.start_serving(MyProto, '0.0.0.0', 0)
+        sock = self.event_loop.run_until_complete(f)
+        host, port = sock.getsockname()
+
+        client = socket.socket()
+        client.connect(('127.0.0.1', port))
+        client.send(b'xxx')
+        client.close()
+
+        self.event_loop.stop_serving(sock)
+
+        client = socket.socket()
+        self.assertRaises(
+            ConnectionRefusedError, client.connect, ('127.0.0.1', port))
+
     def test_start_serving_host_port_sock(self):
         self.suppress_log_errors()
         fut = self.event_loop.start_serving(
@@ -1297,6 +1313,8 @@ class AbstractEventLoopTests(unittest.TestCase):
             NotImplementedError, ev_loop.create_connection, f)
         self.assertRaises(
             NotImplementedError, ev_loop.start_serving, f)
+        self.assertRaises(
+            NotImplementedError, ev_loop.stop_serving, f)
         self.assertRaises(
             NotImplementedError, ev_loop.create_datagram_endpoint, f)
         self.assertRaises(

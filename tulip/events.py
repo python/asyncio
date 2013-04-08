@@ -185,6 +185,10 @@ class AbstractEventLoop:
                       family=0, proto=0, flags=0, sock=None):
         raise NotImplementedError
 
+    def stop_serving(self, sock):
+        """Stop listening for incoming connections. Close socket."""
+        raise NotImplementedError
+
     def create_datagram_endpoint(self, protocol_factory,
                                  local_addr=None, remote_addr=None, *,
                                  family=0, proto=0, flags=0):

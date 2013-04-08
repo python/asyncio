@@ -166,7 +166,7 @@ class EventLoopTestsMixin:
             time.sleep(0.1)
             self.event_loop.call_soon_threadsafe(callback)
 
-        self.event_loop.run_once(0.001)  # windows iocp
+        self.event_loop.run_once(0)  # windows iocp
 
         t = threading.Thread(target=run)
         t0 = time.monotonic()
@@ -1137,6 +1137,9 @@ if sys.platform == 'win32':
         def test_create_datagram_endpoint_connect_err(self):
             raise unittest.SkipTest(
                 "IocpEventLoop does not have create_datagram_endpoint()")
+        def test_stop_serving(self):
+            raise unittest.SkipTest(
+                "IocpEventLoop does not support stop_serving()")
 else:
     from tulip import selectors
     from tulip import unix_events

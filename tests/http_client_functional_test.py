@@ -344,7 +344,7 @@ class HttpClientFunctionalTests(test_utils.LogTrackingTestCase):
 
     def test_request_conn_error(self):
         self.assertRaises(
-            ConnectionRefusedError,
+            OSError,
             self.loop.run_until_complete,
             client.request('get', 'http://0.0.0.0:1', timeout=0.1))
 

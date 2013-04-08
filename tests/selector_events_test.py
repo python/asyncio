@@ -663,7 +663,8 @@ class SelectorSocketTransportTests(unittest.TestCase):
 
         self.assertEqual([b'data'], transport._buffer)
 
-    def test_write_exception(self):
+    @unittest.mock.patch('tulip.selector_events.tulip_log')
+    def test_write_exception(self, m_log):
         err = self.sock.send.side_effect = OSError()
 
         data = b'data'
@@ -672,6 +673,17 @@ class SelectorSocketTransportTests(unittest.TestCase):
         transport._fatal_error = unittest.mock.Mock()
         transport.write(data)
         transport._fatal_error.assert_called_with(err)
+        self.assertEqual(transport._conn_lost, 1)
+
+        self.sock.reset_mock()
+        transport.write(data)
+        self.assertFalse(self.sock.send.called)
+        self.assertEqual(transport._conn_lost, 2)
+        transport.write(data)
+        transport.write(data)
+        transport.write(data)
+        transport.write(data)
+        m_log.warning.assert_called_with('socket.send() raised exception.')
 
     def test_write_str(self):
         transport = _SelectorSocketTransport(
@@ -756,6 +768,7 @@ class SelectorSocketTransportTests(unittest.TestCase):
         transport._buffer.append(b'data')
         transport._write_ready()
         transport._fatal_error.assert_called_with(err)
+        self.assertEqual(transport._conn_lost, 1)
 
     def test_close(self):
         transport = _SelectorSocketTransport(
@@ -869,6 +882,17 @@ class SelectorSslTransportTests(unittest.TestCase):
     def test_write_closing(self):
         self.transport.close()
         self.assertRaises(AssertionError, self.transport.write, b'data')
+
+    @unittest.mock.patch('tulip.selector_events.tulip_log')
+    def test_write_exception(self, m_log):
+        self.transport._conn_lost = 1
+        self.transport.write(b'data')
+        self.assertEqual(self.transport._buffer, [])
+        self.transport.write(b'data')
+        self.transport.write(b'data')
+        self.transport.write(b'data')
+        self.transport.write(b'data')
+        m_log.warning.assert_called_with('socket.send() raised exception.')
 
     def test_abort(self):
         self.transport._close = unittest.mock.Mock()
@@ -1008,6 +1032,7 @@ class SelectorSslTransportTests(unittest.TestCase):
         self.transport._on_ready()
         self.transport._fatal_error.assert_called_with(err)
         self.assertEqual([], self.transport._buffer)
+        self.assertEqual(self.transport._conn_lost, 1)
 
 
 class SelectorDatagramTransportTests(unittest.TestCase):
@@ -1102,7 +1127,8 @@ class SelectorDatagramTransportTests(unittest.TestCase):
         self.assertEqual(
             [(b'data', ('0.0.0.0', 12345))], list(transport._buffer))
 
-    def test_sendto_exception(self):
+    @unittest.mock.patch('tulip.selector_events.tulip_log')
+    def test_sendto_exception(self, m_log):
         data = b'data'
         err = self.sock.sendto.side_effect = OSError()
 
@@ -1111,8 +1137,17 @@ class SelectorDatagramTransportTests(unittest.TestCase):
         transport._fatal_error = unittest.mock.Mock()
         transport.sendto(data, ())
 
+        self.assertEqual(transport._conn_lost, 1)
         self.assertTrue(transport._fatal_error.called)
         transport._fatal_error.assert_called_with(err)
+
+        transport._address = ('123',)
+        transport.sendto(data)
+        transport.sendto(data)
+        transport.sendto(data)
+        transport.sendto(data)
+        transport.sendto(data)
+        m_log.warning.assert_called_with('socket.send() raised exception.')
 
     def test_sendto_connection_refused(self):
         data = b'data'
@@ -1124,6 +1159,7 @@ class SelectorDatagramTransportTests(unittest.TestCase):
         transport._fatal_error = unittest.mock.Mock()
         transport.sendto(data, ())
 
+        self.assertEqual(transport._conn_lost, 0)
         self.assertFalse(transport._fatal_error.called)
 
     def test_sendto_connection_refused_connected(self):
@@ -1136,6 +1172,7 @@ class SelectorDatagramTransportTests(unittest.TestCase):
         transport._fatal_error = unittest.mock.Mock()
         transport.sendto(data)
 
+        self.assertEqual(transport._conn_lost, 1)
         self.assertTrue(transport._fatal_error.called)
 
     def test_sendto_str(self):

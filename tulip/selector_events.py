@@ -329,6 +329,7 @@ class _SelectorSocketTransport(transports.Transport):
         self._sock = sock
         self._protocol = protocol
         self._buffer = []
+        self._conn_lost = 0
         self._closing = False  # Set when close() called.
         self._event_loop.add_reader(self._sock.fileno(), self._read_ready)
         self._event_loop.call_soon(self._protocol.connection_made, self)
@@ -355,6 +356,12 @@ class _SelectorSocketTransport(transports.Transport):
         if not data:
             return
 
+        if self._conn_lost:
+            if self._conn_lost >= 5:
+                tulip_log.warning('socket.send() raised exception.')
+            self._conn_lost += 1
+            return
+
         if not self._buffer:
             # Attempt to send it right away first.
             try:
@@ -362,6 +369,7 @@ class _SelectorSocketTransport(transports.Transport):
             except (BlockingIOError, InterruptedError):
                 n = 0
             except socket.error as exc:
+                self._conn_lost += 1
                 self._fatal_error(exc)
                 return
 
@@ -383,6 +391,7 @@ class _SelectorSocketTransport(transports.Transport):
         except (BlockingIOError, InterruptedError):
             self._buffer.append(data)
         except Exception as exc:
+            self._conn_lost += 1
             self._fatal_error(exc)
         else:
             if n == len(data):
@@ -440,6 +449,7 @@ class _SelectorSslTransport(transports.Transport):
                                          do_handshake_on_connect=False)
         self._sslsock = sslsock
         self._buffer = []
+        self._conn_lost = 0
         self._closing = False  # Set when close() called.
         self._extra['socket'] = sslsock
 
@@ -519,6 +529,7 @@ class _SelectorSslTransport(transports.Transport):
         except (BlockingIOError, InterruptedError):
             n = 0
         except Exception as exc:
+            self._conn_lost += 1
             self._fatal_error(exc)
             return
 
@@ -534,6 +545,13 @@ class _SelectorSslTransport(transports.Transport):
         assert not self._closing
         if not data:
             return
+
+        if self._conn_lost:
+            if self._conn_lost >= 5:
+                tulip_log.warning('socket.send() raised exception.')
+            self._conn_lost += 1
+            return
+
         self._buffer.append(data)
         # We could optimize, but the callback can do this for now.
 
@@ -572,6 +590,7 @@ class _SelectorDatagramTransport(transports.DatagramTransport):
         self._protocol = protocol
         self._address = address
         self._buffer = collections.deque()
+        self._conn_lost = 0
         self._closing = False  # Set when close() called.
         self._event_loop.add_reader(self._fileno, self._read_ready)
         self._event_loop.call_soon(self._protocol.connection_made, self)
@@ -595,6 +614,12 @@ class _SelectorDatagramTransport(transports.DatagramTransport):
         if self._address:
             assert addr in (None, self._address)
 
+        if self._conn_lost and self._address:
+            if self._conn_lost >= 5:
+                tulip_log.warning('socket.send() raised exception.')
+            self._conn_lost += 1
+            return
+
         if not self._buffer:
             # Attempt to send it right away first.
             try:
@@ -605,11 +630,13 @@ class _SelectorDatagramTransport(transports.DatagramTransport):
                 return
             except ConnectionRefusedError as exc:
                 if self._address:
+                    self._conn_lost += 1
                     self._fatal_error(exc)
-                    return
+                return
             except (BlockingIOError, InterruptedError):
                 self._event_loop.add_writer(self._fileno, self._sendto_ready)
             except Exception as exc:
+                self._conn_lost += 1
                 self._fatal_error(exc)
                 return
 
@@ -625,12 +652,14 @@ class _SelectorDatagramTransport(transports.DatagramTransport):
                     self._sock.sendto(data, addr)
             except ConnectionRefusedError as exc:
                 if self._address:
+                    self._conn_lost += 1
                     self._fatal_error(exc)
                 return
             except (BlockingIOError, InterruptedError):
                 self._buffer.appendleft((data, addr))  # Try again later.
                 break
             except Exception as exc:
+                self._conn_lost += 1
                 self._fatal_error(exc)
                 return
 

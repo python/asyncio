@@ -20,6 +20,7 @@ class _ProactorSocketTransport(transports.Transport):
         self._buffer = []
         self._read_fut = None
         self._write_fut = None
+        self._conn_lost = 0
         self._closing = False  # Set when close() called.
         self._event_loop.call_soon(self._protocol.connection_made, self)
         self._event_loop.call_soon(self._loop_reading)
@@ -57,6 +58,11 @@ class _ProactorSocketTransport(transports.Transport):
         assert not self._closing
         if not data:
             return
+        if self._conn_lost:
+            if self._conn_lost >= 5:
+                tulip_log.warning('socket.send() raised exception.')
+            self._conn_lost += 1
+            return
         self._buffer.append(data)
         if not self._write_fut:
             self._loop_writing()
@@ -73,6 +79,7 @@ class _ProactorSocketTransport(transports.Transport):
                 return
             self._write_fut = self._event_loop._proactor.send(self._sock, data)
         except OSError as exc:
+            self._conn_lost += 1
             self._fatal_error(exc)
         else:
             self._write_fut.add_done_callback(self._loop_writing)

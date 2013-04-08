@@ -123,7 +123,8 @@ class ProactorSocketTransportTests(unittest.TestCase):
         self.event_loop._proactor.send.return_value.add_done_callback.\
             assert_called_with(tr._loop_writing)
 
-    def test_loop_writing_err(self):
+    @unittest.mock.patch('tulip.proactor_events.tulip_log')
+    def test_loop_writing_err(self, m_log):
         err = self.event_loop._proactor.send.side_effect = OSError()
         tr = _ProactorSocketTransport(
             self.event_loop, self.sock, self.protocol)
@@ -131,6 +132,15 @@ class ProactorSocketTransportTests(unittest.TestCase):
         tr._buffer = [b'da', b'ta']
         tr._loop_writing()
         tr._fatal_error.assert_called_with(err)
+        self.assertEqual(tr._conn_lost, 1)
+
+        tr.write(b'data')
+        tr.write(b'data')
+        tr.write(b'data')
+        tr.write(b'data')
+        tr.write(b'data')
+        self.assertEqual(tr._buffer, [])
+        m_log.warning.assert_called_with('socket.send() raised exception.')
 
     def test_loop_writing_stop(self):
         fut = tulip.Future()

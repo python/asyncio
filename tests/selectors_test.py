@@ -129,9 +129,11 @@ class BaseSelectorTests(unittest.TestCase):
         self.assertFalse(s._fd_to_key)
         self.assertFalse(s._fileobj_to_key)
 
-    def test_key_from_fd(self):
+    @unittest.mock.patch('tulip.selectors.tulip_log')
+    def test_key_from_fd(self, m_log):
         s = selectors._BaseSelector()
         key = s.register(1, selectors.EVENT_READ)
 
         self.assertIs(key, s._key_from_fd(1))
         self.assertIsNone(s._key_from_fd(10))
+        m_log.warning.assert_called_with('No key found for fd %r', 10)

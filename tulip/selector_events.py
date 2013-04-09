@@ -116,7 +116,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             if ssl:
                 sslcontext = None if isinstance(ssl, bool) else ssl
                 self._make_ssl_transport(
-                    conn, protocol_factory(), sslcontext, futures.Future(),
+                    conn, protocol_factory(), sslcontext, None,
                     server_side=True, extra={'addr': addr})
             else:
                 self._make_socket_transport(
@@ -435,7 +435,7 @@ class _SelectorSocketTransport(transports.Transport):
 
 class _SelectorSslTransport(transports.Transport):
 
-    def __init__(self, event_loop, rawsock, protocol, sslcontext, waiter,
+    def __init__(self, event_loop, rawsock, protocol, sslcontext, waiter=None,
                  server_side=False, extra=None):
         super().__init__(extra)
 
@@ -467,18 +467,21 @@ class _SelectorSslTransport(transports.Transport):
             return
         except Exception as exc:
             self._sslsock.close()
-            self._waiter.set_exception(exc)
+            if self._waiter is not None:
+                self._waiter.set_exception(exc)
             return
         except BaseException as exc:
             self._sslsock.close()
-            self._waiter.set_exception(exc)
+            if self._waiter is not None:
+                self._waiter.set_exception(exc)
             raise
         self._event_loop.remove_reader(fd)
         self._event_loop.remove_writer(fd)
         self._event_loop.add_reader(fd, self._on_ready)
         self._event_loop.add_writer(fd, self._on_ready)
         self._event_loop.call_soon(self._protocol.connection_made, self)
-        self._event_loop.call_soon(self._waiter.set_result, None)
+        if self._waiter is not None:
+            self._event_loop.call_soon(self._waiter.set_result, None)
 
     def _on_ready(self):
         # Because of renegotiations (?), there's no difference between

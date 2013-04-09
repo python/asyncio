@@ -40,7 +40,7 @@ class ServerHttpProtocol(tulip.Protocol):
     _request_count = 0
     _request_handle = None
 
-    def __init__(self, log=logging, debug=False):
+    def __init__(self, *, log=logging, debug=False):
         self.log = log
         self.debug = debug
 

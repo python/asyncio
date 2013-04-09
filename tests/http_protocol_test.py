@@ -7,15 +7,11 @@ import zlib
 
 import tulip
 from tulip.http import protocol
-from tulip.test_utils import LogTrackingTestCase
 
 
-class HttpStreamReaderTests(LogTrackingTestCase):
+class HttpStreamReaderTests(unittest.TestCase):
 
     def setUp(self):
-        super().setUp()
-        self.suppress_log_errors()
-
         self.loop = tulip.new_event_loop()
         tulip.set_event_loop(self.loop)
 
@@ -24,7 +20,6 @@ class HttpStreamReaderTests(LogTrackingTestCase):
 
     def tearDown(self):
         self.loop.close()
-        super().tearDown()
 
     def test_request_line(self):
         self.stream.feed_data(b'get /path HTTP/1.1\r\n')

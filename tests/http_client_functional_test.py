@@ -3,6 +3,7 @@
 import io
 import os.path
 import http.cookies
+import unittest
 
 import tulip
 import tulip.http
@@ -10,18 +11,14 @@ from tulip import test_utils
 from tulip.http import client
 
 
-class HttpClientFunctionalTests(test_utils.LogTrackingTestCase):
+class HttpClientFunctionalTests(unittest.TestCase):
 
     def setUp(self):
-        super().setUp()
-        self.suppress_log_errors()
-
         self.loop = tulip.new_event_loop()
         tulip.set_event_loop(self.loop)
 
     def tearDown(self):
         self.loop.close()
-        super().tearDown()
 
     def test_HTTP_200_OK_METHOD(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:

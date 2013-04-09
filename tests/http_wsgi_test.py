@@ -7,15 +7,11 @@ import unittest.mock
 import tulip
 from tulip.http import wsgi
 from tulip.http import protocol
-from tulip.test_utils import LogTrackingTestCase
 
 
-class HttpWsgiServerProtocolTests(LogTrackingTestCase):
+class HttpWsgiServerProtocolTests(unittest.TestCase):
 
     def setUp(self):
-        super().setUp()
-        self.suppress_log_errors()
-
         self.loop = tulip.new_event_loop()
         tulip.set_event_loop(self.loop)
 
@@ -32,7 +28,6 @@ class HttpWsgiServerProtocolTests(LogTrackingTestCase):
 
     def tearDown(self):
         self.loop.close()
-        super().tearDown()
 
     def test_ctor(self):
         srv = wsgi.WSGIServerHttpProtocol(self.wsgi)

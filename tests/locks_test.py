@@ -8,7 +8,6 @@ from tulip import events
 from tulip import futures
 from tulip import locks
 from tulip import tasks
-from tulip import test_utils
 
 
 class LockTests(unittest.TestCase):
@@ -57,19 +56,22 @@ class LockTests(unittest.TestCase):
         def c1(result):
             if (yield from lock.acquire()):
                 result.append(1)
+            return True
 
         @tasks.coroutine
         def c2(result):
             if (yield from lock.acquire()):
                 result.append(2)
+            return True
 
         @tasks.coroutine
         def c3(result):
             if (yield from lock.acquire()):
                 result.append(3)
+            return True
 
-        tasks.Task(c1(result))
-        tasks.Task(c2(result))
+        t1 = tasks.Task(c1(result))
+        t2 = tasks.Task(c2(result))
 
         self.event_loop.run_once()
         self.assertEqual([], result)
@@ -81,7 +83,7 @@ class LockTests(unittest.TestCase):
         self.event_loop.run_once()
         self.assertEqual([1], result)
 
-        tasks.Task(c3(result))
+        t3 = tasks.Task(c3(result))
 
         lock.release()
         self.event_loop.run_once()
@@ -90,6 +92,13 @@ class LockTests(unittest.TestCase):
         lock.release()
         self.event_loop.run_once()
         self.assertEqual([1, 2, 3], result)
+
+        self.assertTrue(t1.done())
+        self.assertTrue(t1.result())
+        self.assertTrue(t2.done())
+        self.assertTrue(t2.result())
+        self.assertTrue(t3.done())
+        self.assertTrue(t3.result())
 
     def test_acquire_timeout(self):
         lock = locks.Lock()
@@ -210,17 +219,24 @@ class EventWaiterTests(unittest.TestCase):
             if (yield from ev.wait()):
                 result.append(3)
 
-        tasks.Task(c1(result))
-        tasks.Task(c2(result))
+        t1 = tasks.Task(c1(result))
+        t2 = tasks.Task(c2(result))
 
         self.event_loop.run_once()
         self.assertEqual([], result)
 
-        tasks.Task(c3(result))
+        t3 = tasks.Task(c3(result))
 
         ev.set()
         self.event_loop.run_once()
         self.assertEqual([3, 1, 2], result)
+
+        self.assertTrue(t1.done())
+        self.assertIsNone(t1.result())
+        self.assertTrue(t2.done())
+        self.assertIsNone(t2.result())
+        self.assertTrue(t3.done())
+        self.assertIsNone(t3.result())
 
     def test_wait_on_set(self):
         ev = locks.EventWaiter()
@@ -287,8 +303,9 @@ class EventWaiterTests(unittest.TestCase):
         def c1(result):
             if (yield from ev.wait()):
                 result.append(1)
+            return True
 
-        tasks.Task(c1(result))
+        t = tasks.Task(c1(result))
         self.event_loop.run_once()
         self.assertEqual([], result)
 
@@ -304,11 +321,13 @@ class EventWaiterTests(unittest.TestCase):
         self.assertEqual([1], result)
         self.assertEqual(0, len(ev._waiters))
 
+        self.assertTrue(t.done())
+        self.assertTrue(t.result())
 
-class ConditionTests(test_utils.LogTrackingTestCase):
+
+class ConditionTests(unittest.TestCase):
 
     def setUp(self):
-        super().setUp()
         self.event_loop = events.new_event_loop()
         events.set_event_loop(self.event_loop)
 
@@ -324,22 +343,25 @@ class ConditionTests(test_utils.LogTrackingTestCase):
             yield from cond.acquire()
             if (yield from cond.wait()):
                 result.append(1)
+            return True
 
         @tasks.coroutine
         def c2(result):
             yield from cond.acquire()
             if (yield from cond.wait()):
                 result.append(2)
+            return True
 
         @tasks.coroutine
         def c3(result):
             yield from cond.acquire()
             if (yield from cond.wait()):
                 result.append(3)
+            return True
 
-        tasks.Task(c1(result))
-        tasks.Task(c2(result))
-        tasks.Task(c3(result))
+        t1 = tasks.Task(c1(result))
+        t2 = tasks.Task(c2(result))
+        t3 = tasks.Task(c3(result))
 
         self.event_loop.run_once()
         self.assertEqual([], result)
@@ -372,6 +394,13 @@ class ConditionTests(test_utils.LogTrackingTestCase):
         self.assertEqual([1, 2, 3], result)
         self.assertTrue(cond.locked())
 
+        self.assertTrue(t1.done())
+        self.assertTrue(t1.result())
+        self.assertTrue(t2.done())
+        self.assertTrue(t2.result())
+        self.assertTrue(t3.done())
+        self.assertTrue(t3.result())
+
     def test_wait_timeout(self):
         cond = locks.Condition()
         self.event_loop.run_until_complete(cond.acquire())
@@ -397,8 +426,6 @@ class ConditionTests(test_utils.LogTrackingTestCase):
         self.assertTrue(cond.locked())
 
     def test_wait_unacquired(self):
-        self.suppress_log_errors()
-
         cond = locks.Condition()
         self.assertRaises(
             RuntimeError,
@@ -419,8 +446,9 @@ class ConditionTests(test_utils.LogTrackingTestCase):
             if (yield from cond.wait_for(predicate)):
                 result.append(1)
                 cond.release()
+            return True
 
-        tasks.Task(c1(result))
+        t = tasks.Task(c1(result))
 
         self.event_loop.run_once()
         self.assertEqual([], result)
@@ -437,6 +465,9 @@ class ConditionTests(test_utils.LogTrackingTestCase):
         cond.release()
         self.event_loop.run_once()
         self.assertEqual([1], result)
+
+        self.assertTrue(t.done())
+        self.assertTrue(t.result())
 
     def test_wait_for_timeout(self):
         cond = locks.Condition()
@@ -476,8 +507,6 @@ class ConditionTests(test_utils.LogTrackingTestCase):
         self.assertTrue(0.08 < total_time < 0.12)
 
     def test_wait_for_unacquired(self):
-        self.suppress_log_errors()
-
         cond = locks.Condition()
 
         # predicate can return true immediately
@@ -500,6 +529,7 @@ class ConditionTests(test_utils.LogTrackingTestCase):
             if (yield from cond.wait()):
                 result.append(1)
                 cond.release()
+            return True
 
         @tasks.coroutine
         def c2(result):
@@ -507,6 +537,7 @@ class ConditionTests(test_utils.LogTrackingTestCase):
             if (yield from cond.wait()):
                 result.append(2)
                 cond.release()
+            return True
 
         @tasks.coroutine
         def c3(result):
@@ -514,10 +545,11 @@ class ConditionTests(test_utils.LogTrackingTestCase):
             if (yield from cond.wait()):
                 result.append(3)
                 cond.release()
+            return True
 
-        tasks.Task(c1(result))
-        tasks.Task(c2(result))
-        tasks.Task(c3(result))
+        t1 = tasks.Task(c1(result))
+        t2 = tasks.Task(c2(result))
+        t3 = tasks.Task(c3(result))
 
         self.event_loop.run_once()
         self.assertEqual([], result)
@@ -535,6 +567,13 @@ class ConditionTests(test_utils.LogTrackingTestCase):
         self.event_loop.run_once()
         self.assertEqual([1, 2, 3], result)
 
+        self.assertTrue(t1.done())
+        self.assertTrue(t1.result())
+        self.assertTrue(t2.done())
+        self.assertTrue(t2.result())
+        self.assertTrue(t3.done())
+        self.assertTrue(t3.result())
+
     def test_notify_all(self):
         cond = locks.Condition()
 
@@ -546,6 +585,7 @@ class ConditionTests(test_utils.LogTrackingTestCase):
             if (yield from cond.wait()):
                 result.append(1)
                 cond.release()
+            return True
 
         @tasks.coroutine
         def c2(result):
@@ -553,9 +593,10 @@ class ConditionTests(test_utils.LogTrackingTestCase):
             if (yield from cond.wait()):
                 result.append(2)
                 cond.release()
+            return True
 
-        tasks.Task(c1(result))
-        tasks.Task(c2(result))
+        t1 = tasks.Task(c1(result))
+        t2 = tasks.Task(c2(result))
 
         self.event_loop.run_once()
         self.assertEqual([], result)
@@ -565,6 +606,11 @@ class ConditionTests(test_utils.LogTrackingTestCase):
         cond.release()
         self.event_loop.run_once()
         self.assertEqual([1, 2], result)
+
+        self.assertTrue(t1.done())
+        self.assertTrue(t1.result())
+        self.assertTrue(t2.done())
+        self.assertTrue(t2.result())
 
     def test_notify_unacquired(self):
         cond = locks.Condition()
@@ -626,25 +672,29 @@ class SemaphoreTests(unittest.TestCase):
         def c1(result):
             yield from sem.acquire()
             result.append(1)
+            return True
 
         @tasks.coroutine
         def c2(result):
             yield from sem.acquire()
             result.append(2)
+            return True
 
         @tasks.coroutine
         def c3(result):
             yield from sem.acquire()
             result.append(3)
+            return True
 
         @tasks.coroutine
         def c4(result):
             yield from sem.acquire()
             result.append(4)
+            return True
 
-        tasks.Task(c1(result))
-        tasks.Task(c2(result))
-        tasks.Task(c3(result))
+        t1 = tasks.Task(c1(result))
+        t2 = tasks.Task(c2(result))
+        t3 = tasks.Task(c3(result))
 
         self.event_loop.run_once()
         self.assertEqual([1], result)
@@ -652,7 +702,7 @@ class SemaphoreTests(unittest.TestCase):
         self.assertEqual(2, len(sem._waiters))
         self.assertEqual(0, sem._value)
 
-        tasks.Task(c4(result))
+        t4 = tasks.Task(c4(result))
 
         sem.release()
         sem.release()
@@ -664,6 +714,14 @@ class SemaphoreTests(unittest.TestCase):
         self.assertTrue(sem.locked())
         self.assertEqual(1, len(sem._waiters))
         self.assertEqual(0, sem._value)
+
+        self.assertTrue(t1.done())
+        self.assertTrue(t1.result())
+        self.assertTrue(t2.done())
+        self.assertTrue(t2.result())
+        self.assertTrue(t3.done())
+        self.assertTrue(t3.result())
+        self.assertFalse(t4.done())
 
     def test_acquire_timeout(self):
         sem = locks.Semaphore()

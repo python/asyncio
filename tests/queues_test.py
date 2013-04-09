@@ -99,10 +99,11 @@ class QueueBasicTests(_QueueTestBase):
             for i in range(3):
                 yield from q.put(i)
                 have_been_put.append(i)
+            return True
 
         @tasks.coroutine
         def test():
-            tasks.Task(putter())
+            t = tasks.Task(putter())
             yield from tasks.sleep(0.01)
 
             # The putter is blocked after putting two items.
@@ -114,6 +115,9 @@ class QueueBasicTests(_QueueTestBase):
             self.assertEqual([0, 1, 2], have_been_put)
             self.assertEqual(1, q.get_nowait())
             self.assertEqual(2, q.get_nowait())
+
+            self.assertTrue(t.done())
+            self.assertTrue(t.result())
 
         self.event_loop.run_until_complete(test())
 
@@ -178,8 +182,11 @@ class QueueGetTests(_QueueTestBase):
             q.put_nowait(1)
             self.assertEqual(1, (yield from q.get()))
 
-            tasks.Task(q.put(2))
+            t = tasks.Task(q.put(2))
             self.assertEqual(2, (yield from q.get()))
+
+            self.assertTrue(t.done())
+            self.assertIsNone(t.result())
 
         self.event_loop.run_until_complete(queue_get())
 
@@ -275,13 +282,16 @@ class QueuePutTests(_QueueTestBase):
         @tasks.coroutine
         def queue_put():
             yield from q.put(1, timeout=0.01)
+            return True
 
         @tasks.coroutine
         def test():
-            tasks.Task(queue_put())
             return (yield from q.get())
 
+        t = tasks.Task(queue_put())
         self.assertEqual(1, self.event_loop.run_until_complete(test()))
+        self.assertTrue(t.done())
+        self.assertTrue(t.result())
 
 
 class LifoQueueTests(_QueueTestBase):

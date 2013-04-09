@@ -309,7 +309,8 @@ class BaseProactorEventLoopTests(unittest.TestCase):
     def test_process_events(self):
         self.event_loop._process_events([])
 
-    def test_start_serving(self):
+    @unittest.mock.patch('tulip.proactor_events.tulip_log')
+    def test_start_serving(self, m_log):
         pf = unittest.mock.Mock()
         call_soon = self.event_loop.call_soon = unittest.mock.Mock()
 
@@ -335,3 +336,4 @@ class BaseProactorEventLoopTests(unittest.TestCase):
         fut.result.side_effect = OSError()
         loop(fut)
         self.assertTrue(self.sock.close.called)
+        self.assertTrue(m_log.exception.called)

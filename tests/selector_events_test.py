@@ -168,6 +168,7 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         f = self.event_loop.sock_sendall(sock, b'')
         self.assertIsInstance(f, futures.Future)
         self.assertTrue(f.done())
+        self.assertIsNone(f.result())
         self.assertFalse(self.event_loop._sock_sendall.called)
 
     def test__sock_sendall_canceled_fut(self):
@@ -220,6 +221,7 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
 
         self.event_loop._sock_sendall(f, False, sock, b'data')
         self.assertTrue(f.done())
+        self.assertIsNone(f.result())
 
     def test__sock_sendall_partial(self):
         sock = unittest.mock.Mock()
@@ -267,6 +269,7 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
 
         self.event_loop._sock_connect(f, False, sock, ('127.0.0.1', 8080))
         self.assertTrue(f.done())
+        self.assertIsNone(f.result())
         self.assertTrue(sock.connect.called)
 
     def test__sock_connect_canceled_fut(self):

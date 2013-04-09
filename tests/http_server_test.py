@@ -6,21 +6,16 @@ import unittest.mock
 import tulip
 from tulip.http import server
 from tulip.http import errors
-from tulip.test_utils import LogTrackingTestCase
 
 
-class HttpServerProtocolTests(LogTrackingTestCase):
+class HttpServerProtocolTests(unittest.TestCase):
 
     def setUp(self):
-        super().setUp()
-        self.suppress_log_errors()
-
         self.loop = tulip.new_event_loop()
         tulip.set_event_loop(self.loop)
 
     def tearDown(self):
         self.loop.close()
-        super().tearDown()
 
     def test_http_status_exception(self):
         exc = errors.HttpStatusException(500, message='Internal error')
@@ -97,7 +92,8 @@ class HttpServerProtocolTests(LogTrackingTestCase):
     @unittest.mock.patch('tulip.http.server.traceback')
     def test_handle_error_traceback_exc(self, m_trace):
         transport = unittest.mock.Mock()
-        srv = server.ServerHttpProtocol(debug=True)
+        log = unittest.mock.Mock()
+        srv = server.ServerHttpProtocol(debug=True, log=log)
         srv.connection_made(transport)
 
         m_trace.format_exc.side_effect = ValueError
@@ -106,6 +102,7 @@ class HttpServerProtocolTests(LogTrackingTestCase):
         content = b''.join([c[1][0] for c in list(transport.write.mock_calls)])
         self.assertTrue(
             content.startswith(b'HTTP/1.1 500 Internal Server Error'))
+        self.assertTrue(log.exception.called)
 
     def test_handle_error_debug(self):
         transport = unittest.mock.Mock()

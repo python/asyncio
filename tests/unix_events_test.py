@@ -193,6 +193,7 @@ class UnixReadPipeTransportTests(unittest.TestCase):
         unix_events._UnixReadPipeTransport(self.event_loop, self.pipe,
                                            self.protocol, fut)
         self.event_loop.call_soon.assert_called_with(fut.set_result, None)
+        fut.cancel()
 
     @unittest.mock.patch('os.read')
     @unittest.mock.patch('fcntl.fcntl')
@@ -337,6 +338,7 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
                                             self.protocol, fut)
         self.event_loop.call_soon.assert_called_with(fut.set_result, None)
+        fut.cancel()
 
     @unittest.mock.patch('fcntl.fcntl')
     def test_can_write_eof(self, m_fcntl):

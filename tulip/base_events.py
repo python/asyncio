@@ -328,12 +328,6 @@ class BaseEventLoop(events.AbstractEventLoop):
 
         sock.setblocking(False)
 
-        if ssl:
-            import ssl as sslmod
-            sslcontext = sslmod.SSLContext(sslmod.PROTOCOL_SSLv23)
-            sock = sslcontext.wrap_socket(sock, server_side=False,
-                                          do_handshake_on_connect=False)
-
         protocol = protocol_factory()
         waiter = futures.Future()
         if ssl:
@@ -490,7 +484,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         """XXX"""
         if isinstance(future, futures.Future):
             return future  # Don't wrap our own type of Future.
-        new_future = futures.Future()
+        new_future = futures.Future(event_loop=self)
         future.add_done_callback(
             lambda future:
                 self.call_soon_threadsafe(new_future._copy_state, future))
@@ -554,3 +548,12 @@ class BaseEventLoop(events.AbstractEventLoop):
             handle = self._ready.popleft()
             if not handle.cancelled:
                 handle.run()
+
+    # Future.__del__ uses log level
+    _log_level = logging.WARNING
+
+    def set_log_level(self, val):
+        self._log_level = val
+
+    def get_log_level(self):
+        return self._log_level

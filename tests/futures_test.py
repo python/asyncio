@@ -1,7 +1,10 @@
 """Tests for futures.py."""
 
+import logging
 import unittest
+import unittest.mock
 
+from tulip import events
 from tulip import futures
 
 
@@ -11,11 +14,16 @@ def _fakefunc(f):
 
 class FutureTests(unittest.TestCase):
 
+    def setUp(self):
+        self.loop = events.get_event_loop()
+
     def test_initial_state(self):
         f = futures.Future()
         self.assertFalse(f.cancelled())
         self.assertFalse(f.running())
         self.assertFalse(f.done())
+        f.cancel()
+        self.assertTrue(f.cancelled())
 
     def test_init_event_loop_positional(self):
         # Make sure Future does't accept a positional argument
@@ -85,6 +93,7 @@ class FutureTests(unittest.TestCase):
     def test_repr(self):
         f_pending = futures.Future()
         self.assertEqual(repr(f_pending), 'Future<PENDING>')
+        f_pending.cancel()
 
         f_cancelled = futures.Future()
         f_cancelled.cancel()
@@ -93,15 +102,19 @@ class FutureTests(unittest.TestCase):
         f_result = futures.Future()
         f_result.set_result(4)
         self.assertEqual(repr(f_result), 'Future<result=4>')
+        self.assertEqual(f_result.result(), 4)
 
+        exc = RuntimeError()
         f_exception = futures.Future()
-        f_exception.set_exception(RuntimeError())
+        f_exception.set_exception(exc)
         self.assertEqual(repr(f_exception), 'Future<exception=RuntimeError()>')
+        self.assertIs(f_exception.exception(), exc)
 
         f_few_callbacks = futures.Future()
         f_few_callbacks.add_done_callback(_fakefunc)
         self.assertIn('Future<PENDING, [<function _fakefunc',
                       repr(f_few_callbacks))
+        f_few_callbacks.cancel()
 
         f_many_callbacks = futures.Future()
         for i in range(20):
@@ -109,6 +122,7 @@ class FutureTests(unittest.TestCase):
         r = repr(f_many_callbacks)
         self.assertIn('Future<PENDING, [<function _fakefunc', r)
         self.assertIn('<18 more>', r)
+        f_many_callbacks.cancel()
 
     def test_copy_state(self):
         # Test the internal _copy_state method since it's being directly
@@ -137,14 +151,61 @@ class FutureTests(unittest.TestCase):
         self.assertTrue(newf_cancelled.cancelled())
 
     def test_iter(self):
+        fut = futures.Future()
+
         def coro():
-            fut = futures.Future()
             yield from fut
 
         def test():
             arg1, arg2 = coro()
 
         self.assertRaises(AssertionError, test)
+        fut.cancel()
+
+    @unittest.mock.patch('tulip.futures.tulip_log')
+    def test_del_normal(self, log):
+        self.loop.set_log_level(futures.STACK_DEBUG)
+
+        fut = futures.Future()
+        fut.set_result(True)
+        fut.result()
+        del fut
+        self.assertFalse(log.error.called)
+
+    @unittest.mock.patch('tulip.futures.tulip_log')
+    def test_del_not_done(self, log):
+        self.loop.set_log_level(futures.STACK_DEBUG)
+
+        fut = futures.Future()
+        r_fut = repr(fut)
+        del fut
+        log.error.mock_calls[-1].assert_called_with(
+            'Future abandoned before completion: %r', r_fut)
+
+    @unittest.mock.patch('tulip.futures.tulip_log')
+    def test_del_done(self, log):
+        self.loop.set_log_level(futures.STACK_DEBUG)
+
+        fut = futures.Future()
+        next(iter(fut))
+        fut.set_result(1)
+        r_fut = repr(fut)
+        del fut
+        log.error.mock_calls[-1].assert_called_with(
+            'Future result has not been requested: %r', r_fut)
+
+    @unittest.mock.patch('tulip.futures.tulip_log')
+    def test_del_exc(self, log):
+        self.loop.set_log_level(futures.STACK_DEBUG)
+
+        exc = ValueError()
+        fut = futures.Future()
+        fut.set_exception(exc)
+        r_fut = repr(fut)
+        del fut
+        log.exception.mock_calls[-1].assert_called_with(
+            'Future raised an exception and nobody caught it: %r', r_fut,
+            exc_info=(ValueError, exc, None))
 
 
 # A fake event loop for tests. All it does is implement a call_soon method
@@ -152,6 +213,12 @@ class FutureTests(unittest.TestCase):
 class _FakeEventLoop:
     def call_soon(self, fn, future):
         fn(future)
+
+    def set_log_level(self, val):
+        pass
+
+    def get_log_level(self):
+        return logging.CRITICAL
 
 
 class FutureDoneCallbackTests(unittest.TestCase):

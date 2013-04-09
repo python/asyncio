@@ -2,6 +2,7 @@
 
 import cgi
 import contextlib
+import gc
 import email.parser
 import http.server
 import json
@@ -14,7 +15,6 @@ import sys
 import threading
 import traceback
 import urllib.parse
-import unittest
 try:
     import ssl
 except ImportError:  # pragma: no cover
@@ -29,24 +29,6 @@ if sys.platform == 'win32':  # pragma: no cover
     from .winsocketpair import socketpair
 else:
     from socket import socketpair  # pragma: no cover
-
-
-class LogTrackingTestCase(unittest.TestCase):
-
-    def setUp(self):
-        self._logger = logging.getLogger()
-        self._log_level = self._logger.getEffectiveLevel()
-
-    def tearDown(self):
-        self._logger.setLevel(self._log_level)
-
-    def suppress_log_errors(self):  # pragma: no cover
-        if self._log_level >= logging.WARNING:
-            self._logger.setLevel(logging.CRITICAL)
-
-    def suppress_log_warnings(self):  # pragma: no cover
-        if self._log_level >= logging.WARNING:
-            self._logger.setLevel(logging.ERROR)
 
 
 @contextlib.contextmanager
@@ -110,6 +92,7 @@ def run_test_server(loop, *, host='127.0.0.1', port=0,
 
     def run(loop, fut):
         thread_loop = tulip.new_event_loop()
+        thread_loop.set_log_level(logging.CRITICAL)
         tulip.set_event_loop(thread_loop)
 
         sock = thread_loop.run_until_complete(
@@ -122,6 +105,7 @@ def run_test_server(loop, *, host='127.0.0.1', port=0,
 
         thread_loop.run_until_complete(waiter)
         thread_loop.stop()
+        gc.collect()
 
     fut = tulip.Future()
     server_thread = threading.Thread(target=run, args=(loop, fut))

@@ -132,7 +132,7 @@ class BaseEventLoopTests(unittest.TestCase):
             AssertionError, self.event_loop.run_in_executor,
             None, events.Timer(10, cb, ()))
 
-    def test_run_once_in_executor_canceled(self):
+    def test_run_once_in_executor_cancelled(self):
         def cb():
             pass
         h = events.Handle(cb, ())
@@ -143,7 +143,7 @@ class BaseEventLoopTests(unittest.TestCase):
         self.assertTrue(f.done())
         self.assertIsNone(f.result())
 
-    def test_run_once_in_executor(self):
+    def test_run_once_in_executor_plain(self):
         def cb():
             pass
         h = events.Handle(cb, ())
@@ -161,6 +161,8 @@ class BaseEventLoopTests(unittest.TestCase):
         res = self.event_loop.run_in_executor(executor, h)
         self.assertIs(f, res)
         self.assertTrue(executor.submit.called)
+
+        f.cancel()  # Don't complain about abandoned Future.
 
     def test_run_once(self):
         self.event_loop._run_once = unittest.mock.Mock()

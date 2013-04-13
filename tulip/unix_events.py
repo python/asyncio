@@ -195,7 +195,7 @@ class _UnixReadPipeTransport(transports.ReadTransport):
     def _close(self, exc):
         self._closing = True
         self._event_loop.remove_reader(self._fileno)
-        self._call_connection_lost(exc)
+        self._event_loop.call_soon(self._call_connection_lost, exc)
 
     def _call_connection_lost(self, exc):
         try:
@@ -273,7 +273,7 @@ class _UnixWritePipeTransport(transports.WriteTransport):
         assert self._pipe
         self._closing = True
         if not self._buffer:
-            self._call_connection_lost(None)
+            self._event_loop.call_soon(self._call_connection_lost, None)
 
     def close(self):
         if not self._closing:
@@ -292,7 +292,7 @@ class _UnixWritePipeTransport(transports.WriteTransport):
         self._closing = True
         self._buffer.clear()
         self._event_loop.remove_writer(self._fileno)
-        self._call_connection_lost(exc)
+        self._event_loop.call_soon(self._call_connection_lost, exc)
 
     def _call_connection_lost(self, exc):
         try:

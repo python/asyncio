@@ -722,6 +722,7 @@ class SelectorSocketTransportTests(unittest.TestCase):
         transport._write_ready()
         self.sock.send.assert_called_with(data)
         self.event_loop.remove_writer.assert_called_with(7)
+        self.sock.close.assert_called_with()
         self.protocol.connection_lost.assert_called_with(None)
 
     def test_write_ready_no_data(self):
@@ -803,7 +804,8 @@ class SelectorSocketTransportTests(unittest.TestCase):
         self.assertEqual([], transport._buffer)
         self.event_loop.remove_reader.assert_called_with(7)
         self.event_loop.remove_writer.assert_called_with(7)
-        self.protocol.connection_lost.assert_called_with(exc)
+        self.event_loop.call_soon.assert_called_with(
+            transport._call_connection_lost, exc)
         m_exc.assert_called_with('Fatal error for %s', transport)
 
     def test_connection_lost(self):
@@ -911,14 +913,16 @@ class SelectorSslTransportTests(unittest.TestCase):
         self.assertEqual([], self.transport._buffer)
         self.assertTrue(self.event_loop.remove_writer.called)
         self.assertTrue(self.event_loop.remove_reader.called)
-        self.protocol.connection_lost.assert_called_with(exc)
+        self.event_loop.call_soon.assert_called_with(
+            self.protocol.connection_lost, exc)
         m_exc.assert_called_with('Fatal error for %s', self.transport)
 
     def test_close(self):
         self.transport.close()
         self.assertTrue(self.transport._closing)
         self.assertTrue(self.event_loop.remove_reader.called)
-        self.protocol.connection_lost.assert_called_with(None)
+        self.event_loop.call_soon.assert_called_with(
+            self.protocol.connection_lost, None)
 
     def test_close_write_buffer(self):
         self.transport._buffer.append(b'data')
@@ -944,7 +948,7 @@ class SelectorSslTransportTests(unittest.TestCase):
         self.assertTrue(self.event_loop.remove_reader.called)
         self.assertTrue(self.event_loop.remove_writer.called)
         self.assertTrue(self.sslsock.close.called)
-        self.assertTrue(self.protocol.connection_lost.called)
+        self.protocol.connection_lost.assert_called_with(None)
 
     def test_on_ready_recv_retry(self):
         self.sslsock.recv.side_effect = ssl.SSLWantReadError
@@ -1006,7 +1010,8 @@ class SelectorSslTransportTests(unittest.TestCase):
         self.transport._on_ready()
         self.assertTrue(self.sslsock.close.called)
         self.assertTrue(self.event_loop.remove_writer.called)
-        self.assertTrue(self.protocol.connection_lost.called)
+        self.event_loop.call_soon.assert_called_with(
+            self.protocol.connection_lost, None)
 
     def test_on_ready_send_retry(self):
         self.sslsock.recv.side_effect = ssl.SSLWantReadError
@@ -1219,6 +1224,7 @@ class SelectorDatagramTransportTests(unittest.TestCase):
         transport._sendto_ready()
         self.sock.sendto.assert_called_with(data, ())
         self.event_loop.remove_writer.assert_called_with(7)
+        self.sock.close.assert_called_with()
         self.protocol.connection_lost.assert_called_with(None)
 
     def test_sendto_ready_no_data(self):
@@ -1281,7 +1287,8 @@ class SelectorDatagramTransportTests(unittest.TestCase):
 
         self.assertTrue(transport._closing)
         self.event_loop.remove_reader.assert_called_with(7)
-        self.protocol.connection_lost.assert_called_with(None)
+        self.event_loop.call_soon.assert_called_with(
+            transport._call_connection_lost, None)
 
     def test_close_write_buffer(self):
         transport = _SelectorDatagramTransport(
@@ -1304,7 +1311,8 @@ class SelectorDatagramTransportTests(unittest.TestCase):
         self.assertEqual([], list(transport._buffer))
         self.event_loop.remove_writer.assert_called_with(7)
         self.event_loop.remove_reader.assert_called_with(7)
-        self.protocol.connection_lost.assert_called_with(exc)
+        self.event_loop.call_soon.assert_called_with(
+            transport._call_connection_lost, exc)
         m_exc.assert_called_with('Fatal error for %s', transport)
 
     @unittest.mock.patch('tulip.log.tulip_log.exception')

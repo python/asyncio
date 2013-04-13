@@ -413,7 +413,7 @@ class _SelectorSocketTransport(transports.Transport):
         self._closing = True
         self._event_loop.remove_reader(self._sock.fileno())
         if not self._buffer:
-            self._call_connection_lost(None)
+            self._event_loop.call_soon(self._call_connection_lost, None)
 
     def _fatal_error(self, exc):
         # should be called from exception handler only
@@ -424,7 +424,7 @@ class _SelectorSocketTransport(transports.Transport):
         self._event_loop.remove_writer(self._sock.fileno())
         self._event_loop.remove_reader(self._sock.fileno())
         self._buffer.clear()
-        self._call_connection_lost(exc)
+        self._event_loop.call_soon(self._call_connection_lost, exc)
 
     def _call_connection_lost(self, exc):
         try:
@@ -567,7 +567,7 @@ class _SelectorSslTransport(transports.Transport):
         self._closing = True
         self._event_loop.remove_reader(self._sslsock.fileno())
         if not self._buffer:
-            self._protocol.connection_lost(None)
+            self._event_loop.call_soon(self._protocol.connection_lost, None)
 
     def _fatal_error(self, exc):
         tulip_log.exception('Fatal error for %s', self)
@@ -577,7 +577,7 @@ class _SelectorSslTransport(transports.Transport):
         self._event_loop.remove_writer(self._sslsock.fileno())
         self._event_loop.remove_reader(self._sslsock.fileno())
         self._buffer = []
-        self._protocol.connection_lost(exc)
+        self._event_loop.call_soon(self._protocol.connection_lost, exc)
 
 
 class _SelectorDatagramTransport(transports.DatagramTransport):
@@ -678,7 +678,7 @@ class _SelectorDatagramTransport(transports.DatagramTransport):
         self._closing = True
         self._event_loop.remove_reader(self._fileno)
         if not self._buffer:
-            self._call_connection_lost(None)
+            self._event_loop.call_soon(self._call_connection_lost, None)
 
     def _fatal_error(self, exc):
         tulip_log.exception('Fatal error for %s', self)
@@ -690,7 +690,7 @@ class _SelectorDatagramTransport(transports.DatagramTransport):
         self._event_loop.remove_reader(self._fileno)
         if self._address and isinstance(exc, ConnectionRefusedError):
             self._protocol.connection_refused(exc)
-        self._call_connection_lost(exc)
+        self._event_loop.call_soon(self._call_connection_lost, exc)
 
     def _call_connection_lost(self, exc):
         try:

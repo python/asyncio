@@ -236,8 +236,8 @@ class TaskTests(unittest.TestCase):
         self.assertTrue(0.08 <= t1-t0 <= 0.12)
 
     def test_wait(self):
-        a = tasks.sleep(0.1)
-        b = tasks.sleep(0.15)
+        a = tasks.Task(tasks.sleep(0.1))
+        b = tasks.Task(tasks.sleep(0.15))
 
         @tasks.coroutine
         def foo():
@@ -259,8 +259,8 @@ class TaskTests(unittest.TestCase):
         # TODO: Test different return_when values.
 
     def test_wait_first_completed(self):
-        a = tasks.sleep(10.0)
-        b = tasks.sleep(0.1)
+        a = tasks.Task(tasks.sleep(10.0))
+        b = tasks.Task(tasks.sleep(0.1))
         task = tasks.Task(tasks.wait(
             [b, a], return_when=tasks.FIRST_COMPLETED))
 
@@ -298,7 +298,7 @@ class TaskTests(unittest.TestCase):
 
     def test_wait_first_exception(self):
         # first_exception, task already has exception
-        a = tasks.sleep(10.0)
+        a = tasks.Task(tasks.sleep(10.0))
 
         @tasks.coroutine
         def exc():
@@ -314,7 +314,7 @@ class TaskTests(unittest.TestCase):
 
     def test_wait_first_exception_in_wait(self):
         # first_exception, exception during waiting
-        a = tasks.sleep(10.0)
+        a = tasks.Task(tasks.sleep(10.0))
 
         @tasks.coroutine
         def exc():
@@ -329,7 +329,7 @@ class TaskTests(unittest.TestCase):
         self.assertEqual({a}, pending)
 
     def test_wait_with_exception(self):
-        a = tasks.sleep(0.1)
+        a = tasks.Task(tasks.sleep(0.1))
 
         @tasks.coroutine
         def sleeper():
@@ -356,8 +356,8 @@ class TaskTests(unittest.TestCase):
         self.assertTrue(t1-t0 <= 0.01)
 
     def test_wait_with_timeout(self):
-        a = tasks.sleep(0.1)
-        b = tasks.sleep(0.15)
+        a = tasks.Task(tasks.sleep(0.1))
+        b = tasks.Task(tasks.sleep(0.15))
 
         @tasks.coroutine
         def foo():
@@ -439,6 +439,26 @@ class TaskTests(unittest.TestCase):
         self.assertTrue(t1-t0 >= 0.09)
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'yeah')
+
+    def test_sleep_cancel(self):
+        t = tasks.Task(tasks.sleep(10.0, 'yeah'))
+
+        handle = None
+        orig_call_later = self.event_loop.call_later
+
+        def call_later(self, delay, callback, *args):
+            nonlocal handle
+            handle = orig_call_later(self, delay, callback, *args)
+            return handle
+
+        self.event_loop.call_later = call_later
+        self.event_loop.run_once()
+
+        self.assertFalse(handle.cancelled)
+
+        t.cancel()
+        self.event_loop.run_once()
+        self.assertTrue(handle.cancelled)
 
     def test_task_cancel_sleeping_task(self):
         sleepfut = None

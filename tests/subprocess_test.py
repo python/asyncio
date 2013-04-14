@@ -1,3 +1,7 @@
+# NOTE: This is a hack.  Andrew Svetlov is working in a proper
+# subprocess management transport for use with
+# connect_{read,write}_pipe().
+
 """Tests for subprocess_transport.py."""
 
 import logging

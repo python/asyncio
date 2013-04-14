@@ -318,13 +318,12 @@ def _wrap_coroutines(fs):
     return wrapped
 
 
+@coroutine
 def sleep(when, result=None):
-    """Return a Future that completes after a given time (in seconds).
-
-    It's okay to cancel the Future.
-
-    Undocumented feature: sleep(when, x) sets the Future's result to x.
-    """
+    """Coroutine that completes after a given time (in seconds)."""
     future = futures.Future()
-    future._event_loop.call_later(when, future.set_result, result)
-    return future
+    h = future._event_loop.call_later(when, future.set_result, result)
+    try:
+        return (yield from future)
+    finally:
+        h.cancel()

@@ -5,6 +5,7 @@ proactor is only implemented on Windows with IOCP.
 """
 
 from . import base_events
+from . import constants
 from . import transports
 from .log import tulip_log
 
@@ -59,7 +60,7 @@ class _ProactorSocketTransport(transports.Transport):
         if not data:
             return
         if self._conn_lost:
-            if self._conn_lost >= 5:
+            if self._conn_lost >= constants.LOG_THRESHOLD_FOR_CONNLOST_WRITES:
                 tulip_log.warning('socket.send() raised exception.')
             self._conn_lost += 1
             return

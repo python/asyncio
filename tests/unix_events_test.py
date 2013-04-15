@@ -406,9 +406,10 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         self.event_loop.add_writer.assert_called_with(5, tr._write_ready)
         self.assertEqual([b'data'], tr._buffer)
 
+    @unittest.mock.patch('tulip.unix_events.tulip_log')
     @unittest.mock.patch('os.write')
     @unittest.mock.patch('fcntl.fcntl')
-    def test_write_err(self, m_fcntl, m_write):
+    def test_write_err(self, m_fcntl, m_write, m_log):
         tr = unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
                                                  self.protocol)
 
@@ -420,6 +421,16 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         self.assertFalse(self.event_loop.called)
         self.assertEqual([], tr._buffer)
         tr._fatal_error.assert_called_with(err)
+        self.assertEqual(1, tr._conn_lost)
+
+        tr.write(b'data')
+        self.assertEqual(2, tr._conn_lost)
+        tr.write(b'data')
+        tr.write(b'data')
+        tr.write(b'data')
+        tr.write(b'data')
+        m_log.warning.assert_called_with(
+            'os.write(pipe, data) raised exception.')
 
     @unittest.mock.patch('os.write')
     @unittest.mock.patch('fcntl.fcntl')
@@ -489,6 +500,7 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         self.event_loop.call_soon.assert_called_with(
             tr._call_connection_lost, err)
         m_logexc.assert_called_with('Fatal error for %s', tr)
+        self.assertEqual(1, tr._conn_lost)
 
     @unittest.mock.patch('os.write')
     @unittest.mock.patch('fcntl.fcntl')

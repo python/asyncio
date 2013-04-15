@@ -13,6 +13,7 @@ except ImportError:  # pragma: no cover
     ssl = None
 
 from . import base_events
+from . import constants
 from . import events
 from . import futures
 from . import selectors
@@ -360,7 +361,7 @@ class _SelectorSocketTransport(transports.Transport):
             return
 
         if self._conn_lost:
-            if self._conn_lost >= 5:
+            if self._conn_lost >= constants.LOG_THRESHOLD_FOR_CONNLOST_WRITES:
                 tulip_log.warning('socket.send() raised exception.')
             self._conn_lost += 1
             return
@@ -553,7 +554,7 @@ class _SelectorSslTransport(transports.Transport):
             return
 
         if self._conn_lost:
-            if self._conn_lost >= 5:
+            if self._conn_lost >= constants.LOG_THRESHOLD_FOR_CONNLOST_WRITES:
                 tulip_log.warning('socket.send() raised exception.')
             self._conn_lost += 1
             return
@@ -621,7 +622,7 @@ class _SelectorDatagramTransport(transports.DatagramTransport):
             assert addr in (None, self._address)
 
         if self._conn_lost and self._address:
-            if self._conn_lost >= 5:
+            if self._conn_lost >= constants.LOG_THRESHOLD_FOR_CONNLOST_WRITES:
                 tulip_log.warning('socket.send() raised exception.')
             self._conn_lost += 1
             return

@@ -11,6 +11,7 @@ try:
 except ImportError:  # pragma: no cover
     signal = None
 
+from . import constants
 from . import events
 from . import selector_events
 from . import transports
@@ -215,6 +216,7 @@ class _UnixWritePipeTransport(transports.WriteTransport):
         _set_nonblocking(self._fileno)
         self._protocol = protocol
         self._buffer = []
+        self._conn_lost = 0
         self._closing = False  # Set when close() or write_eof() called.
         self._event_loop.call_soon(self._protocol.connection_made, self)
         if waiter is not None:
@@ -226,6 +228,12 @@ class _UnixWritePipeTransport(transports.WriteTransport):
         if not data:
             return
 
+        if self._conn_lost:
+            if self._conn_lost >= constants.LOG_THRESHOLD_FOR_CONNLOST_WRITES:
+                tulip_log.warning('os.write(pipe, data) raised exception.')
+            self._conn_lost += 1
+            return
+
         if not self._buffer:
             # Attempt to send it right away first.
             try:
@@ -233,6 +241,7 @@ class _UnixWritePipeTransport(transports.WriteTransport):
             except BlockingIOError:
                 n = 0
             except Exception as exc:
+                self._conn_lost += 1
                 self._fatal_error(exc)
                 return
             if n == len(data):
@@ -253,6 +262,7 @@ class _UnixWritePipeTransport(transports.WriteTransport):
         except BlockingIOError:
             self._buffer.append(data)
         except Exception as exc:
+            self._conn_lost += 1
             self._fatal_error(exc)
         else:
             if n == len(data):

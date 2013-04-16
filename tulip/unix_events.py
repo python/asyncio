@@ -167,7 +167,7 @@ class _UnixReadPipeTransport(transports.ReadTransport):
     def _read_ready(self):
         try:
             data = os.read(self._fileno, self.max_size)
-        except BlockingIOError:
+        except (BlockingIOError, InterruptedError):
             pass
         except OSError as exc:
             self._fatal_error(exc)
@@ -238,7 +238,7 @@ class _UnixWritePipeTransport(transports.WriteTransport):
             # Attempt to send it right away first.
             try:
                 n = os.write(self._fileno, data)
-            except BlockingIOError:
+            except (BlockingIOError, InterruptedError):
                 n = 0
             except Exception as exc:
                 self._conn_lost += 1
@@ -259,7 +259,7 @@ class _UnixWritePipeTransport(transports.WriteTransport):
         self._buffer.clear()
         try:
             n = os.write(self._fileno, data)
-        except BlockingIOError:
+        except (BlockingIOError, InterruptedError):
             self._buffer.append(data)
         except Exception as exc:
             self._conn_lost += 1

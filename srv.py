@@ -90,8 +90,7 @@ class HttpServer(tulip.http.ServerHttpProtocol):
                 with open(path, 'rb') as fp:
                     chunk = fp.read(8196)
                     while chunk:
-                        if not response.write(chunk):
-                            break
+                        response.write(chunk):
                         chunk = fp.read(8196)
             except OSError:
                 response.write(b'Cannot open')

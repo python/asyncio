@@ -120,7 +120,7 @@ def start(req, loop):
     try:
         resp = req.send(transport)
         yield from resp.start(p, transport)
-    except:
+    except Exception:
         transport.close()
         raise
 
@@ -159,7 +159,7 @@ class HttpRequest:
             v = [l.strip() for l in version.split('.', 1)]
             try:
                 version = int(v[0]), int(v[1])
-            except:
+            except ValueError:
                 raise ValueError(
                     'Can not parse http version number: {}'
                     .format(version)) from None
@@ -196,7 +196,7 @@ class HttpRequest:
             netloc, port_s = netloc.split(':', 1)
             try:
                 port = int(port_s)
-            except:
+            except ValueError:
                 raise ValueError(
                     'Port number could not be converted.') from None
         else:

@@ -161,7 +161,7 @@ class Router:
             if match is not None:
                 try:
                     return getattr(self, fn)(match)
-                except:
+                except Exception:
                     out = io.StringIO()
                     traceback.print_exc(file=out)
                     self._response(500, out.getvalue())

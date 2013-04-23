@@ -317,7 +317,7 @@ class DeflateBuffer:
     def feed_data(self, chunk):
         try:
             chunk = self.zlib.decompress(chunk)
-        except:
+        except Exception:
             raise errors.IncompleteRead(b'') from None
 
         if chunk:

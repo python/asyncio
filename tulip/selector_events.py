@@ -108,7 +108,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             conn.setblocking(False)
         except (BlockingIOError, InterruptedError):
             pass  # False alarm.
-        except:
+        except Exception:
             # Bad error. Stop serving.
             self.remove_reader(sock.fileno())
             sock.close()

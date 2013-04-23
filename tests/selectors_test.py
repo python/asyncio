@@ -137,3 +137,7 @@ class BaseSelectorTests(unittest.TestCase):
         self.assertIs(key, s._key_from_fd(1))
         self.assertIsNone(s._key_from_fd(10))
         m_log.warning.assert_called_with('No key found for fd %r', 10)
+
+    if hasattr(selectors.Selector, 'fileno'):
+        def test_fileno(self):
+            self.assertIsInstance(selectors.Selector().fileno(), int)

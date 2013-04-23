@@ -6,21 +6,16 @@ import unittest.mock
 import tulip
 from tulip.http import server
 from tulip.http import errors
-from tulip.test_utils import LogTrackingTestCase
 
 
-class HttpServerProtocolTests(LogTrackingTestCase):
+class HttpServerProtocolTests(unittest.TestCase):
 
     def setUp(self):
-        super().setUp()
-        self.suppress_log_errors()
-
         self.loop = tulip.new_event_loop()
         tulip.set_event_loop(self.loop)
 
     def tearDown(self):
         self.loop.close()
-        super().tearDown()
 
     def test_http_status_exception(self):
         exc = errors.HttpStatusException(500, message='Internal error')
@@ -53,16 +48,16 @@ class HttpServerProtocolTests(LogTrackingTestCase):
         srv.connection_made(unittest.mock.Mock())
 
         srv.data_received(b'123')
-        self.assertEqual(b'123', b''.join(srv.stream.buffer))
+        self.assertEqual(b'123', bytes(srv.stream._buffer))
 
         srv.data_received(b'456')
-        self.assertEqual(b'123456', b''.join(srv.stream.buffer))
+        self.assertEqual(b'123456', bytes(srv.stream._buffer))
 
     def test_eof_received(self):
         srv = server.ServerHttpProtocol()
         srv.connection_made(unittest.mock.Mock())
         srv.eof_received()
-        self.assertTrue(srv.stream.eof)
+        self.assertTrue(srv.stream._eof)
 
     def test_connection_lost(self):
         srv = server.ServerHttpProtocol()
@@ -90,14 +85,16 @@ class HttpServerProtocolTests(LogTrackingTestCase):
         srv = server.ServerHttpProtocol()
         srv.connection_made(transport)
 
-        srv.handle_error(404)
+        srv.handle_error(404, headers=(('X-Server', 'Tulip'),))
         content = b''.join([c[1][0] for c in list(transport.write.mock_calls)])
         self.assertIn(b'HTTP/1.1 404 Not Found', content)
+        self.assertIn(b'X-SERVER: Tulip', content)
 
     @unittest.mock.patch('tulip.http.server.traceback')
     def test_handle_error_traceback_exc(self, m_trace):
         transport = unittest.mock.Mock()
-        srv = server.ServerHttpProtocol(debug=True)
+        log = unittest.mock.Mock()
+        srv = server.ServerHttpProtocol(debug=True, log=log)
         srv.connection_made(transport)
 
         m_trace.format_exc.side_effect = ValueError
@@ -106,6 +103,7 @@ class HttpServerProtocolTests(LogTrackingTestCase):
         content = b''.join([c[1][0] for c in list(transport.write.mock_calls)])
         self.assertTrue(
             content.startswith(b'HTTP/1.1 500 Internal Server Error'))
+        self.assertTrue(log.exception.called)
 
     def test_handle_error_debug(self):
         transport = unittest.mock.Mock()
@@ -147,22 +145,22 @@ class HttpServerProtocolTests(LogTrackingTestCase):
 
         self.loop.run_until_complete(srv._request_handle)
         self.assertTrue(handle.called)
-        self.assertIsNone(srv._request_handle)
 
     def test_handle_coro(self):
         transport = unittest.mock.Mock()
         srv = server.ServerHttpProtocol()
-        srv.connection_made(transport)
 
         called = False
 
         @tulip.coroutine
-        def coro(rline, message):
+        def coro(message, payload):
             nonlocal called
             called = True
             srv.eof_received()
+            srv.close()
 
         srv.handle_request = coro
+        srv.connection_made(transport)
 
         srv.stream.feed_data(
             b'GET / HTTP/1.0\r\n'
@@ -214,7 +212,7 @@ class HttpServerProtocolTests(LogTrackingTestCase):
             srv.close()
         srv.handle_error.side_effect = side_effect
 
-        srv.stream.feed_data(b'GET / HT/asd\r\n')
+        srv.stream.feed_data(b'GET / HT/asd\r\n\r\n')
 
         self.loop.run_until_complete(srv._request_handle)
         self.assertTrue(srv.handle_error.called)
@@ -238,3 +236,13 @@ class HttpServerProtocolTests(LogTrackingTestCase):
 
         self.assertTrue(srv.handle_error.called)
         self.assertTrue(500, srv.handle_error.call_args[0][0])
+
+    def test_handle_error_no_handle_task(self):
+        transport = unittest.mock.Mock()
+        srv = server.ServerHttpProtocol()
+        srv.connection_made(transport)
+        srv.connection_lost(None)
+        close = srv.close = unittest.mock.Mock()
+
+        srv.handle_error(300)
+        self.assertTrue(close.called)

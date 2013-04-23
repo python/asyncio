@@ -11,6 +11,7 @@ try:
 except ImportError:  # pragma: no cover
     signal = None
 
+from . import constants
 from . import events
 from . import selector_events
 from . import transports
@@ -166,7 +167,7 @@ class _UnixReadPipeTransport(transports.ReadTransport):
     def _read_ready(self):
         try:
             data = os.read(self._fileno, self.max_size)
-        except BlockingIOError:
+        except (BlockingIOError, InterruptedError):
             pass
         except OSError as exc:
             self._fatal_error(exc)
@@ -195,7 +196,7 @@ class _UnixReadPipeTransport(transports.ReadTransport):
     def _close(self, exc):
         self._closing = True
         self._event_loop.remove_reader(self._fileno)
-        self._call_connection_lost(exc)
+        self._event_loop.call_soon(self._call_connection_lost, exc)
 
     def _call_connection_lost(self, exc):
         try:
@@ -215,6 +216,7 @@ class _UnixWritePipeTransport(transports.WriteTransport):
         _set_nonblocking(self._fileno)
         self._protocol = protocol
         self._buffer = []
+        self._conn_lost = 0
         self._closing = False  # Set when close() or write_eof() called.
         self._event_loop.call_soon(self._protocol.connection_made, self)
         if waiter is not None:
@@ -226,13 +228,20 @@ class _UnixWritePipeTransport(transports.WriteTransport):
         if not data:
             return
 
+        if self._conn_lost:
+            if self._conn_lost >= constants.LOG_THRESHOLD_FOR_CONNLOST_WRITES:
+                tulip_log.warning('os.write(pipe, data) raised exception.')
+            self._conn_lost += 1
+            return
+
         if not self._buffer:
             # Attempt to send it right away first.
             try:
                 n = os.write(self._fileno, data)
-            except BlockingIOError:
+            except (BlockingIOError, InterruptedError):
                 n = 0
             except Exception as exc:
+                self._conn_lost += 1
                 self._fatal_error(exc)
                 return
             if n == len(data):
@@ -250,9 +259,10 @@ class _UnixWritePipeTransport(transports.WriteTransport):
         self._buffer.clear()
         try:
             n = os.write(self._fileno, data)
-        except BlockingIOError:
+        except (BlockingIOError, InterruptedError):
             self._buffer.append(data)
         except Exception as exc:
+            self._conn_lost += 1
             self._fatal_error(exc)
         else:
             if n == len(data):
@@ -273,7 +283,7 @@ class _UnixWritePipeTransport(transports.WriteTransport):
         assert self._pipe
         self._closing = True
         if not self._buffer:
-            self._call_connection_lost(None)
+            self._event_loop.call_soon(self._call_connection_lost, None)
 
     def close(self):
         if not self._closing:
@@ -292,7 +302,7 @@ class _UnixWritePipeTransport(transports.WriteTransport):
         self._closing = True
         self._buffer.clear()
         self._event_loop.remove_writer(self._fileno)
-        self._call_connection_lost(exc)
+        self._event_loop.call_soon(self._call_connection_lost, exc)
 
     def _call_connection_lost(self, exc):
         try:

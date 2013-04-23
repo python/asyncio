@@ -8,7 +8,6 @@ import unittest.mock
 from tulip import events
 from tulip import futures
 from tulip import tasks
-from tulip import test_utils
 
 
 class Dummy:
@@ -20,16 +19,14 @@ class Dummy:
         pass
 
 
-class TaskTests(test_utils.LogTrackingTestCase):
+class TaskTests(unittest.TestCase):
 
     def setUp(self):
-        super().setUp()
         self.event_loop = events.new_event_loop()
         events.set_event_loop(self.event_loop)
 
     def tearDown(self):
         self.event_loop.close()
-        super().tearDown()
 
     def test_task_class(self):
         @tasks.coroutine
@@ -156,8 +153,6 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertFalse(t.cancel())
 
     def test_future_timeout_catch(self):
-        self.suppress_log_errors()
-
         @tasks.coroutine
         def coro():
             yield from tasks.sleep(10.0)
@@ -241,8 +236,8 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertTrue(0.08 <= t1-t0 <= 0.12)
 
     def test_wait(self):
-        a = tasks.sleep(0.1)
-        b = tasks.sleep(0.15)
+        a = tasks.Task(tasks.sleep(0.1))
+        b = tasks.Task(tasks.sleep(0.15))
 
         @tasks.coroutine
         def foo():
@@ -264,14 +259,17 @@ class TaskTests(test_utils.LogTrackingTestCase):
         # TODO: Test different return_when values.
 
     def test_wait_first_completed(self):
-        a = tasks.sleep(10.0)
-        b = tasks.sleep(0.1)
+        a = tasks.Task(tasks.sleep(10.0))
+        b = tasks.Task(tasks.sleep(0.1))
         task = tasks.Task(tasks.wait(
             [b, a], return_when=tasks.FIRST_COMPLETED))
 
         done, pending = self.event_loop.run_until_complete(task)
         self.assertEqual({b}, done)
         self.assertEqual({a}, pending)
+        self.assertFalse(a.done())
+        self.assertTrue(b.done())
+        self.assertIsNone(b.result())
 
     def test_wait_really_done(self):
         # there is possibility that some tasks in the pending list
@@ -293,11 +291,14 @@ class TaskTests(test_utils.LogTrackingTestCase):
 
         done, pending = self.event_loop.run_until_complete(task)
         self.assertEqual({a, b}, done)
+        self.assertTrue(a.done())
+        self.assertIsNone(a.result())
+        self.assertTrue(b.done())
+        self.assertIsNone(b.result())
 
     def test_wait_first_exception(self):
-        self.suppress_log_errors()
-
-        a = tasks.sleep(10.0)
+        # first_exception, task already has exception
+        a = tasks.Task(tasks.sleep(10.0))
 
         @tasks.coroutine
         def exc():
@@ -311,9 +312,24 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertEqual({b}, done)
         self.assertEqual({a}, pending)
 
+    def test_wait_first_exception_in_wait(self):
+        # first_exception, exception during waiting
+        a = tasks.Task(tasks.sleep(10.0))
+
+        @tasks.coroutine
+        def exc():
+            yield from tasks.sleep(0.01)
+            raise ZeroDivisionError('err')
+
+        b = tasks.Task(exc())
+        task = tasks.wait([b, a], return_when=tasks.FIRST_EXCEPTION)
+
+        done, pending = self.event_loop.run_until_complete(task)
+        self.assertEqual({b}, done)
+        self.assertEqual({a}, pending)
+
     def test_wait_with_exception(self):
-        self.suppress_log_errors()
-        a = tasks.sleep(0.1)
+        a = tasks.Task(tasks.sleep(0.1))
 
         @tasks.coroutine
         def sleeper():
@@ -340,8 +356,8 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertTrue(t1-t0 <= 0.01)
 
     def test_wait_with_timeout(self):
-        a = tasks.sleep(0.1)
-        b = tasks.sleep(0.15)
+        a = tasks.Task(tasks.sleep(0.1))
+        b = tasks.Task(tasks.sleep(0.15))
 
         @tasks.coroutine
         def foo():
@@ -386,7 +402,6 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertTrue(t1-t0 <= 0.01)
 
     def test_as_completed_with_timeout(self):
-        self.suppress_log_errors()
         a = tasks.sleep(0.1, 'a')
         b = tasks.sleep(0.15, 'b')
 
@@ -424,6 +439,26 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertTrue(t1-t0 >= 0.09)
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'yeah')
+
+    def test_sleep_cancel(self):
+        t = tasks.Task(tasks.sleep(10.0, 'yeah'))
+
+        handle = None
+        orig_call_later = self.event_loop.call_later
+
+        def call_later(self, delay, callback, *args):
+            nonlocal handle
+            handle = orig_call_later(self, delay, callback, *args)
+            return handle
+
+        self.event_loop.call_later = call_later
+        self.event_loop.run_once()
+
+        self.assertFalse(handle.cancelled)
+
+        t.cancel()
+        self.event_loop.run_once()
+        self.assertTrue(handle.cancelled)
 
     def test_task_cancel_sleeping_task(self):
         sleepfut = None
@@ -477,8 +512,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertIsNone(task._fut_waiter)
         self.assertTrue(fut.cancelled())
 
-    @unittest.mock.patch('tulip.tasks.tulip_log')
-    def test_step_in_completed_task(self, m_logging):
+    def test_step_in_completed_task(self):
         @tasks.coroutine
         def notmuch():
             return 'ko'
@@ -488,8 +522,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
 
         self.assertRaises(AssertionError, task._step)
 
-    @unittest.mock.patch('tulip.tasks.tulip_log')
-    def test_step_result(self, m_logging):
+    def test_step_result(self):
         @tasks.coroutine
         def notmuch():
             yield None
@@ -501,7 +534,6 @@ class TaskTests(test_utils.LogTrackingTestCase):
 
     def test_step_result_future(self):
         # If coroutine returns future, task waits on this future.
-        self.suppress_log_warnings()
 
         class Fut(futures.Future):
             def __init__(self, *args):
@@ -520,7 +552,7 @@ class TaskTests(test_utils.LogTrackingTestCase):
             nonlocal result
             result = yield from fut
 
-        wait_for_future()
+        t = wait_for_future()
         self.event_loop.run_once()
         self.assertTrue(fut.cb_added)
 
@@ -528,6 +560,8 @@ class TaskTests(test_utils.LogTrackingTestCase):
         fut.set_result(res)
         self.event_loop.run_once()
         self.assertIs(res, result)
+        self.assertTrue(t.done())
+        self.assertIsNone(t.result())
 
     def test_step_result_concurrent_future(self):
         # Coroutine returns concurrent.futures.Future
@@ -557,8 +591,6 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertIs(res, task.result())
 
     def test_step_with_baseexception(self):
-        self.suppress_log_errors()
-
         @tasks.coroutine
         def notmutch():
             raise BaseException()
@@ -570,8 +602,6 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertIsInstance(task.exception(), BaseException)
 
     def test_baseexception_during_cancel(self):
-        self.suppress_log_errors()
-
         @tasks.coroutine
         def sleeper():
             yield from tasks.sleep(10)
@@ -610,7 +640,6 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertTrue(tasks.iscoroutinefunction(fn2))
 
     def test_yield_vs_yield_from(self):
-        self.suppress_log_errors()
         fut = futures.Future()
 
         @tasks.task
@@ -625,12 +654,9 @@ class TaskTests(test_utils.LogTrackingTestCase):
         self.assertIs(fut.exception(), cm.exception)
 
     def test_yield_vs_yield_from_generator(self):
-        self.suppress_log_errors()
-        fut = futures.Future()
-
         @tasks.coroutine
         def coro():
-            yield from fut
+            yield
 
         @tasks.task
         def wait_for_future():
@@ -642,7 +668,6 @@ class TaskTests(test_utils.LogTrackingTestCase):
             self.event_loop.run_until_complete, task)
 
     def test_coroutine_non_gen_function(self):
-
         @tasks.coroutine
         def func():
             return 'test'
@@ -667,9 +692,10 @@ class TaskTests(test_utils.LogTrackingTestCase):
             fut.set_result('test')
 
         t1 = tasks.Task(func())
-        tasks.Task(coro())
+        t2 = tasks.Task(coro())
         res = self.event_loop.run_until_complete(t1)
         self.assertEqual(res, 'test')
+        self.assertIsNone(t2.result())
 
 
 if __name__ == '__main__':

@@ -17,6 +17,8 @@ import time
 import unittest
 import unittest.mock
 
+
+from tulip import futures
 from tulip import events
 from tulip import transports
 from tulip import protocols
@@ -26,10 +28,13 @@ from tulip import test_utils
 
 
 class MyProto(protocols.Protocol):
+    done = None
 
-    def __init__(self):
+    def __init__(self, create_future=False):
         self.state = 'INITIAL'
         self.nbytes = 0
+        if create_future:
+            self.done = futures.Future()
 
     def connection_made(self, transport):
         self.transport = transport
@@ -49,13 +54,18 @@ class MyProto(protocols.Protocol):
     def connection_lost(self, exc):
         assert self.state in ('CONNECTED', 'EOF'), self.state
         self.state = 'CLOSED'
+        if self.done:
+            self.done.set_result(None)
 
 
 class MyDatagramProto(protocols.DatagramProtocol):
+    done = None
 
-    def __init__(self):
+    def __init__(self, create_future=False):
         self.state = 'INITIAL'
         self.nbytes = 0
+        if create_future:
+            self.done = futures.Future()
 
     def connection_made(self, transport):
         self.transport = transport
@@ -72,14 +82,19 @@ class MyDatagramProto(protocols.DatagramProtocol):
     def connection_lost(self, exc):
         assert self.state == 'INITIALIZED', self.state
         self.state = 'CLOSED'
+        if self.done:
+            self.done.set_result(None)
 
 
 class MyReadPipeProto(protocols.Protocol):
+    done = None
 
-    def __init__(self):
+    def __init__(self, create_future=False):
         self.state = ['INITIAL']
         self.nbytes = 0
         self.transport = None
+        if create_future:
+            self.done = futures.Future()
 
     def connection_made(self, transport):
         self.transport = transport
@@ -98,13 +113,18 @@ class MyReadPipeProto(protocols.Protocol):
     def connection_lost(self, exc):
         assert self.state == ['INITIAL', 'CONNECTED', 'EOF'], self.state
         self.state.append('CLOSED')
+        if self.done:
+            self.done.set_result(None)
 
 
 class MyWritePipeProto(protocols.Protocol):
+    done = None
 
-    def __init__(self):
+    def __init__(self, create_future=False):
         self.state = 'INITIAL'
         self.transport = None
+        if create_future:
+            self.done = futures.Future()
 
     def connection_made(self, transport):
         self.transport = transport
@@ -114,6 +134,8 @@ class MyWritePipeProto(protocols.Protocol):
     def connection_lost(self, exc):
         assert self.state == 'CONNECTED', self.state
         self.state = 'CLOSED'
+        if self.done:
+            self.done.set_result(None)
 
 
 class EventLoopTestsMixin:
@@ -132,8 +154,6 @@ class EventLoopTestsMixin:
         self.event_loop.run()  # Returns immediately.
 
     def test_run_nesting(self):
-        self.suppress_log_errors()
-
         @tasks.coroutine
         def coro():
             self.assertTrue(self.event_loop.is_running())
@@ -144,8 +164,6 @@ class EventLoopTestsMixin:
             self.event_loop.run_until_complete, coro())
 
     def test_run_once_nesting(self):
-        self.suppress_log_errors()
-
         @tasks.coroutine
         def coro():
             tasks.sleep(0.1)
@@ -422,16 +440,18 @@ class EventLoopTestsMixin:
         self.assertTrue(data == b'x'*256)
 
     def test_sock_client_ops(self):
-        self.suppress_log_errors()
-
         with test_utils.run_test_server(self.event_loop) as httpd:
             sock = socket.socket()
             sock.setblocking(False)
             self.event_loop.run_until_complete(
                 self.event_loop.sock_connect(sock, httpd.address))
             self.event_loop.run_until_complete(
-                self.event_loop.sock_sendall(sock, b'GET / HTTP/1.0\r\n\r\n'))
+                self.event_loop.sock_sendall(
+                    sock, b'GET / HTTP/1.0\r\n\r\n'))
             data = self.event_loop.run_until_complete(
+                self.event_loop.sock_recv(sock, 1024))
+            # consume data
+            self.event_loop.run_until_complete(
                 self.event_loop.sock_recv(sock, 1024))
             sock.close()
 
@@ -616,18 +636,15 @@ class EventLoopTestsMixin:
             self.assertTrue(pr.nbytes > 0)
 
     def test_create_connection_host_port_sock(self):
-        self.suppress_log_errors()
         coro = self.event_loop.create_connection(
             MyProto, 'example.com', 80, sock=object())
         self.assertRaises(ValueError, self.event_loop.run_until_complete, coro)
 
     def test_create_connection_no_host_port_sock(self):
-        self.suppress_log_errors()
         coro = self.event_loop.create_connection(MyProto)
         self.assertRaises(ValueError, self.event_loop.run_until_complete, coro)
 
     def test_create_connection_no_getaddrinfo(self):
-        self.suppress_log_errors()
         getaddrinfo = self.event_loop.getaddrinfo = unittest.mock.Mock()
         getaddrinfo.return_value = []
 
@@ -636,8 +653,6 @@ class EventLoopTestsMixin:
             socket.error, self.event_loop.run_until_complete, coro)
 
     def test_create_connection_connect_err(self):
-        self.suppress_log_errors()
-
         @tasks.coroutine
         def getaddrinfo(*args, **kw):
             yield from []
@@ -651,8 +666,6 @@ class EventLoopTestsMixin:
             socket.error, self.event_loop.run_until_complete, coro)
 
     def test_create_connection_mutiple_errors(self):
-        self.suppress_log_errors()
-
         @tasks.coroutine
         def getaddrinfo(*args, **kw):
             yield from []
@@ -719,7 +732,7 @@ class EventLoopTestsMixin:
 
         def factory():
             nonlocal proto
-            proto = MyProto()
+            proto = MyProto(create_future=True)
             return proto
 
         here = os.path.dirname(__file__)
@@ -755,7 +768,7 @@ class EventLoopTestsMixin:
 
         # close connection
         proto.transport.close()
-
+        self.event_loop.run_until_complete(proto.done)
         self.assertEqual('CLOSED', proto.state)
 
         # the client socket must be closed after to avoid ECONNRESET upon
@@ -763,11 +776,18 @@ class EventLoopTestsMixin:
         client.close()
 
     def test_start_serving_sock(self):
+        proto = futures.Future()
+
+        class TestMyProto(MyProto):
+            def __init__(self):
+                super().__init__()
+                proto.set_result(self)
+
         sock_ob = socket.socket(type=socket.SOCK_STREAM)
         sock_ob.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock_ob.bind(('0.0.0.0', 0))
 
-        f = self.event_loop.start_serving(MyProto, sock=sock_ob)
+        f = self.event_loop.start_serving(TestMyProto, sock=sock_ob)
         sock = self.event_loop.run_until_complete(f)
         self.assertIs(sock, sock_ob)
 
@@ -776,8 +796,7 @@ class EventLoopTestsMixin:
         client = socket.socket()
         client.connect(('127.0.0.1', port))
         client.send(b'xxx')
-        self.event_loop.run_once()  # This is quite mysterious, but necessary.
-        self.event_loop.run_once()
+        self.event_loop.run_until_complete(proto)
         sock.close()
         client.close()
 
@@ -798,18 +817,15 @@ class EventLoopTestsMixin:
             ConnectionRefusedError, client.connect, ('127.0.0.1', port))
 
     def test_start_serving_host_port_sock(self):
-        self.suppress_log_errors()
         fut = self.event_loop.start_serving(
             MyProto, '0.0.0.0', 0, sock=object())
         self.assertRaises(ValueError, self.event_loop.run_until_complete, fut)
 
     def test_start_serving_no_host_port_sock(self):
-        self.suppress_log_errors()
         fut = self.event_loop.start_serving(MyProto)
         self.assertRaises(ValueError, self.event_loop.run_until_complete, fut)
 
     def test_start_serving_no_getaddrinfo(self):
-        self.suppress_log_errors()
         getaddrinfo = self.event_loop.getaddrinfo = unittest.mock.Mock()
         getaddrinfo.return_value = []
 
@@ -819,7 +835,6 @@ class EventLoopTestsMixin:
 
     @unittest.mock.patch('tulip.base_events.socket')
     def test_start_serving_cant_bind(self, m_socket):
-        self.suppress_log_errors()
 
         class Err(socket.error):
             pass
@@ -836,8 +851,6 @@ class EventLoopTestsMixin:
 
     @unittest.mock.patch('tulip.base_events.socket')
     def test_create_datagram_endpoint_no_addrinfo(self, m_socket):
-        self.suppress_log_errors()
-
         m_socket.error = socket.error
         m_socket.getaddrinfo.return_value = []
 
@@ -847,8 +860,6 @@ class EventLoopTestsMixin:
             socket.error, self.event_loop.run_until_complete, coro)
 
     def test_create_datagram_endpoint_addr_error(self):
-        self.suppress_log_errors()
-
         coro = self.event_loop.create_datagram_endpoint(
             MyDatagramProto, local_addr='localhost')
         self.assertRaises(
@@ -860,6 +871,9 @@ class EventLoopTestsMixin:
 
     def test_create_datagram_endpoint(self):
         class TestMyDatagramProto(MyDatagramProto):
+            def __init__(self):
+                super().__init__(create_future=True)
+
             def datagram_received(self, data, addr):
                 super().datagram_received(data, addr)
                 self.transport.sendto(b'resp:'+data, addr)
@@ -870,7 +884,8 @@ class EventLoopTestsMixin:
         host, port = s_transport.get_extra_info('addr')
 
         coro = self.event_loop.create_datagram_endpoint(
-            MyDatagramProto, remote_addr=(host, port))
+            lambda: MyDatagramProto(create_future=True),
+            remote_addr=(host, port))
         transport, client = self.event_loop.run_until_complete(coro)
 
         self.assertEqual('INITIALIZED', client.state)
@@ -889,12 +904,11 @@ class EventLoopTestsMixin:
 
         # close connection
         transport.close()
-
+        self.event_loop.run_until_complete(client.done)
         self.assertEqual('CLOSED', client.state)
         server.transport.close()
 
     def test_create_datagram_endpoint_connect_err(self):
-        self.suppress_log_errors()
         self.event_loop.sock_connect = unittest.mock.Mock()
         self.event_loop.sock_connect.side_effect = socket.error
 
@@ -905,8 +919,6 @@ class EventLoopTestsMixin:
 
     @unittest.mock.patch('tulip.base_events.socket')
     def test_create_datagram_endpoint_socket_err(self, m_socket):
-        self.suppress_log_errors()
-
         m_socket.error = socket.error
         m_socket.getaddrinfo = socket.getaddrinfo
         m_socket.socket.side_effect = socket.error
@@ -922,8 +934,6 @@ class EventLoopTestsMixin:
             socket.error, self.event_loop.run_until_complete, coro)
 
     def test_create_datagram_endpoint_no_matching_family(self):
-        self.suppress_log_errors()
-
         coro = self.event_loop.create_datagram_endpoint(
             protocols.DatagramProtocol,
             remote_addr=('127.0.0.1', 0), local_addr=('::1', 0))
@@ -932,8 +942,6 @@ class EventLoopTestsMixin:
 
     @unittest.mock.patch('tulip.base_events.socket')
     def test_create_datagram_endpoint_setblk_err(self, m_socket):
-        self.suppress_log_errors()
-
         m_socket.error = socket.error
         m_socket.socket.return_value.setblocking.side_effect = socket.error
 
@@ -945,16 +953,12 @@ class EventLoopTestsMixin:
             m_socket.socket.return_value.close.called)
 
     def test_create_datagram_endpoint_noaddr_nofamily(self):
-        self.suppress_log_errors()
-
         coro = self.event_loop.create_datagram_endpoint(
             protocols.DatagramProtocol)
         self.assertRaises(ValueError, self.event_loop.run_until_complete, coro)
 
     @unittest.mock.patch('tulip.base_events.socket')
     def test_create_datagram_endpoint_cant_bind(self, m_socket):
-        self.suppress_log_errors()
-
         class Err(socket.error):
             pass
 
@@ -977,14 +981,14 @@ class EventLoopTestsMixin:
         self.event_loop._accept_connection(MyProto, sock)
         self.assertFalse(sock.close.called)
 
-    def test_accept_connection_exception(self):
-        self.suppress_log_errors()
-
+    @unittest.mock.patch('tulip.selector_events.tulip_log')
+    def test_accept_connection_exception(self, m_log):
         sock = unittest.mock.Mock()
         sock.accept.side_effect = OSError()
 
         self.event_loop._accept_connection(MyProto, sock)
         self.assertTrue(sock.close.called)
+        self.assertTrue(m_log.exception.called)
 
     def test_internal_fds(self):
         event_loop = self.create_event_loop()
@@ -1004,7 +1008,7 @@ class EventLoopTestsMixin:
 
         def factory():
             nonlocal proto
-            proto = MyReadPipeProto()
+            proto = MyReadPipeProto(create_future=True)
             return proto
 
         rpipe, wpipe = os.pipe()
@@ -1031,7 +1035,7 @@ class EventLoopTestsMixin:
         self.assertEqual(5, proto.nbytes)
 
         os.close(wpipe)
-        self.event_loop.run_once()
+        self.event_loop.run_until_complete(proto.done)
         self.assertEqual(
             ['INITIAL', 'CONNECTED', 'EOF', 'CLOSED'], proto.state)
         # extra info is available
@@ -1045,7 +1049,7 @@ class EventLoopTestsMixin:
 
         def factory():
             nonlocal proto
-            proto = MyWritePipeProto()
+            proto = MyWritePipeProto(create_future=True)
             return proto
 
         rpipe, wpipe = os.pipe()
@@ -1081,20 +1085,20 @@ class EventLoopTestsMixin:
 
         # close connection
         proto.transport.close()
-        self.event_loop.run_once()
+        self.event_loop.run_until_complete(proto.done)
         self.assertEqual('CLOSED', proto.state)
 
 
 if sys.platform == 'win32':
     from tulip import windows_events
 
-    class SelectEventLoopTests(EventLoopTestsMixin,
-                               test_utils.LogTrackingTestCase):
+    class SelectEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
+
         def create_event_loop(self):
             return windows_events.SelectorEventLoop()
 
-    class ProactorEventLoopTests(EventLoopTestsMixin,
-                                 test_utils.LogTrackingTestCase):
+    class ProactorEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
+
         def create_event_loop(self):
             return windows_events.ProactorEventLoop()
         def test_create_ssl_connection(self):
@@ -1145,27 +1149,27 @@ else:
     from tulip import unix_events
 
     if hasattr(selectors, 'KqueueSelector'):
-        class KqueueEventLoopTests(EventLoopTestsMixin,
-                                   test_utils.LogTrackingTestCase):
+        class KqueueEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
+
             def create_event_loop(self):
                 return unix_events.SelectorEventLoop(
                     selectors.KqueueSelector())
 
     if hasattr(selectors, 'EpollSelector'):
-        class EPollEventLoopTests(EventLoopTestsMixin,
-                                  test_utils.LogTrackingTestCase):
+        class EPollEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
+
             def create_event_loop(self):
                 return unix_events.SelectorEventLoop(selectors.EpollSelector())
 
     if hasattr(selectors, 'PollSelector'):
-        class PollEventLoopTests(EventLoopTestsMixin,
-                                 test_utils.LogTrackingTestCase):
+        class PollEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
+
             def create_event_loop(self):
                 return unix_events.SelectorEventLoop(selectors.PollSelector())
 
     # Should always exist.
-    class SelectEventLoopTests(EventLoopTestsMixin,
-                               test_utils.LogTrackingTestCase):
+    class SelectEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
+
         def create_event_loop(self):
             return unix_events.SelectorEventLoop(selectors.SelectSelector())
 

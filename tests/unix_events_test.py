@@ -193,6 +193,7 @@ class UnixReadPipeTransportTests(unittest.TestCase):
         unix_events._UnixReadPipeTransport(self.event_loop, self.pipe,
                                            self.protocol, fut)
         self.event_loop.call_soon.assert_called_with(fut.set_result, None)
+        fut.cancel()
 
     @unittest.mock.patch('os.read')
     @unittest.mock.patch('fcntl.fcntl')
@@ -214,8 +215,8 @@ class UnixReadPipeTransportTests(unittest.TestCase):
         tr._read_ready()
 
         m_read.assert_called_with(5, tr.max_size)
-        self.protocol.eof_received.assert_called_with()
         self.event_loop.remove_reader.assert_called_with(5)
+        self.protocol.eof_received.assert_called_with()
 
     @unittest.mock.patch('os.read')
     @unittest.mock.patch('fcntl.fcntl')
@@ -293,7 +294,8 @@ class UnixReadPipeTransportTests(unittest.TestCase):
         tr._close(err)
         self.assertTrue(tr._closing)
         self.event_loop.remove_reader.assert_called_with(5)
-        self.protocol.connection_lost.assert_called_with(err)
+        self.event_loop.call_soon.assert_called_with(
+            tr._call_connection_lost, err)
 
     @unittest.mock.patch('fcntl.fcntl')
     def test__call_connection_lost(self, m_fcntl):
@@ -337,6 +339,7 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
                                             self.protocol, fut)
         self.event_loop.call_soon.assert_called_with(fut.set_result, None)
+        fut.cancel()
 
     @unittest.mock.patch('fcntl.fcntl')
     def test_can_write_eof(self, m_fcntl):
@@ -403,9 +406,10 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         self.event_loop.add_writer.assert_called_with(5, tr._write_ready)
         self.assertEqual([b'data'], tr._buffer)
 
+    @unittest.mock.patch('tulip.unix_events.tulip_log')
     @unittest.mock.patch('os.write')
     @unittest.mock.patch('fcntl.fcntl')
-    def test_write_err(self, m_fcntl, m_write):
+    def test_write_err(self, m_fcntl, m_write, m_log):
         tr = unix_events._UnixWritePipeTransport(self.event_loop, self.pipe,
                                                  self.protocol)
 
@@ -417,6 +421,16 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         self.assertFalse(self.event_loop.called)
         self.assertEqual([], tr._buffer)
         tr._fatal_error.assert_called_with(err)
+        self.assertEqual(1, tr._conn_lost)
+
+        tr.write(b'data')
+        self.assertEqual(2, tr._conn_lost)
+        tr.write(b'data')
+        tr.write(b'data')
+        tr.write(b'data')
+        tr.write(b'data')
+        m_log.warning.assert_called_with(
+            'os.write(pipe, data) raised exception.')
 
     @unittest.mock.patch('os.write')
     @unittest.mock.patch('fcntl.fcntl')
@@ -483,8 +497,10 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         self.event_loop.remove_writer.assert_called_with(5)
         self.assertEqual([], tr._buffer)
         self.assertTrue(tr._closing)
-        self.protocol.connection_lost.assert_called_with(err)
+        self.event_loop.call_soon.assert_called_with(
+            tr._call_connection_lost, err)
         m_logexc.assert_called_with('Fatal error for %s', tr)
+        self.assertEqual(1, tr._conn_lost)
 
     @unittest.mock.patch('os.write')
     @unittest.mock.patch('fcntl.fcntl')
@@ -500,6 +516,7 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         self.event_loop.remove_writer.assert_called_with(5)
         self.assertEqual([], tr._buffer)
         self.protocol.connection_lost.assert_called_with(None)
+        self.pipe.close.assert_called_with()
 
     @unittest.mock.patch('os.write')
     @unittest.mock.patch('fcntl.fcntl')
@@ -513,7 +530,8 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         self.event_loop.remove_writer.assert_called_with(5)
         self.assertEqual([], tr._buffer)
         self.assertTrue(tr._closing)
-        self.protocol.connection_lost.assert_called_with(None)
+        self.event_loop.call_soon.assert_called_with(
+            tr._call_connection_lost, None)
 
     @unittest.mock.patch('fcntl.fcntl')
     def test__call_connection_lost(self, m_fcntl):
@@ -561,7 +579,8 @@ class UnixWritePipeTransportTests(unittest.TestCase):
 
         tr.write_eof()
         self.assertTrue(tr._closing)
-        self.protocol.connection_lost.assert_called_with(None)
+        self.event_loop.call_soon.assert_called_with(
+            tr._call_connection_lost, None)
 
     @unittest.mock.patch('fcntl.fcntl')
     def test_write_eof_pending(self, m_fcntl):

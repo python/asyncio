@@ -309,6 +309,9 @@ if 'epoll' in globals():
             super().__init__()
             self._epoll = epoll()
 
+        def fileno(self):
+            return self._epoll.fileno()
+
         def register(self, fileobj, events, data=None):
             key = super().register(fileobj, events, data)
             epoll_events = 0
@@ -358,6 +361,9 @@ if 'kqueue' in globals():
         def __init__(self):
             super().__init__()
             self._kqueue = kqueue()
+
+        def fileno(self):
+            return self._kqueue.fileno()
 
         def unregister(self, fileobj):
             key = super().unregister(fileobj)

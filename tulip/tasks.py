@@ -11,7 +11,6 @@ import inspect
 import time
 
 from . import futures
-from .log import tulip_log
 
 
 def coroutine(func):
@@ -95,11 +94,10 @@ class Task(futures.Future):
         self._must_cancel = True
         # _step() will call super().cancel() to call the callbacks.
         if self._fut_waiter is not None:
-            assert not self._fut_waiter.done(), 'Assume it is a race condition.'
-            self._fut_waiter.cancel()
+            return self._fut_waiter.cancel()
         else:
             self._event_loop.call_soon(self._step_maybe)
-        return True
+            return True
 
     def cancelled(self):
         return self._must_cancel or super().cancelled()
@@ -136,13 +134,11 @@ class Task(futures.Future):
                 super().cancel()
             else:
                 self.set_exception(exc)
-                tulip_log.exception('Exception in task')
         except BaseException as exc:
             if self._must_cancel:
                 super().cancel()
             else:
                 self.set_exception(exc)
-                tulip_log.exception('BaseException in task')
             raise
         else:
             # XXX No check for self._must_cancel here?
@@ -239,14 +235,14 @@ def _wait(fs, timeout=None, return_when=ALL_COMPLETED):
     # Will always be cancelled eventually.
     bail = futures.Future(timeout=timeout)
 
-    def _on_completion(f):
-        pending.remove(f)
-        done.add(f)
+    def _on_completion(fut):
+        pending.remove(fut)
+        done.add(fut)
         if (not pending or
             return_when == FIRST_COMPLETED or
             (return_when == FIRST_EXCEPTION and
-             not f.cancelled() and
-             f.exception() is not None)):
+             not fut.cancelled() and
+             fut.exception() is not None)):
             bail.cancel()
 
             for f in pending:
@@ -322,13 +318,12 @@ def _wrap_coroutines(fs):
     return wrapped
 
 
+@coroutine
 def sleep(when, result=None):
-    """Return a Future that completes after a given time (in seconds).
-
-    It's okay to cancel the Future.
-
-    Undocumented feature: sleep(when, x) sets the Future's result to x.
-    """
+    """Coroutine that completes after a given time (in seconds)."""
     future = futures.Future()
-    future._event_loop.call_later(when, future.set_result, result)
-    return future
+    h = future._event_loop.call_later(when, future.set_result, result)
+    try:
+        return (yield from future)
+    finally:
+        h.cancel()

@@ -446,7 +446,8 @@ class EventLoopTestsMixin:
             self.event_loop.run_until_complete(
                 self.event_loop.sock_connect(sock, httpd.address))
             self.event_loop.run_until_complete(
-                self.event_loop.sock_sendall(sock, b'GET / HTTP/1.0\r\n\r\n'))
+                self.event_loop.sock_sendall(
+                    sock, b'GET / HTTP/1.0\r\n\r\n'))
             data = self.event_loop.run_until_complete(
                 self.event_loop.sock_recv(sock, 1024))
             # consume data
@@ -1052,52 +1053,6 @@ class EventLoopTestsMixin:
             return proto
 
         rpipe, wpipe = os.pipe()
-        self.addCleanup(os.close, rpipe)
-        pipeobj = io.open(wpipe, 'wb', 1024)
-
-        @tasks.task
-        def connect():
-            nonlocal transport
-            t, p = yield from self.event_loop.connect_write_pipe(factory,
-                                                                 pipeobj)
-            self.assertIs(p, proto)
-            self.assertIs(t, proto.transport)
-            self.assertEqual('CONNECTED', proto.state)
-            transport = t
-
-        self.event_loop.run_until_complete(connect())
-
-        transport.write(b'1')
-        self.event_loop.run_once()
-        data = os.read(rpipe, 1024)
-        self.assertEqual(b'1', data)
-
-        transport.write(b'2345')
-        self.event_loop.run_once()
-        data = os.read(rpipe, 1024)
-        self.assertEqual(b'2345', data)
-        self.assertEqual('CONNECTED', proto.state)
-
-        # extra info is available
-        self.assertIsNotNone(proto.transport.get_extra_info('pipe'))
-
-        # close connection
-        proto.transport.close()
-        self.event_loop.run_until_complete(proto.done)
-        self.assertEqual('CLOSED', proto.state)
-
-    @unittest.skipUnless(sys.platform != 'win32',
-                         "Don't support pipes for Windows")
-    def test_write_pipe_disconnect_on_close(self):
-        proto = None
-        transport = None
-
-        def factory():
-            nonlocal proto
-            proto = MyWritePipeProto(create_future=True)
-            return proto
-
-        rpipe, wpipe = os.pipe()
         pipeobj = io.open(wpipe, 'wb', 1024)
 
         @tasks.task
@@ -1125,6 +1080,11 @@ class EventLoopTestsMixin:
 
         os.close(rpipe)
 
+        # extra info is available
+        self.assertIsNotNone(proto.transport.get_extra_info('pipe'))
+
+        # close connection
+        proto.transport.close()
         self.event_loop.run_until_complete(proto.done)
         self.assertEqual('CLOSED', proto.state)
 

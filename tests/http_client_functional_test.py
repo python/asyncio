@@ -1,5 +1,6 @@
 """Http client functional tests."""
 
+import gc
 import io
 import os.path
 import http.cookies
@@ -19,6 +20,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
 
     def tearDown(self):
         self.loop.close()
+        gc.collect()
 
     def test_HTTP_200_OK_METHOD(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
@@ -320,7 +322,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
             self.assertEqual(r.status, 200)
 
             content = self.loop.run_until_complete(r.content.read())
-            self.assertIn(b'"Cookie": "test1=123; test3=456"', content)
+            self.assertIn(b'"Cookie": "test1=123; test3=456"', bytes(content))
 
     def test_chunked(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:

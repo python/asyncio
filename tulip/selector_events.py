@@ -5,7 +5,6 @@ also includes support for signal handling, see the unix_events sub-module.
 """
 
 import collections
-import errno
 import socket
 try:
     import ssl

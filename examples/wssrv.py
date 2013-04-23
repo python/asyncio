@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Simple multiprocess http server written using an event loop."""
+"""Multiprocess WebSocket http chat example."""
 
 import argparse
-import email.message
 import os
 import logging
 import socket
@@ -23,85 +22,89 @@ ARGS.add_argument(
     '--workers', action="store", dest='workers',
     default=2, type=int, help='Number of workers.')
 
+WS_FILE = os.path.join(os.path.dirname(__file__), 'websocket.html')
+
 
 class HttpServer(tulip.http.ServerHttpProtocol):
 
+    clients = None  # list of all active connections
+    parent = None  # process supervisor
+                   # we use it as broadcaster to all workers
+
     @tulip.coroutine
     def handle_request(self, message, payload):
-        print('{}: method = {!r}; path = {!r}; version = {!r}'.format(
-            os.getpid(), message.method, message.path, message.version))
-
-        path = message.path
-
-        if (not (path.isprintable() and path.startswith('/')) or '/.' in path):
-            path = None
-        else:
-            path = '.' + path
-            if not os.path.exists(path):
-                path = None
-            else:
-                isdir = os.path.isdir(path)
-
-        if not path:
-            raise tulip.http.HttpStatusException(404)
-
-        headers = email.message.Message()
+        upgrade = False
         for hdr, val in message.headers:
-            headers.add_header(hdr, val)
+            if hdr == 'UPGRADE':
+                upgrade = 'websocket' in val.lower()
+                break
 
-        if isdir and not path.endswith('/'):
-            path = path + '/'
-            raise tulip.http.HttpStatusException(
-                302, headers=(('URI', path), ('Location', path)))
+        if upgrade:
+            # websocket handshake
+            status, headers, parser, writer = websocket.do_handshake(
+                message, self.transport)
 
-        response = tulip.http.Response(self.transport, 200)
-        response.add_header('Transfer-Encoding', 'chunked')
+            resp = tulip.http.Response(self.transport, status)
+            resp.add_headers(*headers)
+            resp.send_headers()
 
-        # content encoding
-        accept_encoding = headers.get('accept-encoding', '').lower()
-        if 'deflate' in accept_encoding:
-            response.add_header('Content-Encoding', 'deflate')
-            response.add_compression_filter('deflate')
-        elif 'gzip' in accept_encoding:
-            response.add_header('Content-Encoding', 'gzip')
-            response.add_compression_filter('gzip')
+            # install websocket parser
+            databuffer = self.stream.set_parser(parser)
 
-        response.add_chunking_filter(1025)
+            # notify everybody
+            print('{}: Someone joined.'.format(os.getpid()))
+            for wsc in self.clients:
+                wsc.send(b'Someone joined.')
+            self.clients.append(writer)
+            self.parent.send(b'Someone joined.')
 
-        if isdir:
+            # chat dispatcher
+            while True:
+                msg = yield from databuffer.read()
+                if msg is None:  # client droped connection
+                    break
+
+                if msg.tp == websocket.MSG_PING:
+                    writer.pong()
+
+                elif msg.tp == websocket.MSG_TEXT:
+                    data = msg.data.strip()
+                    print('{}: {}'.format(os.getpid(), data))
+                    for wsc in self.clients:
+                        if wsc is not writer:
+                            wsc.send(data.encode())
+                    self.parent.send(data)
+
+                elif msg.tp == websocket.MSG_CLOSE:
+                    break
+
+            # notify everybody
+            print('{}: Someone disconnected.'.format(os.getpid()))
+            self.parent.send(b'Someone disconnected.')
+            self.clients.remove(writer)
+            for wsc in self.clients:
+                wsc.send(b'Someone disconnected.')
+
+            self.close()
+        else:
+            # send html page with js chat
+            response = tulip.http.Response(self.transport, 200)
+            response.add_header('Transfer-Encoding', 'chunked')
             response.add_header('Content-type', 'text/html')
             response.send_headers()
 
-            response.write(b'<ul>\r\n')
-            for name in sorted(os.listdir(path)):
-                if name.isprintable() and not name.startswith('.'):
-                    try:
-                        bname = name.encode('ascii')
-                    except UnicodeError:
-                        pass
-                    else:
-                        if os.path.isdir(os.path.join(path, name)):
-                            response.write(b'<li><a href="' + bname +
-                                           b'/">' + bname + b'/</a></li>\r\n')
-                        else:
-                            response.write(b'<li><a href="' + bname +
-                                           b'">' + bname + b'</a></li>\r\n')
-            response.write(b'</ul>')
-        else:
-            response.add_header('Content-type', 'text/plain')
-            response.send_headers()
-
             try:
-                with open(path, 'rb') as fp:
+                with open(WS_FILE, 'rb') as fp:
                     chunk = fp.read(8196)
                     while chunk:
-                        response.write(chunk)
+                        if not response.write(chunk):
+                            break
                         chunk = fp.read(8196)
             except OSError:
                 response.write(b'Cannot open')
 
-        response.write_eof()
-        self.close()
+            response.write_eof()
+            self.close()
 
 
 class ChildProcess:
@@ -111,6 +114,7 @@ class ChildProcess:
         self.down_write = down_write
         self.args = args
         self.sock = sock
+        self.clients = []
 
     def start(self):
         # start server
@@ -123,16 +127,20 @@ class ChildProcess:
             os._exit(0)
         loop.add_signal_handler(signal.SIGINT, stop)
 
-        f = loop.start_serving(lambda: HttpServer(debug=True), sock=self.sock)
-        x = loop.run_until_complete(f)
-        print('Starting srv worker process {} on {}'.format(
-            os.getpid(), x.getsockname()))
-
         # heartbeat
         self.heartbeat()
 
         tulip.get_event_loop().run_forever()
         os._exit(0)
+
+    @tulip.task
+    def start_server(self, writer):
+        sock = yield from self.loop.start_serving(
+            lambda: HttpServer(
+                debug=True, parent=writer, clients=self.clients),
+            sock=self.sock)
+        print('Starting srv worker process {} on {}'.format(
+            os.getpid(), sock.getsockname()))
 
     @tulip.task
     def heartbeat(self):
@@ -145,6 +153,8 @@ class ChildProcess:
         reader = read_proto.set_parser(websocket.WebSocketParser())
         writer = websocket.WebSocketWriter(write_transport)
 
+        self.start_server(writer)
+
         while True:
             msg = yield from reader.read()
             if msg is None:
@@ -155,6 +165,9 @@ class ChildProcess:
                 writer.pong()
             elif msg.tp == websocket.MSG_CLOSE:
                 break
+            elif msg.tp == websocket.MSG_TEXT:  # broadcast message
+                for wsc in self.clients:
+                    wsc.send(msg.data.strip().encode())
 
         read_transport.close()
         write_transport.close()
@@ -164,7 +177,8 @@ class Worker:
 
     _started = False
 
-    def __init__(self, loop, args, sock):
+    def __init__(self, sv, loop, args, sock):
+        self.sv = sv
         self.loop = loop
         self.args = args
         self.sock = sock
@@ -220,8 +234,14 @@ class Worker:
                 self.kill()
                 self.start()
                 return
+
             elif msg.tp == websocket.MSG_PONG:
                 self.ping = time.monotonic()
+
+            elif msg.tp == websocket.MSG_TEXT:  # broadcast to all workers
+                for worker in self.sv.workers:
+                    if self.pid != worker.pid:
+                        worker.writer.send(msg.data)
 
     @tulip.task
     def connect(self, pid, up_write, down_read):
@@ -238,6 +258,7 @@ class Worker:
         # store info
         self.pid = pid
         self.ping = time.monotonic()
+        self.writer = writer
         self.rtransport = read_transport
         self.wtransport = write_transport
         self.chat_task = self.chat(reader)
@@ -270,7 +291,7 @@ class Superviser:
 
         # start processes
         for idx in range(self.args.workers):
-            self.workers.append(Worker(self.loop, self.args, sock))
+            self.workers.append(Worker(self, self.loop, self.args, sock))
 
         self.loop.add_signal_handler(signal.SIGINT, lambda: self.loop.stop())
         self.loop.run_forever()

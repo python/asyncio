@@ -48,16 +48,16 @@ class HttpServerProtocolTests(unittest.TestCase):
         srv.connection_made(unittest.mock.Mock())
 
         srv.data_received(b'123')
-        self.assertEqual(b'123', b''.join(srv.stream.buffer))
+        self.assertEqual(b'123', bytes(srv.stream._buffer))
 
         srv.data_received(b'456')
-        self.assertEqual(b'123456', b''.join(srv.stream.buffer))
+        self.assertEqual(b'123456', bytes(srv.stream._buffer))
 
     def test_eof_received(self):
         srv = server.ServerHttpProtocol()
         srv.connection_made(unittest.mock.Mock())
         srv.eof_received()
-        self.assertTrue(srv.stream.eof)
+        self.assertTrue(srv.stream._eof)
 
     def test_connection_lost(self):
         srv = server.ServerHttpProtocol()
@@ -85,9 +85,10 @@ class HttpServerProtocolTests(unittest.TestCase):
         srv = server.ServerHttpProtocol()
         srv.connection_made(transport)
 
-        srv.handle_error(404)
+        srv.handle_error(404, headers=(('X-Server', 'Tulip'),))
         content = b''.join([c[1][0] for c in list(transport.write.mock_calls)])
         self.assertIn(b'HTTP/1.1 404 Not Found', content)
+        self.assertIn(b'X-SERVER: Tulip', content)
 
     @unittest.mock.patch('tulip.http.server.traceback')
     def test_handle_error_traceback_exc(self, m_trace):
@@ -144,22 +145,22 @@ class HttpServerProtocolTests(unittest.TestCase):
 
         self.loop.run_until_complete(srv._request_handle)
         self.assertTrue(handle.called)
-        self.assertIsNone(srv._request_handle)
 
     def test_handle_coro(self):
         transport = unittest.mock.Mock()
         srv = server.ServerHttpProtocol()
-        srv.connection_made(transport)
 
         called = False
 
         @tulip.coroutine
-        def coro(rline, message):
+        def coro(message, payload):
             nonlocal called
             called = True
             srv.eof_received()
+            srv.close()
 
         srv.handle_request = coro
+        srv.connection_made(transport)
 
         srv.stream.feed_data(
             b'GET / HTTP/1.0\r\n'
@@ -211,7 +212,7 @@ class HttpServerProtocolTests(unittest.TestCase):
             srv.close()
         srv.handle_error.side_effect = side_effect
 
-        srv.stream.feed_data(b'GET / HT/asd\r\n')
+        srv.stream.feed_data(b'GET / HT/asd\r\n\r\n')
 
         self.loop.run_until_complete(srv._request_handle)
         self.assertTrue(srv.handle_error.called)
@@ -235,3 +236,13 @@ class HttpServerProtocolTests(unittest.TestCase):
 
         self.assertTrue(srv.handle_error.called)
         self.assertTrue(500, srv.handle_error.call_args[0][0])
+
+    def test_handle_error_no_handle_task(self):
+        transport = unittest.mock.Mock()
+        srv = server.ServerHttpProtocol()
+        srv.connection_made(transport)
+        srv.connection_lost(None)
+        close = srv.close = unittest.mock.Mock()
+
+        srv.handle_error(300)
+        self.assertTrue(close.called)

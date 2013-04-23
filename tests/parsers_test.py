@@ -8,234 +8,6 @@ from tulip import parsers
 from tulip import tasks
 
 
-class ParserBufferTests(unittest.TestCase):
-
-    def test_feed_data(self):
-        buf = parsers.ParserBuffer()
-        buf.feed_data(b'')
-        self.assertEqual(len(buf), 0)
-
-        buf.feed_data(b'data')
-        self.assertEqual(buf.size, 4)
-        self.assertEqual(len(buf), 4)
-        self.assertEqual(buf, b'data')
-
-    def test_shrink(self):
-        buf = parsers.ParserBuffer()
-        buf.feed_data(b'data')
-
-        buf.shrink()
-        self.assertEqual(bytes(buf), b'data')
-
-        buf.offset = 2
-        buf.shrink()
-        self.assertEqual(bytes(buf), b'ta')
-        self.assertEqual(2, len(buf))
-        self.assertEqual(2, buf.size)
-        self.assertEqual(0, buf.offset)
-
-    def test_shrink_feed_data(self):
-        stream = parsers.StreamBuffer(2)
-        stream.feed_data(b'data')
-        self.assertEqual(bytes(stream._buffer), b'data')
-
-        stream._buffer.offset = 2
-        stream.feed_data(b'1')
-        self.assertEqual(bytes(stream._buffer), b'ta1')
-        self.assertEqual(3, len(stream._buffer))
-        self.assertEqual(3, stream._buffer.size)
-        self.assertEqual(0, stream._buffer.offset)
-
-    def test_read(self):
-        buf = parsers.ParserBuffer()
-        p = buf.read(3)
-        next(p)
-        p.send(b'1')
-        try:
-            p.send(b'234')
-        except StopIteration as exc:
-            res = exc.value
-
-        self.assertEqual(res, b'123')
-        self.assertEqual(b'4', bytes(buf))
-
-    def test_readsome(self):
-        buf = parsers.ParserBuffer()
-        p = buf.readsome(3)
-        next(p)
-        try:
-            p.send(b'1')
-        except StopIteration as exc:
-            res = exc.value
-        self.assertEqual(res, b'1')
-
-        p = buf.readsome(2)
-        next(p)
-        try:
-            p.send(b'234')
-        except StopIteration as exc:
-            res = exc.value
-        self.assertEqual(res, b'23')
-        self.assertEqual(b'4', bytes(buf))
-
-    def test_skip(self):
-        buf = parsers.ParserBuffer()
-        p = buf.skip(3)
-        next(p)
-        p.send(b'1')
-        try:
-            p.send(b'234')
-        except StopIteration as exc:
-            res = exc.value
-
-        self.assertIsNone(res)
-        self.assertEqual(b'4', bytes(buf))
-
-    def test_readuntil_params(self):
-        buf = parsers.ParserBuffer()
-        p = buf.readuntil(b'')
-        self.assertRaises(AssertionError, next, p)
-
-        p = buf.readuntil('\n')
-        self.assertRaises(AssertionError, next, p)
-
-    def test_readuntil_limit(self):
-        buf = parsers.ParserBuffer()
-        p = buf.readuntil(b'\n', limit=4)
-        next(p)
-        p.send(b'1')
-        p.send(b'234')
-        self.assertRaises(ValueError, p.send, b'5')
-
-        buf = parsers.ParserBuffer()
-        p = buf.readuntil(b'\n', limit=4)
-        next(p)
-        self.assertRaises(ValueError, p.send, b'12345\n6')
-
-        buf = parsers.ParserBuffer()
-        p = buf.readuntil(b'\n', limit=4)
-        next(p)
-        self.assertRaises(ValueError, p.send, b'12345\n6')
-
-        class CustomExc(Exception):
-            pass
-
-        buf = parsers.ParserBuffer()
-        p = buf.readuntil(b'\n', limit=4, exc=CustomExc)
-        next(p)
-        self.assertRaises(CustomExc, p.send, b'12345\n6')
-
-    def test_readuntil(self):
-        buf = parsers.ParserBuffer()
-        p = buf.readuntil(b'\n', limit=4)
-        next(p)
-        p.send(b'123')
-        try:
-            p.send(b'\n456')
-        except StopIteration as exc:
-            res = exc.value
-
-        self.assertEqual(res, b'123\n')
-        self.assertEqual(b'456', bytes(buf))
-
-    def test_skipuntil_params(self):
-        buf = parsers.ParserBuffer()
-        p = buf.skipuntil(b'')
-        self.assertRaises(AssertionError, next, p)
-
-        p = buf.skipuntil('\n')
-        self.assertRaises(AssertionError, next, p)
-
-    def test_skipuntil(self):
-        buf = parsers.ParserBuffer()
-        p = buf.skipuntil(b'\n')
-        next(p)
-        p.send(b'123')
-        try:
-            p.send(b'\n456\n')
-        except StopIteration:
-            pass
-        self.assertEqual(b'456\n', bytes(buf))
-
-        p = buf.readline()
-        try:
-            next(p)
-        except StopIteration as exc:
-            res = exc.value
-        self.assertEqual(b'', bytes(buf))
-        self.assertEqual(b'456\n', res)
-
-    def test_readline_limit(self):
-        buf = parsers.ParserBuffer()
-        p = buf.readline(limit=4)
-        next(p)
-        p.send(b'1')
-        p.send(b'234')
-        self.assertRaises(ValueError, p.send, b'5')
-
-        buf = parsers.ParserBuffer()
-        p = buf.readline(limit=4)
-        next(p)
-        self.assertRaises(ValueError, p.send, b'12345\n6')
-
-        buf = parsers.ParserBuffer()
-        p = buf.readline(limit=4)
-        next(p)
-        self.assertRaises(ValueError, p.send, b'12345\n6')
-
-    def test_readline(self):
-        buf = parsers.ParserBuffer()
-        p = buf.readline(limit=4)
-        next(p)
-        p.send(b'123')
-        try:
-            p.send(b'\n456')
-        except StopIteration as exc:
-            res = exc.value
-
-        self.assertEqual(res, b'123\n')
-        self.assertEqual(b'456', bytes(buf))
-
-    def test_lines_parser(self):
-        out = parsers.DataBuffer()
-        buf = parsers.ParserBuffer()
-        p = parsers.lines_parser()
-        next(p)
-        p.send((out, buf))
-
-        for d in (b'line1', b'\r\n', b'lin', b'e2\r', b'\ndata'):
-            p.send(d)
-
-        self.assertEqual(
-            [bytearray(b'line1\r\n'), bytearray(b'line2\r\n')],
-            list(out._buffer))
-        try:
-            p.throw(parsers.EofStream())
-        except parsers.EofStream:
-            pass
-
-        self.assertEqual(bytes(buf), b'data')
-
-    def test_chunks_parser(self):
-        out = parsers.DataBuffer()
-        buf = parsers.ParserBuffer()
-        p = parsers.chunks_parser(5)
-        next(p)
-        p.send((out, buf))
-
-        for d in (b'line1', b'lin', b'e2d', b'ata'):
-            p.send(d)
-
-        self.assertEqual(
-            [bytearray(b'line1'), bytearray(b'line2')], list(out._buffer))
-        try:
-            p.throw(parsers.EofStream())
-        except parsers.EofStream:
-            pass
-
-        self.assertEqual(bytes(buf), b'data')
-
-
 class StreamBufferTests(unittest.TestCase):
 
     DATA = b'line1\nline2\nline3\n'
@@ -380,8 +152,8 @@ class StreamBufferTests(unittest.TestCase):
         def lines_parser():
             out, buf = yield
             try:
-                out.feed_data((yield from buf.readline()))
-                out.feed_data((yield from buf.readline()))
+                out.feed_data((yield from buf.readuntil(b'\n')))
+                out.feed_data((yield from buf.readuntil(b'\n')))
             finally:
                 out.feed_eof()
 
@@ -390,8 +162,7 @@ class StreamBufferTests(unittest.TestCase):
         stream.feed_data(b'\r\nline2\r\ndata')
         s = stream.set_parser(lines_parser())
 
-        self.assertEqual([bytearray(b'line1\r\n'), bytearray(b'line2\r\n')],
-                         list(s._buffer))
+        self.assertEqual(b'line1\r\nline2\r\n', b''.join(s._buffer))
         self.assertEqual(b'data', bytes(stream._buffer))
         self.assertIsNone(stream._parser)
         self.assertTrue(s._eof)
@@ -655,3 +426,174 @@ class StreamProtocolTests(unittest.TestCase):
         exc = ValueError()
         proto.connection_lost(exc)
         self.assertIs(proto.exception(), exc)
+
+
+class ParserBuffer(unittest.TestCase):
+
+    def _make_one(self):
+        return parsers.ParserBuffer()
+
+    def test_shrink(self):
+        buf = parsers.ParserBuffer()
+        buf.feed_data(b'data')
+
+        buf._shrink()
+        self.assertEqual(bytes(buf), b'data')
+
+        buf.offset = 2
+        buf._shrink()
+        self.assertEqual(bytes(buf), b'ta')
+        self.assertEqual(2, len(buf))
+        self.assertEqual(2, buf.size)
+        self.assertEqual(0, buf.offset)
+
+    def test_feed_data(self):
+        buf = self._make_one()
+        buf.feed_data(b'')
+        self.assertEqual(len(buf), 0)
+
+        buf.feed_data(b'data')
+        self.assertEqual(len(buf), 4)
+        self.assertEqual(bytes(buf), b'data')
+
+    def test_read(self):
+        buf = self._make_one()
+        p = buf.read(3)
+        next(p)
+        p.send(b'1')
+        try:
+            p.send(b'234')
+        except StopIteration as exc:
+            res = exc.value
+
+        self.assertEqual(res, b'123')
+        self.assertEqual(b'4', bytes(buf))
+
+    def test_readsome(self):
+        buf = self._make_one()
+        p = buf.readsome(3)
+        next(p)
+        try:
+            p.send(b'1')
+        except StopIteration as exc:
+            res = exc.value
+        self.assertEqual(res, b'1')
+
+        p = buf.readsome(2)
+        next(p)
+        try:
+            p.send(b'234')
+        except StopIteration as exc:
+            res = exc.value
+        self.assertEqual(res, b'23')
+        self.assertEqual(b'4', bytes(buf))
+
+    def test_skip(self):
+        buf = self._make_one()
+        p = buf.skip(3)
+        next(p)
+        p.send(b'1')
+        try:
+            p.send(b'234')
+        except StopIteration as exc:
+            res = exc.value
+
+        self.assertIsNone(res)
+        self.assertEqual(b'4', bytes(buf))
+
+    def test_readuntil_limit(self):
+        buf = self._make_one()
+        p = buf.readuntil(b'\n', 4)
+        next(p)
+        p.send(b'1')
+        p.send(b'234')
+        self.assertRaises(ValueError, p.send, b'5')
+
+        buf = parsers.ParserBuffer()
+        p = buf.readuntil(b'\n', 4)
+        next(p)
+        self.assertRaises(ValueError, p.send, b'12345\n6')
+
+        buf = parsers.ParserBuffer()
+        p = buf.readuntil(b'\n', 4)
+        next(p)
+        self.assertRaises(ValueError, p.send, b'12345\n6')
+
+        class CustomExc(Exception):
+            pass
+
+        buf = parsers.ParserBuffer()
+        p = buf.readuntil(b'\n', 4, CustomExc)
+        next(p)
+        self.assertRaises(CustomExc, p.send, b'12345\n6')
+
+    def test_readuntil(self):
+        buf = self._make_one()
+        p = buf.readuntil(b'\n', 4)
+        next(p)
+        p.send(b'123')
+        try:
+            p.send(b'\n456')
+        except StopIteration as exc:
+            res = exc.value
+
+        self.assertEqual(res, b'123\n')
+        self.assertEqual(b'456', bytes(buf))
+
+    def test_skipuntil(self):
+        buf = self._make_one()
+        p = buf.skipuntil(b'\n')
+        next(p)
+        p.send(b'123')
+        try:
+            p.send(b'\n456\n')
+        except StopIteration:
+            pass
+        self.assertEqual(b'456\n', bytes(buf))
+
+        p = buf.readuntil(b'\n')
+        try:
+            next(p)
+        except StopIteration as exc:
+            res = exc.value
+        self.assertEqual(b'', bytes(buf))
+        self.assertEqual(b'456\n', res)
+
+    def test_lines_parser(self):
+        out = parsers.DataBuffer()
+        buf = self._make_one()
+        p = parsers.lines_parser()
+        next(p)
+        p.send((out, buf))
+
+        for d in (b'line1', b'\r\n', b'lin', b'e2\r', b'\ndata'):
+            p.send(d)
+
+        self.assertEqual(
+            [bytearray(b'line1\r\n'), bytearray(b'line2\r\n')],
+            list(out._buffer))
+        try:
+            p.throw(parsers.EofStream())
+        except parsers.EofStream:
+            pass
+
+        self.assertEqual(bytes(buf), b'data')
+
+    def test_chunks_parser(self):
+        out = parsers.DataBuffer()
+        buf = self._make_one()
+        p = parsers.chunks_parser(5)
+        next(p)
+        p.send((out, buf))
+
+        for d in (b'line1', b'lin', b'e2d', b'ata'):
+            p.send(d)
+
+        self.assertEqual(
+            [bytearray(b'line1'), bytearray(b'line2')], list(out._buffer))
+        try:
+            p.throw(parsers.EofStream())
+        except parsers.EofStream:
+            pass
+
+        self.assertEqual(bytes(buf), b'data')

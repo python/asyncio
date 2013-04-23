@@ -39,11 +39,11 @@ class WSGIServerHttpProtocol(server.ServerHttpProtocol):
         self.is_ssl = is_ssl
         self.readpayload = readpayload
 
-    def create_wsgi_response(self, info, message):
-        return WsgiResponse(self.transport, info, message)
+    def create_wsgi_response(self, message):
+        return WsgiResponse(self.transport, message)
 
-    def create_wsgi_environ(self, info, message, payload):
-        uri_parts = urlsplit(info.uri)
+    def create_wsgi_environ(self, message, payload):
+        uri_parts = urlsplit(message.path)
         url_scheme = 'https' if self.is_ssl else 'http'
 
         environ = {
@@ -57,10 +57,10 @@ class WSGIServerHttpProtocol(server.ServerHttpProtocol):
             'wsgi.file_wrapper': FileWrapper,
             'wsgi.url_scheme': url_scheme,
             'SERVER_SOFTWARE': tulip.http.HttpMessage.SERVER_SOFTWARE,
-            'REQUEST_METHOD': info.method,
+            'REQUEST_METHOD': message.method,
             'QUERY_STRING': uri_parts.query or '',
-            'RAW_URI': info.uri,
-            'SERVER_PROTOCOL': 'HTTP/%s.%s' % info.version
+            'RAW_URI': message.path,
+            'SERVER_PROTOCOL': 'HTTP/%s.%s' % message.version
         }
 
         # authors should be aware that REMOTE_HOST and REMOTE_ADDR
@@ -86,7 +86,7 @@ class WSGIServerHttpProtocol(server.ServerHttpProtocol):
                 environ['CONTENT_LENGTH'] = hdr_value
                 continue
 
-            key = 'HTTP_' + hdr_name.replace('-', '_')
+            key = 'HTTP_%s' % hdr_name.replace('-', '_')
             if key in environ:
                 hdr_value = '%s,%s' % (environ[key], hdr_value)
 
@@ -140,16 +140,19 @@ class WSGIServerHttpProtocol(server.ServerHttpProtocol):
         return environ
 
     @tulip.coroutine
-    def handle_request(self, info, message):
+    def handle_request(self, message, payload):
         """Handle a single HTTP request"""
 
         if self.readpayload:
-            payload = io.BytesIO((yield from message.payload.read()))
-        else:
-            payload = message.payload
+            wsgiinput = io.BytesIO()
+            chunk = yield from payload.read()
+            while chunk:
+                wsgiinput.write(chunk)
+                chunk = yield from payload.read()
+            payload = wsgiinput
 
-        environ = self.create_wsgi_environ(info, message, payload)
-        response = self.create_wsgi_response(info, message)
+        environ = self.create_wsgi_environ(message, payload)
+        response = self.create_wsgi_response(message)
 
         riter = self.wsgi(environ, response.start_response)
         if isinstance(riter, tulip.Future) or inspect.isgenerator(riter):
@@ -195,9 +198,8 @@ class WsgiResponse:
 
     status = None
 
-    def __init__(self, transport, info, message):
+    def __init__(self, transport, message):
         self.transport = transport
-        self.info = info
         self.message = message
 
     def start_response(self, status, headers, exc_info=None):
@@ -213,7 +215,7 @@ class WsgiResponse:
         self.status = status
         self.response = tulip.http.Response(
             self.transport, status_code,
-            self.info.version, self.message.should_close)
+            self.message.version, self.message.should_close)
         self.response.add_headers(*headers)
         self.response._send_headers = True
         return self.response.write

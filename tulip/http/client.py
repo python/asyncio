@@ -24,7 +24,7 @@ import uuid
 import urllib.parse
 
 import tulip
-from tulip.http import protocol
+import tulip.http
 
 
 @tulip.coroutine
@@ -116,34 +116,15 @@ def request(method, url, *,
 @tulip.coroutine
 def start(req, loop):
     transport, p = yield from loop.create_connection(
-        HttpProtocol, req.host, req.port, ssl=req.ssl)
+        tulip.StreamProtocol, req.host, req.port, ssl=req.ssl)
     try:
         resp = req.send(transport)
-        yield from resp.start(p.stream, transport)
+        yield from resp.start(p, transport)
     except:
         transport.close()
         raise
 
     return resp
-
-
-class HttpProtocol(tulip.Protocol):
-
-    stream = None
-    transport = None
-
-    def connection_made(self, transport):
-        self.transport = transport
-        self.stream = protocol.HttpStreamReader()
-
-    def data_received(self, data):
-        self.stream.feed_data(data)
-
-    def eof_received(self):
-        self.stream.feed_eof()
-
-    def connection_lost(self, exc):
-        pass
 
 
 class HttpRequest:
@@ -325,7 +306,7 @@ class HttpRequest:
                 self.headers['content-type'] = (
                     'application/x-www-form-urlencoded')
             if 'content-length' not in self.headers and not chunked:
-                self.headers['content-length'] = len(self.body)
+                self.headers['content-length'] = str(len(self.body))
 
         # files (multipart/form-data)
         elif files:
@@ -382,7 +363,7 @@ class HttpRequest:
                 request.add_chunking_filter(8196)
             else:
                 chunked = False
-                self.headers['content-length'] = len(self.body)
+                self.headers['content-length'] = str(len(self.body))
 
         request.add_headers(*self.headers.items())
         request.send_headers()
@@ -406,9 +387,8 @@ class HttpResponse(http.client.HTTPMessage):
     reason = None   # Reason-Phrase
 
     content = None  # payload stream
-
-    _content = None
-    _transport = None
+    stream = None   # input stream
+    transport = None  # current transport
 
     def __init__(self, method, url, host=''):
         super().__init__()
@@ -416,6 +396,7 @@ class HttpResponse(http.client.HTTPMessage):
         self.method = method
         self.url = url
         self.host = host
+        self._content = None
 
     def __repr__(self):
         out = io.StringIO()
@@ -426,41 +407,54 @@ class HttpResponse(http.client.HTTPMessage):
 
     def start(self, stream, transport):
         """Start response processing."""
-        self._transport = transport
+        self.stream = stream
+        self.transport = transport
 
-        # read status
-        self.version, self.status, self.reason = (
-            yield from stream.read_response_status())
+        httpstream = stream.set_parser(tulip.http.http_response_parser())
 
-        # does the body have a fixed length? (of zero)
-        length = None
-        if (self.status == http.client.NO_CONTENT or
-                self.status == http.client.NOT_MODIFIED or
-                100 <= self.status < 200 or self.method == "HEAD"):
-            length = 0
+        # read response
+        message = yield from httpstream.read()
 
-        # http message
-        message = yield from stream.read_message(length=length)
+        # response status
+        self.version = message.version
+        self.status = message.code
+        self.reason = message.reason
 
         # headers
         for hdr, val in message.headers:
             self.add_header(hdr, val)
 
         # payload
-        self.content = message.payload
+        self.content = stream.set_parser(
+            tulip.http.http_payload_parser(message))
 
         return self
 
     def close(self):
-        if self._transport is not None:
-            self._transport.close()
-            self._transport = None
+        if self.transport is not None:
+            self.transport.close()
+            self.transport = None
 
     @tulip.coroutine
     def read(self, decode=False):
         """Read response payload. Decode known types of content."""
         if self._content is None:
-            self._content = yield from self.content.read()
+            buf = []
+            total = 0
+            chunk = yield from self.content.read()
+            while chunk:
+                size = len(chunk)
+                buf.append((chunk, size))
+                total += size
+                chunk = yield from self.content.read()
+
+            self._content = bytearray(total)
+
+            idx = 0
+            content = memoryview(self._content)
+            for chunk, size in buf:
+                content[idx:idx+size] = chunk
+                idx += size
 
         data = self._content
 

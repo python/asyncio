@@ -19,11 +19,12 @@ import tulip.http
 
 class HttpServer(tulip.http.ServerHttpProtocol):
 
-    def handle_request(self, request_info, message):
+    @tulip.coroutine
+    def handle_request(self, message, payload):
         print('method = {!r}; path = {!r}; version = {!r}'.format(
-            request_info.method, request_info.uri, request_info.version))
+            message.method, message.path, message.version))
 
-        path = request_info.uri
+        path = message.path
 
         if (not (path.isprintable() and path.startswith('/')) or '/.' in path):
             print('bad path', repr(path))
@@ -90,7 +91,7 @@ class HttpServer(tulip.http.ServerHttpProtocol):
                 with open(path, 'rb') as fp:
                     chunk = fp.read(8196)
                     while chunk:
-                        response.write(chunk):
+                        response.write(chunk)
                         chunk = fp.read(8196)
             except OSError:
                 response.write(b'Cannot open')

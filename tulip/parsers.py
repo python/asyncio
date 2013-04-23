@@ -81,9 +81,8 @@ class StreamBuffer:
     unset_parser() sends EofStream into parser and then removes it.
     """
 
-    def __init__(self, buffer_size=5120):
+    def __init__(self):
         self._buffer = ParserBuffer()
-        self._buffer_size = buffer_size
         self._eof = False
         self._parser = None
         self._parser_buffer = None
@@ -96,9 +95,7 @@ class StreamBuffer:
         self._exception = exc
 
         if self._parser_buffer is not None:
-            self._buffer.shrink()
             self._parser_buffer.set_exception(exc)
-
             self._parser = None
             self._parser_buffer = None
 
@@ -120,10 +117,6 @@ class StreamBuffer:
         else:
             self._buffer.feed_data(data)
 
-        # shrink buffer
-        if (self._buffer.offset and len(self._buffer) > self._buffer_size):
-            self._buffer.shrink()
-
     def feed_eof(self):
         """send eof to all parsers, recursively."""
         if self._parser:
@@ -140,7 +133,6 @@ class StreamBuffer:
             self._parser_buffer = None
 
         self._eof = True
-        self._buffer.shrink()
 
     def set_parser(self, p):
         """set parser to stream. return parser's DataStream."""
@@ -224,8 +216,11 @@ class DataBuffer:
     def set_exception(self, exc):
         self._exception = exc
 
-        if self._waiter is not None:
-            self._waiter.set_exception(exc)
+        waiter = self._waiter
+        if waiter is not None:
+            self._waiter = None
+            if not waiter.cancelled():
+                waiter.set_exception(exc)
 
     def feed_data(self, data):
         self._buffer.append(data)
@@ -241,7 +236,7 @@ class DataBuffer:
         waiter = self._waiter
         if waiter is not None:
             self._waiter = None
-            waiter.set_result(True)
+            waiter.set_result(False)
 
     @tasks.coroutine
     def read(self):
@@ -273,7 +268,7 @@ class ParserBuffer(bytearray):
         self._writer = self._feed_data()
         next(self._writer)
 
-    def shrink(self):
+    def _shrink(self):
         if self.offset:
             del self[:self.offset]
             self.offset = 0
@@ -286,6 +281,10 @@ class ParserBuffer(bytearray):
                 chunk_len = len(chunk)
                 self.size += chunk_len
                 self.extend(chunk)
+
+                # shrink buffer
+                if (self.offset and len(self) > 5120):
+                    self._shrink()
 
     def feed_data(self, data):
         self._writer.send(data)
@@ -318,27 +317,6 @@ class ParserBuffer(bytearray):
 
             self._writer.send((yield))
 
-    def readline(self, limit=2**16, exc=ValueError):
-        """readline() reads until \n string."""
-
-        while True:
-            new_line = self.find(b'\n', self.offset)
-            if new_line >= 0:
-                end = new_line + 1
-                size = end - self.offset
-                if size > limit:
-                    raise exc('Line is too long.')
-
-                start, self.offset = self.offset, end
-                self.size = self.size - size
-
-                return self[start:end]
-            else:
-                if self.size > limit:
-                    raise exc('Line is too long.')
-
-            self._writer.send((yield))
-
     def readuntil(self, stop, limit=None, exc=ValueError):
         assert isinstance(stop, bytes) and stop, \
             'bytes is required: {!r}'.format(stop)
@@ -346,11 +324,11 @@ class ParserBuffer(bytearray):
         stop_len = len(stop)
 
         while True:
-            new_line = self.find(stop, self.offset)
-            if new_line >= 0:
-                end = new_line + stop_len
+            pos = self.find(stop, self.offset)
+            if pos >= 0:
+                end = pos + stop_len
                 size = end - self.offset
-                if size > limit:
+                if limit is not None and size > limit:
                     raise exc('Line is too long.')
 
                 start, self.offset = self.offset, end
@@ -404,7 +382,7 @@ def lines_parser(limit=2**16, exc=ValueError):
     out, buf = yield
 
     while True:
-        out.feed_data((yield from buf.readline(limit, exc)))
+        out.feed_data((yield from buf.readuntil(b'\n', limit, exc)))
 
 
 def chunks_parser(size=8196):

@@ -1,10 +1,15 @@
 """WebSocket protocol versions 13 and 8."""
 
-__all__ = ['WebSocketParser', 'WebSocketWriter', 'Message', 'WebSocketError',
+__all__ = ['WebSocketParser', 'WebSocketWriter', 'do_handshake',
+           'Message', 'WebSocketError',
            'MSG_TEXT', 'MSG_BINARY', 'MSG_CLOSE', 'MSG_PING', 'MSG_PONG']
 
+import base64
+import binascii
 import collections
+import hashlib
 import struct
+from tulip.http import errors
 
 # Frame opcodes defined in the spec.
 OPCODE_CONTINUATION = 0x0
@@ -13,6 +18,10 @@ MSG_BINARY = OPCODE_BINARY = 0x2
 MSG_CLOSE = OPCODE_CLOSE = 0x8
 MSG_PING = OPCODE_PING = 0x9
 MSG_PONG = OPCODE_PONG = 0xa
+
+WS_KEY = b'258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
+WS_HDRS = ('UPGRADE', 'CONNECTION',
+           'SEC-WEBSOCKET-VERSION', 'SEC-WEBSOCKET-KEY')
 
 Message = collections.namedtuple('Message', ['tp', 'data', 'extra'])
 
@@ -173,3 +182,46 @@ class WebSocketWriter:
         self._send_frame(
             struct.pack('!H%ds' % len(message), code, message),
             opcode=OPCODE_CLOSE)
+
+
+def do_handshake(message, transport):
+    """Prepare WebSocket handshake. It return http response code,
+    response headers, websocket parser, websocket writer. It does not
+    do any IO."""
+    headers = dict(((hdr, val)
+                    for hdr, val in message.headers if hdr in WS_HDRS))
+
+    if 'websocket' != headers.get('UPGRADE', '').lower().strip():
+        raise errors.BadRequestException('No WebSocket UPGRADE hdr: {}'.format(
+            headers.get('UPGRADE')))
+
+    if 'upgrade' not in headers.get('CONNECTION', '').lower():
+        raise errors.BadRequestException(
+            'No CONNECTION upgrade hdr: {}'.format(
+                headers.get('CONNECTION')))
+
+    # check supported version
+    version = headers.get('SEC-WEBSOCKET-VERSION')
+    if version not in ('13', '8'):
+        raise errors.BadRequestException(
+            'Unsupported version: {}'.format(version))
+
+    # check client handshake for validity
+    key = headers.get('SEC-WEBSOCKET-KEY')
+    try:
+        if not key or len(base64.b64decode(key)) != 16:
+            raise errors.BadRequestException(
+                'Handshake error: {!r}'.format(key))
+    except binascii.Error:
+        raise errors.BadRequestException(
+            'Handshake error: {!r}'.format(key)) from None
+
+    # response code, headers, parser, writer
+    return (101,
+            (('UPGRADE', 'websocket'),
+             ('CONNECTION', 'upgrade'),
+             ('TRANSFER-ENCODING', 'chunked'),
+             ('SEC-WEBSOCKET-ACCEPT', base64.b64encode(
+                 hashlib.sha1(key.encode() + WS_KEY).digest()).decode())),
+            WebSocketParser(),
+            WebSocketWriter(transport))

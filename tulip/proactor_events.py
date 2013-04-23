@@ -168,7 +168,7 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
             if f is not None:
                 f.result()  # may raise
             f = self._proactor.recv(self._ssock, 4096)
-        except Exception:
+        except:
             self.close()
             raise
         else:

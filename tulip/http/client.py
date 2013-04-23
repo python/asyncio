@@ -120,7 +120,7 @@ def start(req, loop):
     try:
         resp = req.send(transport)
         yield from resp.start(p, transport)
-    except Exception:
+    except:
         transport.close()
         raise
 

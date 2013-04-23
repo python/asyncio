@@ -37,7 +37,7 @@ class UnixSubprocessTransport(transports.Transport):
                 os.dup2(wstdout, 1)
                 # TODO: What to do with stderr?
                 os.execv(args[0], args)
-            except Exception:
+            except:
                 try:
                     traceback.print_traceback()
                 finally:

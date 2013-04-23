@@ -2,6 +2,7 @@
 
 import cgi
 import contextlib
+import gc
 import email.parser
 import http.server
 import json
@@ -14,7 +15,6 @@ import sys
 import threading
 import traceback
 import urllib.parse
-import unittest
 try:
     import ssl
 except ImportError:  # pragma: no cover
@@ -29,24 +29,6 @@ if sys.platform == 'win32':  # pragma: no cover
     from .winsocketpair import socketpair
 else:
     from socket import socketpair  # pragma: no cover
-
-
-class LogTrackingTestCase(unittest.TestCase):
-
-    def setUp(self):
-        self._logger = logging.getLogger()
-        self._log_level = self._logger.getEffectiveLevel()
-
-    def tearDown(self):
-        self._logger.setLevel(self._log_level)
-
-    def suppress_log_errors(self):  # pragma: no cover
-        if self._log_level >= logging.WARNING:
-            self._logger.setLevel(logging.CRITICAL)
-
-    def suppress_log_warnings(self):  # pragma: no cover
-        if self._log_level >= logging.WARNING:
-            self._logger.setLevel(logging.ERROR)
 
 
 @contextlib.contextmanager
@@ -75,20 +57,23 @@ def run_test_server(loop, *, host='127.0.0.1', port=0,
 
     class TestHttpServer(tulip.http.ServerHttpProtocol):
 
-        def handle_request(self, info, message):
+        def handle_request(self, message, payload):
             if properties.get('noresponse', False):
                 return
 
             if router is not None:
-                payload = io.BytesIO((yield from message.payload.read()))
-                rob = router(
-                    properties, self.transport,
-                    info, message.headers, payload, message.compression)
+                body = bytearray()
+                chunk = yield from payload.read()
+                while chunk:
+                    body.extend(chunk)
+                    chunk = yield from payload.read()
+
+                rob = router(properties, self.transport, message, bytes(body))
                 rob.dispatch()
 
             else:
                 response = tulip.http.Response(
-                    self.transport, 200, info.version)
+                    self.transport, 200, message.version)
 
                 text = b'Test message'
                 response.add_header('Content-type', 'text/plain')
@@ -110,6 +95,7 @@ def run_test_server(loop, *, host='127.0.0.1', port=0,
 
     def run(loop, fut):
         thread_loop = tulip.new_event_loop()
+        thread_loop.set_log_level(logging.CRITICAL)
         tulip.set_event_loop(thread_loop)
 
         sock = thread_loop.run_until_complete(
@@ -122,6 +108,7 @@ def run_test_server(loop, *, host='127.0.0.1', port=0,
 
         thread_loop.run_until_complete(waiter)
         thread_loop.stop()
+        gc.collect()
 
     fut = tulip.Future()
     server_thread = threading.Thread(target=run, args=(loop, fut))
@@ -140,19 +127,19 @@ class Router:
     _response_version = "1.1"
     _responses = http.server.BaseHTTPRequestHandler.responses
 
-    def __init__(self, props, transport, rline, headers, body, cmode):
+    def __init__(self, props, transport, message, payload):
         # headers
         self._headers = http.client.HTTPMessage()
-        for hdr, val in headers:
+        for hdr, val in message.headers:
             self._headers.add_header(hdr, val)
 
         self._props = props
         self._transport = transport
-        self._method = rline.method
-        self._uri = rline.uri
-        self._version = rline.version
-        self._compression = cmode
-        self._body = body.read()
+        self._method = message.method
+        self._uri = message.path
+        self._version = message.version
+        self._compression = message.compression
+        self._body = payload
 
         url = urllib.parse.urlsplit(self._uri)
         self._path = url.path
@@ -174,7 +161,7 @@ class Router:
             if match is not None:
                 try:
                     return getattr(self, fn)(match)
-                except:
+                except Exception:
                     out = io.StringIO()
                     traceback.print_exc(file=out)
                     self._response(500, out.getvalue())

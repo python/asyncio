@@ -5,7 +5,6 @@ also includes support for signal handling, see the unix_events sub-module.
 """
 
 import collections
-import errno
 import socket
 try:
     import ssl
@@ -13,6 +12,7 @@ except ImportError:  # pragma: no cover
     ssl = None
 
 from . import base_events
+from . import constants
 from . import events
 from . import futures
 from . import selectors
@@ -21,13 +21,16 @@ from .log import tulip_log
 
 
 # Errno values indicating the connection was disconnected.
-_DISCONNECTED = frozenset((errno.ECONNRESET,
-                           errno.ENOTCONN,
-                           errno.ESHUTDOWN,
-                           errno.ECONNABORTED,
-                           errno.EPIPE,
-                           errno.EBADF,
-                           ))
+# Comment out _DISCONNECTED as never used
+# TODO: make sure that errors has processed properly
+# for now we have no exception clsses for ENOTCONN and EBADF
+# _DISCONNECTED = frozenset((errno.ECONNRESET,
+#                            errno.ENOTCONN,
+#                            errno.ESHUTDOWN,
+#                            errno.ECONNABORTED,
+#                            errno.EPIPE,
+#                            errno.EBADF,
+#                            ))
 
 
 class BaseSelectorEventLoop(base_events.BaseEventLoop):
@@ -105,7 +108,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             conn.setblocking(False)
         except (BlockingIOError, InterruptedError):
             pass  # False alarm.
-        except:
+        except Exception:
             # Bad error. Stop serving.
             self.remove_reader(sock.fileno())
             sock.close()
@@ -116,7 +119,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             if ssl:
                 sslcontext = None if isinstance(ssl, bool) else ssl
                 self._make_ssl_transport(
-                    conn, protocol_factory(), sslcontext, futures.Future(),
+                    conn, protocol_factory(), sslcontext, None,
                     server_side=True, extra={'addr': addr})
             else:
                 self._make_socket_transport(
@@ -357,7 +360,7 @@ class _SelectorSocketTransport(transports.Transport):
             return
 
         if self._conn_lost:
-            if self._conn_lost >= 5:
+            if self._conn_lost >= constants.LOG_THRESHOLD_FOR_CONNLOST_WRITES:
                 tulip_log.warning('socket.send() raised exception.')
             self._conn_lost += 1
             return
@@ -413,7 +416,7 @@ class _SelectorSocketTransport(transports.Transport):
         self._closing = True
         self._event_loop.remove_reader(self._sock.fileno())
         if not self._buffer:
-            self._call_connection_lost(None)
+            self._event_loop.call_soon(self._call_connection_lost, None)
 
     def _fatal_error(self, exc):
         # should be called from exception handler only
@@ -424,7 +427,7 @@ class _SelectorSocketTransport(transports.Transport):
         self._event_loop.remove_writer(self._sock.fileno())
         self._event_loop.remove_reader(self._sock.fileno())
         self._buffer.clear()
-        self._call_connection_lost(exc)
+        self._event_loop.call_soon(self._call_connection_lost, exc)
 
     def _call_connection_lost(self, exc):
         try:
@@ -435,7 +438,7 @@ class _SelectorSocketTransport(transports.Transport):
 
 class _SelectorSslTransport(transports.Transport):
 
-    def __init__(self, event_loop, rawsock, protocol, sslcontext, waiter,
+    def __init__(self, event_loop, rawsock, protocol, sslcontext, waiter=None,
                  server_side=False, extra=None):
         super().__init__(extra)
 
@@ -467,18 +470,21 @@ class _SelectorSslTransport(transports.Transport):
             return
         except Exception as exc:
             self._sslsock.close()
-            self._waiter.set_exception(exc)
+            if self._waiter is not None:
+                self._waiter.set_exception(exc)
             return
         except BaseException as exc:
             self._sslsock.close()
-            self._waiter.set_exception(exc)
+            if self._waiter is not None:
+                self._waiter.set_exception(exc)
             raise
         self._event_loop.remove_reader(fd)
         self._event_loop.remove_writer(fd)
         self._event_loop.add_reader(fd, self._on_ready)
         self._event_loop.add_writer(fd, self._on_ready)
         self._event_loop.call_soon(self._protocol.connection_made, self)
-        self._event_loop.call_soon(self._waiter.set_result, None)
+        if self._waiter is not None:
+            self._event_loop.call_soon(self._waiter.set_result, None)
 
     def _on_ready(self):
         # Because of renegotiations (?), there's no difference between
@@ -547,7 +553,7 @@ class _SelectorSslTransport(transports.Transport):
             return
 
         if self._conn_lost:
-            if self._conn_lost >= 5:
+            if self._conn_lost >= constants.LOG_THRESHOLD_FOR_CONNLOST_WRITES:
                 tulip_log.warning('socket.send() raised exception.')
             self._conn_lost += 1
             return
@@ -564,7 +570,7 @@ class _SelectorSslTransport(transports.Transport):
         self._closing = True
         self._event_loop.remove_reader(self._sslsock.fileno())
         if not self._buffer:
-            self._protocol.connection_lost(None)
+            self._event_loop.call_soon(self._protocol.connection_lost, None)
 
     def _fatal_error(self, exc):
         tulip_log.exception('Fatal error for %s', self)
@@ -574,7 +580,7 @@ class _SelectorSslTransport(transports.Transport):
         self._event_loop.remove_writer(self._sslsock.fileno())
         self._event_loop.remove_reader(self._sslsock.fileno())
         self._buffer = []
-        self._protocol.connection_lost(exc)
+        self._event_loop.call_soon(self._protocol.connection_lost, exc)
 
 
 class _SelectorDatagramTransport(transports.DatagramTransport):
@@ -615,7 +621,7 @@ class _SelectorDatagramTransport(transports.DatagramTransport):
             assert addr in (None, self._address)
 
         if self._conn_lost and self._address:
-            if self._conn_lost >= 5:
+            if self._conn_lost >= constants.LOG_THRESHOLD_FOR_CONNLOST_WRITES:
                 tulip_log.warning('socket.send() raised exception.')
             self._conn_lost += 1
             return
@@ -675,7 +681,7 @@ class _SelectorDatagramTransport(transports.DatagramTransport):
         self._closing = True
         self._event_loop.remove_reader(self._fileno)
         if not self._buffer:
-            self._call_connection_lost(None)
+            self._event_loop.call_soon(self._call_connection_lost, None)
 
     def _fatal_error(self, exc):
         tulip_log.exception('Fatal error for %s', self)
@@ -687,7 +693,7 @@ class _SelectorDatagramTransport(transports.DatagramTransport):
         self._event_loop.remove_reader(self._fileno)
         if self._address and isinstance(exc, ConnectionRefusedError):
             self._protocol.connection_refused(exc)
-        self._call_connection_lost(exc)
+        self._event_loop.call_soon(self._call_connection_lost, exc)
 
     def _call_connection_lost(self, exc):
         try:

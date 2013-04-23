@@ -5,20 +5,17 @@ import unittest
 from tulip import events
 from tulip import streams
 from tulip import tasks
-from tulip import test_utils
 
 
-class StreamReaderTests(test_utils.LogTrackingTestCase):
+class StreamReaderTests(unittest.TestCase):
 
     DATA = b'line1\nline2\nline3\n'
 
     def setUp(self):
-        super().setUp()
         self.event_loop = events.new_event_loop()
         events.set_event_loop(self.event_loop)
 
     def tearDown(self):
-        super().tearDown()
         self.event_loop.close()
 
     def test_feed_empty_data(self):
@@ -124,8 +121,6 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         self.assertEqual(len(b'\n chunk4')-1, stream.byte_count)
 
     def test_readline_limit_with_existing_data(self):
-        self.suppress_log_errors()
-
         stream = streams.StreamReader(3)
         stream.feed_data(b'li')
         stream.feed_data(b'ne1\nline2\n')
@@ -145,8 +140,6 @@ class StreamReaderTests(test_utils.LogTrackingTestCase):
         self.assertEqual(2, stream.byte_count)
 
     def test_readline_limit(self):
-        self.suppress_log_errors()
-
         stream = streams.StreamReader(7)
 
         def cb():

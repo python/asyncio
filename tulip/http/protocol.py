@@ -1,8 +1,9 @@
 """Http related helper utils."""
 
-__all__ = ['HttpStreamReader',
-           'HttpMessage', 'Request', 'Response',
-           'RawHttpMessage', 'RequestLine', 'ResponseStatus']
+__all__ = ['HttpMessage', 'Request', 'Response',
+           'RawRequestMessage', 'RawResponseMessage',
+           'http_request_parser', 'http_response_parser',
+           'http_payload_parser']
 
 import collections
 import functools
@@ -10,87 +11,50 @@ import http.server
 import itertools
 import re
 import sys
-import time
 import zlib
 from wsgiref.handlers import format_date_time
 
 import tulip
-from . import errors
+from tulip.http import errors
 
 METHRE = re.compile('[A-Z0-9$-_.]+')
 VERSRE = re.compile('HTTP/(\d+).(\d+)')
-HDRRE = re.compile(b"[\x00-\x1F\x7F()<>@,;:\[\]={} \t\\\\\"]")
-CONTINUATION = (b' ', b'\t')
+HDRRE = re.compile('[\x00-\x1F\x7F()<>@,;:\[\]={} \t\\\\\"]')
+CONTINUATION = (' ', '\t')
+EOF_MARKER = object()
+EOL_MARKER = object()
+
 RESPONSES = http.server.BaseHTTPRequestHandler.responses
 
-RequestLine = collections.namedtuple(
-    'RequestLine', ['method', 'uri', 'version'])
+
+RawRequestMessage = collections.namedtuple(
+    'RawRequestLine',
+    ['method', 'path', 'version', 'headers', 'should_close', 'compression'])
 
 
-ResponseStatus = collections.namedtuple(
-    'ResponseStatus', ['version', 'code', 'reason'])
+RawResponseMessage = collections.namedtuple(
+    'RawResponseStatus',
+    ['version', 'code', 'reason', 'headers', 'should_close', 'compression'])
 
 
-RawHttpMessage = collections.namedtuple(
-    'RawHttpMessage', ['headers', 'payload', 'should_close', 'compression'])
+def http_request_parser(max_line_size=8190,
+                        max_headers=32768, max_field_size=8190):
+    """Read request status line. Exception errors.BadStatusLine
+    could be raised in case of any errors in status line.
+    Returns RawRequestMessage.
+    """
+    out, buf = yield
 
+    try:
+        # read http message (request line + headers)
+        raw_data = yield from buf.readuntil(
+            b'\r\n\r\n', max_headers, errors.LineTooLong)
+        lines = raw_data.decode('ascii', 'surrogateescape').splitlines(True)
 
-class HttpStreamReader(tulip.StreamReader):
-
-    MAX_HEADERS = 32768
-    MAX_HEADERFIELD_SIZE = 8190
-
-    # if _parser is set, feed_data and feed_eof sends data into
-    # _parser instead of self. is it being used as stream redirection for
-    # _parse_chunked_payload, _parse_length_payload and _parse_eof_payload
-    _parser = None
-
-    def feed_data(self, data):
-        """_parser is a generator, if _parser is set, feed_data sends
-        incoming data into the generator untile generator stops."""
-        if self._parser:
-            try:
-                self._parser.send(data)
-            except StopIteration as exc:
-                self._parser = None
-                if exc.value:
-                    self.feed_data(exc.value)
-        else:
-            super().feed_data(data)
-
-    def feed_eof(self):
-        """_parser is a generator, if _parser is set feed_eof throws
-        StreamEofException into this generator."""
-        if self._parser:
-            try:
-                self._parser.throw(StreamEofException())
-            except StopIteration:
-                self._parser = None
-
-        super().feed_eof()
-
-    @tulip.coroutine
-    def read_request_line(self):
-        """Read request status line. Exception errors.BadStatusLine
-        could be raised in case of any errors in status line.
-        Returns three values (method, uri, version)
-
-        Example:
-
-            GET /path HTTP/1.1
-
-            >> yield from reader.read_request_line()
-            ('GET', '/path', (1, 1))
-
-        """
-        bline = yield from self.readline()
+        # request line
+        line = lines[0]
         try:
-            line = bline.decode('ascii').rstrip()
-        except UnicodeDecodeError:
-            raise errors.BadStatusLine(bline) from None
-
-        try:
-            method, uri, version = line.split(None, 2)
+            method, path, version = line.split(None, 2)
         except ValueError:
             raise errors.BadStatusLine(line) from None
 
@@ -105,33 +69,37 @@ class HttpStreamReader(tulip.StreamReader):
             raise errors.BadStatusLine(version)
         version = (int(match.group(1)), int(match.group(2)))
 
-        return RequestLine(method, uri, version)
+        # read headers
+        headers, close, compression = parse_headers(
+            lines, max_line_size, max_headers, max_field_size)
+        if close is None:
+            close = version <= (1, 0)
 
-    @tulip.coroutine
-    def read_response_status(self):
-        """Read response status line. Exception errors.BadStatusLine
-        could be raised in case of any errors in status line.
-        Returns three values (version, status_code, reason)
+        out.feed_data(
+            RawRequestMessage(
+                method, path, version, headers, close, compression))
+        out.feed_eof()
+    except tulip.EofStream:
+        # Presumably, the server closed the connection before
+        # sending a valid response.
+        pass
 
-        Example:
 
-            HTTP/1.1 200 Ok
+def http_response_parser(max_line_size=8190,
+                         max_headers=32768, max_field_size=8190):
+    """Read response status line and headers.
 
-            >> yield from reader.read_response_status()
-            ((1, 1), 200, 'Ok')
+    BadStatusLine  could be raised in case of any errors in status line.
+    Returns RawResponseMessage"""
+    out, buf = yield
 
-        """
-        bline = yield from self.readline()
-        if not bline:
-            # Presumably, the server closed the connection before
-            # sending a valid response.
-            raise errors.BadStatusLine(bline)
+    try:
+        # read http message (response line + headers)
+        raw_data = yield from buf.readuntil(
+            b'\r\n\r\n', max_line_size+max_headers, errors.LineTooLong)
+        lines = raw_data.decode('ascii', 'surrogateescape').splitlines(True)
 
-        try:
-            line = bline.decode('ascii').rstrip()
-        except UnicodeDecodeError:
-            raise errors.BadStatusLine(bline) from None
-
+        line = lines[0]
         try:
             version, status = line.split(None, 1)
         except ValueError:
@@ -157,307 +125,210 @@ class HttpStreamReader(tulip.StreamReader):
         if status < 100 or status > 999:
             raise errors.BadStatusLine(line)
 
-        return ResponseStatus(version, status, reason.strip())
+        # read headers
+        headers, close, compression = parse_headers(
+            lines, max_line_size, max_headers, max_field_size)
+        if close is None:
+            close = version <= (1, 0)
 
-    @tulip.coroutine
-    def read_headers(self):
-        """Read and parses RFC2822 headers from a stream.
+        out.feed_data(
+            RawResponseMessage(
+                version, status, reason.strip(), headers, close, compression))
+        out.feed_eof()
+    except tulip.EofStream:
+        # Presumably, the server closed the connection before
+        # sending a valid response.
+        raise errors.BadStatusLine(b'') from None
 
-        Line continuations are supported. Returns list of header name
-        and value pairs. Header name is in upper case.
-        """
-        size = 0
-        headers = []
 
-        line = yield from self.readline()
+def parse_headers(lines, max_line_size, max_headers, max_field_size):
+    """Parses RFC2822 headers from a stream.
 
-        while line not in (b'\r\n', b'\n'):
-            header_length = len(line)
+    Line continuations are supported. Returns list of header name
+    and value pairs. Header name is in upper case.
+    """
+    close_conn = None
+    encoding = None
+    headers = collections.deque()
 
-            # Parse initial header name : value pair.
-            sep_pos = line.find(b':')
-            if sep_pos < 0:
-                raise ValueError('Invalid header {}'.format(line.strip()))
+    lines_idx = 1
+    line = lines[1]
 
-            name, value = line[:sep_pos], line[sep_pos+1:]
-            name = name.rstrip(b' \t').upper()
-            if HDRRE.search(name):
-                raise ValueError('Invalid header name {}'.format(name))
+    while line not in ('\r\n', '\n'):
+        header_length = len(line)
 
-            name = name.strip().decode('ascii', 'surrogateescape')
-            value = [value.lstrip()]
+        # Parse initial header name : value pair.
+        try:
+            name, value = line.split(':', 1)
+        except ValueError:
+            raise ValueError('Invalid header: {}'.format(line)) from None
 
-            # next line
-            line = yield from self.readline()
+        name = name.strip(' \t').upper()
+        if HDRRE.search(name):
+            raise ValueError('Invalid header name: {}'.format(name))
 
-            # consume continuation lines
-            continuation = line.startswith(CONTINUATION)
+        # next line
+        lines_idx += 1
+        line = lines[lines_idx]
 
-            if continuation:
-                while continuation:
-                    header_length += len(line)
-                    if header_length > self.MAX_HEADERFIELD_SIZE:
-                        raise errors.LineTooLong(
-                            'limit request headers fields size')
-                    value.append(line)
+        # consume continuation lines
+        continuation = line[0] in CONTINUATION
 
-                    line = yield from self.readline()
-                    continuation = line.startswith(CONTINUATION)
-            else:
-                if header_length > self.MAX_HEADERFIELD_SIZE:
+        if continuation:
+            value = [value]
+            while continuation:
+                header_length += len(line)
+                if header_length > max_field_size:
                     raise errors.LineTooLong(
                         'limit request headers fields size')
+                value.append(line)
 
-            # total headers size
-            size += header_length
-            if size >= self.MAX_HEADERS:
-                raise errors.LineTooLong('limit request headers fields')
-
-            headers.append(
-                (name,
-                 b''.join(value).rstrip().decode('ascii', 'surrogateescape')))
-
-        return headers
-
-    def _parse_chunked_payload(self):
-        """Chunked transfer encoding parser."""
-        stream = yield
-
-        try:
-            data = bytearray()
-
-            while True:
-                # read line
-                if b'\n' not in data:
-                    data.extend((yield))
-                    continue
-
-                line, data = data.split(b'\n', 1)
-
-                # Read the next chunk size from the file
-                i = line.find(b';')
-                if i >= 0:
-                    line = line[:i]  # strip chunk-extensions
-                try:
-                    size = int(line, 16)
-                except ValueError:
-                    raise errors.IncompleteRead(b'') from None
-
-                if size == 0:
-                    break
-
-                # read chunk
-                while len(data) < size:
-                    data.extend((yield))
-
-                # feed stream
-                stream.feed_data(data[:size])
-
-                data = data[size:]
-
-                # toss the CRLF at the end of the chunk
-                while len(data) < 2:
-                    data.extend((yield))
-
-                data = data[2:]
-
-            # read and discard trailer up to the CRLF terminator
-            while True:
-                if b'\n' in data:
-                    line, data = data.split(b'\n', 1)
-                    if line in (b'\r', b''):
-                        break
-                else:
-                    data.extend((yield))
-
-            # stream eof
-            stream.feed_eof()
-            return data
-
-        except StreamEofException:
-            stream.set_exception(errors.IncompleteRead(b''))
-        except errors.IncompleteRead as exc:
-            stream.set_exception(exc)
-
-    def _parse_length_payload(self, length):
-        """Read specified amount of bytes."""
-        stream = yield
-
-        try:
-            data = bytearray()
-            while length:
-                data.extend((yield))
-
-                data_len = len(data)
-                if data_len <= length:
-                    stream.feed_data(data)
-                    data = bytearray()
-                    length -= data_len
-                else:
-                    stream.feed_data(data[:length])
-                    data = data[length:]
-                    length = 0
-
-            stream.feed_eof()
-            return data
-        except StreamEofException:
-            stream.set_exception(errors.IncompleteRead(b''))
-
-    def _parse_eof_payload(self):
-        """Read all bytes untile eof."""
-        stream = yield
-
-        try:
-            while True:
-                stream.feed_data((yield))
-        except StreamEofException:
-            stream.feed_eof()
-
-    @tulip.coroutine
-    def read_message(self, version=(1, 1),
-                     length=None, compression=True, readall=False):
-        """Read RFC2822 headers and message payload from a stream.
-
-        read_message() automatically decompress gzip and deflate content
-        encoding. To prevent decompression pass compression=False.
-
-        Returns tuple of headers, payload stream, should close flag,
-        compression type.
-        """
-        # load headers
-        headers = yield from self.read_headers()
-
-        # payload params
-        chunked = False
-        encoding = None
-        close_conn = None
-
-        for name, value in headers:
-            if name == 'CONTENT-LENGTH':
-                length = value
-            elif name == 'TRANSFER-ENCODING':
-                chunked = value.lower() == 'chunked'
-            elif name == 'SEC-WEBSOCKET-KEY1':
-                length = 8
-            elif name == 'CONNECTION':
-                v = value.lower()
-                if v == 'close':
-                    close_conn = True
-                elif v == 'keep-alive':
-                    close_conn = False
-            elif compression and name == 'CONTENT-ENCODING':
-                enc = value.lower()
-                if enc in ('gzip', 'deflate'):
-                    encoding = enc
-
-        if close_conn is None:
-            close_conn = version <= (1, 0)
-
-        # payload parser
-        if chunked:
-            parser = self._parse_chunked_payload()
-
-        elif length is not None:
-            try:
-                length = int(length)
-            except ValueError:
-                raise errors.InvalidHeader('CONTENT-LENGTH') from None
-
-            if length < 0:
-                raise errors.InvalidHeader('CONTENT-LENGTH')
-
-            parser = self._parse_length_payload(length)
+                # next line
+                lines_idx += 1
+                line = lines[lines_idx]
+                continuation = line[0] in CONTINUATION
+            value = ''.join(value)
         else:
-            if readall:
-                parser = self._parse_eof_payload()
+            if header_length > max_field_size:
+                raise errors.LineTooLong('limit request headers fields size')
+
+        value = value.strip()
+
+        # keep-alive and encoding
+        if name == 'CONNECTION':
+            v = value.lower()
+            if v == 'close':
+                close_conn = True
+            elif v == 'keep-alive':
+                close_conn = False
+        elif name == 'CONTENT-ENCODING':
+            enc = value.lower()
+            if enc in ('gzip', 'deflate'):
+                encoding = enc
+
+        headers.append((name, value))
+
+    return headers, close_conn, encoding
+
+
+def http_payload_parser(message, length=None, compression=True, readall=False):
+    out, buf = yield
+
+    # payload params
+    chunked = False
+    for name, value in message.headers:
+        if name == 'CONTENT-LENGTH':
+            length = value
+        elif name == 'TRANSFER-ENCODING':
+            chunked = value.lower() == 'chunked'
+        elif name == 'SEC-WEBSOCKET-KEY1':
+            length = 8
+
+    # payload decompression wrapper
+    if compression and message.compression:
+        out = DeflateBuffer(out, message.compression)
+
+    # payload parser
+    if chunked:
+        yield from parse_chunked_payload(out, buf)
+
+    elif length is not None:
+        try:
+            length = int(length)
+        except ValueError:
+            raise errors.InvalidHeader('CONTENT-LENGTH') from None
+
+        if length < 0:
+            raise errors.InvalidHeader('CONTENT-LENGTH')
+        elif length > 0:
+            yield from parse_length_payload(out, buf, length)
+    else:
+        if readall:
+            yield from parse_eof_payload(out, buf)
+
+    out.feed_eof()
+
+
+def parse_chunked_payload(out, buf):
+    """Chunked transfer encoding parser."""
+    try:
+        while True:
+            # read next chunk size
+            #line = yield from buf.readline(8196)
+            line = yield from buf.readuntil(b'\r\n', 8196)
+
+            i = line.find(b';')
+            if i >= 0:
+                line = line[:i]  # strip chunk-extensions
             else:
-                parser = self._parse_length_payload(0)
+                line = line.strip()
+            try:
+                size = int(line, 16)
+            except ValueError:
+                raise errors.IncompleteRead(b'') from None
 
-        next(parser)
+            if size == 0:  # eof marker
+                break
 
-        payload = stream = tulip.StreamReader()
+            # read chunk and feed buffer
+            while size:
+                chunk = yield from buf.readsome(size)
+                out.feed_data(chunk)
+                size = size - len(chunk)
 
-        # payload decompression wrapper
-        if encoding is not None:
-            stream = DeflateStream(stream, encoding)
+            # toss the CRLF at the end of the chunk
+            yield from buf.skip(2)
 
-        try:
-            # initialize payload parser with stream, stream is being
-            # used by parser as destination stream
-            parser.send(stream)
-        except StopIteration:
-            pass
-        else:
-            # feed existing buffer to payload parser
-            self.byte_count = 0
-            while self.buffer:
-                try:
-                    parser.send(self.buffer.popleft())
-                except StopIteration as exc:
-                    parser = None
+        # read and discard trailer up to the CRLF terminator
+        yield from buf.skipuntil(b'\r\n')
 
-                    # parser is done
-                    buf = b''.join(self.buffer)
-                    self.buffer.clear()
-
-                    # re-add remaining data back to buffer
-                    if exc.value:
-                        self.feed_data(exc.value)
-
-                    if buf:
-                        self.feed_data(buf)
-
-                    break
-
-            # parser still require more data
-            if parser is not None:
-                if self.eof:
-                    try:
-                        parser.throw(StreamEofException())
-                    except StopIteration as exc:
-                        pass
-                else:
-                    self._parser = parser
-
-        return RawHttpMessage(headers, payload, close_conn, encoding)
+    except tulip.EofStream:
+        raise errors.IncompleteRead(b'') from None
 
 
-class StreamEofException(Exception):
-    """Internal exception: eof received."""
+def parse_length_payload(out, buf, length):
+    """Read specified amount of bytes."""
+    try:
+        while length:
+            chunk = yield from buf.readsome(length)
+            out.feed_data(chunk)
+            length -= len(chunk)
+
+    except tulip.EofStream:
+        raise errors.IncompleteRead(b'') from None
 
 
-class DeflateStream:
+def parse_eof_payload(out, buf):
+    """Read all bytes untile eof."""
+    while True:
+        out.feed_data((yield from buf.readsome()))
+
+
+class DeflateBuffer:
     """DeflateStream decomress stream and feed data into specified stream."""
 
-    def __init__(self, stream, encoding):
-        self.stream = stream
+    def __init__(self, out, encoding):
+        self.out = out
         zlib_mode = (16 + zlib.MAX_WBITS
                      if encoding == 'gzip' else -zlib.MAX_WBITS)
 
         self.zlib = zlib.decompressobj(wbits=zlib_mode)
 
-    def set_exception(self, exc):
-        self.stream.set_exception(exc)
-
     def feed_data(self, chunk):
         try:
             chunk = self.zlib.decompress(chunk)
-        except:
-            self.stream.set_exception(errors.IncompleteRead(b''))
+        except Exception:
+            raise errors.IncompleteRead(b'') from None
 
         if chunk:
-            self.stream.feed_data(chunk)
+            self.out.feed_data(chunk)
 
     def feed_eof(self):
-        self.stream.feed_data(self.zlib.flush())
+        self.out.feed_data(self.zlib.flush())
         if not self.zlib.eof:
-            self.stream.set_exception(errors.IncompleteRead(b''))
+            raise errors.IncompleteRead(b'')
 
-        self.stream.feed_eof()
-
-
-EOF_MARKER = object()
-EOL_MARKER = object()
+        self.out.feed_eof()
 
 
 def wrap_payload_filter(func):
@@ -606,22 +477,26 @@ class HttpMessage:
         self.transport = transport
         self.version = version
         self.closing = close
-        self.keepalive = False
+        self.keepalive = None
 
         self.chunked = False
         self.length = None
         self.upgrade = False
-        self.headers = []
+        self.headers = collections.deque()
         self.headers_sent = False
 
     def force_close(self):
         self.closing = True
+        self.keepalive = False
 
     def force_chunked(self):
         self.chunked = True
 
     def keep_alive(self):
-        return self.keepalive and not self.closing
+        if self.keepalive is None:
+            return not self.closing
+        else:
+            return self.keepalive
 
     def is_headers_sent(self):
         return self.headers_sent
@@ -638,14 +513,14 @@ class HttpMessage:
             self.length = int(value)
 
         if name == 'CONNECTION':
-            val = value.lower().strip()
+            val = value.lower()
             # handle websocket
-            if val == 'upgrade':
+            if 'upgrade' in val:
                 self.upgrade = True
             # connection keep-alive
-            elif val == 'close':
+            elif 'close' in val:
                 self.keepalive = False
-            elif val == 'keep-alive':
+            elif 'keep-alive' in val:
                 self.keepalive = True
 
         elif name == 'UPGRADE':
@@ -688,31 +563,28 @@ class HttpMessage:
 
         next(self.writer)
 
-        # status line
-        self.transport.write(self.status_line.encode('ascii'))
+        self._add_default_headers()
 
-        # send headers
-        self.transport.write(
-            ('{}\r\n\r\n'.format('\r\n'.join(
-                ('{}: {}'.format(k, v) for k, v in
-                 itertools.chain(self._default_headers(), self.headers))))
-             ).encode('ascii'))
+        # status + headers
+        hdrs = ''.join(itertools.chain(
+            (self.status_line,),
+            *((k, ': ', v, '\r\n') for k, v in self.headers)))
 
-    def _default_headers(self):
+        self.transport.write(hdrs.encode('ascii') + b'\r\n')
+
+    def _add_default_headers(self):
         # set the connection header
         if self.upgrade:
             connection = 'upgrade'
-        elif self.keep_alive():
+        elif not self.closing if self.keepalive is None else self.keepalive:
             connection = 'keep-alive'
         else:
             connection = 'close'
 
-        headers = [('CONNECTION', connection)]
-
         if self.chunked:
-            headers.append(('TRANSFER-ENCODING', 'chunked'))
+            self.headers.appendleft(('TRANSFER-ENCODING', 'chunked'))
 
-        return headers
+        self.headers.appendleft(('CONNECTION', connection))
 
     def write(self, chunk):
         """write() writes chunk of data to a steram by using different writers.
@@ -739,7 +611,7 @@ class HttpMessage:
     def write_eof(self):
         self.write(EOF_MARKER)
         try:
-            self.writer.throw(StreamEofException())
+            self.writer.throw(tulip.EofStream())
         except StopIteration:
             pass
 
@@ -748,7 +620,7 @@ class HttpMessage:
         while True:
             try:
                 chunk = yield
-            except StreamEofException:
+            except tulip.EofStream:
                 self.transport.write(b'0\r\n\r\n')
                 break
 
@@ -761,7 +633,7 @@ class HttpMessage:
         while True:
             try:
                 chunk = yield
-            except StreamEofException:
+            except tulip.EofStream:
                 break
 
             if length:
@@ -777,7 +649,7 @@ class HttpMessage:
         while True:
             try:
                 chunk = yield
-            except StreamEofException:
+            except tulip.EofStream:
                 break
 
             self.transport.write(chunk)
@@ -848,32 +720,28 @@ class Response(HttpMessage):
         super().__init__(transport, http_version, close)
 
         self.status = status
-        self.status_line = 'HTTP/{0[0]}.{0[1]} {1} {2}\r\n'.format(
-            http_version, status, RESPONSES[status][0])
+        self.status_line = 'HTTP/{}.{} {} {}\r\n'.format(
+            http_version[0], http_version[1], status, RESPONSES[status][0])
 
-    def _default_headers(self):
-        headers = super()._default_headers()
-        headers.extend((('DATE', format_date_time(time.time())),
-                        ('SERVER', self.SERVER_SOFTWARE)))
-
-        return headers
+    def _add_default_headers(self):
+        super()._add_default_headers()
+        self.headers.extend((('DATE', format_date_time(None)),
+                             ('SERVER', self.SERVER_SOFTWARE),))
 
 
 class Request(HttpMessage):
 
     HOP_HEADERS = ()
 
-    def __init__(self, transport, method, uri,
+    def __init__(self, transport, method, path,
                  http_version=(1, 1), close=False):
         super().__init__(transport, http_version, close)
 
         self.method = method
-        self.uri = uri
+        self.path = path
         self.status_line = '{0} {1} HTTP/{2[0]}.{2[1]}\r\n'.format(
-            method, uri, http_version)
+            method, path, http_version)
 
-    def _default_headers(self):
-        headers = super()._default_headers()
-        headers.append(('USER-AGENT', self.SERVER_SOFTWARE))
-
-        return headers
+    def _add_default_headers(self):
+        super()._add_default_headers()
+        self.headers.append(('USER-AGENT', self.SERVER_SOFTWARE))

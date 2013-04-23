@@ -7,15 +7,11 @@ import unittest.mock
 import tulip
 from tulip.http import wsgi
 from tulip.http import protocol
-from tulip.test_utils import LogTrackingTestCase
 
 
-class HttpWsgiServerProtocolTests(LogTrackingTestCase):
+class HttpWsgiServerProtocolTests(unittest.TestCase):
 
     def setUp(self):
-        super().setUp()
-        self.suppress_log_errors()
-
         self.loop = tulip.new_event_loop()
         tulip.set_event_loop(self.loop)
 
@@ -25,14 +21,16 @@ class HttpWsgiServerProtocolTests(LogTrackingTestCase):
         self.transport.get_extra_info.return_value = '127.0.0.1'
 
         self.payload = b'data'
-        self.info = protocol.RequestLine('GET', '/path', (1, 0))
         self.headers = []
-        self.message = protocol.RawHttpMessage(
-            self.headers, b'data', True, 'deflate')
+        self.message = protocol.RawRequestMessage(
+            'GET', '/path', (1, 0), self.headers, True, 'deflate')
+        self.payload = tulip.DataBuffer()
+        self.payload.feed_data(b'data')
+        self.payload.feed_data(b'data')
+        self.payload.feed_eof()
 
     def tearDown(self):
         self.loop.close()
-        super().tearDown()
 
     def test_ctor(self):
         srv = wsgi.WSGIServerHttpProtocol(self.wsgi)
@@ -43,7 +41,7 @@ class HttpWsgiServerProtocolTests(LogTrackingTestCase):
         srv = wsgi.WSGIServerHttpProtocol(self.wsgi, **kw)
         srv.stream = self.stream
         srv.transport = self.transport
-        return srv.create_wsgi_environ(self.info, self.message, self.payload)
+        return srv.create_wsgi_environ(self.message, self.payload)
 
     def test_environ(self):
         environ = self._make_one()
@@ -86,7 +84,8 @@ class HttpWsgiServerProtocolTests(LogTrackingTestCase):
         self.assertEqual(environ['SERVER_PROTOCOL'], 'HTTP/1.0')
 
     def test_environ_host_port_header(self):
-        self.info = protocol.RequestLine('GET', '/path', (1, 1))
+        self.message = protocol.RawRequestMessage(
+            'GET', '/path', (1, 1), self.headers, True, 'deflate')
         self.headers.append(('HOST', 'python.org:443'))
         environ = self._make_one()
 
@@ -125,7 +124,7 @@ class HttpWsgiServerProtocolTests(LogTrackingTestCase):
         srv.stream = self.stream
         srv.transport = self.transport
 
-        resp = srv.create_wsgi_response(self.info, self.message)
+        resp = srv.create_wsgi_response(self.message)
         self.assertIsInstance(resp, wsgi.WsgiResponse)
 
     def test_wsgi_response_start_response(self):
@@ -133,7 +132,7 @@ class HttpWsgiServerProtocolTests(LogTrackingTestCase):
         srv.stream = self.stream
         srv.transport = self.transport
 
-        resp = srv.create_wsgi_response(self.info, self.message)
+        resp = srv.create_wsgi_response(self.message)
         resp.start_response(
             '200 OK', [('CONTENT-TYPE', 'text/plain')])
         self.assertEqual(resp.status, '200 OK')
@@ -144,7 +143,7 @@ class HttpWsgiServerProtocolTests(LogTrackingTestCase):
         srv.stream = self.stream
         srv.transport = self.transport
 
-        resp = srv.create_wsgi_response(self.info, self.message)
+        resp = srv.create_wsgi_response(self.message)
         resp.start_response(
             '200 OK', [('CONTENT-TYPE', 'text/plain')], ['', ValueError()])
         self.assertEqual(resp.status, '200 OK')
@@ -155,7 +154,7 @@ class HttpWsgiServerProtocolTests(LogTrackingTestCase):
         srv.stream = self.stream
         srv.transport = self.transport
 
-        resp = srv.create_wsgi_response(self.info, self.message)
+        resp = srv.create_wsgi_response(self.message)
         resp.start_response('200 OK', [('CONTENT-TYPE', 'text/plain')])
 
         self.assertRaises(
@@ -191,7 +190,7 @@ class HttpWsgiServerProtocolTests(LogTrackingTestCase):
         srv.transport = self.transport
 
         self.loop.run_until_complete(
-            srv.handle_request(self.info, self.message))
+            srv.handle_request(self.message, self.payload))
 
         content = b''.join(
             [c[1][0] for c in self.transport.write.mock_calls])
@@ -207,16 +206,16 @@ class HttpWsgiServerProtocolTests(LogTrackingTestCase):
         stream = tulip.StreamReader()
         stream.feed_data(b'data')
         stream.feed_eof()
-        self.message = protocol.RawHttpMessage(
-            self.headers, stream, True, 'deflate')
-        self.info = protocol.RequestLine('GET', '/path', (1, 1))
+
+        self.message = protocol.RawRequestMessage(
+            'GET', '/path', (1, 1), self.headers, True, 'deflate')
 
         srv = wsgi.WSGIServerHttpProtocol(wsgi_app, True)
         srv.stream = self.stream
         srv.transport = self.transport
 
         self.loop.run_until_complete(
-            srv.handle_request(self.info, self.message))
+            srv.handle_request(self.message, self.payload))
 
         content = b''.join(
             [c[1][0] for c in self.transport.write.mock_calls])
@@ -234,7 +233,7 @@ class HttpWsgiServerProtocolTests(LogTrackingTestCase):
         srv.transport = self.transport
 
         self.loop.run_until_complete(
-            srv.handle_request(self.info, self.message))
+            srv.handle_request(self.message, self.payload))
 
         content = b''.join(
             [c[1][0] for c in self.transport.write.mock_calls])

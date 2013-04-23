@@ -1,8 +1,10 @@
 """Http client functional tests."""
 
+import gc
 import io
 import os.path
 import http.cookies
+import unittest
 
 import tulip
 import tulip.http
@@ -10,18 +12,15 @@ from tulip import test_utils
 from tulip.http import client
 
 
-class HttpClientFunctionalTests(test_utils.LogTrackingTestCase):
+class HttpClientFunctionalTests(unittest.TestCase):
 
     def setUp(self):
-        super().setUp()
-        self.suppress_log_errors()
-
         self.loop = tulip.new_event_loop()
         tulip.set_event_loop(self.loop)
 
     def tearDown(self):
         self.loop.close()
-        super().tearDown()
+        gc.collect()
 
     def test_HTTP_200_OK_METHOD(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
@@ -323,7 +322,7 @@ class HttpClientFunctionalTests(test_utils.LogTrackingTestCase):
             self.assertEqual(r.status, 200)
 
             content = self.loop.run_until_complete(r.content.read())
-            self.assertIn(b'"Cookie": "test1=123; test3=456"', content)
+            self.assertIn(b'"Cookie": "test1=123; test3=456"', bytes(content))
 
     def test_chunked(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:

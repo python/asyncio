@@ -12,14 +12,11 @@ from tulip import events
 from tulip import futures
 from tulip import protocols
 from tulip import tasks
-from tulip import test_utils
 
 
-class BaseEventLoopTests(test_utils.LogTrackingTestCase):
+class BaseEventLoopTests(unittest.TestCase):
 
     def setUp(self):
-        super().setUp()
-
         self.event_loop = base_events.BaseEventLoop()
         self.event_loop._selector = unittest.mock.Mock()
         self.event_loop._selector.registered_count.return_value = 1
@@ -75,12 +72,15 @@ class BaseEventLoopTests(test_utils.LogTrackingTestCase):
         self.assertFalse(self.event_loop._ready)
 
     def test_wrap_future(self):
-        f = futures.Future()
+        f = futures.Future(event_loop=self.event_loop)
         self.assertIs(self.event_loop.wrap_future(f), f)
+        f.cancel()
 
     def test_wrap_future_concurrent(self):
         f = concurrent.futures.Future()
-        self.assertIsInstance(self.event_loop.wrap_future(f), futures.Future)
+        fut = self.event_loop.wrap_future(f)
+        self.assertIsInstance(fut, futures.Future)
+        fut.cancel()
 
     def test_set_default_executor(self):
         executor = unittest.mock.Mock()
@@ -132,7 +132,7 @@ class BaseEventLoopTests(test_utils.LogTrackingTestCase):
             AssertionError, self.event_loop.run_in_executor,
             None, events.Timer(10, cb, ()))
 
-    def test_run_once_in_executor_canceled(self):
+    def test_run_once_in_executor_cancelled(self):
         def cb():
             pass
         h = events.Handle(cb, ())
@@ -141,8 +141,9 @@ class BaseEventLoopTests(test_utils.LogTrackingTestCase):
         f = self.event_loop.run_in_executor(None, h)
         self.assertIsInstance(f, futures.Future)
         self.assertTrue(f.done())
+        self.assertIsNone(f.result())
 
-    def test_run_once_in_executor(self):
+    def test_run_once_in_executor_plain(self):
         def cb():
             pass
         h = events.Handle(cb, ())
@@ -160,6 +161,8 @@ class BaseEventLoopTests(test_utils.LogTrackingTestCase):
         res = self.event_loop.run_in_executor(executor, h)
         self.assertIs(f, res)
         self.assertTrue(executor.submit.called)
+
+        f.cancel()  # Don't complain about abandoned Future.
 
     def test_run_once(self):
         self.event_loop._run_once = unittest.mock.Mock()
@@ -253,7 +256,6 @@ class BaseEventLoopTests(test_utils.LogTrackingTestCase):
 
     @unittest.mock.patch('tulip.base_events.socket')
     def test_create_connection_mutiple_errors(self, m_socket):
-        self.suppress_log_errors()
 
         class MyProto(protocols.Protocol):
             pass

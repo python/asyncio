@@ -6,8 +6,12 @@ __all__ = ['CancelledError', 'TimeoutError',
            ]
 
 import concurrent.futures._base
+import io
+import logging
+import traceback
 
 from . import events
+from .log import tulip_log
 
 # States for Future.
 _PENDING = 'PENDING'
@@ -18,6 +22,8 @@ _FINISHED = 'FINISHED'
 Error = concurrent.futures._base.Error
 CancelledError = concurrent.futures.CancelledError
 TimeoutError = concurrent.futures.TimeoutError
+
+STACK_DEBUG = logging.DEBUG - 1  # heavy-duty debugging
 
 
 class InvalidStateError(Error):
@@ -52,8 +58,13 @@ class Future:
     _result = None
     _exception = None
     _timeout_handle = None
+    _event_loop = None
 
     _blocking = False  # proper use of future (yield vs yield from)
+
+    # result of the future has to be requested
+    _debug_stack = None
+    _debug_result_requested = False
 
     def __init__(self, *, event_loop=None, timeout=None):
         """Initialize the future.
@@ -71,6 +82,12 @@ class Future:
         if timeout is not None:
             self._timeout_handle = self._event_loop.call_later(
                 timeout, self.cancel)
+
+        if __debug__:
+            if self._event_loop.get_log_level() <= STACK_DEBUG:
+                out = io.StringIO()
+                traceback.print_stack(file=out)
+                self._debug_stack = out.getvalue()
 
     def __repr__(self):
         res = self.__class__.__name__
@@ -151,6 +168,8 @@ class Future:
         the future is done and has an exception set, this exception is raised.
         Timeout values other than 0 are not supported.
         """
+        if __debug__:
+            self._debug_result_requested = True
         if timeout != 0:
             raise InvalidTimeoutError
         if self._state == _CANCELLED:
@@ -169,6 +188,8 @@ class Future:
         CancelledError.  If the future isn't done yet, raises
         InvalidStateError.  Timeout values other than 0 are not supported.
         """
+        if __debug__:
+            self._debug_result_requested = True
         if timeout != 0:
             raise InvalidTimeoutError
         if self._state == _CANCELLED:
@@ -253,3 +274,36 @@ class Future:
             yield self  # This tells Task to wait for completion.
         assert self.done(), "yield from wasn't used with future"
         return self.result()  # May raise too.
+
+    if __debug__:
+        def __del__(self):
+            if (not self._debug_result_requested and
+                self._state != _CANCELLED and
+                self._event_loop is not None):
+
+                level = self._event_loop.get_log_level()
+                if level > logging.WARNING:
+                    return
+
+                r_self = repr(self)
+
+                if self._state == _PENDING:
+                    tulip_log.error(
+                        'Future abandoned before completion: %s', r_self)
+                    if (self._debug_stack and level <= STACK_DEBUG):
+                        tulip_log.error(self._debug_stack)
+
+                else:
+                    exc = self._exception
+                    if exc is not None:
+                        tulip_log.exception(
+                            'Future raised an exception and '
+                            'nobody caught it: %s', r_self,
+                            exc_info=(exc.__class__, exc, exc.__traceback__))
+                        if (self._debug_stack and level <= STACK_DEBUG):
+                            tulip_log.error(self._debug_stack)
+                    else:
+                        tulip_log.error(
+                            'Future result has not been requested: %s', r_self)
+                        if (self._debug_stack and level <= STACK_DEBUG):
+                            tulip_log.error(self._debug_stack)

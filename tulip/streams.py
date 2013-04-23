@@ -24,8 +24,10 @@ class StreamReader:
     def set_exception(self, exc):
         self._exception = exc
 
-        if self.waiter is not None:
-            self.waiter.set_exception(exc)
+        waiter = self.waiter
+        if waiter is not None:
+            self.waiter = None
+            waiter.set_exception(exc)
 
     def feed_eof(self):
         self.eof = True

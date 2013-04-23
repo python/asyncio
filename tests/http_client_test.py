@@ -8,26 +8,7 @@ import urllib.parse
 import tulip
 import tulip.http
 
-from tulip.http.client import HttpProtocol, HttpRequest, HttpResponse
-
-
-class HttpProtocolTests(unittest.TestCase):
-
-    def test_protocol(self):
-        transport = unittest.mock.Mock()
-
-        p = HttpProtocol()
-        p.connection_made(transport)
-        self.assertIs(p.transport, transport)
-        self.assertIsInstance(p.stream, tulip.http.HttpStreamReader)
-
-        p.data_received(b'data')
-        self.assertEqual(4, p.stream.byte_count)
-
-        p.eof_received()
-        self.assertTrue(p.stream.eof)
-
-        p.connection_lost(None)
+from tulip.http.client import HttpRequest, HttpResponse
 
 
 class HttpResponseTests(unittest.TestCase):
@@ -37,16 +18,16 @@ class HttpResponseTests(unittest.TestCase):
         tulip.set_event_loop(self.loop)
 
         self.transport = unittest.mock.Mock()
-        self.stream = tulip.http.HttpStreamReader(self.transport)
+        self.stream = tulip.StreamBuffer()
         self.response = HttpResponse('get', 'http://python.org')
 
     def tearDown(self):
         self.loop.close()
 
     def test_close(self):
-        self.response._transport = self.transport
+        self.response.transport = self.transport
         self.response.close()
-        self.assertIsNone(self.response._transport)
+        self.assertIsNone(self.response.transport)
         self.assertTrue(self.transport.close.called)
         self.response.close()
         self.response.close()
@@ -65,7 +46,7 @@ class HttpRequestTests(unittest.TestCase):
         tulip.set_event_loop(self.loop)
 
         self.transport = unittest.mock.Mock()
-        self.stream = tulip.http.HttpStreamReader(self.transport)
+        self.stream = tulip.StreamBuffer()
 
     def tearDown(self):
         self.loop.close()
@@ -173,11 +154,11 @@ class HttpRequestTests(unittest.TestCase):
     def test_no_content_length(self):
         req = HttpRequest('get', 'http://python.org')
         req.send(self.transport)
-        self.assertEqual(0, req.headers.get('Content-Length'))
+        self.assertEqual('0', req.headers.get('Content-Length'))
 
         req = HttpRequest('head', 'http://python.org')
         req.send(self.transport)
-        self.assertEqual(0, req.headers.get('Content-Length'))
+        self.assertEqual('0', req.headers.get('Content-Length'))
 
     def test_path_is_not_double_encoded(self):
         req = HttpRequest('get', "http://0.0.0.0/get/test case")

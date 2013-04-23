@@ -8,9 +8,8 @@ import logging
 import traceback
 
 import tulip
-import tulip.http
+from tulip.http import errors
 
-from . import errors
 
 RESPONSES = http.server.BaseHTTPRequestHandler.responses
 DEFAULT_ERROR_MESSAGE = """
@@ -40,13 +39,14 @@ class ServerHttpProtocol(tulip.Protocol):
     _request_count = 0
     _request_handle = None
 
-    def __init__(self, log=logging, debug=False):
+    def __init__(self, *, log=logging, debug=False, **kwargs):
+        self.__dict__.update(kwargs)
         self.log = log
         self.debug = debug
 
     def connection_made(self, transport):
         self.transport = transport
-        self.stream = tulip.http.HttpStreamReader()
+        self.stream = tulip.StreamBuffer()
         self._request_handle = self.start()
 
     def data_received(self, data):
@@ -63,7 +63,7 @@ class ServerHttpProtocol(tulip.Protocol):
     def close(self):
         self._closing = True
 
-    def log_access(self, status, info, message, *args, **kw):
+    def log_access(self, status, message, *args, **kw):
         pass
 
     def log_debug(self, *args, **kw):
@@ -82,18 +82,23 @@ class ServerHttpProtocol(tulip.Protocol):
         or response handling. In case of any error connection is being closed.
         """
 
-        while True:
+        while self._request_handle is not None:
             info = None
             message = None
             self._request_count += 1
 
             try:
-                info = yield from self.stream.read_request_line()
-                message = yield from self.stream.read_message(info.version)
+                httpstream = self.stream.set_parser(
+                    tulip.http.http_request_parser())
 
-                handler = self.handle_request(info, message)
+                message = yield from httpstream.read()
+
+                payload = self.stream.set_parser(
+                    tulip.http.http_payload_parser(message))
+
+                handler = self.handle_request(message, payload)
                 if (inspect.isgenerator(handler) or
-                    isinstance(handler, tulip.Future)):
+                        isinstance(handler, tulip.Future)):
                     yield from handler
 
             except tulip.CancelledError:
@@ -108,50 +113,52 @@ class ServerHttpProtocol(tulip.Protocol):
                     self.transport.close()
                     break
 
-        self._request_handle = None
-
-    def handle_error(self, status=500, info=None,
-                     message=None, exc=None, headers=None):
+    def handle_error(self, status=500,
+                     message=None, payload=None, exc=None, headers=None):
         """Handle errors.
 
         Returns http response with specific status code. Logs additional
         information. It always closes current connection."""
-
-        if status == 500:
-            self.log_exception("Error handling request")
-
         try:
-            reason, msg = RESPONSES[status]
-        except KeyError:
-            status = 500
-            reason, msg = '???', ''
+            if self._request_handle is None:
+                # client has been disconnected during writing.
+                return
 
-        if self.debug and exc is not None:
+            if status == 500:
+                self.log_exception("Error handling request")
+
             try:
-                tb = traceback.format_exc()
-                msg += '<br><h2>Traceback:</h2>\n<pre>{}</pre>'.format(tb)
-            except:
-                pass
+                reason, msg = RESPONSES[status]
+            except KeyError:
+                status = 500
+                reason, msg = '???', ''
 
-        self.log_access(status, info, message)
+            if self.debug and exc is not None:
+                try:
+                    tb = traceback.format_exc()
+                    msg += '<br><h2>Traceback:</h2>\n<pre>{}</pre>'.format(tb)
+                except:
+                    pass
 
-        html = DEFAULT_ERROR_MESSAGE.format(
-            status=status, reason=reason, message=msg)
+            self.log_access(status, message)
 
-        response = tulip.http.Response(self.transport, status, close=True)
-        response.add_headers(
-            ('Content-Type', 'text/html'),
-            ('Content-Length', str(len(html))))
-        if headers is not None:
-            response.add_headers(*headers)
-        response.send_headers()
+            html = DEFAULT_ERROR_MESSAGE.format(
+                status=status, reason=reason, message=msg)
 
-        response.write(html.encode('ascii'))
-        response.write_eof()
+            response = tulip.http.Response(self.transport, status, close=True)
+            response.add_headers(
+                ('Content-Type', 'text/html'),
+                ('Content-Length', str(len(html))))
+            if headers is not None:
+                response.add_headers(*headers)
+            response.send_headers()
 
-        self.close()
+            response.write(html.encode('ascii'))
+            response.write_eof()
+        finally:
+            self.close()
 
-    def handle_request(self, info, message):
+    def handle_request(self, message, payload):
         """Handle a single http request.
 
         Subclass should override this method. By default it always
@@ -161,7 +168,7 @@ class ServerHttpProtocol(tulip.Protocol):
         message: tulip.http.RawHttpMessage instance
         """
         response = tulip.http.Response(
-            self.transport, 404, http_version=info.version, close=True)
+            self.transport, 404, http_version=message.version, close=True)
 
         body = b'Page Not Found!'
 
@@ -173,4 +180,4 @@ class ServerHttpProtocol(tulip.Protocol):
         response.write_eof()
 
         self.close()
-        self.log_access(404, info, message)
+        self.log_access(404, message)

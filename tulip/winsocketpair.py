@@ -24,7 +24,7 @@ def socketpair(family=socket.AF_INET, type=socket.SOCK_STREAM, proto=0):
         csock.connect((addr, port))
     except (BlockingIOError, InterruptedError):
         pass
-    except:
+    except Exception:
         lsock.close()
         csock.close()
         raise

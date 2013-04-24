@@ -135,12 +135,12 @@ class ChildProcess:
 
     @tulip.task
     def start_server(self, writer):
-        sock = yield from self.loop.start_serving(
+        socks = yield from self.loop.start_serving(
             lambda: HttpServer(
                 debug=True, parent=writer, clients=self.clients),
             sock=self.sock)
         print('Starting srv worker process {} on {}'.format(
-            os.getpid(), sock.getsockname()))
+            os.getpid(), socks[0].getsockname()))
 
     @tulip.task
     def heartbeat(self):

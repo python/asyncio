@@ -14,8 +14,10 @@ except ImportError:
 import sys
 import threading
 import time
+import errno
 import unittest
 import unittest.mock
+from test.support import find_unused_port
 
 
 from tulip import futures
@@ -689,7 +691,9 @@ class EventLoopTestsMixin:
             return proto
 
         f = self.event_loop.start_serving(factory, '0.0.0.0', 0)
-        sock = self.event_loop.run_until_complete(f)
+        socks = self.event_loop.run_until_complete(f)
+        self.assertEqual(len(socks), 1)
+        sock = socks[0]
         host, port = sock.getsockname()
         self.assertEqual(host, '0.0.0.0')
         client = socket.socket()
@@ -744,7 +748,7 @@ class EventLoopTestsMixin:
         f = self.event_loop.start_serving(
             factory, '127.0.0.1', 0, ssl=sslcontext)
 
-        sock = self.event_loop.run_until_complete(f)
+        sock = self.event_loop.run_until_complete(f)[0]
         host, port = sock.getsockname()
         self.assertEqual(host, '127.0.0.1')
 
@@ -788,7 +792,7 @@ class EventLoopTestsMixin:
         sock_ob.bind(('0.0.0.0', 0))
 
         f = self.event_loop.start_serving(TestMyProto, sock=sock_ob)
-        sock = self.event_loop.run_until_complete(f)
+        sock = self.event_loop.run_until_complete(f)[0]
         self.assertIs(sock, sock_ob)
 
         host, port = sock.getsockname()
@@ -797,12 +801,34 @@ class EventLoopTestsMixin:
         client.connect(('127.0.0.1', port))
         client.send(b'xxx')
         self.event_loop.run_until_complete(proto)
-        sock.close()
         client.close()
+
+        f = self.event_loop.start_serving(MyProto, host=host, port=port)
+        with self.assertRaises(socket.error) as cm:
+            self.event_loop.run_until_complete(f)
+        self.assertEqual(cm.exception.errno, errno.EADDRINUSE)
+
+    @unittest.skipUnless(socket.has_ipv6, 'IPv6 not supported')
+    def test_start_serving_dual_stack(self):
+        port = find_unused_port()
+        f = self.event_loop.start_serving(MyProto, host=None, port=port)
+        socks = self.event_loop.run_until_complete(f)
+        with socket.socket() as client:
+            client.connect(('127.0.0.1', port))
+            client.send(b'xxx')
+            self.event_loop.run_once()
+            self.event_loop.run_once()
+        with socket.socket(socket.AF_INET6) as client:
+            client.connect(('::1', port))
+            client.send(b'xxx')
+            self.event_loop.run_once()
+            self.event_loop.run_once()
+        for s in socks:
+            s.close()
 
     def test_stop_serving(self):
         f = self.event_loop.start_serving(MyProto, '0.0.0.0', 0)
-        sock = self.event_loop.run_until_complete(f)
+        sock = self.event_loop.run_until_complete(f)[0]
         host, port = sock.getsockname()
 
         client = socket.socket()

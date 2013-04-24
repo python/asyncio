@@ -10,6 +10,7 @@ import sys
 import tulip
 import tulip.http
 from tulip.http import websocket
+import tulip.selectors
 
 WS_KEY = b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
@@ -47,9 +48,13 @@ def start_client(loop, url):
     writer = websocket.WebSocketWriter(response.transport)
 
     # input reader
-    loop.add_reader(
-        sys.stdin.fileno(),
-        lambda: writer.send(name + b': ' + sys.stdin.readline().encode()))
+    def stdin_callback():
+        line = sys.stdin.buffer.readline()
+        if not line:
+            loop.stop()
+        else:
+            writer.send(name + b': ' + line)
+    loop.add_reader(sys.stdin.fileno(), stdin_callback)
 
     @tulip.coroutine
     def dispatch():
@@ -84,7 +89,9 @@ if __name__ == '__main__':
 
     url = 'http://{}:{}'.format(args.host, args.port)
 
-    loop = tulip.get_event_loop()
+    loop = tulip.SelectorEventLoop(tulip.selectors.SelectSelector())
+    tulip.set_event_loop(loop)
+
     loop.set_log_level(50)
     loop.add_signal_handler(signal.SIGINT, loop.stop)
     tulip.Task(start_client(loop, url))

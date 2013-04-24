@@ -820,19 +820,33 @@ class EventLoopTestsMixin:
 
     @unittest.skipUnless(socket.has_ipv6, 'IPv6 not supported')
     def test_start_serving_dual_stack(self):
+        f_proto = futures.Future()
+
+        class TestMyProto(MyProto):
+            def connection_made(self, transport):
+                super().connection_made(transport)
+                f_proto.set_result(self)
+
         port = find_unused_port()
-        f = self.event_loop.start_serving(MyProto, host=None, port=port)
+        f = self.event_loop.start_serving(TestMyProto, host=None, port=port)
         socks = self.event_loop.run_until_complete(f)
-        with socket.socket() as client:
-            client.connect(('127.0.0.1', port))
-            client.send(b'xxx')
-            self.event_loop.run_once()
-            self.event_loop.run_once()
-        with socket.socket(socket.AF_INET6) as client:
-            client.connect(('::1', port))
-            client.send(b'xxx')
-            self.event_loop.run_once()
-            self.event_loop.run_once()
+        client = socket.socket()
+        client.connect(('127.0.0.1', port))
+        client.send(b'xxx')
+        proto = self.event_loop.run_until_complete(f_proto)
+        proto.transport.close()
+        self.event_loop.run_once()  # windows, issue #35
+        client.close()
+
+        f_proto = futures.Future()
+        client = socket.socket(socket.AF_INET6)
+        client.connect(('::1', port))
+        client.send(b'xxx')
+        proto = self.event_loop.run_until_complete(f_proto)
+        proto.transport.close()
+        self.event_loop.run_once()  # windows, issue #35
+        client.close()
+
         for s in socks:
             s.close()
 
@@ -873,16 +887,16 @@ class EventLoopTestsMixin:
     def test_start_serving_cant_bind(self, m_socket):
 
         class Err(socket.error):
-            pass
+            strerror = 'error'
 
         m_socket.error = socket.error
         m_socket.getaddrinfo.return_value = [
             (2, 1, 6, '', ('127.0.0.1', 10100))]
         m_sock = m_socket.socket.return_value = unittest.mock.Mock()
-        m_sock.setsockopt.side_effect = Err
+        m_sock.bind.side_effect = Err
 
         fut = self.event_loop.start_serving(MyProto, '0.0.0.0', 0)
-        self.assertRaises(Err, self.event_loop.run_until_complete, fut)
+        self.assertRaises(OSError, self.event_loop.run_until_complete, fut)
         self.assertTrue(m_sock.close.called)
 
     @unittest.mock.patch('tulip.base_events.socket')

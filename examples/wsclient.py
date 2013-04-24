@@ -1,4 +1,6 @@
+#!/usr/bin/env python3
 """websocket cmd client for wssrv.py example."""
+import argparse
 import base64
 import hashlib
 import os
@@ -12,10 +14,9 @@ from tulip.http import websocket
 WS_KEY = b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
 
-def start_client(loop):
+def start_client(loop, url):
     name = input('Please enter your name: ').encode()
 
-    url = 'http://localhost:8080/'
     sec_key = base64.b64encode(os.urandom(16))
 
     # send request
@@ -66,7 +67,25 @@ def start_client(loop):
     yield from dispatch()
 
 
+ARGS = argparse.ArgumentParser(
+    description="websocket console client for wssrv.py example.")
+ARGS.add_argument(
+    '--host', action="store", dest='host',
+    default='127.0.0.1', help='Host name')
+ARGS.add_argument(
+    '--port', action="store", dest='port',
+    default=8080, type=int, help='Port number')
+
 if __name__ == '__main__':
+    args = ARGS.parse_args()
+    if ':' in args.host:
+        args.host, port = args.host.split(':', 1)
+        args.port = int(port)
+
+    url = 'http://{}:{}'.format(args.host, args.port)
+
     loop = tulip.get_event_loop()
+    loop.set_log_level(50)
     loop.add_signal_handler(signal.SIGINT, loop.stop)
-    loop.run_until_complete(start_client(loop))
+    tulip.Task(start_client(loop, url))
+    loop.run_forever()

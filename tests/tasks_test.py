@@ -78,6 +78,7 @@ class TaskTests(unittest.TestCase):
         def notmuch():
             yield from []
             return 'abc'
+
         t = notmuch()
         t.add_done_callback(Dummy())
         self.assertEqual(repr(t), 'Task(<notmuch>)<PENDING, [Dummy()]>')
@@ -137,6 +138,52 @@ class TaskTests(unittest.TestCase):
             self.event_loop.run_until_complete, t)
         self.assertTrue(t.done())
         self.assertFalse(t.cancel())
+
+    def test_cancel_yield(self):
+        @tasks.task
+        def task():
+            yield
+            yield
+            return 12
+
+        t = task()
+        self.event_loop.run_once()  # start coro
+        t.cancel()
+        self.assertRaises(
+            futures.CancelledError,
+            self.event_loop.run_until_complete, t)
+        self.assertTrue(t.done())
+        self.assertFalse(t.cancel())
+
+    def test_cancel_done_future(self):
+        fut1 = futures.Future()
+        fut2 = futures.Future()
+        fut3 = futures.Future()
+
+        @tasks.task
+        def task():
+            yield from fut1
+            try:
+                yield from fut2
+            except futures.CancelledError:
+                pass
+            yield from fut3
+
+        t = task()
+        self.event_loop.run_once()
+        fut1.set_result(None)
+        t.cancel()
+        self.event_loop.run_once()  # process fut1 result, delay cancel
+        self.assertFalse(t.done())
+        self.event_loop.run_once()  # cancel fut2, but coro still alive
+        self.assertFalse(t.done())
+        self.event_loop.run_once()  # cancel fut3
+        self.assertTrue(t.done())
+
+        self.assertEqual(fut1.result(), None)
+        self.assertTrue(fut2.cancelled())
+        self.assertTrue(fut3.cancelled())
+        self.assertTrue(t.cancelled())
 
     def test_future_timeout(self):
         @tasks.coroutine

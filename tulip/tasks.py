@@ -65,6 +65,9 @@ def task(func):
     return task_wrapper
 
 
+_marker = object()
+
+
 class Task(futures.Future):
     """A coroutine wrapped in a Future."""
 
@@ -89,7 +92,7 @@ class Task(futures.Future):
         return res
 
     def cancel(self):
-        if self.done():
+        if self.done() or self._must_cancel:
             return False
         self._must_cancel = True
         # _step() will call super().cancel() to call the callbacks.
@@ -107,16 +110,18 @@ class Task(futures.Future):
         if not self.done():
             return self._step()
 
-    def _step(self, value=None, exc=None):
+    def _step(self, value=_marker, exc=None):
         assert not self.done(), \
             '_step(): already done: {!r}, {!r}, {!r}'.format(self, value, exc)
 
-        self._fut_waiter = None
-
         # We'll call either coro.throw(exc) or coro.send(value).
-        if self._must_cancel:
+        # Task cancel has to be delayed if current waiter future is done.
+        if self._must_cancel and exc is None and value is _marker:
             exc = futures.CancelledError
+
         coro = self._coro
+        value = None if value is _marker else value
+        self._fut_waiter = None
         try:
             if exc is not None:
                 result = coro.throw(exc)
@@ -141,7 +146,6 @@ class Task(futures.Future):
                 self.set_exception(exc)
             raise
         else:
-            # XXX No check for self._must_cancel here?
             if isinstance(result, futures.Future):
                 if not result._blocking:
                     result.set_exception(
@@ -152,6 +156,10 @@ class Task(futures.Future):
                 result._blocking = False
                 result.add_done_callback(self._wakeup)
                 self._fut_waiter = result
+
+                # task cancellation has been delayed.
+                if self._must_cancel:
+                    self._fut_waiter.cancel()
 
             elif isinstance(result, concurrent.futures.Future):
                 # This ought to be more efficient than wrap_future(),
@@ -175,7 +183,7 @@ class Task(futures.Future):
                             RuntimeError(
                                 'Task received bad yield: {!r}'.format(result)))
                     else:
-                        self._event_loop.call_soon(self._step)
+                        self._event_loop.call_soon(self._step_maybe)
 
     def _wakeup(self, future):
         try:

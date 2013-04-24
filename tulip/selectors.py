@@ -415,10 +415,10 @@ if 'kqueue' in globals():
 # Choose the best implementation: roughly, epoll|kqueue > poll > select.
 # select() also can't accept a FD > FD_SETSIZE (usually around 1024)
 if 'KqueueSelector' in globals():
-    Selector = KqueueSelector
+    DefaultSelector = KqueueSelector
 elif 'EpollSelector' in globals():
-    Selector = EpollSelector
+    DefaultSelector = EpollSelector
 elif 'PollSelector' in globals():
-    Selector = PollSelector
+    DefaultSelector = PollSelector
 else:
-    Selector = SelectSelector
+    DefaultSelector = SelectSelector

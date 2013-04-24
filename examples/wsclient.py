@@ -42,8 +42,8 @@ def start_client(loop):
         raise ValueError("Handshake error - Invalid challenge response")
 
     # switch to websocket protocol
-    stream = response.stream.set_parser(websocket.websocket_parser())
-    writer = websocket.websocket_writer(response.transport)
+    stream = response.stream.set_parser(websocket.WebSocketParser())
+    writer = websocket.WebSocketWriter(response.transport)
 
     # input reader
     loop.add_reader(
@@ -56,11 +56,11 @@ def start_client(loop):
             msg = yield from stream.read()
             if msg is None:
                 break
-            elif msg.opcode == websocket.OPCODE_PING:
+            elif msg.tp == websocket.MSG_PING:
                 writer.pong()
-            elif msg.opcode == websocket.OPCODE_TEXT:
+            elif msg.tp == websocket.MSG_TEXT:
                 print(msg.data.strip())
-            elif msg.opcode == websocket.OPCODE_CLOSE:
+            elif msg.tp == websocket.MSG_CLOSE:
                 break
 
     yield from dispatch()

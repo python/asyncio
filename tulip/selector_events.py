@@ -43,7 +43,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         super().__init__()
 
         if selector is None:
-            selector = selectors.Selector()
+            selector = selectors.DefaultSelector()
         tulip_log.debug('Using selector: %s', selector.__class__.__name__)
         self._selector = selector
         self._make_self_pipe()

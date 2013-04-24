@@ -361,7 +361,7 @@ class ParserBuffer(bytearray):
             stop_line = self.find(stop, self.offset)
             if stop_line >= 0:
                 end = stop_line + stop_len
-                self.size = self.size - end - self.offset
+                self.size = self.size - (end - self.offset)
                 self.offset = end
                 return
             else:

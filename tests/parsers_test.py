@@ -551,13 +551,12 @@ class ParserBuffer(unittest.TestCase):
             pass
         self.assertEqual(b'456\n', bytes(buf))
 
-        p = buf.readuntil(b'\n')
+        p = buf.skipuntil(b'\n')
         try:
             next(p)
-        except StopIteration as exc:
-            res = exc.value
+        except StopIteration:
+            pass
         self.assertEqual(b'', bytes(buf))
-        self.assertEqual(b'456\n', res)
 
     def test_lines_parser(self):
         out = parsers.DataBuffer()

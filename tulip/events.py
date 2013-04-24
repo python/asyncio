@@ -12,6 +12,7 @@ __all__ = ['EventLoopPolicy', 'DefaultEventLoopPolicy',
 
 import sys
 import threading
+import socket
 
 from .log import tulip_log
 
@@ -182,7 +183,36 @@ class AbstractEventLoop:
         raise NotImplementedError
 
     def start_serving(self, protocol_factory, host=None, port=None, *,
-                      family=0, proto=0, flags=0, sock=None):
+                      family=socket.AF_UNSPEC, flags=socket.AI_PASSIVE,
+                      sock=None, backlog=100, ssl=False, reuse_address=None):
+        """Creates a TCP server bound to host and port and return
+        a list of socket objects which will later be handled by
+        protocol_factory.
+
+        If host is an empty string or None all interfaces are assumed
+        and a list of multiple sockets will be returned (most likely
+        one for IPv4 and another one for IPv6).
+
+        family can be set to either AF_INET or AF_INET6 to force the
+        socket to use IPv4 or IPv6. If not set it will be determined
+        from host (defaults to AF_UNSPEC).
+
+        flags is a bitmask for getaddrinfo().
+
+        sock can optionally be specified in order to use a preexisting
+        socket object.
+
+        backlog is the maximum number of queued connections passed to
+        listen() (defaults to 100).
+
+        ssl can be set to True to enable SSL over the accepted
+        connections.
+
+        reuse_address tells the kernel to reuse a local socket in
+        TIME_WAIT state, without waiting for its natural timeout to
+        expire. If not specified will automatically be set to True on
+        UNIX.
+        """
         raise NotImplementedError
 
     def stop_serving(self, sock):

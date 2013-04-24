@@ -20,6 +20,8 @@ import heapq
 import logging
 import socket
 import time
+import os
+import sys
 
 from . import events
 from . import futures
@@ -413,45 +415,64 @@ class BaseEventLoop(events.AbstractEventLoop):
     # TODO: Or create_server()?
     @tasks.task
     def start_serving(self, protocol_factory, host=None, port=None, *,
-                      family=0, proto=0, flags=0, backlog=100, sock=None,
-                      ssl=False):
+                      family=socket.AF_UNSPEC, flags=socket.AI_PASSIVE,
+                      sock=None, backlog=100, ssl=False, reuse_address=None):
         """XXX"""
         if host is not None or port is not None:
             if sock is not None:
                 raise ValueError(
                     "host, port and sock can not be specified at the same time")
 
+            AF_INET6 = getattr(socket, 'AF_INET6', 0)
+            if reuse_address is None:
+                reuse_address = os.name == 'posix' and sys.platform != 'cygwin'
+            sockets = []
+            if host == "":
+                host = None
+
             infos = yield from self.getaddrinfo(
                 host, port, family=family,
-                type=socket.SOCK_STREAM, proto=proto, flags=flags)
-
+                type=socket.SOCK_STREAM, proto=0, flags=flags)
             if not infos:
                 raise socket.error('getaddrinfo() returned empty list')
 
-            # TODO: Maybe we want to bind every address in the list
-            # instead of the first one that works?
-            exceptions = []
-            for family, type, proto, cname, address in infos:
-                sock = socket.socket(family=family, type=type, proto=proto)
-                try:
-                    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                    sock.bind(address)
-                except socket.error as exc:
-                    sock.close()
-                    exceptions.append(exc)
-                else:
-                    break
-            else:
-                raise exceptions[0]
+            completed = False
+            try:
+                for res in infos:
+                    af, socktype, proto, canonname, sa = res
+                    sock = socket.socket(af, socktype, proto)
+                    sockets.append(sock)
+                    if reuse_address:
+                        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR,
+                                        True)
+                    # Disable IPv4/IPv6 dual stack support (enabled by
+                    # default on Linux) which makes a single socket
+                    # listen on both address families.
+                    if af == AF_INET6 and hasattr(socket, "IPPROTO_IPV6"):
+                        sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY,
+                                        True)
+                    try:
+                        sock.bind(sa)
+                    except socket.error as err:
+                        raise socket.error(err.errno, "error while attempting "
+                                      "to bind on address %r: %s" \
+                                      % (sa, err.strerror.lower()))
+                completed = True
+            finally:
+                if not completed:
+                    for sock in sockets:
+                        sock.close()
+        else:
+            if sock is None:
+                raise ValueError(
+                    "host and port was not specified and no sock specified")
+            sockets = [sock]
 
-        elif sock is None:
-            raise ValueError(
-                "host and port was not specified and no sock specified")
-
-        sock.listen(backlog)
-        sock.setblocking(False)
-        self._start_serving(protocol_factory, sock, ssl)
-        return sock
+        for sock in sockets:
+            sock.listen(backlog)
+            sock.setblocking(False)
+            self._start_serving(protocol_factory, sock, ssl)
+        return sockets
 
     @tasks.coroutine
     def connect_read_pipe(self, protocol_factory, pipe):

@@ -124,7 +124,7 @@ class ChildProcess:
         loop.add_signal_handler(signal.SIGINT, stop)
 
         f = loop.start_serving(lambda: HttpServer(debug=True), sock=self.sock)
-        x = loop.run_until_complete(f)
+        x = loop.run_until_complete(f[0])
         print('Starting srv worker process {} on {}'.format(
             os.getpid(), x.getsockname()))
 

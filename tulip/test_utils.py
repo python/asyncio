@@ -98,13 +98,13 @@ def run_test_server(loop, *, host='127.0.0.1', port=0,
         thread_loop.set_log_level(logging.CRITICAL)
         tulip.set_event_loop(thread_loop)
 
-        sock = thread_loop.run_until_complete(
+        socks = thread_loop.run_until_complete(
             thread_loop.start_serving(
                 TestHttpServer, host, port, ssl=sslcontext))
 
         waiter = tulip.Future()
         loop.call_soon_threadsafe(
-            fut.set_result, (thread_loop, waiter, sock.getsockname()))
+            fut.set_result, (thread_loop, waiter, socks[0].getsockname()))
 
         thread_loop.run_until_complete(waiter)
         thread_loop.stop()

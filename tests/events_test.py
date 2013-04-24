@@ -783,8 +783,8 @@ class EventLoopTestsMixin:
         proto = futures.Future()
 
         class TestMyProto(MyProto):
-            def __init__(self):
-                super().__init__()
+            def connection_made(self, transport):
+                super().connection_made(transport)
                 proto.set_result(self)
 
         sock_ob = socket.socket(type=socket.SOCK_STREAM)
@@ -801,7 +801,17 @@ class EventLoopTestsMixin:
         client.connect(('127.0.0.1', port))
         client.send(b'xxx')
         self.event_loop.run_until_complete(proto)
+        sock.close()
         client.close()
+
+    def test_start_serving_addrinuse(self):
+        sock_ob = socket.socket(type=socket.SOCK_STREAM)
+        sock_ob.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock_ob.bind(('0.0.0.0', 0))
+
+        f = self.event_loop.start_serving(MyProto, sock=sock_ob)
+        sock = self.event_loop.run_until_complete(f)[0]
+        host, port = sock.getsockname()
 
         f = self.event_loop.start_serving(MyProto, host=host, port=port)
         with self.assertRaises(socket.error) as cm:

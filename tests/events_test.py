@@ -152,9 +152,6 @@ class EventLoopTestsMixin:
         gc.collect()
         super().tearDown()
 
-    def test_run(self):
-        self.event_loop.run()  # Returns immediately.
-
     def test_run_nesting(self):
         @tasks.coroutine
         def coro():
@@ -202,13 +199,14 @@ class EventLoopTestsMixin:
 
         def callback(arg):
             results.append(arg)
+            self.event_loop.stop()
 
         self.event_loop.call_later(0.1, callback, 'hello world')
         t0 = time.monotonic()
-        self.event_loop.run()
+        self.event_loop.run_forever()
         t1 = time.monotonic()
         self.assertEqual(results, ['hello world'])
-        self.assertTrue(t1-t0 >= 0.09)
+        self.assertTrue(0.09 <= t1-t0 <= 0.12)
 
     def test_call_repeatedly(self):
         results = []
@@ -218,7 +216,7 @@ class EventLoopTestsMixin:
 
         self.event_loop.call_repeatedly(0.03, callback, 'ho')
         self.event_loop.call_later(0.1, self.event_loop.stop)
-        self.event_loop.run()
+        self.event_loop.run_forever()
         self.assertEqual(results, ['ho', 'ho', 'ho'])
 
     def test_call_soon(self):
@@ -226,9 +224,10 @@ class EventLoopTestsMixin:
 
         def callback(arg1, arg2):
             results.append((arg1, arg2))
+            self.event_loop.stop()
 
         self.event_loop.call_soon(callback, 'hello', 'world')
-        self.event_loop.run()
+        self.event_loop.run_forever()
         self.assertEqual(results, [('hello', 'world')])
 
     def test_call_soon_with_handle(self):
@@ -236,10 +235,11 @@ class EventLoopTestsMixin:
 
         def callback():
             results.append('yeah')
+            self.event_loop.stop()
 
         handle = events.Handle(callback, ())
         self.assertIs(self.event_loop.call_soon(handle), handle)
-        self.event_loop.run()
+        self.event_loop.run_forever()
         self.assertEqual(results, ['yeah'])
 
     def test_call_soon_threadsafe(self):
@@ -247,15 +247,17 @@ class EventLoopTestsMixin:
 
         def callback(arg):
             results.append(arg)
+            if len(results) >= 2:
+                self.event_loop.stop()
 
-        def run():
+        def run_in_thread():
             self.event_loop.call_soon_threadsafe(callback, 'hello')
 
-        t = threading.Thread(target=run)
+        t = threading.Thread(target=run_in_thread)
         self.event_loop.call_later(0.1, callback, 'world')
         t0 = time.monotonic()
         t.start()
-        self.event_loop.run()
+        self.event_loop.run_forever()
         t1 = time.monotonic()
         t.join()
         self.assertEqual(results, ['hello', 'world'])
@@ -266,10 +268,12 @@ class EventLoopTestsMixin:
 
         def callback(arg):
             results.append(arg)
+            if len(results) >= 2:
+                self.event_loop.stop()
 
         self.event_loop.call_later(0.1, callback, 'world')
         self.event_loop.call_soon_threadsafe(callback, 'hello')
-        self.event_loop.run()
+        self.event_loop.run_forever()
         self.assertEqual(results, ['hello', 'world'])
 
     def test_call_soon_threadsafe_with_handle(self):
@@ -277,6 +281,8 @@ class EventLoopTestsMixin:
 
         def callback(arg):
             results.append(arg)
+            if len(results) >= 2:
+                self.event_loop.stop()
 
         handle = events.Handle(callback, ('hello',))
 
@@ -289,7 +295,7 @@ class EventLoopTestsMixin:
 
         t0 = time.monotonic()
         t.start()
-        self.event_loop.run()
+        self.event_loop.run_forever()
         t1 = time.monotonic()
         t.join()
         self.assertEqual(results, ['hello', 'world'])
@@ -343,7 +349,8 @@ class EventLoopTestsMixin:
         self.event_loop.call_later(0.05, w.send, b'abc')
         self.event_loop.call_later(0.1, w.send, b'def')
         self.event_loop.call_later(0.15, w.close)
-        self.event_loop.run()
+        self.event_loop.call_later(0.16, self.event_loop.stop)
+        self.event_loop.run_forever()
         self.assertEqual(b''.join(bytes_read), b'abcdef')
 
     def test_reader_callback_with_handle(self):
@@ -369,7 +376,8 @@ class EventLoopTestsMixin:
         self.event_loop.call_later(0.05, w.send, b'abc')
         self.event_loop.call_later(0.1, w.send, b'def')
         self.event_loop.call_later(0.15, w.close)
-        self.event_loop.run()
+        self.event_loop.call_later(0.16, self.event_loop.stop)
+        self.event_loop.run_forever()
         self.assertEqual(b''.join(bytes_read), b'abcdef')
 
     def test_reader_callback_cancel(self):
@@ -392,7 +400,8 @@ class EventLoopTestsMixin:
         self.event_loop.call_later(0.05, w.send, b'abc')
         self.event_loop.call_later(0.1, w.send, b'def')
         self.event_loop.call_later(0.15, w.close)
-        self.event_loop.run()
+        self.event_loop.call_later(0.16, self.event_loop.stop)
+        self.event_loop.run_forever()
         self.assertEqual(b''.join(bytes_read), b'abcdef')
 
     def test_writer_callback(self):
@@ -404,7 +413,8 @@ class EventLoopTestsMixin:
             self.assertTrue(self.event_loop.remove_writer(w.fileno()))
 
         self.event_loop.call_later(0.1, remove_writer)
-        self.event_loop.run()
+        self.event_loop.call_later(0.11, self.event_loop.stop)
+        self.event_loop.run_forever()
         w.close()
         data = r.recv(256*1024)
         r.close()
@@ -420,7 +430,8 @@ class EventLoopTestsMixin:
             self.assertTrue(self.event_loop.remove_writer(w.fileno()))
 
         self.event_loop.call_later(0.1, remove_writer)
-        self.event_loop.run()
+        self.event_loop.call_later(0.11, self.event_loop.stop)
+        self.event_loop.run_forever()
         w.close()
         data = r.recv(256*1024)
         r.close()
@@ -433,9 +444,10 @@ class EventLoopTestsMixin:
         def sender():
             w.send(b'x'*256)
             handle.cancel()
+            self.event_loop.stop()
 
         handle = self.event_loop.add_writer(w.fileno(), sender)
-        self.event_loop.run()
+        self.event_loop.run_forever()
         w.close()
         data = r.recv(1024)
         r.close()
@@ -589,11 +601,13 @@ class EventLoopTestsMixin:
 
     def test_create_connection(self):
         with test_utils.run_test_server(self.event_loop) as httpd:
-            f = self.event_loop.create_connection(MyProto, *httpd.address)
+            f = self.event_loop.create_connection(
+                lambda: MyProto(create_future=True),
+                *httpd.address)
             tr, pr = self.event_loop.run_until_complete(f)
             self.assertTrue(isinstance(tr, transports.Transport))
             self.assertTrue(isinstance(pr, protocols.Protocol))
-            self.event_loop.run()
+            self.event_loop.run_until_complete(pr.done)
             self.assertTrue(pr.nbytes > 0)
 
     def test_create_connection_sock(self):
@@ -615,11 +629,12 @@ class EventLoopTestsMixin:
             else:
                 assert False, 'Can not create socket.'
 
-            f = self.event_loop.create_connection(MyProto, sock=sock)
+            f = self.event_loop.create_connection(
+                lambda: MyProto(create_future=True), sock=sock)
             tr, pr = self.event_loop.run_until_complete(f)
             self.assertTrue(isinstance(tr, transports.Transport))
             self.assertTrue(isinstance(pr, protocols.Protocol))
-            self.event_loop.run()
+            self.event_loop.run_until_complete(pr.done)
             self.assertTrue(pr.nbytes > 0)
 
     @unittest.skipIf(ssl is None, 'No ssl module')
@@ -627,14 +642,14 @@ class EventLoopTestsMixin:
         with test_utils.run_test_server(
                 self.event_loop, use_ssl=True) as httpd:
             f = self.event_loop.create_connection(
-                MyProto, *httpd.address, ssl=True)
+                lambda: MyProto(create_future=True), *httpd.address, ssl=True)
             tr, pr = self.event_loop.run_until_complete(f)
             self.assertTrue(isinstance(tr, transports.Transport))
             self.assertTrue(isinstance(pr, protocols.Protocol))
             self.assertTrue('ssl' in tr.__class__.__name__.lower())
             self.assertTrue(
                 hasattr(tr.get_extra_info('socket'), 'getsockname'))
-            self.event_loop.run()
+            self.event_loop.run_until_complete(pr.done)
             self.assertTrue(pr.nbytes > 0)
 
     def test_create_connection_host_port_sock(self):
@@ -1340,8 +1355,6 @@ class AbstractEventLoopTests(unittest.TestCase):
     def test_not_imlemented(self):
         f = unittest.mock.Mock()
         ev_loop = events.AbstractEventLoop()
-        self.assertRaises(
-            NotImplementedError, ev_loop.run)
         self.assertRaises(
             NotImplementedError, ev_loop.run_forever)
         self.assertRaises(

@@ -95,7 +95,7 @@ class _ProactorSocketTransport(transports.Transport):
 
     def close(self):
         self._closing = True
-        if not self._buffer:
+        if not self._buffer and self._write_fut is None:
             self._event_loop.call_soon(self._call_connection_lost, None)
 
     def _fatal_error(self, exc):

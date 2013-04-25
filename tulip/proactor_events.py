@@ -41,7 +41,7 @@ class _ProactorSocketTransport(transports.Transport):
                     return
 
             self._read_fut = self._event_loop._proactor.recv(self._sock, 4096)
-        except ConnectionAbortedError as exc:
+        except (ConnectionAbortedError, ConnectionResetError) as exc:
             if not self._closing:
                 self._fatal_error(exc)
         except OSError as exc:

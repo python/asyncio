@@ -850,7 +850,6 @@ class EventLoopTestsMixin:
         client.send(b'xxx')
         proto = self.event_loop.run_until_complete(f_proto)
         proto.transport.close()
-        self.event_loop.run_once()  # windows, issue #35
         client.close()
 
         f_proto = futures.Future()
@@ -859,7 +858,6 @@ class EventLoopTestsMixin:
         client.send(b'xxx')
         proto = self.event_loop.run_until_complete(f_proto)
         proto.transport.close()
-        self.event_loop.run_once()  # windows, issue #35
         client.close()
 
         for s in socks:

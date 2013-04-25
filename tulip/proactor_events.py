@@ -77,6 +77,9 @@ class _ProactorSocketTransport(transports.Transport):
             self._buffer = []
             if not data:
                 self._write_fut = None
+                if self._closing:
+                    self._event_loop.call_soon(
+                        self._call_connection_lost, None)
                 return
             self._write_fut = self._event_loop._proactor.send(self._sock, data)
         except OSError as exc:
@@ -92,8 +95,6 @@ class _ProactorSocketTransport(transports.Transport):
 
     def close(self):
         self._closing = True
-        if self._write_fut:
-            self._write_fut.cancel()
         if not self._buffer:
             self._event_loop.call_soon(self._call_connection_lost, None)
 

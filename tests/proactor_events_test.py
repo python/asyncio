@@ -152,6 +152,20 @@ class ProactorSocketTransportTests(unittest.TestCase):
         tr._loop_writing(fut)
         self.assertIsNone(tr._write_fut)
 
+    def test_loop_writing_closing(self):
+        fut = tulip.Future()
+        fut.set_result(1)
+
+        tr = _ProactorSocketTransport(
+            self.event_loop, self.sock, self.protocol)
+        self.event_loop.reset_mock()
+        tr._write_fut = fut
+        tr.close()
+        tr._loop_writing(fut)
+        self.assertIsNone(tr._write_fut)
+        self.event_loop.call_soon.assert_called_with(
+            tr._call_connection_lost, None)
+
     def test_abort(self):
         tr = _ProactorSocketTransport(
             self.event_loop, self.sock, self.protocol)
@@ -162,15 +176,21 @@ class ProactorSocketTransportTests(unittest.TestCase):
     def test_close(self):
         tr = _ProactorSocketTransport(
             self.event_loop, self.sock, self.protocol)
-        tr._write_fut = unittest.mock.Mock()
+        self.event_loop.reset_mock()
         tr.close()
-
-        tr._write_fut.cancel.assert_called_with()
         self.event_loop.call_soon.assert_called_with(
             tr._call_connection_lost, None)
         self.assertTrue(tr._closing)
 
-    def test_close_2(self):
+    def test_close_write_fut(self):
+        tr = _ProactorSocketTransport(
+            self.event_loop, self.sock, self.protocol)
+        tr._write_fut = unittest.mock.Mock()
+        self.event_loop.reset_mock()
+        tr.close()
+        self.assertFalse(self.event_loop.call_soon.called)
+
+    def test_close_buffer(self):
         tr = _ProactorSocketTransport(
             self.event_loop, self.sock, self.protocol)
         tr._buffer = [b'data']

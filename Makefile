@@ -1,7 +1,8 @@
 # Some simple testing tasks (sorry, UNIX only).
 
 PYTHON=python3
-VERBOSE=1
+VERBOSE=$(V)
+V=	1
 FLAGS=
 
 test:

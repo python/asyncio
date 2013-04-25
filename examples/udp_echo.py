@@ -1,15 +1,13 @@
-"""UDP echo example.
-
-Start server:
-
-  >> python ./udp_echo.py --server
-
-"""
-
+#!/usr/bin/env python3
+"""UDP echo example."""
+import argparse
 import sys
 import tulip
-
-ADDRESS = ('127.0.0.1', 10000)
+import logging
+try:
+    import signal
+except ImportError:
+    signal = None
 
 
 class MyServerUdpEchoProtocol:
@@ -31,7 +29,7 @@ class MyServerUdpEchoProtocol:
 
 class MyClientUdpEchoProtocol:
 
-    message = 'This is the message. It will be repeated.'
+    message = 'This is the message. It will be echoed.'
 
     def connection_made(self, transport):
         self.transport = transport
@@ -52,22 +50,51 @@ class MyClientUdpEchoProtocol:
         loop.stop()
 
 
-def start_server():
-    loop = tulip.get_event_loop()
-    tulip.Task(loop.create_datagram_endpoint(
-        MyServerUdpEchoProtocol, local_addr=ADDRESS))
-    loop.run_forever()
+def start_server(loop, addr):
+    t = tulip.Task(loop.create_datagram_endpoint(
+        MyServerUdpEchoProtocol, local_addr=addr))
+    loop.run_until_complete(t)
 
 
-def start_client():
-    loop = tulip.get_event_loop()
-    tulip.Task(loop.create_datagram_endpoint(
-        MyClientUdpEchoProtocol, remote_addr=ADDRESS))
-    loop.run_forever()
+def start_client(loop, addr):
+    t = tulip.Task(loop.create_datagram_endpoint(
+        MyClientUdpEchoProtocol, remote_addr=addr))
+    loop.run_until_complete(t)
+
+
+ARGS = argparse.ArgumentParser(description="UDP Echo example.")
+ARGS.add_argument(
+    '--server', action="store_true", dest='server',
+    default=False, help='Run udp server')
+ARGS.add_argument(
+    '--client', action="store_true", dest='client',
+    default=False, help='Run udp client')
+ARGS.add_argument(
+    '--host', action="store", dest='host',
+    default='127.0.0.1', help='Host name')
+ARGS.add_argument(
+    '--port', action="store", dest='port',
+    default=9999, type=int, help='Port number')
 
 
 if __name__ == '__main__':
-    if '--server' in sys.argv:
-        start_server()
+    args = ARGS.parse_args()
+    if ':' in args.host:
+        args.host, port = args.host.split(':', 1)
+        args.port = int(port)
+
+    if (not (args.server or args.client)) or (args.server and args.client):
+        print('Please specify --server or --client\n')
+        ARGS.print_help()
     else:
-        start_client()
+        loop = tulip.get_event_loop()
+        loop.set_log_level(logging.CRITICAL)
+        if signal is not None:
+            loop.add_signal_handler(signal.SIGINT, loop.stop)
+
+        if '--server' in sys.argv:
+            start_server(loop, (args.host, args.port))
+        else:
+            start_client(loop, (args.host, args.port))
+
+        loop.run_forever()

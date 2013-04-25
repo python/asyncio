@@ -192,7 +192,7 @@ class EventLoopTestsMixin:
         t1 = time.monotonic()
         t.join()
         self.assertTrue(called)
-        self.assertTrue(0.09 < t1-t0 <= 0.12)
+        self.assertTrue(0.09 < t1-t0 <= 0.15)
 
     def test_call_later(self):
         results = []

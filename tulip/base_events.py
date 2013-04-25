@@ -94,41 +94,22 @@ class BaseEventLoop(events.AbstractEventLoop):
         """Returns running status of event loop."""
         return self._running
 
-    def run(self):
-        """Run the event loop until nothing left to do or stop() called.
+    def run_forever(self):
+        """Run until stop() is called.
 
-        This keeps going as long as there are either readable and
-        writable file descriptors, or scheduled callbacks (of either
-        variety).
-
-        TODO: Give this a timeout too?
+        TODO: Maybe rename to run().
         """
         if self._running:
             raise RuntimeError('Event loop is running.')
-
         self._running = True
         try:
-            while (self._ready or
-                   self._scheduled or
-                   self._selector.registered_count() > 1):
+            while True:
                 try:
                     self._run_once()
                 except _StopError:
                     break
         finally:
             self._running = False
-
-    def run_forever(self):
-        """Run until stop() is called.
-
-        This only makes sense over run() if you have another thread
-        scheduling callbacks using call_soon_threadsafe().
-        """
-        handle = self.call_repeatedly(24*3600, lambda: None)
-        try:
-            self.run()
-        finally:
-            handle.cancel()
 
     def run_once(self, timeout=0):
         """Run through all callbacks and all I/O polls once.

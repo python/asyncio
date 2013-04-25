@@ -82,11 +82,12 @@ class UnixSubprocessTransport(transports.Transport):
             self._event_loop.remove_writer(self._wstdin)
             os.close(self._wstdin)
             self._wstdin = -1
+            self._maybe_cleanup()
 
     def close(self):
         if not self._eof:
             self.write_eof()
-        # XXX What else?
+        self._maybe_cleanup()
 
     def _fatal_error(self, exc):
         tulip_log.error('Fatal error: %r', exc)
@@ -98,6 +99,16 @@ class UnixSubprocessTransport(transports.Transport):
             self._wstdin = -1
         self._eof = True
         self._buffer = None
+        self._maybe_cleanup(exc)
+
+    _conn_lost_called = False
+
+    def _maybe_cleanup(self, exc=None):
+        if (self._wstdin < 0 and
+            self._rstdout < 0 and
+            not self._conn_lost_called):
+            self._conn_lost_called = True
+            self._event_loop.call_soon(self._protocol.connection_lost, exc)
 
     def _stdin_callback(self):
         data = b''.join(self._buffer)
@@ -116,6 +127,7 @@ class UnixSubprocessTransport(transports.Transport):
                 if self._eof:
                     os.close(self._wstdin)
                     self._wstdin = -1
+                    self._maybe_cleanup()
                 return
 
             elif n > 0:
@@ -136,6 +148,7 @@ class UnixSubprocessTransport(transports.Transport):
                 os.close(self._rstdout)
                 self._rstdout = -1
                 self._event_loop.call_soon(self._protocol.eof_received)
+                self._maybe_cleanup()
 
 
 def _setnonblocking(fd):

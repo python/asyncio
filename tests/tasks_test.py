@@ -33,7 +33,7 @@ class TaskTests(unittest.TestCase):
         def notmuch():
             return 'ok'
         t = tasks.Task(notmuch())
-        self.event_loop.run()
+        self.event_loop.run_until_complete(t)
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'ok')
         self.assertIs(t._event_loop, self.event_loop)
@@ -48,7 +48,7 @@ class TaskTests(unittest.TestCase):
             yield from []
             return 'ko'
         t = notmuch()
-        self.event_loop.run()
+        self.event_loop.run_until_complete(t)
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'ko')
 
@@ -57,7 +57,7 @@ class TaskTests(unittest.TestCase):
         def notmuch():
             return 'ko'
         t = notmuch()
-        self.event_loop.run()
+        self.event_loop.run_until_complete(t)
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'ko')
 
@@ -69,7 +69,7 @@ class TaskTests(unittest.TestCase):
         def notmuch():
             return fut
         t = notmuch()
-        self.event_loop.run()
+        self.event_loop.run_until_complete(t)
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'ko')
 
@@ -481,7 +481,7 @@ class TaskTests(unittest.TestCase):
 
         t = tasks.Task(sleeper(0.1, 'yeah'))
         t0 = time.monotonic()
-        self.event_loop.run()
+        self.event_loop.run_until_complete(t)
         t1 = time.monotonic()
         self.assertTrue(t1-t0 >= 0.09)
         self.assertTrue(t.done())

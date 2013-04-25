@@ -8,6 +8,7 @@ import logging
 import unittest
 
 from tulip import events
+from tulip import futures
 from tulip import protocols
 from tulip import subprocess_transport
 
@@ -17,6 +18,7 @@ class MyProto(protocols.Protocol):
     def __init__(self):
         self.state = 'INITIAL'
         self.nbytes = 0
+        self.done = futures.Future()
 
     def connection_made(self, transport):
         self.transport = transport
@@ -37,6 +39,7 @@ class MyProto(protocols.Protocol):
     def connection_lost(self, exc):
         assert self.state in ('CONNECTED', 'EOF'), self.state
         self.state = 'CLOSED'
+        self.done.set_result(None)
 
 
 class FutureTests(unittest.TestCase):
@@ -51,7 +54,7 @@ class FutureTests(unittest.TestCase):
     def test_unix_subprocess(self):
         p = MyProto()
         subprocess_transport.UnixSubprocessTransport(p, ['/bin/ls', '-lR'])
-        self.event_loop.run()
+        self.event_loop.run_until_complete(p.done)
 
 
 if __name__ == '__main__':

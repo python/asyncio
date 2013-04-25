@@ -115,21 +115,21 @@ class Timer(Handle):
 class AbstractEventLoop:
     """Abstract event loop."""
 
-    # TODO: Rename run() -> run_until_idle(), run_forever() -> run().
-
-    def run(self):
-        """Run the event loop.  Block until there is nothing left to do."""
-        raise NotImplementedError
-
     def run_forever(self):
-        """Run the event loop.  Block until stop() is called."""
+        """Run the event loop until stop() is called.
+
+        TODO: Rename to run().
+        """
         raise NotImplementedError
 
-    def run_once(self, timeout=None):  # NEW!
-        """Run one complete cycle of the event loop."""
+    def run_once(self, timeout=None):
+        """Run one complete cycle of the event loop.
+
+        TODO: Deprecate this.
+        """
         raise NotImplementedError
 
-    def run_until_complete(self, future, timeout=None):  # NEW!
+    def run_until_complete(self, future, timeout=None):
         """Run the event loop until a Future is done.
 
         Return the Future's result, or raise its exception.
@@ -140,7 +140,7 @@ class AbstractEventLoop:
         """
         raise NotImplementedError
 
-    def stop(self):  # NEW!
+    def stop(self):
         """Stop the event loop as soon as reasonable.
 
         Exactly how soon that is may depend on the implementation, but
@@ -153,7 +153,7 @@ class AbstractEventLoop:
     def call_later(self, delay, callback, *args):
         raise NotImplementedError
 
-    def call_repeatedly(self, interval, callback, *args):  # NEW!
+    def call_repeatedly(self, interval, callback, *args):
         raise NotImplementedError
 
     def call_soon(self, callback, *args):

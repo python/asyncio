@@ -1,4 +1,4 @@
-"""Search for lines > 80 chars or with trailing whitespace."""
+"""Search for lines >= 80 chars or with trailing whitespace."""
 
 import sys, os
 
@@ -32,7 +32,7 @@ def process(fn):
         for i, line in enumerate(f):
             line = line.rstrip('\n')
             sline = line.rstrip()
-            if len(line) > 80 or line != sline or not isascii(line):
+            if len(line) >= 80 or line != sline or not isascii(line):
                 print('{}:{:d}:{}{}'.format(
                     fn, i+1, sline, '_' * (len(line) - len(sline))))
     finally:

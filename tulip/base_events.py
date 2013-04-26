@@ -268,7 +268,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         if host is not None or port is not None:
             if sock is not None:
                 raise ValueError(
-                    "host, port and sock can not be specified at the same time")
+                    "host/port and sock can not be specified at the same time")
 
             infos = yield from self.getaddrinfo(
                 host, port, family=family,
@@ -360,7 +360,8 @@ class BaseEventLoop(events.AbstractEventLoop):
 
         exceptions = []
 
-        for (family, proto), (local_address, remote_address) in addr_pairs_info:
+        for ((family, proto),
+             (local_address, remote_address)) in addr_pairs_info:
             sock = None
             l_addr = None
             r_addr = None
@@ -398,7 +399,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         if host is not None or port is not None:
             if sock is not None:
                 raise ValueError(
-                    "host, port and sock can not be specified at the same time")
+                    "host/port and sock can not be specified at the same time")
 
             AF_INET6 = getattr(socket, 'AF_INET6', 0)
             if reuse_address is None:
@@ -426,7 +427,8 @@ class BaseEventLoop(events.AbstractEventLoop):
                     # default on Linux) which makes a single socket
                     # listen on both address families.
                     if af == AF_INET6 and hasattr(socket, "IPPROTO_IPV6"):
-                        sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY,
+                        sock.setsockopt(socket.IPPROTO_IPV6,
+                                        socket.IPV6_V6ONLY,
                                         True)
                     try:
                         sock.bind(sa)

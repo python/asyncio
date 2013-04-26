@@ -75,7 +75,7 @@ class IocpProactor:
         ov.AcceptEx(listener.fileno(), conn.fileno())
 
         def finish_accept():
-            addr = ov.getresult()
+            ov.getresult()
             buf = struct.pack('@P', listener.fileno())
             conn.setsockopt(socket.SOL_SOCKET,
                             _overlapped.SO_UPDATE_ACCEPT_CONTEXT,

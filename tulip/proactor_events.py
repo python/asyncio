@@ -12,10 +12,10 @@ from .log import tulip_log
 
 class _ProactorSocketTransport(transports.Transport):
 
-    def __init__(self, event_loop, sock, protocol, waiter=None, extra=None):
+    def __init__(self, loop, sock, protocol, waiter=None, extra=None):
         super().__init__(extra)
         self._extra['socket'] = sock
-        self._event_loop = event_loop
+        self._loop = loop
         self._sock = sock
         self._protocol = protocol
         self._buffer = []
@@ -23,10 +23,10 @@ class _ProactorSocketTransport(transports.Transport):
         self._write_fut = None
         self._conn_lost = 0
         self._closing = False  # Set when close() called.
-        self._event_loop.call_soon(self._protocol.connection_made, self)
-        self._event_loop.call_soon(self._loop_reading)
+        self._loop.call_soon(self._protocol.connection_made, self)
+        self._loop.call_soon(self._loop_reading)
         if waiter is not None:
-            self._event_loop.call_soon(waiter.set_result, None)
+            self._loop.call_soon(waiter.set_result, None)
 
     def _loop_reading(self, fut=None):
         data = None
@@ -40,7 +40,7 @@ class _ProactorSocketTransport(transports.Transport):
                     self._read_fut = None
                     return
 
-            self._read_fut = self._event_loop._proactor.recv(self._sock, 4096)
+            self._read_fut = self._loop._proactor.recv(self._sock, 4096)
         except (ConnectionAbortedError, ConnectionResetError) as exc:
             if not self._closing:
                 self._fatal_error(exc)
@@ -78,10 +78,9 @@ class _ProactorSocketTransport(transports.Transport):
             if not data:
                 self._write_fut = None
                 if self._closing:
-                    self._event_loop.call_soon(
-                        self._call_connection_lost, None)
+                    self._loop.call_soon(self._call_connection_lost, None)
                 return
-            self._write_fut = self._event_loop._proactor.send(self._sock, data)
+            self._write_fut = self._loop._proactor.send(self._sock, data)
         except OSError as exc:
             self._conn_lost += 1
             self._fatal_error(exc)
@@ -96,7 +95,7 @@ class _ProactorSocketTransport(transports.Transport):
     def close(self):
         self._closing = True
         if not self._buffer and self._write_fut is None:
-            self._event_loop.call_soon(self._call_connection_lost, None)
+            self._loop.call_soon(self._call_connection_lost, None)
 
     def _fatal_error(self, exc):
         tulip_log.exception('Fatal error for %s', self)
@@ -106,7 +105,7 @@ class _ProactorSocketTransport(transports.Transport):
             self._read_fut.cancel()
         self._write_fut = self._read_fut = None
         self._buffer = []
-        self._event_loop.call_soon(self._call_connection_lost, exc)
+        self._loop.call_soon(self._call_connection_lost, exc)
 
     def _call_connection_lost(self, exc):
         try:

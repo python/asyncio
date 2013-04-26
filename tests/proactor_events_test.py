@@ -12,26 +12,24 @@ from tulip.proactor_events import _ProactorSocketTransport
 class ProactorSocketTransportTests(unittest.TestCase):
 
     def setUp(self):
-        self.event_loop = unittest.mock.Mock()
+        self.loop = unittest.mock.Mock()
         self.sock = unittest.mock.Mock(socket.socket)
         self.protocol = unittest.mock.Mock(tulip.Protocol)
 
     def test_ctor(self):
         fut = tulip.Future()
         tr = _ProactorSocketTransport(
-            self.event_loop, self.sock, self.protocol, fut)
-        self.event_loop.call_soon.mock_calls[0].assert_called_with(
-            tr._loop_reading)
-        self.event_loop.call_soon.mock_calls[1].assert_called_with(
+            self.loop, self.sock, self.protocol, fut)
+        self.loop.call_soon.mock_calls[0].assert_called_with(tr._loop_reading)
+        self.loop.call_soon.mock_calls[1].assert_called_with(
             self.protocol.connection_made, tr)
-        self.event_loop.call_soon.mock_calls[2].assert_called_with(
+        self.loop.call_soon.mock_calls[2].assert_called_with(
             fut.set_result, None)
 
     def test_loop_reading(self):
-        tr = _ProactorSocketTransport(
-            self.event_loop, self.sock, self.protocol)
+        tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
         tr._loop_reading()
-        self.event_loop._proactor.recv.assert_called_with(self.sock, 4096)
+        self.loop._proactor.recv.assert_called_with(self.sock, 4096)
         self.assertFalse(self.protocol.data_received.called)
         self.assertFalse(self.protocol.eof_received.called)
 
@@ -39,75 +37,65 @@ class ProactorSocketTransportTests(unittest.TestCase):
         res = tulip.Future()
         res.set_result(b'data')
 
-        tr = _ProactorSocketTransport(
-            self.event_loop, self.sock, self.protocol)
+        tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
 
         tr._read_fut = res
         tr._loop_reading(res)
-        self.event_loop._proactor.recv.assert_called_with(self.sock, 4096)
+        self.loop._proactor.recv.assert_called_with(self.sock, 4096)
         self.protocol.data_received.assert_called_with(b'data')
 
     def test_loop_reading_no_data(self):
         res = tulip.Future()
         res.set_result(b'')
 
-        tr = _ProactorSocketTransport(
-            self.event_loop, self.sock, self.protocol)
+        tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
 
         self.assertRaises(AssertionError, tr._loop_reading, res)
 
         tr._read_fut = res
         tr._loop_reading(res)
-        self.assertFalse(self.event_loop._proactor.recv.called)
+        self.assertFalse(self.loop._proactor.recv.called)
         self.assertTrue(self.protocol.eof_received.called)
 
     def test_loop_reading_aborted(self):
-        err = self.event_loop._proactor.recv.side_effect = (
-            ConnectionAbortedError())
+        err = self.loop._proactor.recv.side_effect = ConnectionAbortedError()
 
-        tr = _ProactorSocketTransport(
-            self.event_loop, self.sock, self.protocol)
+        tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
         tr._fatal_error = unittest.mock.Mock()
         tr._loop_reading()
         tr._fatal_error.assert_called_with(err)
 
     def test_loop_reading_aborted_closing(self):
-        self.event_loop._proactor.recv.side_effect = (
-            ConnectionAbortedError())
+        self.loop._proactor.recv.side_effect = ConnectionAbortedError()
 
-        tr = _ProactorSocketTransport(
-            self.event_loop, self.sock, self.protocol)
+        tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
         tr._closing = True
         tr._fatal_error = unittest.mock.Mock()
         tr._loop_reading()
         self.assertFalse(tr._fatal_error.called)
 
     def test_loop_reading_exception(self):
-        err = self.event_loop._proactor.recv.side_effect = (OSError())
+        err = self.loop._proactor.recv.side_effect = (OSError())
 
-        tr = _ProactorSocketTransport(
-            self.event_loop, self.sock, self.protocol)
+        tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
         tr._fatal_error = unittest.mock.Mock()
         tr._loop_reading()
         tr._fatal_error.assert_called_with(err)
 
     def test_write(self):
-        tr = _ProactorSocketTransport(
-            self.event_loop, self.sock, self.protocol)
+        tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
         tr._loop_writing = unittest.mock.Mock()
         tr.write(b'data')
         self.assertEqual(tr._buffer, [b'data'])
         self.assertTrue(tr._loop_writing.called)
 
     def test_write_no_data(self):
-        tr = _ProactorSocketTransport(
-            self.event_loop, self.sock, self.protocol)
+        tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
         tr.write(b'')
         self.assertFalse(tr._buffer)
 
     def test_write_more(self):
-        tr = _ProactorSocketTransport(
-            self.event_loop, self.sock, self.protocol)
+        tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
         tr._write_fut = unittest.mock.Mock()
         tr._loop_writing = unittest.mock.Mock()
         tr.write(b'data')
@@ -115,19 +103,17 @@ class ProactorSocketTransportTests(unittest.TestCase):
         self.assertFalse(tr._loop_writing.called)
 
     def test_loop_writing(self):
-        tr = _ProactorSocketTransport(
-            self.event_loop, self.sock, self.protocol)
+        tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
         tr._buffer = [b'da', b'ta']
         tr._loop_writing()
-        self.event_loop._proactor.send.assert_called_with(self.sock, b'data')
-        self.event_loop._proactor.send.return_value.add_done_callback.\
+        self.loop._proactor.send.assert_called_with(self.sock, b'data')
+        self.loop._proactor.send.return_value.add_done_callback.\
             assert_called_with(tr._loop_writing)
 
     @unittest.mock.patch('tulip.proactor_events.tulip_log')
     def test_loop_writing_err(self, m_log):
-        err = self.event_loop._proactor.send.side_effect = OSError()
-        tr = _ProactorSocketTransport(
-            self.event_loop, self.sock, self.protocol)
+        err = self.loop._proactor.send.side_effect = OSError()
+        tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
         tr._fatal_error = unittest.mock.Mock()
         tr._buffer = [b'da', b'ta']
         tr._loop_writing()
@@ -146,8 +132,7 @@ class ProactorSocketTransportTests(unittest.TestCase):
         fut = tulip.Future()
         fut.set_result(b'data')
 
-        tr = _ProactorSocketTransport(
-            self.event_loop, self.sock, self.protocol)
+        tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
         tr._write_fut = fut
         tr._loop_writing(fut)
         self.assertIsNone(tr._write_fut)
@@ -156,53 +141,44 @@ class ProactorSocketTransportTests(unittest.TestCase):
         fut = tulip.Future()
         fut.set_result(1)
 
-        tr = _ProactorSocketTransport(
-            self.event_loop, self.sock, self.protocol)
-        self.event_loop.reset_mock()
+        tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
+        self.loop.reset_mock()
         tr._write_fut = fut
         tr.close()
         tr._loop_writing(fut)
         self.assertIsNone(tr._write_fut)
-        self.event_loop.call_soon.assert_called_with(
-            tr._call_connection_lost, None)
+        self.loop.call_soon.assert_called_with(tr._call_connection_lost, None)
 
     def test_abort(self):
-        tr = _ProactorSocketTransport(
-            self.event_loop, self.sock, self.protocol)
+        tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
         tr._fatal_error = unittest.mock.Mock()
         tr.abort()
         tr._fatal_error.assert_called_with(None)
 
     def test_close(self):
-        tr = _ProactorSocketTransport(
-            self.event_loop, self.sock, self.protocol)
-        self.event_loop.reset_mock()
+        tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
+        self.loop.reset_mock()
         tr.close()
-        self.event_loop.call_soon.assert_called_with(
-            tr._call_connection_lost, None)
+        self.loop.call_soon.assert_called_with(tr._call_connection_lost, None)
         self.assertTrue(tr._closing)
 
     def test_close_write_fut(self):
-        tr = _ProactorSocketTransport(
-            self.event_loop, self.sock, self.protocol)
+        tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
         tr._write_fut = unittest.mock.Mock()
-        self.event_loop.reset_mock()
+        self.loop.reset_mock()
         tr.close()
-        self.assertFalse(self.event_loop.call_soon.called)
+        self.assertFalse(self.loop.call_soon.called)
 
     def test_close_buffer(self):
-        tr = _ProactorSocketTransport(
-            self.event_loop, self.sock, self.protocol)
+        tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
         tr._buffer = [b'data']
-        self.event_loop.reset_mock()
+        self.loop.reset_mock()
         tr.close()
-
-        self.assertFalse(self.event_loop.call_soon.called)
+        self.assertFalse(self.loop.call_soon.called)
 
     @unittest.mock.patch('tulip.proactor_events.tulip_log')
     def test_fatal_error(self, m_logging):
-        tr = _ProactorSocketTransport(
-            self.event_loop, self.sock, self.protocol)
+        tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
         tr._buffer = [b'data']
         read_fut = tr._read_fut = unittest.mock.Mock()
         write_fut = tr._write_fut = unittest.mock.Mock()
@@ -210,24 +186,20 @@ class ProactorSocketTransportTests(unittest.TestCase):
 
         read_fut.cancel.assert_called_with()
         write_fut.cancel.assert_called_with()
-        self.event_loop.call_soon.assert_called_with(
-            tr._call_connection_lost, None)
+        self.loop.call_soon.assert_called_with(tr._call_connection_lost, None)
         self.assertEqual([], tr._buffer)
 
     @unittest.mock.patch('tulip.proactor_events.tulip_log')
     def test_fatal_error_2(self, m_logging):
-        tr = _ProactorSocketTransport(
-            self.event_loop, self.sock, self.protocol)
+        tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
         tr._buffer = [b'data']
         tr._fatal_error(None)
 
-        self.event_loop.call_soon.assert_called_with(
-            tr._call_connection_lost, None)
+        self.loop.call_soon.assert_called_with(tr._call_connection_lost, None)
         self.assertEqual([], tr._buffer)
 
     def test_call_connection_lost(self):
-        tr = _ProactorSocketTransport(
-            self.event_loop, self.sock, self.protocol)
+        tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
         tr._call_connection_lost(None)
         self.assertTrue(self.protocol.connection_lost.called)
         self.assertTrue(self.sock.close.called)
@@ -245,52 +217,52 @@ class BaseProactorEventLoopTests(unittest.TestCase):
             def _socketpair(s):
                 return (self.ssock, self.csock)
 
-        self.event_loop = EventLoop(self.proactor)
+        self.loop = EventLoop(self.proactor)
 
     @unittest.mock.patch.object(BaseProactorEventLoop, 'call_soon')
     @unittest.mock.patch.object(BaseProactorEventLoop, '_socketpair')
     def test_ctor(self, socketpair, call_soon):
         ssock, csock = socketpair.return_value = (
             unittest.mock.Mock(), unittest.mock.Mock())
-        event_loop = BaseProactorEventLoop(self.proactor)
-        self.assertIs(event_loop._ssock, ssock)
-        self.assertIs(event_loop._csock, csock)
-        self.assertEqual(event_loop._internal_fds, 1)
-        call_soon.assert_called_with(event_loop._loop_self_reading)
+        loop = BaseProactorEventLoop(self.proactor)
+        self.assertIs(loop._ssock, ssock)
+        self.assertIs(loop._csock, csock)
+        self.assertEqual(loop._internal_fds, 1)
+        call_soon.assert_called_with(loop._loop_self_reading)
 
     def test_close_self_pipe(self):
-        self.event_loop._close_self_pipe()
-        self.assertEqual(self.event_loop._internal_fds, 0)
+        self.loop._close_self_pipe()
+        self.assertEqual(self.loop._internal_fds, 0)
         self.assertTrue(self.ssock.close.called)
         self.assertTrue(self.csock.close.called)
-        self.assertIsNone(self.event_loop._ssock)
-        self.assertIsNone(self.event_loop._csock)
+        self.assertIsNone(self.loop._ssock)
+        self.assertIsNone(self.loop._csock)
 
     def test_close(self):
-        self.event_loop._close_self_pipe = unittest.mock.Mock()
-        self.event_loop.close()
-        self.assertTrue(self.event_loop._close_self_pipe.called)
+        self.loop._close_self_pipe = unittest.mock.Mock()
+        self.loop.close()
+        self.assertTrue(self.loop._close_self_pipe.called)
         self.assertTrue(self.proactor.close.called)
-        self.assertIsNone(self.event_loop._proactor)
+        self.assertIsNone(self.loop._proactor)
 
-        self.event_loop._close_self_pipe.reset_mock()
-        self.event_loop.close()
-        self.assertFalse(self.event_loop._close_self_pipe.called)
+        self.loop._close_self_pipe.reset_mock()
+        self.loop.close()
+        self.assertFalse(self.loop._close_self_pipe.called)
 
     def test_sock_recv(self):
-        self.event_loop.sock_recv(self.sock, 1024)
+        self.loop.sock_recv(self.sock, 1024)
         self.proactor.recv.assert_called_with(self.sock, 1024)
 
     def test_sock_sendall(self):
-        self.event_loop.sock_sendall(self.sock, b'data')
+        self.loop.sock_sendall(self.sock, b'data')
         self.proactor.send.assert_called_with(self.sock, b'data')
 
     def test_sock_connect(self):
-        self.event_loop.sock_connect(self.sock, 123)
+        self.loop.sock_connect(self.sock, 123)
         self.proactor.connect.assert_called_with(self.sock, 123)
 
     def test_sock_accept(self):
-        self.event_loop.sock_accept(self.sock)
+        self.loop.sock_accept(self.sock)
         self.proactor.accept.assert_called_with(self.sock)
 
     def test_socketpair(self):
@@ -298,43 +270,42 @@ class BaseProactorEventLoopTests(unittest.TestCase):
             NotImplementedError, BaseProactorEventLoop, self.proactor)
 
     def test_make_socket_transport(self):
-        tr = self.event_loop._make_socket_transport(
-            self.sock, unittest.mock.Mock())
+        tr = self.loop._make_socket_transport(self.sock, unittest.mock.Mock())
         self.assertIsInstance(tr, _ProactorSocketTransport)
 
     def test_loop_self_reading(self):
-        self.event_loop._loop_self_reading()
+        self.loop._loop_self_reading()
         self.proactor.recv.assert_called_with(self.ssock, 4096)
         self.proactor.recv.return_value.add_done_callback.assert_called_with(
-            self.event_loop._loop_self_reading)
+            self.loop._loop_self_reading)
 
     def test_loop_self_reading_fut(self):
         fut = unittest.mock.Mock()
-        self.event_loop._loop_self_reading(fut)
+        self.loop._loop_self_reading(fut)
         self.assertTrue(fut.result.called)
         self.proactor.recv.assert_called_with(self.ssock, 4096)
         self.proactor.recv.return_value.add_done_callback.assert_called_with(
-            self.event_loop._loop_self_reading)
+            self.loop._loop_self_reading)
 
     def test_loop_self_reading_exception(self):
-        self.event_loop.close = unittest.mock.Mock()
+        self.loop.close = unittest.mock.Mock()
         self.proactor.recv.side_effect = OSError()
-        self.assertRaises(OSError, self.event_loop._loop_self_reading)
-        self.assertTrue(self.event_loop.close.called)
+        self.assertRaises(OSError, self.loop._loop_self_reading)
+        self.assertTrue(self.loop.close.called)
 
     def test_write_to_self(self):
-        self.event_loop._write_to_self()
+        self.loop._write_to_self()
         self.csock.send.assert_called_with(b'x')
 
     def test_process_events(self):
-        self.event_loop._process_events([])
+        self.loop._process_events([])
 
     @unittest.mock.patch('tulip.proactor_events.tulip_log')
     def test_start_serving(self, m_log):
         pf = unittest.mock.Mock()
-        call_soon = self.event_loop.call_soon = unittest.mock.Mock()
+        call_soon = self.loop.call_soon = unittest.mock.Mock()
 
-        self.event_loop._start_serving(pf, self.sock)
+        self.loop._start_serving(pf, self.sock)
         self.assertTrue(call_soon.called)
 
         # callback
@@ -346,11 +317,10 @@ class BaseProactorEventLoopTests(unittest.TestCase):
         fut = unittest.mock.Mock()
         fut.result.return_value = (unittest.mock.Mock(), unittest.mock.Mock())
 
-        make_transport = self.event_loop._make_socket_transport = (
-            unittest.mock.Mock())
+        make_tr = self.loop._make_socket_transport = unittest.mock.Mock()
         loop(fut)
         self.assertTrue(fut.result.called)
-        self.assertTrue(make_transport.called)
+        self.assertTrue(make_tr.called)
 
         # exception
         fut.result.side_effect = OSError()

@@ -4,7 +4,7 @@ Beyond the PEP:
 - Only the main thread has a default event loop.
 """
 
-__all__ = ['EventLoopPolicy', 'DefaultEventLoopPolicy',
+__all__ = ['AbstractEventLoopPolicy', 'DefaultEventLoopPolicy',
            'AbstractEventLoop', 'Timer', 'Handle', 'make_handle',
            'get_event_loop_policy', 'set_event_loop_policy',
            'get_event_loop', 'set_event_loop', 'new_event_loop',
@@ -115,11 +115,10 @@ class Timer(Handle):
 class AbstractEventLoop:
     """Abstract event loop."""
 
-    def run_forever(self):
-        """Run the event loop until stop() is called.
+    # Running and stopping the event loop.
 
-        TODO: Rename to run().
-        """
+    def run_forever(self):
+        """Run the event loop until stop() is called."""
         raise NotImplementedError
 
     def run_once(self, timeout=None):
@@ -148,7 +147,14 @@ class AbstractEventLoop:
         """
         raise NotImplementedError
 
-    # Methods returning Handles for scheduling callbacks.
+    def is_running(self):
+        """Return whether the event loop is currently running."""
+        raise NotImplementedError
+
+    # Methods scheduling callbacks.  All these return Handles.
+
+    def call_soon(self, callback, *args):
+        return self.call_later(0, callback, *args)
 
     def call_later(self, delay, callback, *args):
         raise NotImplementedError
@@ -156,18 +162,18 @@ class AbstractEventLoop:
     def call_repeatedly(self, interval, callback, *args):
         raise NotImplementedError
 
-    def call_soon(self, callback, *args):
-        return self.call_later(0, callback, *args)
+    # Methods for interacting with threads.
 
     def call_soon_threadsafe(self, callback, *args):
         raise NotImplementedError
-
-    # Methods returning Futures for interacting with threads.
 
     def wrap_future(self, future):
         raise NotImplementedError
 
     def run_in_executor(self, executor, callback, *args):
+        raise NotImplementedError
+
+    def set_default_executor(self, executor):
         raise NotImplementedError
 
     # Network I/O methods returning Futures.
@@ -293,7 +299,7 @@ class AbstractEventLoop:
         raise NotImplementedError
 
 
-class EventLoopPolicy:
+class AbstractEventLoopPolicy:
     """Abstract policy for accessing the event loop."""
 
     def get_event_loop(self):
@@ -309,7 +315,7 @@ class EventLoopPolicy:
         raise NotImplementedError
 
 
-class DefaultEventLoopPolicy(threading.local, EventLoopPolicy):
+class DefaultEventLoopPolicy(threading.local, AbstractEventLoopPolicy):
     """Default policy implementation for accessing the event loop.
 
     In this policy, each thread has its own event loop.  However, we
@@ -336,6 +342,7 @@ class DefaultEventLoopPolicy(threading.local, EventLoopPolicy):
 
     def set_event_loop(self, event_loop):
         """Set the event loop."""
+        # TODO: The isinstance() test violates the PEP.
         assert event_loop is None or isinstance(event_loop, AbstractEventLoop)
         self._event_loop = event_loop
 
@@ -371,7 +378,8 @@ def get_event_loop_policy():
 def set_event_loop_policy(policy):
     """XXX"""
     global _event_loop_policy
-    assert policy is None or isinstance(policy, EventLoopPolicy)
+    # TODO: The isinstance() test violates the PEP.
+    assert policy is None or isinstance(policy, AbstractEventLoopPolicy)
     _event_loop_policy = policy
 
 

@@ -13,7 +13,7 @@ from . import _overlapped
 from .log import tulip_log
 
 
-__all__ = ['SelectorEventLoop', 'ProactorEventLoop']
+__all__ = ['SelectorEventLoop', 'ProactorEventLoop', 'IocpProactor']
 
 
 NULL = 0

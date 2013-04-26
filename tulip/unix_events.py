@@ -87,7 +87,8 @@ class SelectorEventLoop(selector_events.BaseSelectorEventLoop):
     def remove_signal_handler(self, sig):
         """Remove a handler for a signal.  UNIX only.
 
-        Return True if a signal handler was removed, False if not."""
+        Return True if a signal handler was removed, False if not.
+        """
         self._check_signal(sig)
         try:
             del self._signal_handlers[sig]

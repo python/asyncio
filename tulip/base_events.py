@@ -90,15 +90,8 @@ class BaseEventLoop(events.AbstractEventLoop):
         """Process selector events."""
         raise NotImplementedError
 
-    def is_running(self):
-        """Returns running status of event loop."""
-        return self._running
-
     def run_forever(self):
-        """Run until stop() is called.
-
-        TODO: Maybe rename to run().
-        """
+        """Run until stop() is called."""
         if self._running:
             raise RuntimeError('Event loop is running.')
         self._running = True
@@ -174,6 +167,10 @@ class BaseEventLoop(events.AbstractEventLoop):
         those callbacks will run if run() is called again later.
         """
         self.call_soon(_raise_stop_error)
+
+    def is_running(self):
+        """Returns running status of event loop."""
+        return self._running
 
     def call_later(self, delay, callback, *args):
         """Arrange for a callback to be called at a given time.
@@ -393,7 +390,6 @@ class BaseEventLoop(events.AbstractEventLoop):
             sock, protocol, r_addr, extra={'addr': l_addr})
         return transport, protocol
 
-    # TODO: Or create_server()?
     @tasks.task
     def start_serving(self, protocol_factory, host=None, port=None, *,
                       family=socket.AF_UNSPEC, flags=socket.AI_PASSIVE,

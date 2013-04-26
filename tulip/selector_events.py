@@ -438,11 +438,11 @@ class _SelectorSocketTransport(transports.Transport):
 
 class _SelectorSslTransport(transports.Transport):
 
-    def __init__(self, event_loop, rawsock, protocol, sslcontext, waiter=None,
+    def __init__(self, loop, rawsock, protocol, sslcontext, waiter=None,
                  server_side=False, extra=None):
         super().__init__(extra)
 
-        self._event_loop = event_loop
+        self._loop = loop
         self._rawsock = rawsock
         self._protocol = protocol
         sslcontext = sslcontext or ssl.SSLContext(ssl.PROTOCOL_SSLv23)
@@ -463,10 +463,10 @@ class _SelectorSslTransport(transports.Transport):
         try:
             self._sslsock.do_handshake()
         except ssl.SSLWantReadError:
-            self._event_loop.add_reader(fd, self._on_handshake)
+            self._loop.add_reader(fd, self._on_handshake)
             return
         except ssl.SSLWantWriteError:
-            self._event_loop.add_writer(fd, self._on_handshake)
+            self._loop.add_writer(fd, self._on_handshake)
             return
         except Exception as exc:
             self._sslsock.close()
@@ -478,13 +478,13 @@ class _SelectorSslTransport(transports.Transport):
             if self._waiter is not None:
                 self._waiter.set_exception(exc)
             raise
-        self._event_loop.remove_reader(fd)
-        self._event_loop.remove_writer(fd)
-        self._event_loop.add_reader(fd, self._on_ready)
-        self._event_loop.add_writer(fd, self._on_ready)
-        self._event_loop.call_soon(self._protocol.connection_made, self)
+        self._loop.remove_reader(fd)
+        self._loop.remove_writer(fd)
+        self._loop.add_reader(fd, self._on_ready)
+        self._loop.add_writer(fd, self._on_ready)
+        self._loop.call_soon(self._protocol.connection_made, self)
         if self._waiter is not None:
-            self._event_loop.call_soon(self._waiter.set_result, None)
+            self._loop.call_soon(self._waiter.set_result, None)
 
     def _on_ready(self):
         # Because of renegotiations (?), there's no difference between
@@ -514,8 +514,8 @@ class _SelectorSslTransport(transports.Transport):
             else:
                 # TODO: Don't close when self._buffer is non-empty.
                 assert not self._buffer
-                self._event_loop.remove_reader(fd)
-                self._event_loop.remove_writer(fd)
+                self._loop.remove_reader(fd)
+                self._loop.remove_writer(fd)
                 self._sslsock.close()
                 self._protocol.connection_lost(None)
                 return
@@ -542,7 +542,7 @@ class _SelectorSslTransport(transports.Transport):
         if n < len(data):
             self._buffer.append(data[n:])
         elif self._closing:
-            self._event_loop.remove_writer(self._sslsock.fileno())
+            self._loop.remove_writer(self._sslsock.fileno())
             self._sslsock.close()
             self._protocol.connection_lost(None)
 
@@ -568,19 +568,19 @@ class _SelectorSslTransport(transports.Transport):
 
     def close(self):
         self._closing = True
-        self._event_loop.remove_reader(self._sslsock.fileno())
+        self._loop.remove_reader(self._sslsock.fileno())
         if not self._buffer:
-            self._event_loop.call_soon(self._protocol.connection_lost, None)
+            self._loop.call_soon(self._protocol.connection_lost, None)
 
     def _fatal_error(self, exc):
         tulip_log.exception('Fatal error for %s', self)
         self._close(exc)
 
     def _close(self, exc):
-        self._event_loop.remove_writer(self._sslsock.fileno())
-        self._event_loop.remove_reader(self._sslsock.fileno())
+        self._loop.remove_writer(self._sslsock.fileno())
+        self._loop.remove_reader(self._sslsock.fileno())
         self._buffer = []
-        self._event_loop.call_soon(self._protocol.connection_lost, exc)
+        self._loop.call_soon(self._protocol.connection_lost, exc)
 
 
 class _SelectorDatagramTransport(transports.DatagramTransport):

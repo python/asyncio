@@ -181,7 +181,7 @@ class Task(futures.Future):
                         self._event_loop.call_soon(
                             self._step, None,
                             RuntimeError(
-                                'Task received bad yield: {!r}'.format(result)))
+                                'Task got bad yield: {!r}'.format(result)))
                     else:
                         self._event_loop.call_soon(self._step_maybe)
 

@@ -1435,7 +1435,7 @@ class ProtocolsAbsTests(unittest.TestCase):
 class PolicyTests(unittest.TestCase):
 
     def test_event_loop_policy(self):
-        policy = events.EventLoopPolicy()
+        policy = events.AbstractEventLoopPolicy()
         self.assertRaises(NotImplementedError, policy.get_event_loop)
         self.assertRaises(NotImplementedError, policy.set_event_loop, object())
         self.assertRaises(NotImplementedError, policy.new_event_loop)
@@ -1477,7 +1477,7 @@ class PolicyTests(unittest.TestCase):
 
     def test_get_event_loop_policy(self):
         policy = events.get_event_loop_policy()
-        self.assertIsInstance(policy, events.EventLoopPolicy)
+        self.assertIsInstance(policy, events.AbstractEventLoopPolicy)
         self.assertIs(policy, events.get_event_loop_policy())
 
     def test_set_event_loop_policy(self):

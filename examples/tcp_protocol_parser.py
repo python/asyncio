@@ -24,7 +24,7 @@ def my_protocol_parser():
     parsers are implemented as a state machine.
 
     more details in tulip/parsers.py
-    existing parsers: 
+    existing parsers:
       * http protocol parsers tulip/http/protocol.py
       * websocket parser tulip/http/websocket.py
     """

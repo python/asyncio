@@ -125,6 +125,8 @@ class _BaseSelector:
         except KeyError:
             raise ValueError("{!r} is not registered".format(fileobj))
         if events != key.events or data != key.data:
+            # TODO: If only the data changed, use a shortcut that only
+            # updates the data.
             self.unregister(fileobj)
             return self.register(fileobj, events, data)
         else:

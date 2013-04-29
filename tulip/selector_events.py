@@ -98,11 +98,11 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         except (BlockingIOError, InterruptedError):
             pass
 
-    def _start_serving(self, protocol_factory, sock, ssl=False):
+    def _start_serving(self, protocol_factory, sock, ssl=None):
         self.add_reader(sock.fileno(), self._accept_connection,
                         protocol_factory, sock, ssl)
 
-    def _accept_connection(self, protocol_factory, sock, ssl=False):
+    def _accept_connection(self, protocol_factory, sock, ssl=None):
         try:
             conn, addr = sock.accept()
             conn.setblocking(False)
@@ -117,9 +117,8 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             tulip_log.exception('Accept failed')
         else:
             if ssl:
-                sslcontext = None if isinstance(ssl, bool) else ssl
                 self._make_ssl_transport(
-                    conn, protocol_factory(), sslcontext, None,
+                    conn, protocol_factory(), ssl, None,
                     server_side=True, extra={'addr': addr})
             else:
                 self._make_socket_transport(
@@ -445,7 +444,12 @@ class _SelectorSslTransport(transports.Transport):
         self._loop = loop
         self._rawsock = rawsock
         self._protocol = protocol
-        sslcontext = sslcontext or ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+        if server_side:
+            assert isinstance(sslcontext,
+                              ssl.SSLContext), 'Must pass an SSLContext'
+        else:
+            # Client-side may pass ssl=True to use a default context.
+            sslcontext = sslcontext or ssl.SSLContext(ssl.PROTOCOL_SSLv23)
         self._sslcontext = sslcontext
         self._waiter = waiter
         sslsock = sslcontext.wrap_socket(rawsock, server_side=server_side,

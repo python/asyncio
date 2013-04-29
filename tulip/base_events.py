@@ -263,7 +263,7 @@ class BaseEventLoop(events.AbstractEventLoop):
 
     @tasks.coroutine
     def create_connection(self, protocol_factory, host=None, port=None, *,
-                          ssl=False, family=0, proto=0, flags=0, sock=None):
+                          ssl=None, family=0, proto=0, flags=0, sock=None):
         """XXX"""
         if host is not None or port is not None:
             if sock is not None:
@@ -394,7 +394,7 @@ class BaseEventLoop(events.AbstractEventLoop):
     @tasks.task
     def start_serving(self, protocol_factory, host=None, port=None, *,
                       family=socket.AF_UNSPEC, flags=socket.AI_PASSIVE,
-                      sock=None, backlog=100, ssl=False, reuse_address=None):
+                      sock=None, backlog=100, ssl=None, reuse_address=None):
         """XXX"""
         if host is not None or port is not None:
             if sock is not None:

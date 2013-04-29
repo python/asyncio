@@ -177,7 +177,7 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
     def _write_to_self(self):
         self._csock.send(b'x')
 
-    def _start_serving(self, protocol_factory, sock, ssl=False):
+    def _start_serving(self, protocol_factory, sock, ssl=None):
         assert not ssl, 'IocpEventLoop imcompatible with SSL.'
 
         def loop(f=None):

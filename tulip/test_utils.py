@@ -91,7 +91,7 @@ def run_test_server(loop, *, host='127.0.0.1', port=0,
         sslcontext = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
         sslcontext.load_cert_chain(certfile, keyfile)
     else:
-        sslcontext = False
+        sslcontext = None
 
     def run(loop, fut):
         thread_loop = tulip.new_event_loop()

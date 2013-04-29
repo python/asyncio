@@ -195,6 +195,17 @@ class FutureTests(unittest.TestCase):
             'Future result has not been requested: %r', r_fut)
 
     @unittest.mock.patch('tulip.futures.tulip_log')
+    def test_del_done_skip(self, log):
+        self.loop.set_log_level(futures.STACK_DEBUG)
+
+        fut = futures.Future()
+        fut._debug_warn_result_requested = False
+        next(iter(fut))
+        fut.set_result(1)
+        del fut
+        self.assertFalse(log.error.called)
+
+    @unittest.mock.patch('tulip.futures.tulip_log')
     def test_del_exc(self, log):
         self.loop.set_log_level(futures.STACK_DEBUG)
 

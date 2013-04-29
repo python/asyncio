@@ -185,12 +185,12 @@ class AbstractEventLoop:
         raise NotImplementedError
 
     def create_connection(self, protocol_factory, host=None, port=None, *,
-                          family=0, proto=0, flags=0, sock=None):
+                          ssl=None, family=0, proto=0, flags=0, sock=None):
         raise NotImplementedError
 
     def start_serving(self, protocol_factory, host=None, port=None, *,
                       family=socket.AF_UNSPEC, flags=socket.AI_PASSIVE,
-                      sock=None, backlog=100, ssl=False, reuse_address=None):
+                      sock=None, backlog=100, ssl=None, reuse_address=None):
         """Creates a TCP server bound to host and port and return
         a list of socket objects which will later be handled by
         protocol_factory.
@@ -211,8 +211,8 @@ class AbstractEventLoop:
         backlog is the maximum number of queued connections passed to
         listen() (defaults to 100).
 
-        ssl can be set to True to enable SSL over the accepted
-        connections.
+        ssl can be set to an SSLContext to enable SSL over the
+        accepted connections.
 
         reuse_address tells the kernel to reuse a local socket in
         TIME_WAIT state, without waiting for its natural timeout to

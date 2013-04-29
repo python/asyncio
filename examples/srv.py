@@ -144,7 +144,7 @@ def main():
         sslcontext = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
         sslcontext.load_cert_chain(certfile, keyfile)
     else:
-        sslcontext = False
+        sslcontext = None
 
     loop = tulip.get_event_loop()
     f = loop.start_serving(

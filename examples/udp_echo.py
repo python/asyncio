@@ -3,7 +3,6 @@
 import argparse
 import sys
 import tulip
-import logging
 try:
     import signal
 except ImportError:
@@ -88,7 +87,6 @@ if __name__ == '__main__':
         ARGS.print_help()
     else:
         loop = tulip.get_event_loop()
-        loop.set_log_level(logging.CRITICAL)
         if signal is not None:
             loop.add_signal_handler(signal.SIGINT, loop.stop)
 

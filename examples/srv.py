@@ -151,7 +151,10 @@ def main():
         lambda: HttpServer(debug=True), args.host, args.port, ssl=sslcontext)
     socks = loop.run_until_complete(f)
     print('serving on', socks[0].getsockname())
-    loop.run_forever()
+    try:
+        loop.run_forever()
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == '__main__':

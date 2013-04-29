@@ -3,7 +3,6 @@
 
 import argparse
 import os
-import logging
 import socket
 import signal
 import time
@@ -120,7 +119,6 @@ class ChildProcess:
         # start server
         self.loop = loop = tulip.new_event_loop()
         tulip.set_event_loop(loop)
-        loop.set_log_level(logging.CRITICAL)
 
         def stop():
             self.loop.stop()
@@ -277,7 +275,6 @@ class Superviser:
 
     def __init__(self, args):
         self.loop = tulip.get_event_loop()
-        self.loop.set_log_level(logging.CRITICAL)
         self.args = args
         self.workers = []
 

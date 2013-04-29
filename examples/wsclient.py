@@ -92,7 +92,6 @@ if __name__ == '__main__':
     loop = tulip.SelectorEventLoop(tulip.selectors.SelectSelector())
     tulip.set_event_loop(loop)
 
-    loop.set_log_level(50)
     loop.add_signal_handler(signal.SIGINT, loop.stop)
     tulip.Task(start_client(loop, url))
     loop.run_forever()

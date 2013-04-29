@@ -4,7 +4,6 @@
 import argparse
 import email.message
 import os
-import logging
 import socket
 import signal
 import time
@@ -116,7 +115,6 @@ class ChildProcess:
         # start server
         self.loop = loop = tulip.new_event_loop()
         tulip.set_event_loop(loop)
-        loop.set_log_level(logging.CRITICAL)
 
         def stop():
             self.loop.stop()
@@ -124,7 +122,7 @@ class ChildProcess:
         loop.add_signal_handler(signal.SIGINT, stop)
 
         f = loop.start_serving(lambda: HttpServer(debug=True), sock=self.sock)
-        x = loop.run_until_complete(f[0])
+        x = loop.run_until_complete(f)[0]
         print('Starting srv worker process {} on {}'.format(
             os.getpid(), x.getsockname()))
 
@@ -256,7 +254,6 @@ class Superviser:
 
     def __init__(self, args):
         self.loop = tulip.get_event_loop()
-        self.loop.set_log_level(logging.CRITICAL)
         self.args = args
         self.workers = []
 

@@ -1292,7 +1292,7 @@ class TimerTests(unittest.TestCase):
 
         args = ()
         when = time.monotonic()
-        h = events.Timer(when, callback, args)
+        h = events.TimerHandle(when, callback, args)
         self.assertIs(h.callback, callback)
         self.assertIs(h.args, args)
         self.assertFalse(h.cancelled)
@@ -1306,7 +1306,8 @@ class TimerTests(unittest.TestCase):
         r = repr(h)
         self.assertTrue(r.endswith('())<cancelled>'))
 
-        self.assertRaises(AssertionError, events.Timer, None, callback, args)
+        self.assertRaises(AssertionError,
+                          events.TimerHandle, None, callback, args)
 
     def test_timer_comparison(self):
         def callback(*args):
@@ -1314,8 +1315,8 @@ class TimerTests(unittest.TestCase):
 
         when = time.monotonic()
 
-        h1 = events.Timer(when, callback, ())
-        h2 = events.Timer(when, callback, ())
+        h1 = events.TimerHandle(when, callback, ())
+        h2 = events.TimerHandle(when, callback, ())
         self.assertFalse(h1 < h2)
         self.assertFalse(h2 < h1)
         self.assertTrue(h1 <= h2)
@@ -1330,8 +1331,8 @@ class TimerTests(unittest.TestCase):
         h2.cancel()
         self.assertFalse(h1 == h2)
 
-        h1 = events.Timer(when, callback, ())
-        h2 = events.Timer(when + 10.0, callback, ())
+        h1 = events.TimerHandle(when, callback, ())
+        h2 = events.TimerHandle(when + 10.0, callback, ())
         self.assertTrue(h1 < h2)
         self.assertFalse(h2 < h1)
         self.assertTrue(h1 <= h2)

@@ -55,8 +55,8 @@ class BaseEventLoopTests(unittest.TestCase):
     def test_add_callback_timer(self):
         when = time.monotonic()
 
-        h1 = events.Timer(when, lambda: False, ())
-        h2 = events.Timer(when+10.0, lambda: False, ())
+        h1 = events.TimerHandle(when, lambda: False, ())
+        h2 = events.TimerHandle(when+10.0, lambda: False, ())
 
         self.event_loop._add_callback(h2)
         self.event_loop._add_callback(h1)
@@ -109,7 +109,7 @@ class BaseEventLoopTests(unittest.TestCase):
             pass
 
         h = self.event_loop.call_later(10.0, cb)
-        self.assertIsInstance(h, events.Timer)
+        self.assertIsInstance(h, events.TimerHandle)
         self.assertIn(h, self.event_loop._scheduled)
         self.assertNotIn(h, self.event_loop._ready)
 
@@ -130,7 +130,7 @@ class BaseEventLoopTests(unittest.TestCase):
             None, events.Handle(cb, ()), ('',))
         self.assertRaises(
             AssertionError, self.event_loop.run_in_executor,
-            None, events.Timer(10, cb, ()))
+            None, events.TimerHandle(10, cb, ()))
 
     def test_run_once_in_executor_cancelled(self):
         def cb():
@@ -171,8 +171,8 @@ class BaseEventLoopTests(unittest.TestCase):
         self.assertTrue(self.event_loop._run_once.called)
 
     def test__run_once(self):
-        h1 = events.Timer(time.monotonic() + 0.1, lambda: True, ())
-        h2 = events.Timer(time.monotonic() + 10.0, lambda: True, ())
+        h1 = events.TimerHandle(time.monotonic() + 0.1, lambda: True, ())
+        h2 = events.TimerHandle(time.monotonic() + 10.0, lambda: True, ())
 
         h1.cancel()
 
@@ -187,7 +187,7 @@ class BaseEventLoopTests(unittest.TestCase):
         self.assertTrue(self.event_loop._process_events.called)
 
     def test__run_once_timeout(self):
-        h = events.Timer(time.monotonic() + 10.0, lambda: True, ())
+        h = events.TimerHandle(time.monotonic() + 10.0, lambda: True, ())
 
         self.event_loop._process_events = unittest.mock.Mock()
         self.event_loop._scheduled.append(h)
@@ -196,7 +196,7 @@ class BaseEventLoopTests(unittest.TestCase):
 
     def test__run_once_timeout_with_ready(self):
         # If event loop has ready callbacks, select timeout is always 0.
-        h = events.Timer(time.monotonic() + 10.0, lambda: True, ())
+        h = events.TimerHandle(time.monotonic() + 10.0, lambda: True, ())
 
         self.event_loop._process_events = unittest.mock.Mock()
         self.event_loop._scheduled.append(h)
@@ -221,14 +221,16 @@ class BaseEventLoopTests(unittest.TestCase):
         m_logging.INFO = logging.INFO
         m_logging.DEBUG = logging.DEBUG
 
-        self.event_loop._scheduled.append(events.Timer(11.0, lambda: True, ()))
+        self.event_loop._scheduled.append(events.TimerHandle(11.0,
+                                                             lambda: True, ()))
         self.event_loop._process_events = unittest.mock.Mock()
         self.event_loop._run_once()
         self.assertEqual(logging.INFO, m_logging.log.call_args[0][0])
 
         idx = -1
         data = [10.0, 10.0, 10.3, 13.0]
-        self.event_loop._scheduled = [events.Timer(11.0, lambda:True, ())]
+        self.event_loop._scheduled = [events.TimerHandle(11.0,
+                                                         lambda:True, ())]
         self.event_loop._run_once()
         self.assertEqual(logging.DEBUG, m_logging.log.call_args[0][0])
 
@@ -241,7 +243,7 @@ class BaseEventLoopTests(unittest.TestCase):
             processed = True
             handle = event_loop.call_soon(lambda: True)
 
-        h = events.Timer(time.monotonic() - 1, cb, (self.event_loop,))
+        h = events.TimerHandle(time.monotonic() - 1, cb, (self.event_loop,))
 
         self.event_loop._process_events = unittest.mock.Mock()
         self.event_loop._scheduled.append(h)

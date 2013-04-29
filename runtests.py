@@ -88,6 +88,8 @@ def load_modules(basedir, suffix='.py'):
         try:
             loader = importlib.machinery.SourceFileLoader(modname, sourcefile)
             mods.append((loader.load_module(), sourcefile))
+        except SyntaxError:
+            raise
         except Exception as err:
             print("Skipping '{}': {}".format(modname, err), file=sys.stderr)
 

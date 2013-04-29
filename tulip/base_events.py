@@ -197,7 +197,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         if delay <= 0:
             return self.call_soon(callback, *args)
 
-        handle = events.Timer(time.monotonic() + delay, callback, args)
+        handle = events.TimerHandle(time.monotonic() + delay, callback, args)
         heapq.heappush(self._scheduled, handle)
         return handle
 
@@ -210,7 +210,7 @@ class BaseEventLoop(events.AbstractEventLoop):
             handle._when = time.monotonic() + interval
             heapq.heappush(self._scheduled, handle)
 
-        handle = events.Timer(time.monotonic() + interval, wrapper, ())
+        handle = events.TimerHandle(time.monotonic() + interval, wrapper, ())
         heapq.heappush(self._scheduled, handle)
         return handle
 
@@ -237,7 +237,7 @@ class BaseEventLoop(events.AbstractEventLoop):
     def run_in_executor(self, executor, callback, *args):
         if isinstance(callback, events.Handle):
             assert not args
-            assert not isinstance(callback, events.Timer)
+            assert not isinstance(callback, events.TimerHandle)
             if callback.cancelled:
                 f = futures.Future()
                 f.set_result(None)
@@ -475,7 +475,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         """Add a Handle to ready or scheduled."""
         if handle.cancelled:
             return
-        if isinstance(handle, events.Timer):
+        if isinstance(handle, events.TimerHandle):
             heapq.heappush(self._scheduled, handle)
         else:
             self._ready.append(handle)

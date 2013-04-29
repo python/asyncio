@@ -5,7 +5,7 @@ Beyond the PEP:
 """
 
 __all__ = ['AbstractEventLoopPolicy', 'DefaultEventLoopPolicy',
-           'AbstractEventLoop', 'Timer', 'Handle', 'make_handle',
+           'AbstractEventLoop', 'TimerHandle', 'Handle', 'make_handle',
            'get_event_loop_policy', 'set_event_loop_policy',
            'get_event_loop', 'set_event_loop', 'new_event_loop',
            ]
@@ -61,7 +61,7 @@ def make_handle(callback, args):
     return Handle(callback, args)
 
 
-class Timer(Handle):
+class TimerHandle(Handle):
     """Object returned by timed callback registration methods."""
 
     def __init__(self, when, callback, args):
@@ -71,9 +71,9 @@ class Timer(Handle):
         self._when = when
 
     def __repr__(self):
-        res = 'Timer({}, {}, {})'.format(self._when,
-                                         self._callback,
-                                         self._args)
+        res = 'TimerHandle({}, {}, {})'.format(self._when,
+                                               self._callback,
+                                               self._args)
         if self._cancelled:
             res += '<cancelled>'
 
@@ -100,7 +100,7 @@ class Timer(Handle):
         return self.__eq__(other)
 
     def __eq__(self, other):
-        if isinstance(other, Timer):
+        if isinstance(other, TimerHandle):
             return (self._when == other._when and
                     self._callback == other._callback and
                     self._args == other._args and

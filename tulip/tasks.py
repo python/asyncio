@@ -71,6 +71,9 @@ _marker = object()
 class Task(futures.Future):
     """A coroutine wrapped in a Future."""
 
+    # disable "Future result has not been requested" warning message.
+    _debug_warn_result_requested = False
+
     def __init__(self, coro, event_loop=None, timeout=None):
         assert inspect.isgenerator(coro)  # Must be a coroutine *object*.
         super().__init__(event_loop=event_loop, timeout=timeout)

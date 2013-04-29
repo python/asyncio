@@ -65,6 +65,7 @@ class Future:
     # result of the future has to be requested
     _debug_stack = None
     _debug_result_requested = False
+    _debug_warn_result_requested = True
 
     def __init__(self, *, event_loop=None, timeout=None):
         """Initialize the future.
@@ -302,7 +303,7 @@ class Future:
                             exc_info=(exc.__class__, exc, exc.__traceback__))
                         if (self._debug_stack and level <= STACK_DEBUG):
                             tulip_log.error(self._debug_stack)
-                    else:
+                    elif self._debug_warn_result_requested:
                         tulip_log.error(
                             'Future result has not been requested: %s', r_self)
                         if (self._debug_stack and level <= STACK_DEBUG):

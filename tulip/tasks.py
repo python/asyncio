@@ -330,10 +330,10 @@ def _wrap_coroutines(fs):
 
 
 @coroutine
-def sleep(when, result=None):
+def sleep(delay, result=None):
     """Coroutine that completes after a given time (in seconds)."""
     future = futures.Future()
-    h = future._event_loop.call_later(when, future.set_result, result)
+    h = future._event_loop.call_later(delay, future.set_result, result)
     try:
         return (yield from future)
     finally:

@@ -55,9 +55,8 @@ class Handle:
 
 
 def make_handle(callback, args):
-    if isinstance(callback, Handle):
-        assert not args
-        return callback
+    # TODO: Inline this?
+    assert not isinstance(callback, Handle), 'A Handle is not a callback'
     return Handle(callback, args)
 
 
@@ -82,6 +81,9 @@ class TimerHandle(Handle):
     @property
     def when(self):
         return self._when
+
+    def __hash__(self):
+        return hash(self._when)
 
     def __lt__(self, other):
         return self._when < other._when
@@ -159,7 +161,10 @@ class AbstractEventLoop:
     def call_later(self, delay, callback, *args):
         raise NotImplementedError
 
-    def call_repeatedly(self, interval, callback, *args):
+    def call_at(self, when, callback, *args):
+        raise NotImplementedError
+
+    def time(self):
         raise NotImplementedError
 
     # Methods for interacting with threads.
@@ -260,7 +265,7 @@ class AbstractEventLoop:
     #    raise NotImplementedError
 
     # Ready-based callback registration methods.
-    # The add_*() methods return a Handle.
+    # The add_*() methods return None.
     # The remove_*() methods return True if something was removed,
     # False if there was nothing to delete.
 

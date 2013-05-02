@@ -45,25 +45,14 @@ class BaseEventLoopTests(unittest.TestCase):
             NotImplementedError,
             self.event_loop._make_write_pipe_transport, m, m)
 
-    def test_add_callback_handle(self):
+    def test__add_callback_handle(self):
         h = events.Handle(lambda: False, ())
 
         self.event_loop._add_callback(h)
         self.assertFalse(self.event_loop._scheduled)
         self.assertIn(h, self.event_loop._ready)
 
-    def test_add_callback_timer(self):
-        when = time.monotonic()
-
-        h1 = events.TimerHandle(when, lambda: False, ())
-        h2 = events.TimerHandle(when+10.0, lambda: False, ())
-
-        self.event_loop._add_callback(h2)
-        self.event_loop._add_callback(h1)
-        self.assertEqual([h1, h2], self.event_loop._scheduled)
-        self.assertFalse(self.event_loop._ready)
-
-    def test_add_callback_cancelled_handle(self):
+    def test__add_callback_cancelled_handle(self):
         h = events.Handle(lambda: False, ())
         h.cancel()
 
@@ -113,13 +102,29 @@ class BaseEventLoopTests(unittest.TestCase):
         self.assertIn(h, self.event_loop._scheduled)
         self.assertNotIn(h, self.event_loop._ready)
 
-    def test_call_later_no_delay(self):
-        def cb():
-            pass
+    def test_call_later_negative_delays(self):
+        calls = []
 
-        h = self.event_loop.call_later(0, cb)
-        self.assertIn(h, self.event_loop._ready)
-        self.assertNotIn(h, self.event_loop._scheduled)
+        def cb(arg):
+            calls.append(arg)
+
+        self.event_loop._process_events = unittest.mock.Mock()
+        self.event_loop.call_later(-1, cb, 'a')
+        self.event_loop.call_later(-2, cb, 'b')
+        self.event_loop.run_once()
+        self.assertEqual(calls, ['b', 'a'])
+
+    def test_time_and_call_at(self):
+        def cb():
+            self.event_loop.stop()
+
+        self.event_loop._process_events = unittest.mock.Mock()
+        when = self.event_loop.time() + 0.1
+        self.event_loop.call_at(when, cb)
+        t0 = self.event_loop.time()
+        self.event_loop.run_forever()
+        t1 = self.event_loop.time()
+        self.assertTrue(0.09 <= t1-t0 <= 0.12, t1-t0)
 
     def test_run_once_in_executor_handle(self):
         def cb():

@@ -126,7 +126,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         # It's now up to the protocol to handle the connection.
 
     def add_reader(self, fd, callback, *args):
-        """Add a reader callback.  Return a Handle instance."""
+        """Add a reader callback."""
         handle = events.make_handle(callback, args)
         try:
             mask, (reader, writer) = self._selector.get_info(fd)
@@ -138,8 +138,6 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
                                   (handle, writer))
             if reader is not None:
                 reader.cancel()
-
-        return handle
 
     def remove_reader(self, fd):
         """Remove a reader callback."""
@@ -161,7 +159,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
                 return False
 
     def add_writer(self, fd, callback, *args):
-        """Add a writer callback.  Return a Handle instance."""
+        """Add a writer callback.."""
         handle = events.make_handle(callback, args)
         try:
             mask, (reader, writer) = self._selector.get_info(fd)
@@ -173,8 +171,6 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
                                   (reader, handle))
             if writer is not None:
                 writer.cancel()
-
-        return handle
 
     def remove_writer(self, fd):
         """Remove a writer callback."""

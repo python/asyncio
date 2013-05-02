@@ -4,6 +4,7 @@ import unittest
 import queue
 
 from tulip import events
+from tulip import futures
 from tulip import locks
 from tulip import queues
 from tulip import tasks
@@ -12,11 +13,11 @@ from tulip import tasks
 class _QueueTestBase(unittest.TestCase):
 
     def setUp(self):
-        self.event_loop = events.new_event_loop()
-        events.set_event_loop(self.event_loop)
+        self.loop = events.new_event_loop()
+        events.set_event_loop(self.loop)
 
     def tearDown(self):
-        self.event_loop.close()
+        self.loop.close()
 
 
 class QueueBasicTests(_QueueTestBase):
@@ -41,7 +42,7 @@ class QueueBasicTests(_QueueTestBase):
             yield from tasks.sleep(0.1)
             self.assertTrue('_getters[1]' in fn(q))
 
-        self.event_loop.run_until_complete(add_getter())
+        self.loop.run_until_complete(add_getter())
 
         @tasks.coroutine
         def add_putter():
@@ -53,11 +54,19 @@ class QueueBasicTests(_QueueTestBase):
             yield from tasks.sleep(0.1)
             self.assertTrue('_putters[1]' in fn(q))
 
-        self.event_loop.run_until_complete(add_putter())
+        self.loop.run_until_complete(add_putter())
 
         q = queues.Queue()
         q.put_nowait(1)
         self.assertTrue('_queue=[1]' in fn(q))
+
+    def test_ctor_loop(self):
+        loop = unittest.mock.Mock()
+        q = queues.Queue(loop=loop)
+        self.assertIs(q._loop, loop)
+
+        q = queues.Queue()
+        self.assertIs(q._loop, events.get_event_loop())
 
     def test_repr(self):
         self._test_repr_or_str(repr, True)
@@ -119,7 +128,7 @@ class QueueBasicTests(_QueueTestBase):
             self.assertTrue(t.done())
             self.assertTrue(t.result())
 
-        self.event_loop.run_until_complete(test())
+        self.loop.run_until_complete(test())
 
 
 class QueueGetTests(_QueueTestBase):
@@ -132,8 +141,20 @@ class QueueGetTests(_QueueTestBase):
         def queue_get():
             return (yield from q.get())
 
-        res = self.event_loop.run_until_complete(queue_get())
+        res = self.loop.run_until_complete(queue_get())
         self.assertEqual(1, res)
+
+    def test_get_with_putters(self):
+        q = queues.Queue(1)
+        q.put_nowait(1)
+
+        waiter = futures.Future()
+        q._putters.append((2, waiter))
+
+        res = self.loop.run_until_complete(q.get())
+        self.assertEqual(1, res)
+        self.assertTrue(waiter.done())
+        self.assertIsNone(waiter.result())
 
     def test_blocking_get_wait(self):
         q = queues.Queue()
@@ -150,7 +171,7 @@ class QueueGetTests(_QueueTestBase):
 
         @tasks.coroutine
         def queue_put():
-            self.event_loop.call_later(0.01, q.put_nowait, 1)
+            self.loop.call_later(0.01, q.put_nowait, 1)
             queue_get_task = tasks.Task(queue_get())
             yield from started.wait()
             self.assertFalse(finished)
@@ -158,7 +179,7 @@ class QueueGetTests(_QueueTestBase):
             self.assertTrue(finished)
             return res
 
-        res = self.event_loop.run_until_complete(queue_put())
+        res = self.loop.run_until_complete(queue_put())
         self.assertEqual(1, res)
 
     def test_nonblocking_get(self):
@@ -188,7 +209,7 @@ class QueueGetTests(_QueueTestBase):
             self.assertTrue(t.done())
             self.assertIsNone(t.result())
 
-        self.event_loop.run_until_complete(queue_get())
+        self.loop.run_until_complete(queue_get())
 
     def test_get_timeout_cancelled(self):
         q = queues.Queue()
@@ -204,7 +225,7 @@ class QueueGetTests(_QueueTestBase):
             q.put_nowait(1)
             return (yield from get_task)
 
-        self.assertEqual(1, self.event_loop.run_until_complete(test()))
+        self.assertEqual(1, self.loop.run_until_complete(test()))
 
 
 class QueuePutTests(_QueueTestBase):
@@ -217,7 +238,7 @@ class QueuePutTests(_QueueTestBase):
             # No maxsize, won't block.
             yield from q.put(1)
 
-        self.event_loop.run_until_complete(queue_put())
+        self.loop.run_until_complete(queue_put())
 
     def test_blocking_put_wait(self):
         q = queues.Queue(maxsize=1)
@@ -234,14 +255,14 @@ class QueuePutTests(_QueueTestBase):
 
         @tasks.coroutine
         def queue_get():
-            self.event_loop.call_later(0.01, q.get_nowait)
+            self.loop.call_later(0.01, q.get_nowait)
             queue_put_task = tasks.Task(queue_put())
             yield from started.wait()
             self.assertFalse(finished)
             yield from queue_put_task
             self.assertTrue(finished)
 
-        self.event_loop.run_until_complete(queue_get())
+        self.loop.run_until_complete(queue_get())
 
     def test_nonblocking_put(self):
         q = queues.Queue()
@@ -274,7 +295,7 @@ class QueuePutTests(_QueueTestBase):
             q.put_nowait(3)
             self.assertEqual(3, q.get_nowait())
 
-        self.event_loop.run_until_complete(queue_put())
+        self.loop.run_until_complete(queue_put())
 
     def test_put_timeout_cancelled(self):
         q = queues.Queue()
@@ -289,7 +310,7 @@ class QueuePutTests(_QueueTestBase):
             return (yield from q.get())
 
         t = tasks.Task(queue_put())
-        self.assertEqual(1, self.event_loop.run_until_complete(test()))
+        self.assertEqual(1, self.loop.run_until_complete(test()))
         self.assertTrue(t.done())
         self.assertTrue(t.result())
 
@@ -320,7 +341,7 @@ class JoinableQueueTests(_QueueTestBase):
 
     def test_task_done_underflow(self):
         q = queues.JoinableQueue()
-        self.assertRaises(q.task_done)
+        self.assertRaises(ValueError, q.task_done)
 
     def test_task_done(self):
         q = queues.JoinableQueue()
@@ -348,7 +369,7 @@ class JoinableQueueTests(_QueueTestBase):
 
             yield from q.join()
 
-        self.event_loop.run_until_complete(test())
+        self.loop.run_until_complete(test())
         self.assertEqual(sum(range(100)), accumulator)
 
     def test_join_empty_queue(self):
@@ -362,7 +383,7 @@ class JoinableQueueTests(_QueueTestBase):
             yield from q.join()
             yield from q.join()
 
-        self.event_loop.run_until_complete(join())
+        self.loop.run_until_complete(join())
 
     def test_join_timeout(self):
         q = queues.JoinableQueue()
@@ -373,7 +394,14 @@ class JoinableQueueTests(_QueueTestBase):
             yield from q.join(0.1)
 
         # Join completes in ~ 0.1 seconds, although no one calls task_done().
-        self.event_loop.run_until_complete(join())
+        self.loop.run_until_complete(join())
+
+    def test_format(self):
+        q = queues.JoinableQueue()
+        self.assertEqual(q._format(), 'maxsize=0')
+
+        q._unfinished_tasks = 2
+        self.assertEqual(q._format(), 'maxsize=0 tasks=2')
 
 
 if __name__ == '__main__':

@@ -25,8 +25,11 @@ class Queue:
     interrupted between calling qsize() and doing an operation on the Queue.
     """
 
-    def __init__(self, maxsize=0):
-        self._event_loop = events.get_event_loop()
+    def __init__(self, maxsize=0, loop=None):
+        if loop is None:
+            self._loop = events.get_event_loop()
+        else:
+            self._loop = loop
         self._maxsize = maxsize
 
         # Futures.
@@ -118,8 +121,7 @@ class Queue:
             getter.set_result(self._get())
 
         elif self._maxsize > 0 and self._maxsize == self.qsize():
-            waiter = futures.Future(
-                event_loop=self._event_loop, timeout=timeout)
+            waiter = futures.Future(event_loop=self._loop, timeout=timeout)
 
             self._putters.append((item, waiter))
             try:
@@ -172,15 +174,14 @@ class Queue:
             # run, we need to defer the put for a tick to ensure that
             # getters and putters alternate perfectly. See
             # ChannelTest.test_wait.
-            self._event_loop.call_soon(putter.set_result, None)
+            self._loop.call_soon(putter.set_result, None)
 
             return self._get()
 
         elif self.qsize():
             return self._get()
         else:
-            waiter = futures.Future(
-                event_loop=self._event_loop, timeout=timeout)
+            waiter = futures.Future(event_loop=self._loop, timeout=timeout)
 
             self._getters.append(waiter)
             try:

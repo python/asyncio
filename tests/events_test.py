@@ -454,7 +454,7 @@ class EventLoopTestsMixin:
         self.assertTrue(data == b'x'*256)
 
     def test_sock_client_ops(self):
-        with test_utils.run_test_server(self.event_loop) as httpd:
+        with test_utils.run_test_server(self.event_loop, host='') as httpd:
             sock = socket.socket()
             sock.setblocking(False)
             self.event_loop.run_until_complete(
@@ -1363,6 +1363,8 @@ class AbstractEventLoopTests(unittest.TestCase):
         self.assertRaises(
             NotImplementedError, ev_loop.stop)
         self.assertRaises(
+            NotImplementedError, ev_loop.is_running)
+        self.assertRaises(
             NotImplementedError, ev_loop.call_later, None, None)
         self.assertRaises(
             NotImplementedError, ev_loop.call_repeatedly, None, None)
@@ -1374,6 +1376,8 @@ class AbstractEventLoopTests(unittest.TestCase):
             NotImplementedError, ev_loop.wrap_future, f)
         self.assertRaises(
             NotImplementedError, ev_loop.run_in_executor, f, f)
+        self.assertRaises(
+            NotImplementedError, ev_loop.set_default_executor, f)
         self.assertRaises(
             NotImplementedError, ev_loop.getaddrinfo, 'localhost', 8080)
         self.assertRaises(

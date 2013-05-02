@@ -204,6 +204,7 @@ class BaseEventLoop(events.AbstractEventLoop):
     def call_repeatedly(self, interval, callback, *args):
         """Call a callback every 'interval' seconds."""
         assert interval > 0, 'Interval must be > 0: {!r}'.format(interval)
+
         # TODO: What if callback is already a Handle?
         def wrapper():
             callback(*args)  # If this fails, the chain is broken.
@@ -268,7 +269,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         if host is not None or port is not None:
             if sock is not None:
                 raise ValueError(
-                    "host/port and sock can not be specified at the same time")
+                    'host/port and sock can not be specified at the same time')
 
             infos = yield from self.getaddrinfo(
                 host, port, family=family,
@@ -304,7 +305,7 @@ class BaseEventLoop(events.AbstractEventLoop):
 
         elif sock is None:
             raise ValueError(
-                "host and port was not specified and no sock specified")
+                'host and port was not specified and no sock specified')
 
         sock.setblocking(False)
 
@@ -399,13 +400,13 @@ class BaseEventLoop(events.AbstractEventLoop):
         if host is not None or port is not None:
             if sock is not None:
                 raise ValueError(
-                    "host/port and sock can not be specified at the same time")
+                    'host/port and sock can not be specified at the same time')
 
             AF_INET6 = getattr(socket, 'AF_INET6', 0)
             if reuse_address is None:
                 reuse_address = os.name == 'posix' and sys.platform != 'cygwin'
             sockets = []
-            if host == "":
+            if host == '':
                 host = None
 
             infos = yield from self.getaddrinfo(
@@ -426,16 +427,16 @@ class BaseEventLoop(events.AbstractEventLoop):
                     # Disable IPv4/IPv6 dual stack support (enabled by
                     # default on Linux) which makes a single socket
                     # listen on both address families.
-                    if af == AF_INET6 and hasattr(socket, "IPPROTO_IPV6"):
+                    if af == AF_INET6 and hasattr(socket, 'IPPROTO_IPV6'):
                         sock.setsockopt(socket.IPPROTO_IPV6,
                                         socket.IPV6_V6ONLY,
                                         True)
                     try:
                         sock.bind(sa)
                     except socket.error as err:
-                        raise socket.error(err.errno, "error while attempting "
-                                      "to bind on address %r: %s" \
-                                      % (sa, err.strerror.lower()))
+                        raise socket.error(err.errno, 'error while attempting '
+                                           'to bind on address %r: %s'
+                                           % (sa, err.strerror.lower()))
                 completed = True
             finally:
                 if not completed:
@@ -444,7 +445,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         else:
             if sock is None:
                 raise ValueError(
-                    "host and port was not specified and no sock specified")
+                    'host and port was not specified and no sock specified')
             sockets = [sock]
 
         for sock in sockets:

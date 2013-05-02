@@ -163,6 +163,14 @@ class FutureTests(unittest.TestCase):
         fut.cancel()
 
     @unittest.mock.patch('tulip.futures.tulip_log')
+    def test_del_norm_level(self, log):
+        self.loop.set_log_level(logging.CRITICAL)
+
+        fut = futures.Future()
+        del fut
+        self.assertFalse(log.error.called)
+
+    @unittest.mock.patch('tulip.futures.tulip_log')
     def test_del_normal(self, log):
         self.loop.set_log_level(futures.STACK_DEBUG)
 

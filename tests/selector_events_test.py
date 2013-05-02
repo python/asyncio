@@ -383,38 +383,47 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
 
     def test_add_reader(self):
         self.event_loop._selector.get_info.side_effect = KeyError
-        h = self.event_loop.add_reader(1, lambda: True)
+        cb = lambda: True
+        self.event_loop.add_reader(1, cb)
 
         self.assertTrue(self.event_loop._selector.register.called)
-        self.assertEqual(
-            (1, selectors.EVENT_READ, (h, None)),
-            self.event_loop._selector.register.call_args[0])
+        fd, mask, (r, w) = self.event_loop._selector.register.call_args[0]
+        self.assertEqual(1, fd)
+        self.assertEqual(selectors.EVENT_READ, mask)
+        self.assertEqual(cb, r.callback)
+        self.assertEqual(None, w)
 
     def test_add_reader_existing(self):
         reader = unittest.mock.Mock()
         writer = unittest.mock.Mock()
         self.event_loop._selector.get_info.return_value = (
             selectors.EVENT_WRITE, (reader, writer))
-        h = self.event_loop.add_reader(1, lambda: True)
+        cb = lambda: True
+        self.event_loop.add_reader(1, cb)
 
         self.assertTrue(reader.cancel.called)
         self.assertFalse(self.event_loop._selector.register.called)
         self.assertTrue(self.event_loop._selector.modify.called)
-        self.assertEqual(
-            (1, selectors.EVENT_WRITE | selectors.EVENT_READ, (h, writer)),
-            self.event_loop._selector.modify.call_args[0])
+        fd, mask, (r, w) = self.event_loop._selector.modify.call_args[0]
+        self.assertEqual(1, fd)
+        self.assertEqual(selectors.EVENT_WRITE | selectors.EVENT_READ, mask)
+        self.assertEqual(cb, r.callback)
+        self.assertEqual(writer, w)
 
     def test_add_reader_existing_writer(self):
         writer = unittest.mock.Mock()
         self.event_loop._selector.get_info.return_value = (
             selectors.EVENT_WRITE, (None, writer))
-        h = self.event_loop.add_reader(1, lambda: True)
+        cb = lambda: True
+        self.event_loop.add_reader(1, cb)
 
         self.assertFalse(self.event_loop._selector.register.called)
         self.assertTrue(self.event_loop._selector.modify.called)
-        self.assertEqual(
-            (1, selectors.EVENT_WRITE | selectors.EVENT_READ, (h, writer)),
-            self.event_loop._selector.modify.call_args[0])
+        fd, mask, (r, w) = self.event_loop._selector.modify.call_args[0]
+        self.assertEqual(1, fd)
+        self.assertEqual(selectors.EVENT_WRITE | selectors.EVENT_READ, mask)
+        self.assertEqual(cb, r.callback)
+        self.assertEqual(writer, w)
 
     def test_remove_reader(self):
         self.event_loop._selector.get_info.return_value = (
@@ -443,26 +452,32 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
 
     def test_add_writer(self):
         self.event_loop._selector.get_info.side_effect = KeyError
-        h = self.event_loop.add_writer(1, lambda: True)
+        cb = lambda: True
+        self.event_loop.add_writer(1, cb)
 
         self.assertTrue(self.event_loop._selector.register.called)
-        self.assertEqual(
-            (1, selectors.EVENT_WRITE, (None, h)),
-            self.event_loop._selector.register.call_args[0])
+        fd, mask, (r, w) = self.event_loop._selector.register.call_args[0]
+        self.assertEqual(1, fd)
+        self.assertEqual(selectors.EVENT_WRITE, mask)
+        self.assertEqual(None, r)
+        self.assertEqual(cb, w.callback)
 
     def test_add_writer_existing(self):
         reader = unittest.mock.Mock()
         writer = unittest.mock.Mock()
         self.event_loop._selector.get_info.return_value = (
             selectors.EVENT_READ, (reader, writer))
-        h = self.event_loop.add_writer(1, lambda: True)
+        cb = lambda: True
+        self.event_loop.add_writer(1, cb)
 
         self.assertTrue(writer.cancel.called)
         self.assertFalse(self.event_loop._selector.register.called)
         self.assertTrue(self.event_loop._selector.modify.called)
-        self.assertEqual(
-            (1, selectors.EVENT_WRITE | selectors.EVENT_READ, (reader, h)),
-            self.event_loop._selector.modify.call_args[0])
+        fd, mask, (r, w) = self.event_loop._selector.modify.call_args[0]
+        self.assertEqual(1, fd)
+        self.assertEqual(selectors.EVENT_WRITE | selectors.EVENT_READ, mask)
+        self.assertEqual(reader, r)
+        self.assertEqual(cb, w.callback)
 
     def test_remove_writer(self):
         self.event_loop._selector.get_info.return_value = (

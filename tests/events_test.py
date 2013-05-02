@@ -208,17 +208,6 @@ class EventLoopTestsMixin:
         self.assertEqual(results, ['hello world'])
         self.assertTrue(0.09 <= t1-t0 <= 0.12)
 
-    def test_call_repeatedly(self):
-        results = []
-
-        def callback(arg):
-            results.append(arg)
-
-        self.event_loop.call_repeatedly(0.03, callback, 'ho')
-        self.event_loop.call_later(0.1, self.event_loop.stop)
-        self.event_loop.run_forever()
-        self.assertEqual(results, ['ho', 'ho', 'ho'])
-
     def test_call_soon(self):
         results = []
 
@@ -229,18 +218,6 @@ class EventLoopTestsMixin:
         self.event_loop.call_soon(callback, 'hello', 'world')
         self.event_loop.run_forever()
         self.assertEqual(results, [('hello', 'world')])
-
-    def test_call_soon_with_handle(self):
-        results = []
-
-        def callback():
-            results.append('yeah')
-            self.event_loop.stop()
-
-        handle = events.Handle(callback, ())
-        self.assertIs(self.event_loop.call_soon(handle), handle)
-        self.event_loop.run_forever()
-        self.assertEqual(results, ['yeah'])
 
     def test_call_soon_threadsafe(self):
         results = []
@@ -276,31 +253,6 @@ class EventLoopTestsMixin:
         self.event_loop.run_forever()
         self.assertEqual(results, ['hello', 'world'])
 
-    def test_call_soon_threadsafe_with_handle(self):
-        results = []
-
-        def callback(arg):
-            results.append(arg)
-            if len(results) >= 2:
-                self.event_loop.stop()
-
-        handle = events.Handle(callback, ('hello',))
-
-        def run():
-            self.assertIs(
-                self.event_loop.call_soon_threadsafe(handle), handle)
-
-        t = threading.Thread(target=run)
-        self.event_loop.call_later(0.1, callback, 'world')
-
-        t0 = time.monotonic()
-        t.start()
-        self.event_loop.run_forever()
-        t1 = time.monotonic()
-        t.join()
-        self.assertEqual(results, ['hello', 'world'])
-        self.assertTrue(t1-t0 >= 0.09)
-
     def test_wrap_future(self):
         def run(arg):
             time.sleep(0.1)
@@ -316,15 +268,6 @@ class EventLoopTestsMixin:
             time.sleep(0.1)
             return arg
         f2 = self.event_loop.run_in_executor(None, run, 'yo')
-        res = self.event_loop.run_until_complete(f2)
-        self.assertEqual(res, 'yo')
-
-    def test_run_in_executor_with_handle(self):
-        def run(arg):
-            time.sleep(0.01)
-            return arg
-        handle = events.Handle(run, ('yo',))
-        f2 = self.event_loop.run_in_executor(None, handle)
         res = self.event_loop.run_until_complete(f2)
         self.assertEqual(res, 'yo')
 
@@ -353,57 +296,6 @@ class EventLoopTestsMixin:
         self.event_loop.run_forever()
         self.assertEqual(b''.join(bytes_read), b'abcdef')
 
-    def test_reader_callback_with_handle(self):
-        r, w = test_utils.socketpair()
-        bytes_read = []
-
-        def reader():
-            try:
-                data = r.recv(1024)
-            except BlockingIOError:
-                # Spurious readiness notifications are possible
-                # at least on Linux -- see man select.
-                return
-            if data:
-                bytes_read.append(data)
-            else:
-                self.assertTrue(self.event_loop.remove_reader(r.fileno()))
-                r.close()
-
-        handle = events.Handle(reader, ())
-        self.assertIs(handle, self.event_loop.add_reader(r.fileno(), handle))
-
-        self.event_loop.call_later(0.05, w.send, b'abc')
-        self.event_loop.call_later(0.1, w.send, b'def')
-        self.event_loop.call_later(0.15, w.close)
-        self.event_loop.call_later(0.16, self.event_loop.stop)
-        self.event_loop.run_forever()
-        self.assertEqual(b''.join(bytes_read), b'abcdef')
-
-    def test_reader_callback_cancel(self):
-        r, w = test_utils.socketpair()
-        bytes_read = []
-
-        def reader():
-            try:
-                data = r.recv(1024)
-            except BlockingIOError:
-                return
-            if data:
-                bytes_read.append(data)
-            if sum(len(b) for b in bytes_read) >= 6:
-                handle.cancel()
-            if not data:
-                r.close()
-
-        handle = self.event_loop.add_reader(r.fileno(), reader)
-        self.event_loop.call_later(0.05, w.send, b'abc')
-        self.event_loop.call_later(0.1, w.send, b'def')
-        self.event_loop.call_later(0.15, w.close)
-        self.event_loop.call_later(0.16, self.event_loop.stop)
-        self.event_loop.run_forever()
-        self.assertEqual(b''.join(bytes_read), b'abcdef')
-
     def test_writer_callback(self):
         r, w = test_utils.socketpair()
         w.setblocking(False)
@@ -419,39 +311,6 @@ class EventLoopTestsMixin:
         data = r.recv(256*1024)
         r.close()
         self.assertTrue(len(data) >= 200)
-
-    def test_writer_callback_with_handle(self):
-        r, w = test_utils.socketpair()
-        w.setblocking(False)
-        handle = events.Handle(w.send, (b'x'*(256*1024),))
-        self.assertIs(self.event_loop.add_writer(w.fileno(), handle), handle)
-
-        def remove_writer():
-            self.assertTrue(self.event_loop.remove_writer(w.fileno()))
-
-        self.event_loop.call_later(0.1, remove_writer)
-        self.event_loop.call_later(0.11, self.event_loop.stop)
-        self.event_loop.run_forever()
-        w.close()
-        data = r.recv(256*1024)
-        r.close()
-        self.assertTrue(len(data) >= 200)
-
-    def test_writer_callback_cancel(self):
-        r, w = test_utils.socketpair()
-        w.setblocking(False)
-
-        def sender():
-            w.send(b'x'*256)
-            handle.cancel()
-            self.event_loop.stop()
-
-        handle = self.event_loop.add_writer(w.fileno(), sender)
-        self.event_loop.run_forever()
-        w.close()
-        data = r.recv(1024)
-        r.close()
-        self.assertTrue(data == b'x'*256)
 
     def test_sock_client_ops(self):
         with test_utils.run_test_server(self.event_loop) as httpd:
@@ -548,21 +407,6 @@ class EventLoopTestsMixin:
                          signal.default_int_handler)
         # Removing again returns False.
         self.assertFalse(self.event_loop.remove_signal_handler(signal.SIGINT))
-
-    @unittest.skipIf(sys.platform == 'win32', 'Unix only')
-    def test_cancel_signal_handler(self):
-        # Cancelling the handler should remove it (eventually).
-        caught = 0
-
-        def my_handler():
-            nonlocal caught
-            caught += 1
-
-        handle = self.event_loop.add_signal_handler(signal.SIGINT, my_handler)
-        handle.cancel()
-        os.kill(os.getpid(), signal.SIGINT)
-        self.event_loop.run_once()
-        self.assertEqual(caught, 0)
 
     @unittest.skipUnless(hasattr(signal, 'SIGALRM'), 'No SIGALRM')
     def test_signal_handling_while_selecting(self):
@@ -1172,13 +1016,9 @@ if sys.platform == 'win32':
             raise unittest.SkipTest("IocpEventLoop does not have add_reader()")
         def test_reader_callback_cancel(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_reader()")
-        def test_reader_callback_with_handle(self):
-            raise unittest.SkipTest("IocpEventLoop does not have add_reader()")
         def test_writer_callback(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_writer()")
         def test_writer_callback_cancel(self):
-            raise unittest.SkipTest("IocpEventLoop does not have add_writer()")
-        def test_writer_callback_with_handle(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_writer()")
         def test_accept_connection_retry(self):
             raise unittest.SkipTest(
@@ -1268,11 +1108,8 @@ class HandleTests(unittest.TestCase):
         def callback(*args):
             return args
         h1 = events.Handle(callback, ())
-        h2 = events.make_handle(h1, ())
-        self.assertIs(h1, h2)
-
         self.assertRaises(
-            AssertionError, events.make_handle, h1, (1, 2))
+            AssertionError, events.make_handle, h1, ())
 
     @unittest.mock.patch('tulip.events.tulip_log')
     def test_callback_with_exception(self, log):
@@ -1365,9 +1202,9 @@ class AbstractEventLoopTests(unittest.TestCase):
         self.assertRaises(
             NotImplementedError, ev_loop.call_later, None, None)
         self.assertRaises(
-            NotImplementedError, ev_loop.call_repeatedly, None, None)
-        self.assertRaises(
             NotImplementedError, ev_loop.call_soon, None)
+        self.assertRaises(
+            NotImplementedError, ev_loop.time)
         self.assertRaises(
             NotImplementedError, ev_loop.call_soon_threadsafe, None)
         self.assertRaises(

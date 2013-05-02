@@ -172,11 +172,15 @@ class BaseEventLoop(events.AbstractEventLoop):
         """Returns running status of event loop."""
         return self._running
 
+    def time(self):
+        """Return the time according to the event loop's clock."""
+        return time.monotonic()
+
     def call_later(self, delay, callback, *args):
         """Arrange for a callback to be called at a given time.
 
-        Return an object with a cancel() method that can be used to
-        cancel the call.
+        Return a Handle: an opaque object with a cancel() method that
+        can be used to cancel the call.
 
         The delay can be an int or float, expressed in seconds.  It is
         always a relative time.
@@ -185,35 +189,16 @@ class BaseEventLoop(events.AbstractEventLoop):
         are scheduled for exactly the same time, it undefined which
         will be called first.
 
-        Callbacks scheduled in the past are passed on to call_soon(),
-        so these will be called in the order in which they were
-        registered rather than by time due.  This is so you can't
-        cheat and insert yourself at the front of the ready queue by
-        using a negative time.
-
         Any positional arguments after the callback will be passed to
         the callback when it is called.
         """
-        if delay <= 0:
-            return self.call_soon(callback, *args)
+        return self.call_at(self.time() + delay, callback, *args)
 
-        handle = events.TimerHandle(time.monotonic() + delay, callback, args)
-        heapq.heappush(self._scheduled, handle)
-        return handle
-
-    def call_repeatedly(self, interval, callback, *args):
-        """Call a callback every 'interval' seconds."""
-        assert interval > 0, 'Interval must be > 0: {!r}'.format(interval)
-
-        # TODO: What if callback is already a Handle?
-        def wrapper():
-            callback(*args)  # If this fails, the chain is broken.
-            handle._when = time.monotonic() + interval
-            heapq.heappush(self._scheduled, handle)
-
-        handle = events.TimerHandle(time.monotonic() + interval, wrapper, ())
-        heapq.heappush(self._scheduled, handle)
-        return handle
+    def call_at(self, when, callback, *args):
+        """Like call_later(), but uses an absolute time."""
+        timer = events.TimerHandle(when, callback, args)
+        heapq.heappush(self._scheduled, timer)
+        return timer
 
     def call_soon(self, callback, *args):
         """Arrange for a callback to be called as soon as possible.
@@ -474,12 +459,18 @@ class BaseEventLoop(events.AbstractEventLoop):
 
     def _add_callback(self, handle):
         """Add a Handle to ready or scheduled."""
+        assert isinstance(handle, events.Handle), 'A Handle is required here'
         if handle.cancelled:
             return
         if isinstance(handle, events.TimerHandle):
             heapq.heappush(self._scheduled, handle)
         else:
             self._ready.append(handle)
+
+    def _add_callback_signalsafe(self, handle):
+        """Like _add_callback() but called from a signal handler."""
+        self._add_callback(handle)
+        self._write_to_self()
 
     def wrap_future(self, future):
         """XXX"""
@@ -498,11 +489,6 @@ class BaseEventLoop(events.AbstractEventLoop):
         schedules the resulting callbacks, and finally schedules
         'call_later' callbacks.
         """
-        # TODO: Break each of these into smaller pieces.
-        # TODO: Refactor to separate the callbacks from the readers/writers.
-        # TODO: An alternative API would be to do the *minimal* amount
-        # of work, e.g. one callback or one I/O poll.
-
         # Remove delayed calls that were cancelled from head of queue.
         while self._scheduled and self._scheduled[0].cancelled:
             heapq.heappop(self._scheduled)
@@ -512,15 +498,16 @@ class BaseEventLoop(events.AbstractEventLoop):
         elif self._scheduled:
             # Compute the desired timeout.
             when = self._scheduled[0].when
-            deadline = max(0, when - time.monotonic())
+            deadline = max(0, when - self.time())
             if timeout is None:
                 timeout = deadline
             else:
                 timeout = min(timeout, deadline)
 
-        t0 = time.monotonic()
+        # TODO: Instrumentation only in debug mode?
+        t0 = self.time()
         event_list = self._selector.select(timeout)
-        t1 = time.monotonic()
+        t1 = self.time()
         argstr = '' if timeout is None else '{:.3f}'.format(timeout)
         if t1-t0 >= 1:
             level = logging.INFO
@@ -530,7 +517,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         self._process_events(event_list)
 
         # Handle 'later' callbacks that are ready.
-        now = time.monotonic()
+        now = self.time()
         while self._scheduled:
             handle = self._scheduled[0]
             if handle.when > now:

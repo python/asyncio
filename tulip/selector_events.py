@@ -263,6 +263,13 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         return fut
 
     def _sock_connect(self, fut, registered, sock, address):
+        # TODO: Use getaddrinfo() to look up the address, to avoid the
+        # trap of hanging the entire event loop when the address
+        # requires doing a DNS lookup.  (OTOH, the caller should
+        # already have done this, so it would be nice if we could
+        # easily tell whether the address needs looking up or not.  I
+        # know how to do this for IPv4, but IPv6 addresses have many
+        # syntaxes.)
         fd = sock.fileno()
         if registered:
             self.remove_writer(fd)

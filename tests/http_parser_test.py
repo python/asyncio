@@ -24,6 +24,20 @@ class ParseHeadersTests(unittest.TestCase):
         self.assertIsNone(close)
         self.assertIsNone(compression)
 
+    def test_parse_headers_multi(self):
+        hdrs = ('',
+                'Set-Cookie: c1=cookie1\r\n',
+                'Set-Cookie: c2=cookie2\r\n', '\r\n')
+
+        headers, close, compression = protocol.parse_headers(
+            hdrs, 8190, 32768, 8190)
+
+        self.assertEqual(list(headers),
+                         [('SET-COOKIE', 'c1=cookie1'),
+                          ('SET-COOKIE', 'c2=cookie2')])
+        self.assertIsNone(close)
+        self.assertIsNone(compression)
+
     def test_conn_close(self):
         headers, close, compression = protocol.parse_headers(
             ['', 'connection: close\r\n', '\r\n'], 8190, 32768, 8190)

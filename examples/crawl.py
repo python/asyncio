@@ -21,12 +21,17 @@ class Crawler:
         self.tasks = set()
         self.sem = tulip.Semaphore(maxtasks)
 
+        # session stores cookies between requests and uses connection pool
+        self.session = tulip.http.Session()
+
     @tulip.task
     def run(self):
         self.addurls([(self.rooturl, '')])  # Set initial work.
         yield from tulip.sleep(1)
         while self.busy:
             yield from tulip.sleep(1)
+
+        self.session.close()
         self.loop.stop()
 
     @tulip.task
@@ -52,7 +57,8 @@ class Crawler:
         self.todo.remove(url)
         self.busy.add(url)
         try:
-            resp = yield from tulip.http.request('get', url)
+            resp = yield from tulip.http.request(
+                'get', url, session=self.session)
         except Exception as exc:
             print('...', url, 'has error', repr(str(exc)))
             self.done[url] = False

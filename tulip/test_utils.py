@@ -81,8 +81,7 @@ def run_test_server(loop, *, host='127.0.0.1', port=0,
                 response.send_headers()
                 response.write(text)
                 response.write_eof()
-
-            self.transport.close()
+                self.transport.close()
 
     if use_ssl:
         here = os.path.join(os.path.dirname(__file__), '..', 'tests')
@@ -254,3 +253,7 @@ class Router:
         # write payload
         response.write(client.str_to_bytes(body))
         response.write_eof()
+
+        # keep-alive
+        if not response.keep_alive():
+            self._transport.close()

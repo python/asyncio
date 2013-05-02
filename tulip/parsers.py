@@ -165,7 +165,8 @@ class StreamBuffer:
 
     def unset_parser(self):
         """unset parser, send eof to the parser and then remove it."""
-        assert self._parser is not None, 'Paser is not set.'
+        if self._parser is None:
+            return
 
         try:
             self._parser.throw(EofStream())

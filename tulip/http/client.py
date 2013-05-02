@@ -41,7 +41,8 @@ def request(method, url, *,
             version=(1, 1),
             timeout=None,
             compress=None,
-            chunked=None):
+            chunked=None,
+            session=None):
     """Constructs and sends a request. Returns response object.
 
     method: http method
@@ -62,6 +63,8 @@ def request(method, url, *,
        with deflate encoding.
     chunked: Boolean or Integer. Set to chunk size for chunked
        transfer encoding.
+    session: tulip.http.Session instance to support connection pooling and
+       session cookies.
 
     Usage:
 
@@ -82,9 +85,14 @@ def request(method, url, *,
             cookies=cookies, files=files, auth=auth, encoding=encoding,
             version=version, compress=compress, chunked=chunked)
 
+        if session is None:
+            conn = start(req, loop)
+        else:
+            conn = session.start(req, loop)
+
         # connection timeout
         try:
-            resp = yield from tulip.Task(start(req, loop), timeout=timeout)
+            resp = yield from tulip.Task(conn, timeout=timeout)
         except tulip.CancelledError:
             raise tulip.TimeoutError from None
 
@@ -117,6 +125,7 @@ def request(method, url, *,
 def start(req, loop):
     transport, p = yield from loop.create_connection(
         tulip.StreamProtocol, req.host, req.port, ssl=req.ssl)
+
     try:
         resp = req.send(transport)
         yield from resp.start(p, transport)
@@ -250,18 +259,7 @@ class HttpRequest:
 
         # cookies
         if cookies:
-            c = http.cookies.SimpleCookie()
-            if 'cookie' in self.headers:
-                c.load(self.headers.get('cookie', ''))
-                del self.headers['cookie']
-
-            for name, value in cookies.items():
-                if isinstance(value, http.cookies.Morsel):
-                    dict.__setitem__(c, name, value)
-                else:
-                    c[name] = value
-
-            self.headers['cookie'] = c.output(header='', sep=';').strip()
+            self.update_cookies(cookies)
 
         # auth
         if auth:
@@ -274,24 +272,15 @@ class HttpRequest:
             else:
                 raise ValueError("Only basic auth is supported")
 
-        self._params = (chunked, compress, files, data, encoding)
-
-    def send(self, transport):
-        chunked, compress, files, data, encoding = self._params
-
-        request = tulip.http.Request(
-            transport, self.method, self.path, self.version)
-
         # Content-encoding
         enc = self.headers.get('Content-Encoding', '').lower()
         if enc:
             chunked = True  # enable chunked, no need to deal with length
-            request.add_compression_filter(enc)
+            compress = enc
         elif compress:
             chunked = True  # enable chunked, no need to deal with length
             compress = compress if isinstance(compress, str) else 'deflate'
             self.headers['Content-Encoding'] = compress
-            request.add_compression_filter(compress)
 
         # form data (x-www-form-urlencoded)
         if isinstance(data, dict):
@@ -354,16 +343,47 @@ class HttpRequest:
             if 'content-length' in self.headers:
                 del self.headers['content-length']
             if 'chunked' not in te:
-                self.headers['Transfer-encoding'] = 'chunked'
+                self.headers['transfer-encoding'] = 'chunked'
 
-            chunk_size = chunked if type(chunked) is int else 8196
-            request.add_chunking_filter(chunk_size)
+            chunked = chunked if type(chunked) is int else 8196
         else:
             if 'chunked' in te:
-                request.add_chunking_filter(8196)
+                chunked = 8196
             else:
-                chunked = False
+                chunked = None
                 self.headers['content-length'] = str(len(self.body))
+
+        self._chunked = chunked
+        self._compress = compress
+
+    def update_cookies(self, cookies):
+        """Update request cookies header."""
+        c = http.cookies.SimpleCookie()
+        if 'cookie' in self.headers:
+            c.load(self.headers.get('cookie', ''))
+            del self.headers['cookie']
+
+        if isinstance(cookies, dict):
+            cookies = cookies.items()
+
+        for name, value in cookies:
+            if isinstance(value, http.cookies.Morsel):
+                # use dict method because SimpleCookie class modifies value
+                dict.__setitem__(c, name, value)
+            else:
+                c[name] = value
+
+        self.headers['cookie'] = c.output(header='', sep=';').strip()
+
+    def send(self, transport):
+        request = tulip.http.Request(
+            transport, self.method, self.path, self.version)
+
+        if self._compress:
+            request.add_compression_filter(self._compress)
+
+        if self._chunked is not None:
+            request.add_chunking_filter(self._chunked)
 
         request.add_headers(*self.headers.items())
         request.send_headers()
@@ -381,10 +401,14 @@ class HttpRequest:
 
 class HttpResponse(http.client.HTTPMessage):
 
+    message = None  # RawResponseStatus object
+
     # from the Status-Line of the response
     version = None  # HTTP-Version
     status = None   # Status-Code
     reason = None   # Reason-Phrase
+
+    cookies = None  # Response cookies (Set-Cookie)
 
     content = None  # payload stream
     stream = None   # input stream
@@ -397,6 +421,9 @@ class HttpResponse(http.client.HTTPMessage):
         self.url = url
         self.host = host
         self._content = None
+
+    def __del__(self):
+        self.close()
 
     def __repr__(self):
         out = io.StringIO()
@@ -413,20 +440,26 @@ class HttpResponse(http.client.HTTPMessage):
         httpstream = stream.set_parser(tulip.http.http_response_parser())
 
         # read response
-        message = yield from httpstream.read()
+        self.message = yield from httpstream.read()
 
         # response status
-        self.version = message.version
-        self.status = message.code
-        self.reason = message.reason
+        self.version = self.message.version
+        self.status = self.message.code
+        self.reason = self.message.reason
 
         # headers
-        for hdr, val in message.headers:
+        for hdr, val in self.message.headers:
             self.add_header(hdr, val)
 
         # payload
         self.content = stream.set_parser(
-            tulip.http.http_payload_parser(message))
+            tulip.http.http_payload_parser(self.message))
+
+        # cookies
+        self.cookies = http.cookies.SimpleCookie()
+        if 'Set-Cookie' in self:
+            for hdr in self.get_all('Set-Cookie'):
+                self.cookies.load(hdr)
 
         return self
 

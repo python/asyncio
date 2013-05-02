@@ -34,6 +34,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
                 self.assertEqual(r.status, 200)
                 self.assertIn('"method": "%s"' % meth.upper(), content)
                 self.assertEqual(content1, content2)
+                r.close()
 
     def test_HTTP_302_REDIRECT_GET(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
@@ -324,6 +325,15 @@ class HttpClientFunctionalTests(unittest.TestCase):
             content = self.loop.run_until_complete(r.content.read())
             self.assertIn(b'"Cookie": "test1=123; test3=456"', bytes(content))
 
+    def test_set_cookies(self):
+        with test_utils.run_test_server(self.loop, router=Functional) as httpd:
+            resp = self.loop.run_until_complete(
+                client.request('get', httpd.url('cookies')))
+            self.assertEqual(resp.status, 200)
+
+            self.assertEqual(resp.cookies['c1'].value, 'cookie1')
+            self.assertEqual(resp.cookies['c2'].value, 'cookie2')
+
     def test_chunked(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
             r = self.loop.run_until_complete(
@@ -346,6 +356,64 @@ class HttpClientFunctionalTests(unittest.TestCase):
             OSError,
             self.loop.run_until_complete,
             client.request('get', 'http://0.0.0.0:1', timeout=0.1))
+
+    def test_keepalive(self):
+        from tulip.http import session
+        s = session.Session()
+
+        with test_utils.run_test_server(self.loop, router=Functional) as httpd:
+            r = self.loop.run_until_complete(
+                client.request('get', httpd.url('keepalive',), session=s))
+            self.assertEqual(r.status, 200)
+            content = self.loop.run_until_complete(r.read(True))
+            self.assertEqual(content['content'], 'requests=1')
+            r.close()
+
+            r = self.loop.run_until_complete(
+                client.request('get', httpd.url('keepalive'), session=s))
+            self.assertEqual(r.status, 200)
+            content = self.loop.run_until_complete(r.read(True))
+            self.assertEqual(content['content'], 'requests=2')
+            r.close()
+
+    def test_session_close(self):
+        from tulip.http import session
+        s = session.Session()
+
+        with test_utils.run_test_server(self.loop, router=Functional) as httpd:
+            r = self.loop.run_until_complete(
+                client.request(
+                    'get', httpd.url('keepalive') + '?close=1', session=s))
+            self.assertEqual(r.status, 200)
+            content = self.loop.run_until_complete(r.read(True))
+            self.assertEqual(content['content'], 'requests=1')
+            r.close()
+
+            r = self.loop.run_until_complete(
+                client.request('get', httpd.url('keepalive'), session=s))
+            self.assertEqual(r.status, 200)
+            content = self.loop.run_until_complete(r.read(True))
+            self.assertEqual(content['content'], 'requests=1')
+            r.close()
+
+    def test_session_cookies(self):
+        from tulip.http import session
+        s = session.Session()
+
+        with test_utils.run_test_server(self.loop, router=Functional) as httpd:
+            s.update_cookies({'test': '1'})
+            r = self.loop.run_until_complete(
+                client.request(
+                    'get', httpd.url('cookies'), session=s))
+            self.assertEqual(r.status, 200)
+            content = self.loop.run_until_complete(r.read(True))
+
+            self.assertEqual(content['headers']['Cookie'], 'test=1')
+            r.close()
+
+            cookies = sorted([(k, v.value) for k, v in s.cookies.items()])
+            self.assertEqual(
+                cookies, [('c1', 'cookie1'), ('c2', 'cookie2'), ('test', '1')])
 
 
 class Functional(test_utils.Router):
@@ -392,3 +460,28 @@ class Functional(test_utils.Router):
         resp = self._start_response(200)
         resp.add_chunking_filter(100)
         self._response(resp, chunked=True)
+
+    @test_utils.Router.define('/keepalive$')
+    def keepalive(self, match):
+        self._transport._requests = getattr(
+            self._transport, '_requests', 0) + 1
+        resp = self._start_response(200)
+        if 'close=' in self._query:
+            self._response(
+                resp, 'requests={}'.format(self._transport._requests))
+        else:
+            self._response(
+                resp, 'requests={}'.format(self._transport._requests),
+                headers={'CONNECTION': 'keep-alive'})
+
+    @test_utils.Router.define('/cookies$')
+    def cookies(self, match):
+        cookies = http.cookies.SimpleCookie()
+        cookies['c1'] = 'cookie1'
+        cookies['c2'] = 'cookie2'
+
+        resp = self._start_response(200)
+        for cookie in cookies.output(header='').split('\n'):
+            resp.add_header('Set-Cookie', cookie.strip())
+
+        self._response(resp)

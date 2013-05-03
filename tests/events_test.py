@@ -506,15 +506,16 @@ class EventLoopTestsMixin:
         self.assertRaises(ValueError, self.event_loop.run_until_complete, coro)
 
     def test_create_connection_no_getaddrinfo(self):
-        getaddrinfo = self.event_loop.getaddrinfo = unittest.mock.Mock()
-        getaddrinfo.return_value = []
-
+        @tasks.task
+        def getaddrinfo(*args, **kw):
+            yield from []
+        self.event_loop.getaddrinfo = getaddrinfo
         coro = self.event_loop.create_connection(MyProto, 'example.com', 80)
         self.assertRaises(
             socket.error, self.event_loop.run_until_complete, coro)
 
     def test_create_connection_connect_err(self):
-        @tasks.coroutine
+        @tasks.task
         def getaddrinfo(*args, **kw):
             yield from []
             return [(2, 1, 6, '', ('107.6.106.82', 80))]
@@ -527,7 +528,7 @@ class EventLoopTestsMixin:
             socket.error, self.event_loop.run_until_complete, coro)
 
     def test_create_connection_mutiple_errors(self):
-        @tasks.coroutine
+        @tasks.task
         def getaddrinfo(*args, **kw):
             yield from []
             return [(2, 1, 6, '', ('107.6.106.82', 80)),
@@ -540,6 +541,26 @@ class EventLoopTestsMixin:
             MyProto, 'example.com', 80, family=socket.AF_INET)
         self.assertRaises(
             socket.error, self.event_loop.run_until_complete, coro)
+
+    def test_create_connection_local_addr(self):
+        with test_utils.run_test_server(self.event_loop) as httpd:
+            port = find_unused_port()
+            f = self.event_loop.create_connection(
+                lambda: MyProto(create_future=True),
+                *httpd.address, local_addr=(httpd.address[0], port))
+            tr, pr = self.event_loop.run_until_complete(f)
+            expected = pr.transport.get_extra_info('socket').getsockname()[1]
+            self.assertEqual(port, expected)
+
+    def test_create_connection_local_addr_in_use(self):
+        with test_utils.run_test_server(self.event_loop) as httpd:
+            f = self.event_loop.create_connection(
+                lambda: MyProto(create_future=True),
+                *httpd.address, local_addr=httpd.address)
+            with self.assertRaises(socket.error) as cm:
+                self.event_loop.run_until_complete(f)
+            self.assertEqual(cm.exception.errno, errno.EADDRINUSE)
+            self.assertIn(str(httpd.address), cm.exception.strerror)
 
     def test_start_serving(self):
         proto = None

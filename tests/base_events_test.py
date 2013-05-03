@@ -288,6 +288,6 @@ class BaseEventLoopTests(unittest.TestCase):
 
         task = tasks.Task(
             self.event_loop.create_connection(MyProto, 'example.com', 80))
-        task._step()
+        yield from tasks.wait(task)
         exc = task.exception()
         self.assertEqual("Multiple exceptions: err1, err2", str(exc))

@@ -249,25 +249,51 @@ class BaseEventLoop(events.AbstractEventLoop):
 
     @tasks.coroutine
     def create_connection(self, protocol_factory, host=None, port=None, *,
-                          ssl=None, family=0, proto=0, flags=0, sock=None):
+                          ssl=None, family=0, proto=0, flags=0, sock=None,
+                          local_addr=None):
         """XXX"""
         if host is not None or port is not None:
             if sock is not None:
                 raise ValueError(
                     'host/port and sock can not be specified at the same time')
 
-            infos = yield from self.getaddrinfo(
-                host, port, family=family,
-                type=socket.SOCK_STREAM, proto=proto, flags=flags)
+            f1 = self.getaddrinfo(host, port, family=family,
+                 type=socket.SOCK_STREAM, proto=proto, flags=flags)
+            fs = [f1]
+            if local_addr is not None:
+                f2 = self.getaddrinfo(*local_addr, family=family,
+                    type=socket.SOCK_STREAM, proto=proto, flags=flags)
+                fs.append(f2)
+            else:
+                f2 = None
 
+            yield from tasks.wait(fs)
+
+            infos = f1.result()
             if not infos:
                 raise socket.error('getaddrinfo() returned empty list')
+            if f2 is not None:
+                laddr_infos = f2.result()
+                if not laddr_infos:
+                    raise socket.error('getaddrinfo() returned empty list')
 
             exceptions = []
             for family, type, proto, cname, address in infos:
                 try:
                     sock = socket.socket(family=family, type=type, proto=proto)
                     sock.setblocking(False)
+                    if f2 is not None:
+                        for _, _, _, _, laddr in laddr_infos:
+                            try:
+                                sock.bind(laddr)
+                                break
+                            except socket.error as exc:
+                                exc = socket.error(exc.errno, "error while " \
+                                      "attempting to bind on address " \
+                                      "%r: %s" % (laddr, exc.strerror.lower()))
+                                exceptions.append(exc)
+                        else:
+                            continue
                     yield from self.sock_connect(sock, address)
                 except socket.error as exc:
                     if sock is not None:

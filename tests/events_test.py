@@ -1209,7 +1209,7 @@ class TimerTests(unittest.TestCase):
 
 class AbstractEventLoopTests(unittest.TestCase):
 
-    def test_not_imlemented(self):
+    def test_not_implemented(self):
         f = unittest.mock.Mock()
         ev_loop = events.AbstractEventLoop()
         self.assertRaises(

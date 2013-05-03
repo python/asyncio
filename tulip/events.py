@@ -191,7 +191,7 @@ class AbstractEventLoop:
 
     def create_connection(self, protocol_factory, host=None, port=None, *,
                           ssl=None, family=0, proto=0, flags=0, sock=None,
-                          local_addr):
+                          local_addr=None):
         raise NotImplementedError
 
     def start_serving(self, protocol_factory, host=None, port=None, *,

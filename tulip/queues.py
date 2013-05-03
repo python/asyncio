@@ -25,7 +25,7 @@ class Queue:
     interrupted between calling qsize() and doing an operation on the Queue.
     """
 
-    def __init__(self, maxsize=0, loop=None):
+    def __init__(self, maxsize=0, *, loop=None):
         if loop is None:
             self._loop = events.get_event_loop()
         else:
@@ -242,11 +242,11 @@ class LifoQueue(Queue):
 class JoinableQueue(Queue):
     """A subclass of Queue with task_done() and join() methods."""
 
-    def __init__(self, maxsize=0):
+    def __init__(self, maxsize=0, *, loop=None):
+        super().__init__(maxsize=maxsize, loop=loop)
         self._unfinished_tasks = 0
         self._finished = locks.EventWaiter(loop=self._loop)
         self._finished.set()
-        super().__init__(maxsize=maxsize)
 
     def _format(self):
         result = Queue._format(self)

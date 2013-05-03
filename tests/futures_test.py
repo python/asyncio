@@ -163,68 +163,48 @@ class FutureTests(unittest.TestCase):
         fut.cancel()
 
     @unittest.mock.patch('tulip.futures.tulip_log')
-    def test_del_norm_level(self, log):
-        self.loop.set_log_level(logging.CRITICAL)
-
+    def test_tb_logger_abandoned(self, m_log):
         fut = futures.Future()
         del fut
-        self.assertFalse(log.error.called)
+        self.assertFalse(m_log.error.called)
 
     @unittest.mock.patch('tulip.futures.tulip_log')
-    def test_del_normal(self, log):
-        self.loop.set_log_level(futures.STACK_DEBUG)
-
+    def test_tb_logger_result_unretrieved(self, m_log):
         fut = futures.Future()
-        fut.set_result(True)
+        fut.set_result(42)
+        del fut
+        self.assertFalse(m_log.error.called)
+
+    @unittest.mock.patch('tulip.futures.tulip_log')
+    def test_tb_logger_result_retrieved(self, m_log):
+        fut = futures.Future()
+        fut.set_result(42)
         fut.result()
         del fut
-        self.assertFalse(log.error.called)
+        self.assertFalse(m_log.error.called)
 
     @unittest.mock.patch('tulip.futures.tulip_log')
-    def test_del_not_done(self, log):
-        self.loop.set_log_level(futures.STACK_DEBUG)
-
+    def test_tb_logger_exception_unretrieved(self, m_log):
         fut = futures.Future()
-        r_fut = repr(fut)
+        fut.set_exception(RuntimeError('boom'))
         del fut
-        log.error.mock_calls[-1].assert_called_with(
-            'Future abandoned before completion: %r', r_fut)
+        self.assertTrue(m_log.error.called)
 
     @unittest.mock.patch('tulip.futures.tulip_log')
-    def test_del_done(self, log):
-        self.loop.set_log_level(futures.STACK_DEBUG)
-
+    def test_tb_logger_exception_retrieved(self, m_log):
         fut = futures.Future()
-        next(iter(fut))
-        fut.set_result(1)
-        r_fut = repr(fut)
+        fut.set_exception(RuntimeError('boom'))
+        fut.exception()
         del fut
-        log.error.mock_calls[-1].assert_called_with(
-            'Future result has not been requested: %r', r_fut)
+        self.assertFalse(m_log.error.called)
 
     @unittest.mock.patch('tulip.futures.tulip_log')
-    def test_del_done_skip(self, log):
-        self.loop.set_log_level(futures.STACK_DEBUG)
-
+    def test_tb_logger_exception_result_retrieved(self, m_log):
         fut = futures.Future()
-        fut._debug_warn_result_requested = False
-        next(iter(fut))
-        fut.set_result(1)
+        fut.set_exception(RuntimeError('boom'))
+        self.assertRaises(RuntimeError, fut.result)
         del fut
-        self.assertFalse(log.error.called)
-
-    @unittest.mock.patch('tulip.futures.tulip_log')
-    def test_del_exc(self, log):
-        self.loop.set_log_level(futures.STACK_DEBUG)
-
-        exc = ValueError()
-        fut = futures.Future()
-        fut.set_exception(exc)
-        r_fut = repr(fut)
-        del fut
-        log.exception.mock_calls[-1].assert_called_with(
-            'Future raised an exception and nobody caught it: %r', r_fut,
-            exc_info=(ValueError, exc, None))
+        self.assertFalse(m_log.error.called)
 
 
 # A fake event loop for tests. All it does is implement a call_soon method

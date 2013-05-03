@@ -62,10 +62,13 @@ class Lock:
 
     """
 
-    def __init__(self):
+    def __init__(self, *, loop=None):
         self._waiters = collections.deque()
         self._locked = False
-        self._event_loop = events.get_event_loop()
+        if loop is not None:
+            self._loop = loop
+        else:
+            self._loop = events.get_event_loop()
 
     def __repr__(self):
         res = super().__repr__()
@@ -94,7 +97,7 @@ class Lock:
             self._locked = True
             return True
 
-        fut = futures.Future(event_loop=self._event_loop, timeout=timeout)
+        fut = futures.Future(event_loop=self._loop, timeout=timeout)
 
         self._waiters.append(fut)
         try:
@@ -150,10 +153,13 @@ class EventWaiter:
     false.
     """
 
-    def __init__(self):
+    def __init__(self, *, loop=None):
         self._waiters = collections.deque()
         self._value = False
-        self._event_loop = events.get_event_loop()
+        if loop is not None:
+            self._loop = loop
+        else:
+            self._loop = events.get_event_loop()
 
     def __repr__(self):
         res = super().__repr__()
@@ -202,7 +208,7 @@ class EventWaiter:
         if self._value:
             return True
 
-        fut = futures.Future(event_loop=self._event_loop, timeout=timeout)
+        fut = futures.Future(event_loop=self._loop, timeout=timeout)
 
         self._waiters.append(fut)
         try:
@@ -225,8 +231,8 @@ class Condition(Lock):
     coroutine.
     """
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, *, loop=None):
+        super().__init__(loop=loop)
 
         self._condition_waiters = collections.deque()
 
@@ -253,7 +259,7 @@ class Condition(Lock):
 
         self.release()
 
-        fut = futures.Future(event_loop=self._event_loop, timeout=timeout)
+        fut = futures.Future(event_loop=self._loop, timeout=timeout)
 
         self._condition_waiters.append(fut)
         try:
@@ -346,7 +352,7 @@ class Semaphore:
     acquire() calls ValueError is raised.
     """
 
-    def __init__(self, value=1, bound=False):
+    def __init__(self, value=1, bound=False, *, loop=None):
         if value < 0:
             raise ValueError("Semaphore initial value must be > 0")
         self._value = value
@@ -354,7 +360,10 @@ class Semaphore:
         self._bound_value = value
         self._waiters = collections.deque()
         self._locked = False
-        self._event_loop = events.get_event_loop()
+        if loop is not None:
+            self._loop = loop
+        else:
+            self._loop = events.get_event_loop()
 
     def __repr__(self):
         res = super().__repr__()
@@ -386,7 +395,7 @@ class Semaphore:
                 self._locked = True
             return True
 
-        fut = futures.Future(event_loop=self._event_loop, timeout=timeout)
+        fut = futures.Future(event_loop=self._loop, timeout=timeout)
 
         self._waiters.append(fut)
         try:

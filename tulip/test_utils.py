@@ -31,6 +31,13 @@ else:
     from socket import socketpair  # pragma: no cover
 
 
+def run_once(loop):
+    @tulip.task
+    def once():
+        pass
+    loop.run_until_complete(once())
+
+
 @contextlib.contextmanager
 def run_test_server(loop, *, host='127.0.0.1', port=0,
                     use_ssl=False, router=None):

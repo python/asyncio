@@ -8,16 +8,25 @@ from tulip import events
 from tulip import futures
 from tulip import locks
 from tulip import tasks
+from tulip.test_utils import run_once
 
 
 class LockTests(unittest.TestCase):
 
     def setUp(self):
-        self.event_loop = events.new_event_loop()
-        events.set_event_loop(self.event_loop)
+        self.loop = events.new_event_loop()
+        events.set_event_loop(self.loop)
 
     def tearDown(self):
-        self.event_loop.close()
+        self.loop.close()
+
+    def test_ctor_loop(self):
+        loop = unittest.mock.Mock()
+        lock = locks.Lock(loop=loop)
+        self.assertIs(lock._loop, loop)
+
+        lock = locks.Lock()
+        self.assertIs(lock._loop, events.get_event_loop())
 
     def test_repr(self):
         lock = locks.Lock()
@@ -27,7 +36,7 @@ class LockTests(unittest.TestCase):
         def acquire_lock():
             yield from lock
 
-        self.event_loop.run_until_complete(acquire_lock())
+        self.loop.run_until_complete(acquire_lock())
         self.assertTrue(repr(lock).endswith('[locked]>'))
 
     def test_lock(self):
@@ -37,7 +46,7 @@ class LockTests(unittest.TestCase):
         def acquire_lock():
             return (yield from lock)
 
-        res = self.event_loop.run_until_complete(acquire_lock())
+        res = self.loop.run_until_complete(acquire_lock())
 
         self.assertTrue(res)
         self.assertTrue(lock.locked())
@@ -49,8 +58,7 @@ class LockTests(unittest.TestCase):
         lock = locks.Lock()
         result = []
 
-        self.assertTrue(
-            self.event_loop.run_until_complete(lock.acquire()))
+        self.assertTrue(self.loop.run_until_complete(lock.acquire()))
 
         @tasks.coroutine
         def c1(result):
@@ -73,24 +81,24 @@ class LockTests(unittest.TestCase):
         t1 = tasks.Task(c1(result))
         t2 = tasks.Task(c2(result))
 
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual([], result)
 
         lock.release()
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual([1], result)
 
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual([1], result)
 
         t3 = tasks.Task(c3(result))
 
         lock.release()
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual([1, 2], result)
 
         lock.release()
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual([1, 2, 3], result)
 
         self.assertTrue(t1.done())
@@ -102,47 +110,44 @@ class LockTests(unittest.TestCase):
 
     def test_acquire_timeout(self):
         lock = locks.Lock()
-        self.assertTrue(
-            self.event_loop.run_until_complete(lock.acquire()))
+        self.assertTrue(self.loop.run_until_complete(lock.acquire()))
 
         t0 = time.monotonic()
-        acquired = self.event_loop.run_until_complete(
-            lock.acquire(timeout=0.1))
+        acquired = self.loop.run_until_complete(lock.acquire(timeout=0.1))
         self.assertFalse(acquired)
 
         total_time = (time.monotonic() - t0)
         self.assertTrue(0.08 < total_time < 0.12)
 
         lock = locks.Lock()
-        self.event_loop.run_until_complete(lock.acquire())
+        self.loop.run_until_complete(lock.acquire())
 
-        self.event_loop.call_later(0.01, lock.release)
-        acquired = self.event_loop.run_until_complete(lock.acquire(10.1))
+        self.loop.call_later(0.01, lock.release)
+        acquired = self.loop.run_until_complete(lock.acquire(10.1))
         self.assertTrue(acquired)
 
     def test_acquire_timeout_mixed(self):
         lock = locks.Lock()
-        self.event_loop.run_until_complete(lock.acquire())
+        self.loop.run_until_complete(lock.acquire())
         tasks.Task(lock.acquire())
         tasks.Task(lock.acquire())
         acquire_task = tasks.Task(lock.acquire(0.01))
         tasks.Task(lock.acquire())
 
-        acquired = self.event_loop.run_until_complete(acquire_task)
+        acquired = self.loop.run_until_complete(acquire_task)
         self.assertFalse(acquired)
 
         self.assertEqual(3, len(lock._waiters))
 
     def test_acquire_cancel(self):
         lock = locks.Lock()
-        self.assertTrue(
-            self.event_loop.run_until_complete(lock.acquire()))
+        self.assertTrue(self.loop.run_until_complete(lock.acquire()))
 
         task = tasks.Task(lock.acquire())
-        self.event_loop.call_soon(task.cancel)
+        self.loop.call_soon(task.cancel)
         self.assertRaises(
             futures.CancelledError,
-            self.event_loop.run_until_complete, task)
+            self.loop.run_until_complete, task)
         self.assertFalse(lock._waiters)
 
     def test_release_not_acquired(self):
@@ -152,7 +157,7 @@ class LockTests(unittest.TestCase):
 
     def test_release_no_waiters(self):
         lock = locks.Lock()
-        self.event_loop.run_until_complete(lock.acquire())
+        self.loop.run_until_complete(lock.acquire())
         self.assertTrue(lock.locked())
 
         lock.release()
@@ -165,7 +170,7 @@ class LockTests(unittest.TestCase):
         def acquire_lock():
             return (yield from lock)
 
-        with self.event_loop.run_until_complete(acquire_lock()):
+        with self.loop.run_until_complete(acquire_lock()):
             self.assertTrue(lock.locked())
 
         self.assertFalse(lock.locked())
@@ -185,11 +190,19 @@ class LockTests(unittest.TestCase):
 class EventWaiterTests(unittest.TestCase):
 
     def setUp(self):
-        self.event_loop = events.new_event_loop()
-        events.set_event_loop(self.event_loop)
+        self.loop = events.new_event_loop()
+        events.set_event_loop(self.loop)
 
     def tearDown(self):
-        self.event_loop.close()
+        self.loop.close()
+
+    def test_ctor_loop(self):
+        loop = unittest.mock.Mock()
+        ev = locks.EventWaiter(loop=loop)
+        self.assertIs(ev._loop, loop)
+
+        ev = locks.EventWaiter()
+        self.assertIs(ev._loop, events.get_event_loop())
 
     def test_repr(self):
         ev = locks.EventWaiter()
@@ -222,13 +235,13 @@ class EventWaiterTests(unittest.TestCase):
         t1 = tasks.Task(c1(result))
         t2 = tasks.Task(c2(result))
 
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual([], result)
 
         t3 = tasks.Task(c3(result))
 
         ev.set()
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual([3, 1, 2], result)
 
         self.assertTrue(t1.done())
@@ -242,21 +255,21 @@ class EventWaiterTests(unittest.TestCase):
         ev = locks.EventWaiter()
         ev.set()
 
-        res = self.event_loop.run_until_complete(ev.wait())
+        res = self.loop.run_until_complete(ev.wait())
         self.assertTrue(res)
 
     def test_wait_timeout(self):
         ev = locks.EventWaiter()
 
         t0 = time.monotonic()
-        res = self.event_loop.run_until_complete(ev.wait(0.1))
+        res = self.loop.run_until_complete(ev.wait(0.1))
         self.assertFalse(res)
         total_time = (time.monotonic() - t0)
         self.assertTrue(0.08 < total_time < 0.12)
 
         ev = locks.EventWaiter()
-        self.event_loop.call_later(0.01, ev.set)
-        acquired = self.event_loop.run_until_complete(ev.wait(10.1))
+        self.loop.call_later(0.01, ev.set)
+        acquired = self.loop.run_until_complete(ev.wait(10.1))
         self.assertTrue(acquired)
 
     def test_wait_timeout_mixed(self):
@@ -267,7 +280,7 @@ class EventWaiterTests(unittest.TestCase):
         tasks.Task(ev.wait())
 
         t0 = time.monotonic()
-        acquired = self.event_loop.run_until_complete(acquire_task)
+        acquired = self.loop.run_until_complete(acquire_task)
         self.assertFalse(acquired)
 
         total_time = (time.monotonic() - t0)
@@ -279,10 +292,10 @@ class EventWaiterTests(unittest.TestCase):
         ev = locks.EventWaiter()
 
         wait = tasks.Task(ev.wait())
-        self.event_loop.call_soon(wait.cancel)
+        self.loop.call_soon(wait.cancel)
         self.assertRaises(
             futures.CancelledError,
-            self.event_loop.run_until_complete, wait)
+            self.loop.run_until_complete, wait)
         self.assertFalse(ev._waiters)
 
     def test_clear(self):
@@ -306,7 +319,7 @@ class EventWaiterTests(unittest.TestCase):
             return True
 
         t = tasks.Task(c1(result))
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual([], result)
 
         ev.set()
@@ -317,7 +330,7 @@ class EventWaiterTests(unittest.TestCase):
         ev.set()
         self.assertEqual(1, len(ev._waiters))
 
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual([1], result)
         self.assertEqual(0, len(ev._waiters))
 
@@ -328,11 +341,11 @@ class EventWaiterTests(unittest.TestCase):
 class ConditionTests(unittest.TestCase):
 
     def setUp(self):
-        self.event_loop = events.new_event_loop()
-        events.set_event_loop(self.event_loop)
+        self.loop = events.new_event_loop()
+        events.set_event_loop(self.loop)
 
     def tearDown(self):
-        self.event_loop.close()
+        self.loop.close()
 
     def test_wait(self):
         cond = locks.Condition()
@@ -363,34 +376,33 @@ class ConditionTests(unittest.TestCase):
         t2 = tasks.Task(c2(result))
         t3 = tasks.Task(c3(result))
 
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual([], result)
         self.assertFalse(cond.locked())
 
-        self.assertTrue(
-            self.event_loop.run_until_complete(cond.acquire()))
+        self.assertTrue(self.loop.run_until_complete(cond.acquire()))
         cond.notify()
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual([], result)
         self.assertTrue(cond.locked())
 
         cond.release()
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual([1], result)
         self.assertTrue(cond.locked())
 
         cond.notify(2)
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual([1], result)
         self.assertTrue(cond.locked())
 
         cond.release()
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual([1, 2], result)
         self.assertTrue(cond.locked())
 
         cond.release()
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual([1, 2, 3], result)
         self.assertTrue(cond.locked())
 
@@ -403,10 +415,10 @@ class ConditionTests(unittest.TestCase):
 
     def test_wait_timeout(self):
         cond = locks.Condition()
-        self.event_loop.run_until_complete(cond.acquire())
+        self.loop.run_until_complete(cond.acquire())
 
         t0 = time.monotonic()
-        wait = self.event_loop.run_until_complete(cond.wait(0.1))
+        wait = self.loop.run_until_complete(cond.wait(0.1))
         self.assertFalse(wait)
         self.assertTrue(cond.locked())
 
@@ -415,13 +427,13 @@ class ConditionTests(unittest.TestCase):
 
     def test_wait_cancel(self):
         cond = locks.Condition()
-        self.event_loop.run_until_complete(cond.acquire())
+        self.loop.run_until_complete(cond.acquire())
 
         wait = tasks.Task(cond.wait())
-        self.event_loop.call_soon(wait.cancel)
+        self.loop.call_soon(wait.cancel)
         self.assertRaises(
             futures.CancelledError,
-            self.event_loop.run_until_complete, wait)
+            self.loop.run_until_complete, wait)
         self.assertFalse(cond._condition_waiters)
         self.assertTrue(cond.locked())
 
@@ -429,7 +441,7 @@ class ConditionTests(unittest.TestCase):
         cond = locks.Condition()
         self.assertRaises(
             RuntimeError,
-            self.event_loop.run_until_complete, cond.wait())
+            self.loop.run_until_complete, cond.wait())
 
     def test_wait_for(self):
         cond = locks.Condition()
@@ -450,20 +462,20 @@ class ConditionTests(unittest.TestCase):
 
         t = tasks.Task(c1(result))
 
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual([], result)
 
-        self.event_loop.run_until_complete(cond.acquire())
+        self.loop.run_until_complete(cond.acquire())
         cond.notify()
         cond.release()
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual([], result)
 
         presult = True
-        self.event_loop.run_until_complete(cond.acquire())
+        self.loop.run_until_complete(cond.acquire())
         cond.notify()
         cond.release()
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual([1], result)
 
         self.assertTrue(t.done())
@@ -490,16 +502,16 @@ class ConditionTests(unittest.TestCase):
 
         t0 = time.monotonic()
 
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual([], result)
 
-        self.event_loop.run_until_complete(cond.acquire())
+        self.loop.run_until_complete(cond.acquire())
         cond.notify()
         cond.release()
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual([], result)
 
-        self.event_loop.run_until_complete(wait_for)
+        self.loop.run_until_complete(wait_for)
         self.assertEqual([2], result)
         self.assertEqual(3, predicate.call_count)
 
@@ -510,13 +522,12 @@ class ConditionTests(unittest.TestCase):
         cond = locks.Condition()
 
         # predicate can return true immediately
-        res = self.event_loop.run_until_complete(
-            cond.wait_for(lambda: [1, 2, 3]))
+        res = self.loop.run_until_complete(cond.wait_for(lambda: [1, 2, 3]))
         self.assertEqual([1, 2, 3], res)
 
         self.assertRaises(
             RuntimeError,
-            self.event_loop.run_until_complete,
+            self.loop.run_until_complete,
             cond.wait_for(lambda: False))
 
     def test_notify(self):
@@ -551,20 +562,20 @@ class ConditionTests(unittest.TestCase):
         t2 = tasks.Task(c2(result))
         t3 = tasks.Task(c3(result))
 
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual([], result)
 
-        self.event_loop.run_until_complete(cond.acquire())
+        self.loop.run_until_complete(cond.acquire())
         cond.notify(1)
         cond.release()
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual([1], result)
 
-        self.event_loop.run_until_complete(cond.acquire())
+        self.loop.run_until_complete(cond.acquire())
         cond.notify(1)
         cond.notify(2048)
         cond.release()
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual([1, 2, 3], result)
 
         self.assertTrue(t1.done())
@@ -598,13 +609,13 @@ class ConditionTests(unittest.TestCase):
         t1 = tasks.Task(c1(result))
         t2 = tasks.Task(c2(result))
 
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual([], result)
 
-        self.event_loop.run_until_complete(cond.acquire())
+        self.loop.run_until_complete(cond.acquire())
         cond.notify_all()
         cond.release()
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual([1, 2], result)
 
         self.assertTrue(t1.done())
@@ -624,17 +635,25 @@ class ConditionTests(unittest.TestCase):
 class SemaphoreTests(unittest.TestCase):
 
     def setUp(self):
-        self.event_loop = events.new_event_loop()
-        events.set_event_loop(self.event_loop)
+        self.loop = events.new_event_loop()
+        events.set_event_loop(self.loop)
 
     def tearDown(self):
-        self.event_loop.close()
+        self.loop.close()
+
+    def test_ctor_loop(self):
+        loop = unittest.mock.Mock()
+        sem = locks.Semaphore(loop=loop)
+        self.assertIs(sem._loop, loop)
+
+        sem = locks.Semaphore()
+        self.assertIs(sem._loop, events.get_event_loop())
 
     def test_repr(self):
         sem = locks.Semaphore()
         self.assertTrue(repr(sem).endswith('[unlocked,value:1]>'))
 
-        self.event_loop.run_until_complete(sem.acquire())
+        self.loop.run_until_complete(sem.acquire())
         self.assertTrue(repr(sem).endswith('[locked]>'))
 
     def test_semaphore(self):
@@ -645,7 +664,7 @@ class SemaphoreTests(unittest.TestCase):
         def acquire_lock():
             return (yield from sem)
 
-        res = self.event_loop.run_until_complete(acquire_lock())
+        res = self.loop.run_until_complete(acquire_lock())
 
         self.assertTrue(res)
         self.assertTrue(sem.locked())
@@ -662,10 +681,8 @@ class SemaphoreTests(unittest.TestCase):
         sem = locks.Semaphore(3)
         result = []
 
-        self.assertTrue(
-            self.event_loop.run_until_complete(sem.acquire()))
-        self.assertTrue(
-            self.event_loop.run_until_complete(sem.acquire()))
+        self.assertTrue(self.loop.run_until_complete(sem.acquire()))
+        self.assertTrue(self.loop.run_until_complete(sem.acquire()))
         self.assertFalse(sem.locked())
 
         @tasks.coroutine
@@ -696,7 +713,7 @@ class SemaphoreTests(unittest.TestCase):
         t2 = tasks.Task(c2(result))
         t3 = tasks.Task(c3(result))
 
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual([1], result)
         self.assertTrue(sem.locked())
         self.assertEqual(2, len(sem._waiters))
@@ -708,7 +725,7 @@ class SemaphoreTests(unittest.TestCase):
         sem.release()
         self.assertEqual(2, sem._value)
 
-        self.event_loop.run_once()
+        run_once(self.loop)
         self.assertEqual(0, sem._value)
         self.assertEqual([1, 2, 3], result)
         self.assertTrue(sem.locked())
@@ -725,32 +742,32 @@ class SemaphoreTests(unittest.TestCase):
 
     def test_acquire_timeout(self):
         sem = locks.Semaphore()
-        self.event_loop.run_until_complete(sem.acquire())
+        self.loop.run_until_complete(sem.acquire())
 
         t0 = time.monotonic()
-        acquired = self.event_loop.run_until_complete(sem.acquire(0.1))
+        acquired = self.loop.run_until_complete(sem.acquire(0.1))
         self.assertFalse(acquired)
 
         total_time = (time.monotonic() - t0)
         self.assertTrue(0.08 < total_time < 0.12)
 
         sem = locks.Semaphore()
-        self.event_loop.run_until_complete(sem.acquire())
+        self.loop.run_until_complete(sem.acquire())
 
-        self.event_loop.call_later(0.01, sem.release)
-        acquired = self.event_loop.run_until_complete(sem.acquire(10.1))
+        self.loop.call_later(0.01, sem.release)
+        acquired = self.loop.run_until_complete(sem.acquire(10.1))
         self.assertTrue(acquired)
 
     def test_acquire_timeout_mixed(self):
         sem = locks.Semaphore()
-        self.event_loop.run_until_complete(sem.acquire())
+        self.loop.run_until_complete(sem.acquire())
         tasks.Task(sem.acquire())
         tasks.Task(sem.acquire())
         acquire_task = tasks.Task(sem.acquire(0.1))
         tasks.Task(sem.acquire())
 
         t0 = time.monotonic()
-        acquired = self.event_loop.run_until_complete(acquire_task)
+        acquired = self.loop.run_until_complete(acquire_task)
         self.assertFalse(acquired)
 
         total_time = (time.monotonic() - t0)
@@ -760,13 +777,13 @@ class SemaphoreTests(unittest.TestCase):
 
     def test_acquire_cancel(self):
         sem = locks.Semaphore()
-        self.event_loop.run_until_complete(sem.acquire())
+        self.loop.run_until_complete(sem.acquire())
 
         acquire = tasks.Task(sem.acquire())
-        self.event_loop.call_soon(acquire.cancel)
+        self.loop.call_soon(acquire.cancel)
         self.assertRaises(
             futures.CancelledError,
-            self.event_loop.run_until_complete, acquire)
+            self.loop.run_until_complete, acquire)
         self.assertFalse(sem._waiters)
 
     def test_release_not_acquired(self):
@@ -776,7 +793,7 @@ class SemaphoreTests(unittest.TestCase):
 
     def test_release_no_waiters(self):
         sem = locks.Semaphore()
-        self.event_loop.run_until_complete(sem.acquire())
+        self.loop.run_until_complete(sem.acquire())
         self.assertTrue(sem.locked())
 
         sem.release()
@@ -789,11 +806,11 @@ class SemaphoreTests(unittest.TestCase):
         def acquire_lock():
             return (yield from sem)
 
-        with self.event_loop.run_until_complete(acquire_lock()):
+        with self.loop.run_until_complete(acquire_lock()):
             self.assertFalse(sem.locked())
             self.assertEqual(1, sem._value)
 
-            with self.event_loop.run_until_complete(acquire_lock()):
+            with self.loop.run_until_complete(acquire_lock()):
                 self.assertTrue(sem.locked())
 
         self.assertEqual(2, sem._value)

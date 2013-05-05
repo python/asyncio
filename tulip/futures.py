@@ -6,7 +6,6 @@ __all__ = ['CancelledError', 'TimeoutError',
            ]
 
 import concurrent.futures._base
-import io
 import logging
 import traceback
 
@@ -118,28 +117,27 @@ class Future:
     _result = None
     _exception = None
     _timeout_handle = None
-    _event_loop = None
+    _loop = None
 
     _blocking = False  # proper use of future (yield vs yield from)
 
     _tb_logger = None
 
-    def __init__(self, *, event_loop=None, timeout=None):
+    def __init__(self, *, loop=None, timeout=None):
         """Initialize the future.
 
         The optional event_loop argument allows to explicitly set the event
         loop object used by the future. If it's not provided, the future uses
         the default event loop.
         """
-        if event_loop is None:
-            self._event_loop = events.get_event_loop()
+        if loop is None:
+            self._loop = events.get_event_loop()
         else:
-            self._event_loop = event_loop
+            self._loop = loop
         self._callbacks = []
 
         if timeout is not None:
-            self._timeout_handle = self._event_loop.call_later(
-                timeout, self.cancel)
+            self._timeout_handle = self._loop.call_later(timeout, self.cancel)
 
     def __repr__(self):
         res = self.__class__.__name__
@@ -190,7 +188,7 @@ class Future:
 
         self._callbacks[:] = []
         for callback in callbacks:
-            self._event_loop.call_soon(callback, self)
+            self._loop.call_soon(callback, self)
 
     def cancelled(self):
         """Return True if the future was cancelled."""
@@ -260,7 +258,7 @@ class Future:
         scheduled with call_soon.
         """
         if self._state != _PENDING:
-            self._event_loop.call_soon(fn, self)
+            self._loop.call_soon(fn, self)
         else:
             self._callbacks.append(fn)
 

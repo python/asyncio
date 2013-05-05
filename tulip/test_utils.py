@@ -101,7 +101,6 @@ def run_test_server(loop, *, host='127.0.0.1', port=0,
 
     def run(loop, fut):
         thread_loop = tulip.new_event_loop()
-        thread_loop.set_log_level(logging.CRITICAL)
         tulip.set_event_loop(thread_loop)
 
         socks = thread_loop.run_until_complete(

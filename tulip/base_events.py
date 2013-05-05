@@ -288,9 +288,11 @@ class BaseEventLoop(events.AbstractEventLoop):
                                 sock.bind(laddr)
                                 break
                             except socket.error as exc:
-                                exc = socket.error(exc.errno, "error while " \
-                                      "attempting to bind on address " \
-                                      "%r: %s" % (laddr, exc.strerror.lower()))
+                                exc = socket.error(
+                                    exc.errno, 'error while '
+                                    'attempting to bind on address '
+                                    '{!r}: {}'.format(
+                                        laddr, exc.strerror.lower()))
                                 exceptions.append(exc)
                         else:
                             continue
@@ -502,7 +504,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         """XXX"""
         if isinstance(future, futures.Future):
             return future  # Don't wrap our own type of Future.
-        new_future = futures.Future(event_loop=self)
+        new_future = futures.Future(loop=self)
         future.add_done_callback(
             lambda future:
                 self.call_soon_threadsafe(new_future._copy_state, future))
@@ -562,12 +564,3 @@ class BaseEventLoop(events.AbstractEventLoop):
             handle = self._ready.popleft()
             if not handle.cancelled:
                 handle.run()
-
-    # Future.__del__ uses log level
-    _log_level = logging.WARNING
-
-    def set_log_level(self, val):
-        self._log_level = val
-
-    def get_log_level(self):
-        return self._log_level

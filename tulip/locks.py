@@ -97,7 +97,7 @@ class Lock:
             self._locked = True
             return True
 
-        fut = futures.Future(event_loop=self._loop, timeout=timeout)
+        fut = futures.Future(loop=self._loop, timeout=timeout)
 
         self._waiters.append(fut)
         try:
@@ -208,7 +208,7 @@ class EventWaiter:
         if self._value:
             return True
 
-        fut = futures.Future(event_loop=self._loop, timeout=timeout)
+        fut = futures.Future(loop=self._loop, timeout=timeout)
 
         self._waiters.append(fut)
         try:
@@ -259,7 +259,7 @@ class Condition(Lock):
 
         self.release()
 
-        fut = futures.Future(event_loop=self._loop, timeout=timeout)
+        fut = futures.Future(loop=self._loop, timeout=timeout)
 
         self._condition_waiters.append(fut)
         try:
@@ -395,7 +395,7 @@ class Semaphore:
                 self._locked = True
             return True
 
-        fut = futures.Future(event_loop=self._loop, timeout=timeout)
+        fut = futures.Future(loop=self._loop, timeout=timeout)
 
         self._waiters.append(fut)
         try:

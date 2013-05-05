@@ -121,7 +121,7 @@ class Queue:
             getter.set_result(self._get())
 
         elif self._maxsize > 0 and self._maxsize == self.qsize():
-            waiter = futures.Future(event_loop=self._loop, timeout=timeout)
+            waiter = futures.Future(loop=self._loop, timeout=timeout)
 
             self._putters.append((item, waiter))
             try:
@@ -181,7 +181,7 @@ class Queue:
         elif self.qsize():
             return self._get()
         else:
-            waiter = futures.Future(event_loop=self._loop, timeout=timeout)
+            waiter = futures.Future(loop=self._loop, timeout=timeout)
 
             self._getters.append(waiter)
             try:

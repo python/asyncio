@@ -144,33 +144,32 @@ class EventLoopTestsMixin:
 
     def setUp(self):
         super().setUp()
-        self.event_loop = self.create_event_loop()
-        events.set_event_loop(self.event_loop)
+        self.loop = self.create_event_loop()
+        events.set_event_loop(self.loop)
 
     def tearDown(self):
-        self.event_loop.close()
+        self.loop.close()
         gc.collect()
         super().tearDown()
 
     def test_run_nesting(self):
         @tasks.coroutine
         def coro():
-            self.assertTrue(self.event_loop.is_running())
-            self.event_loop.run_until_complete(tasks.sleep(0.1))
+            self.assertTrue(self.loop.is_running())
+            self.loop.run_until_complete(tasks.sleep(0.1))
 
         self.assertRaises(
-            RuntimeError,
-            self.event_loop.run_until_complete, coro())
+            RuntimeError, self.loop.run_until_complete, coro())
 
     def test_run_once_nesting(self):
         @tasks.coroutine
         def coro():
             tasks.sleep(0.1)
-            self.event_loop.run_once()
+            self.loop.run_once()
 
         self.assertRaises(
             RuntimeError,
-            self.event_loop.run_until_complete, coro())
+            self.loop.run_until_complete, coro())
 
     def test_run_once_block(self):
         called = False
@@ -181,14 +180,14 @@ class EventLoopTestsMixin:
 
         def run():
             time.sleep(0.1)
-            self.event_loop.call_soon_threadsafe(callback)
+            self.loop.call_soon_threadsafe(callback)
 
-        self.event_loop.run_once(0)  # windows iocp
+        self.loop.run_once(0)  # windows iocp
 
         t = threading.Thread(target=run)
         t0 = time.monotonic()
         t.start()
-        self.event_loop.run_once(None)
+        self.loop.run_once(None)
         t1 = time.monotonic()
         t.join()
         self.assertTrue(called)
@@ -199,11 +198,11 @@ class EventLoopTestsMixin:
 
         def callback(arg):
             results.append(arg)
-            self.event_loop.stop()
+            self.loop.stop()
 
-        self.event_loop.call_later(0.1, callback, 'hello world')
+        self.loop.call_later(0.1, callback, 'hello world')
         t0 = time.monotonic()
-        self.event_loop.run_forever()
+        self.loop.run_forever()
         t1 = time.monotonic()
         self.assertEqual(results, ['hello world'])
         self.assertTrue(0.09 <= t1-t0 <= 0.12)
@@ -213,10 +212,10 @@ class EventLoopTestsMixin:
 
         def callback(arg1, arg2):
             results.append((arg1, arg2))
-            self.event_loop.stop()
+            self.loop.stop()
 
-        self.event_loop.call_soon(callback, 'hello', 'world')
-        self.event_loop.run_forever()
+        self.loop.call_soon(callback, 'hello', 'world')
+        self.loop.run_forever()
         self.assertEqual(results, [('hello', 'world')])
 
     def test_call_soon_threadsafe(self):
@@ -225,16 +224,16 @@ class EventLoopTestsMixin:
         def callback(arg):
             results.append(arg)
             if len(results) >= 2:
-                self.event_loop.stop()
+                self.loop.stop()
 
         def run_in_thread():
-            self.event_loop.call_soon_threadsafe(callback, 'hello')
+            self.loop.call_soon_threadsafe(callback, 'hello')
 
         t = threading.Thread(target=run_in_thread)
-        self.event_loop.call_later(0.1, callback, 'world')
+        self.loop.call_later(0.1, callback, 'world')
         t0 = time.monotonic()
         t.start()
-        self.event_loop.run_forever()
+        self.loop.run_forever()
         t1 = time.monotonic()
         t.join()
         self.assertEqual(results, ['hello', 'world'])
@@ -246,11 +245,11 @@ class EventLoopTestsMixin:
         def callback(arg):
             results.append(arg)
             if len(results) >= 2:
-                self.event_loop.stop()
+                self.loop.stop()
 
-        self.event_loop.call_later(0.1, callback, 'world')
-        self.event_loop.call_soon_threadsafe(callback, 'hello')
-        self.event_loop.run_forever()
+        self.loop.call_later(0.1, callback, 'world')
+        self.loop.call_soon_threadsafe(callback, 'hello')
+        self.loop.run_forever()
         self.assertEqual(results, ['hello', 'world'])
 
     def test_wrap_future(self):
@@ -259,16 +258,16 @@ class EventLoopTestsMixin:
             return arg
         ex = concurrent.futures.ThreadPoolExecutor(1)
         f1 = ex.submit(run, 'oi')
-        f2 = self.event_loop.wrap_future(f1)
-        res = self.event_loop.run_until_complete(f2)
+        f2 = self.loop.wrap_future(f1)
+        res = self.loop.run_until_complete(f2)
         self.assertEqual(res, 'oi')
 
     def test_run_in_executor(self):
         def run(arg):
             time.sleep(0.1)
             return arg
-        f2 = self.event_loop.run_in_executor(None, run, 'yo')
-        res = self.event_loop.run_until_complete(f2)
+        f2 = self.loop.run_in_executor(None, run, 'yo')
+        res = self.loop.run_until_complete(f2)
         self.assertEqual(res, 'yo')
 
     def test_reader_callback(self):
@@ -285,47 +284,46 @@ class EventLoopTestsMixin:
             if data:
                 bytes_read.append(data)
             else:
-                self.assertTrue(self.event_loop.remove_reader(r.fileno()))
+                self.assertTrue(self.loop.remove_reader(r.fileno()))
                 r.close()
 
-        self.event_loop.add_reader(r.fileno(), reader)
-        self.event_loop.call_later(0.05, w.send, b'abc')
-        self.event_loop.call_later(0.1, w.send, b'def')
-        self.event_loop.call_later(0.15, w.close)
-        self.event_loop.call_later(0.16, self.event_loop.stop)
-        self.event_loop.run_forever()
+        self.loop.add_reader(r.fileno(), reader)
+        self.loop.call_later(0.05, w.send, b'abc')
+        self.loop.call_later(0.1, w.send, b'def')
+        self.loop.call_later(0.15, w.close)
+        self.loop.call_later(0.16, self.loop.stop)
+        self.loop.run_forever()
         self.assertEqual(b''.join(bytes_read), b'abcdef')
 
     def test_writer_callback(self):
         r, w = test_utils.socketpair()
         w.setblocking(False)
-        self.event_loop.add_writer(w.fileno(), w.send, b'x'*(256*1024))
+        self.loop.add_writer(w.fileno(), w.send, b'x'*(256*1024))
 
         def remove_writer():
-            self.assertTrue(self.event_loop.remove_writer(w.fileno()))
+            self.assertTrue(self.loop.remove_writer(w.fileno()))
 
-        self.event_loop.call_later(0.1, remove_writer)
-        self.event_loop.call_later(0.11, self.event_loop.stop)
-        self.event_loop.run_forever()
+        self.loop.call_later(0.1, remove_writer)
+        self.loop.call_later(0.11, self.loop.stop)
+        self.loop.run_forever()
         w.close()
         data = r.recv(256*1024)
         r.close()
         self.assertTrue(len(data) >= 200)
 
     def test_sock_client_ops(self):
-        with test_utils.run_test_server(self.event_loop) as httpd:
+        with test_utils.run_test_server(self.loop) as httpd:
             sock = socket.socket()
             sock.setblocking(False)
-            self.event_loop.run_until_complete(
-                self.event_loop.sock_connect(sock, httpd.address))
-            self.event_loop.run_until_complete(
-                self.event_loop.sock_sendall(
-                    sock, b'GET / HTTP/1.0\r\n\r\n'))
-            data = self.event_loop.run_until_complete(
-                self.event_loop.sock_recv(sock, 1024))
+            self.loop.run_until_complete(
+                self.loop.sock_connect(sock, httpd.address))
+            self.loop.run_until_complete(
+                self.loop.sock_sendall(sock, b'GET / HTTP/1.0\r\n\r\n'))
+            data = self.loop.run_until_complete(
+                self.loop.sock_recv(sock, 1024))
             # consume data
-            self.event_loop.run_until_complete(
-                self.event_loop.sock_recv(sock, 1024))
+            self.loop.run_until_complete(
+                self.loop.sock_recv(sock, 1024))
             sock.close()
 
         self.assertTrue(re.match(rb'HTTP/1.0 200 OK', data), data)
@@ -343,8 +341,8 @@ class EventLoopTestsMixin:
         sock = socket.socket()
         sock.setblocking(False)
         with self.assertRaises(ConnectionRefusedError):
-            self.event_loop.run_until_complete(
-                self.event_loop.sock_connect(sock, address))
+            self.loop.run_until_complete(
+                self.loop.sock_connect(sock, address))
         sock.close()
 
     def test_sock_accept(self):
@@ -355,8 +353,8 @@ class EventLoopTestsMixin:
         client = socket.socket()
         client.connect(listener.getsockname())
 
-        f = self.event_loop.sock_accept(listener)
-        conn, addr = self.event_loop.run_until_complete(f)
+        f = self.loop.sock_accept(listener)
+        conn, addr = self.loop.run_until_complete(f)
         self.assertEqual(conn.gettimeout(), 0)
         self.assertEqual(addr, client.getsockname())
         self.assertEqual(client.getpeername(), listener.getsockname())
@@ -374,39 +372,39 @@ class EventLoopTestsMixin:
 
         # Check error behavior first.
         self.assertRaises(
-            TypeError, self.event_loop.add_signal_handler, 'boom', my_handler)
+            TypeError, self.loop.add_signal_handler, 'boom', my_handler)
         self.assertRaises(
-            TypeError, self.event_loop.remove_signal_handler, 'boom')
+            TypeError, self.loop.remove_signal_handler, 'boom')
         self.assertRaises(
-            ValueError, self.event_loop.add_signal_handler, signal.NSIG+1,
+            ValueError, self.loop.add_signal_handler, signal.NSIG+1,
             my_handler)
         self.assertRaises(
-            ValueError, self.event_loop.remove_signal_handler, signal.NSIG+1)
+            ValueError, self.loop.remove_signal_handler, signal.NSIG+1)
         self.assertRaises(
-            ValueError, self.event_loop.add_signal_handler, 0, my_handler)
+            ValueError, self.loop.add_signal_handler, 0, my_handler)
         self.assertRaises(
-            ValueError, self.event_loop.remove_signal_handler, 0)
+            ValueError, self.loop.remove_signal_handler, 0)
         self.assertRaises(
-            ValueError, self.event_loop.add_signal_handler, -1, my_handler)
+            ValueError, self.loop.add_signal_handler, -1, my_handler)
         self.assertRaises(
-            ValueError, self.event_loop.remove_signal_handler, -1)
+            ValueError, self.loop.remove_signal_handler, -1)
         self.assertRaises(
-            RuntimeError, self.event_loop.add_signal_handler, signal.SIGKILL,
+            RuntimeError, self.loop.add_signal_handler, signal.SIGKILL,
             my_handler)
         # Removing SIGKILL doesn't raise, since we don't call signal().
-        self.assertFalse(self.event_loop.remove_signal_handler(signal.SIGKILL))
+        self.assertFalse(self.loop.remove_signal_handler(signal.SIGKILL))
         # Now set a handler and handle it.
-        self.event_loop.add_signal_handler(signal.SIGINT, my_handler)
-        self.event_loop.run_once()
+        self.loop.add_signal_handler(signal.SIGINT, my_handler)
+        self.loop.run_once()
         os.kill(os.getpid(), signal.SIGINT)
-        self.event_loop.run_once()
+        self.loop.run_once()
         self.assertEqual(caught, 1)
         # Removing it should restore the default handler.
-        self.assertTrue(self.event_loop.remove_signal_handler(signal.SIGINT))
+        self.assertTrue(self.loop.remove_signal_handler(signal.SIGINT))
         self.assertEqual(signal.getsignal(signal.SIGINT),
                          signal.default_int_handler)
         # Removing again returns False.
-        self.assertFalse(self.event_loop.remove_signal_handler(signal.SIGINT))
+        self.assertFalse(self.loop.remove_signal_handler(signal.SIGINT))
 
     @unittest.skipUnless(hasattr(signal, 'SIGALRM'), 'No SIGALRM')
     def test_signal_handling_while_selecting(self):
@@ -417,12 +415,11 @@ class EventLoopTestsMixin:
             nonlocal caught
             caught += 1
 
-        self.event_loop.add_signal_handler(
-            signal.SIGALRM, my_handler)
+        self.loop.add_signal_handler(signal.SIGALRM, my_handler)
 
         signal.setitimer(signal.ITIMER_REAL, 0.1, 0)  # Send SIGALRM once.
-        self.event_loop.call_later(0.15, self.event_loop.stop)
-        self.event_loop.run_forever()
+        self.loop.call_later(0.15, self.loop.stop)
+        self.loop.run_forever()
         self.assertEqual(caught, 1)
 
     @unittest.skipUnless(hasattr(signal, 'SIGALRM'), 'No SIGALRM')
@@ -435,37 +432,35 @@ class EventLoopTestsMixin:
             caught += 1
             self.assertEqual(args, some_args)
 
-        self.event_loop.add_signal_handler(
-            signal.SIGALRM, my_handler, *some_args)
+        self.loop.add_signal_handler(signal.SIGALRM, my_handler, *some_args)
 
         signal.setitimer(signal.ITIMER_REAL, 0.1, 0)  # Send SIGALRM once.
-        self.event_loop.call_later(0.15, self.event_loop.stop)
-        self.event_loop.run_forever()
+        self.loop.call_later(0.15, self.loop.stop)
+        self.loop.run_forever()
         self.assertEqual(caught, 1)
 
     def test_create_connection(self):
-        with test_utils.run_test_server(self.event_loop) as httpd:
-            f = self.event_loop.create_connection(
-                lambda: MyProto(create_future=True),
-                *httpd.address)
-            tr, pr = self.event_loop.run_until_complete(f)
+        with test_utils.run_test_server(self.loop) as httpd:
+            f = self.loop.create_connection(
+                lambda: MyProto(create_future=True), *httpd.address)
+            tr, pr = self.loop.run_until_complete(f)
             self.assertTrue(isinstance(tr, transports.Transport))
             self.assertTrue(isinstance(pr, protocols.Protocol))
-            self.event_loop.run_until_complete(pr.done)
+            self.loop.run_until_complete(pr.done)
             self.assertTrue(pr.nbytes > 0)
 
     def test_create_connection_sock(self):
-        with test_utils.run_test_server(self.event_loop) as httpd:
+        with test_utils.run_test_server(self.loop) as httpd:
             sock = None
-            infos = self.event_loop.run_until_complete(
-                self.event_loop.getaddrinfo(
+            infos = self.loop.run_until_complete(
+                self.loop.getaddrinfo(
                     *httpd.address, type=socket.SOCK_STREAM))
             for family, type, proto, cname, address in infos:
                 try:
                     sock = socket.socket(family=family, type=type, proto=proto)
                     sock.setblocking(False)
-                    self.event_loop.run_until_complete(
-                        self.event_loop.sock_connect(sock, address))
+                    self.loop.run_until_complete(
+                        self.loop.sock_connect(sock, address))
                 except:
                     pass
                 else:
@@ -473,59 +468,59 @@ class EventLoopTestsMixin:
             else:
                 assert False, 'Can not create socket.'
 
-            f = self.event_loop.create_connection(
+            f = self.loop.create_connection(
                 lambda: MyProto(create_future=True), sock=sock)
-            tr, pr = self.event_loop.run_until_complete(f)
+            tr, pr = self.loop.run_until_complete(f)
             self.assertTrue(isinstance(tr, transports.Transport))
             self.assertTrue(isinstance(pr, protocols.Protocol))
-            self.event_loop.run_until_complete(pr.done)
+            self.loop.run_until_complete(pr.done)
             self.assertTrue(pr.nbytes > 0)
 
     @unittest.skipIf(ssl is None, 'No ssl module')
     def test_create_ssl_connection(self):
         with test_utils.run_test_server(
-                self.event_loop, use_ssl=True) as httpd:
-            f = self.event_loop.create_connection(
+                self.loop, use_ssl=True) as httpd:
+            f = self.loop.create_connection(
                 lambda: MyProto(create_future=True), *httpd.address, ssl=True)
-            tr, pr = self.event_loop.run_until_complete(f)
+            tr, pr = self.loop.run_until_complete(f)
             self.assertTrue(isinstance(tr, transports.Transport))
             self.assertTrue(isinstance(pr, protocols.Protocol))
             self.assertTrue('ssl' in tr.__class__.__name__.lower())
             self.assertTrue(
                 hasattr(tr.get_extra_info('socket'), 'getsockname'))
-            self.event_loop.run_until_complete(pr.done)
+            self.loop.run_until_complete(pr.done)
             self.assertTrue(pr.nbytes > 0)
 
     def test_create_connection_host_port_sock(self):
-        coro = self.event_loop.create_connection(
+        coro = self.loop.create_connection(
             MyProto, 'example.com', 80, sock=object())
-        self.assertRaises(ValueError, self.event_loop.run_until_complete, coro)
+        self.assertRaises(ValueError, self.loop.run_until_complete, coro)
 
     def test_create_connection_no_host_port_sock(self):
-        coro = self.event_loop.create_connection(MyProto)
-        self.assertRaises(ValueError, self.event_loop.run_until_complete, coro)
+        coro = self.loop.create_connection(MyProto)
+        self.assertRaises(ValueError, self.loop.run_until_complete, coro)
 
     def test_create_connection_no_getaddrinfo(self):
         @tasks.task
         def getaddrinfo(*args, **kw):
             yield from []
-        self.event_loop.getaddrinfo = getaddrinfo
-        coro = self.event_loop.create_connection(MyProto, 'example.com', 80)
+        self.loop.getaddrinfo = getaddrinfo
+        coro = self.loop.create_connection(MyProto, 'example.com', 80)
         self.assertRaises(
-            socket.error, self.event_loop.run_until_complete, coro)
+            socket.error, self.loop.run_until_complete, coro)
 
     def test_create_connection_connect_err(self):
         @tasks.task
         def getaddrinfo(*args, **kw):
             yield from []
             return [(2, 1, 6, '', ('107.6.106.82', 80))]
-        self.event_loop.getaddrinfo = getaddrinfo
-        self.event_loop.sock_connect = unittest.mock.Mock()
-        self.event_loop.sock_connect.side_effect = socket.error
+        self.loop.getaddrinfo = getaddrinfo
+        self.loop.sock_connect = unittest.mock.Mock()
+        self.loop.sock_connect.side_effect = socket.error
 
-        coro = self.event_loop.create_connection(MyProto, 'example.com', 80)
+        coro = self.loop.create_connection(MyProto, 'example.com', 80)
         self.assertRaises(
-            socket.error, self.event_loop.run_until_complete, coro)
+            socket.error, self.loop.run_until_complete, coro)
 
     def test_create_connection_mutiple_errors(self):
         @tasks.task
@@ -533,32 +528,32 @@ class EventLoopTestsMixin:
             yield from []
             return [(2, 1, 6, '', ('107.6.106.82', 80)),
                     (2, 1, 6, '', ('107.6.106.82', 80))]
-        self.event_loop.getaddrinfo = getaddrinfo
-        self.event_loop.sock_connect = unittest.mock.Mock()
-        self.event_loop.sock_connect.side_effect = socket.error
+        self.loop.getaddrinfo = getaddrinfo
+        self.loop.sock_connect = unittest.mock.Mock()
+        self.loop.sock_connect.side_effect = socket.error
 
-        coro = self.event_loop.create_connection(
+        coro = self.loop.create_connection(
             MyProto, 'example.com', 80, family=socket.AF_INET)
         self.assertRaises(
-            socket.error, self.event_loop.run_until_complete, coro)
+            socket.error, self.loop.run_until_complete, coro)
 
     def test_create_connection_local_addr(self):
-        with test_utils.run_test_server(self.event_loop) as httpd:
+        with test_utils.run_test_server(self.loop) as httpd:
             port = find_unused_port()
-            f = self.event_loop.create_connection(
+            f = self.loop.create_connection(
                 lambda: MyProto(create_future=True),
                 *httpd.address, local_addr=(httpd.address[0], port))
-            tr, pr = self.event_loop.run_until_complete(f)
+            tr, pr = self.loop.run_until_complete(f)
             expected = pr.transport.get_extra_info('socket').getsockname()[1]
             self.assertEqual(port, expected)
 
     def test_create_connection_local_addr_in_use(self):
-        with test_utils.run_test_server(self.event_loop) as httpd:
-            f = self.event_loop.create_connection(
+        with test_utils.run_test_server(self.loop) as httpd:
+            f = self.loop.create_connection(
                 lambda: MyProto(create_future=True),
                 *httpd.address, local_addr=httpd.address)
             with self.assertRaises(socket.error) as cm:
-                self.event_loop.run_until_complete(f)
+                self.loop.run_until_complete(f)
             self.assertEqual(cm.exception.errno, errno.EADDRINUSE)
             self.assertIn(str(httpd.address), cm.exception.strerror)
 
@@ -570,8 +565,8 @@ class EventLoopTestsMixin:
             proto = MyProto()
             return proto
 
-        f = self.event_loop.start_serving(factory, '0.0.0.0', 0)
-        socks = self.event_loop.run_until_complete(f)
+        f = self.loop.start_serving(factory, '0.0.0.0', 0)
+        socks = self.loop.run_until_complete(f)
         self.assertEqual(len(socks), 1)
         sock = socks[0]
         host, port = sock.getsockname()
@@ -579,12 +574,12 @@ class EventLoopTestsMixin:
         client = socket.socket()
         client.connect(('127.0.0.1', port))
         client.send(b'xxx')
-        self.event_loop.run_once()
+        self.loop.run_once()
         self.assertIsInstance(proto, MyProto)
         self.assertEqual('INITIAL', proto.state)
-        self.event_loop.run_once()
+        self.loop.run_once()
         self.assertEqual('CONNECTED', proto.state)
-        self.event_loop.run_once(0.001)  # windows iocp
+        self.loop.run_once(0.001)  # windows iocp
         self.assertEqual(3, proto.nbytes)
 
         # extra info is available
@@ -596,7 +591,7 @@ class EventLoopTestsMixin:
 
         # close connection
         proto.transport.close()
-        self.event_loop.run_once(0.001)  # windows iocp
+        self.loop.run_once(0.001)  # windows iocp
 
         self.assertEqual('CLOSED', proto.state)
 
@@ -625,21 +620,20 @@ class EventLoopTestsMixin:
             certfile=os.path.join(here, 'sample.crt'),
             keyfile=os.path.join(here, 'sample.key'))
 
-        f = self.event_loop.start_serving(
+        f = self.loop.start_serving(
             factory, '127.0.0.1', 0, ssl=sslcontext)
 
-        sock = self.event_loop.run_until_complete(f)[0]
+        sock = self.loop.run_until_complete(f)[0]
         host, port = sock.getsockname()
         self.assertEqual(host, '127.0.0.1')
 
-        f_c = self.event_loop.create_connection(
-            ClientMyProto, host, port, ssl=True)
-        client, pr = self.event_loop.run_until_complete(f_c)
+        f_c = self.loop.create_connection(ClientMyProto, host, port, ssl=True)
+        client, pr = self.loop.run_until_complete(f_c)
 
         client.write(b'xxx')
-        self.event_loop.run_once()
+        self.loop.run_once()
         self.assertIsInstance(proto, MyProto)
-        self.event_loop.run_once()
+        self.loop.run_once()
         self.assertEqual('CONNECTED', proto.state)
         self.assertEqual(3, proto.nbytes)
 
@@ -652,7 +646,7 @@ class EventLoopTestsMixin:
 
         # close connection
         proto.transport.close()
-        self.event_loop.run_until_complete(proto.done)
+        self.loop.run_until_complete(proto.done)
         self.assertEqual('CLOSED', proto.state)
 
         # the client socket must be closed after to avoid ECONNRESET upon
@@ -671,8 +665,8 @@ class EventLoopTestsMixin:
         sock_ob.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock_ob.bind(('0.0.0.0', 0))
 
-        f = self.event_loop.start_serving(TestMyProto, sock=sock_ob)
-        sock = self.event_loop.run_until_complete(f)[0]
+        f = self.loop.start_serving(TestMyProto, sock=sock_ob)
+        sock = self.loop.run_until_complete(f)[0]
         self.assertIs(sock, sock_ob)
 
         host, port = sock.getsockname()
@@ -680,7 +674,7 @@ class EventLoopTestsMixin:
         client = socket.socket()
         client.connect(('127.0.0.1', port))
         client.send(b'xxx')
-        self.event_loop.run_until_complete(proto)
+        self.loop.run_until_complete(proto)
         sock.close()
         client.close()
 
@@ -689,13 +683,13 @@ class EventLoopTestsMixin:
         sock_ob.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock_ob.bind(('0.0.0.0', 0))
 
-        f = self.event_loop.start_serving(MyProto, sock=sock_ob)
-        sock = self.event_loop.run_until_complete(f)[0]
+        f = self.loop.start_serving(MyProto, sock=sock_ob)
+        sock = self.loop.run_until_complete(f)[0]
         host, port = sock.getsockname()
 
-        f = self.event_loop.start_serving(MyProto, host=host, port=port)
+        f = self.loop.start_serving(MyProto, host=host, port=port)
         with self.assertRaises(socket.error) as cm:
-            self.event_loop.run_until_complete(f)
+            self.loop.run_until_complete(f)
         self.assertEqual(cm.exception.errno, errno.EADDRINUSE)
 
     @unittest.skipUnless(socket.has_ipv6, 'IPv6 not supported')
@@ -708,12 +702,12 @@ class EventLoopTestsMixin:
                 f_proto.set_result(self)
 
         port = find_unused_port()
-        f = self.event_loop.start_serving(TestMyProto, host=None, port=port)
-        socks = self.event_loop.run_until_complete(f)
+        f = self.loop.start_serving(TestMyProto, host=None, port=port)
+        socks = self.loop.run_until_complete(f)
         client = socket.socket()
         client.connect(('127.0.0.1', port))
         client.send(b'xxx')
-        proto = self.event_loop.run_until_complete(f_proto)
+        proto = self.loop.run_until_complete(f_proto)
         proto.transport.close()
         client.close()
 
@@ -721,7 +715,7 @@ class EventLoopTestsMixin:
         client = socket.socket(socket.AF_INET6)
         client.connect(('::1', port))
         client.send(b'xxx')
-        proto = self.event_loop.run_until_complete(f_proto)
+        proto = self.loop.run_until_complete(f_proto)
         proto.transport.close()
         client.close()
 
@@ -729,8 +723,8 @@ class EventLoopTestsMixin:
             s.close()
 
     def test_stop_serving(self):
-        f = self.event_loop.start_serving(MyProto, '0.0.0.0', 0)
-        sock = self.event_loop.run_until_complete(f)[0]
+        f = self.loop.start_serving(MyProto, '0.0.0.0', 0)
+        sock = self.loop.run_until_complete(f)[0]
         host, port = sock.getsockname()
 
         client = socket.socket()
@@ -738,28 +732,27 @@ class EventLoopTestsMixin:
         client.send(b'xxx')
         client.close()
 
-        self.event_loop.stop_serving(sock)
+        self.loop.stop_serving(sock)
 
         client = socket.socket()
         self.assertRaises(
             ConnectionRefusedError, client.connect, ('127.0.0.1', port))
 
     def test_start_serving_host_port_sock(self):
-        fut = self.event_loop.start_serving(
+        fut = self.loop.start_serving(
             MyProto, '0.0.0.0', 0, sock=object())
-        self.assertRaises(ValueError, self.event_loop.run_until_complete, fut)
+        self.assertRaises(ValueError, self.loop.run_until_complete, fut)
 
     def test_start_serving_no_host_port_sock(self):
-        fut = self.event_loop.start_serving(MyProto)
-        self.assertRaises(ValueError, self.event_loop.run_until_complete, fut)
+        fut = self.loop.start_serving(MyProto)
+        self.assertRaises(ValueError, self.loop.run_until_complete, fut)
 
     def test_start_serving_no_getaddrinfo(self):
-        getaddrinfo = self.event_loop.getaddrinfo = unittest.mock.Mock()
+        getaddrinfo = self.loop.getaddrinfo = unittest.mock.Mock()
         getaddrinfo.return_value = []
 
-        f = self.event_loop.start_serving(MyProto, '0.0.0.0', 0)
-        self.assertRaises(
-            socket.error, self.event_loop.run_until_complete, f)
+        f = self.loop.start_serving(MyProto, '0.0.0.0', 0)
+        self.assertRaises(socket.error, self.loop.run_until_complete, f)
 
     @unittest.mock.patch('tulip.base_events.socket')
     def test_start_serving_cant_bind(self, m_socket):
@@ -773,8 +766,8 @@ class EventLoopTestsMixin:
         m_sock = m_socket.socket.return_value = unittest.mock.Mock()
         m_sock.bind.side_effect = Err
 
-        fut = self.event_loop.start_serving(MyProto, '0.0.0.0', 0)
-        self.assertRaises(OSError, self.event_loop.run_until_complete, fut)
+        fut = self.loop.start_serving(MyProto, '0.0.0.0', 0)
+        self.assertRaises(OSError, self.loop.run_until_complete, fut)
         self.assertTrue(m_sock.close.called)
 
     @unittest.mock.patch('tulip.base_events.socket')
@@ -782,20 +775,20 @@ class EventLoopTestsMixin:
         m_socket.error = socket.error
         m_socket.getaddrinfo.return_value = []
 
-        coro = self.event_loop.create_datagram_endpoint(
+        coro = self.loop.create_datagram_endpoint(
             MyDatagramProto, local_addr=('localhost', 0))
         self.assertRaises(
-            socket.error, self.event_loop.run_until_complete, coro)
+            socket.error, self.loop.run_until_complete, coro)
 
     def test_create_datagram_endpoint_addr_error(self):
-        coro = self.event_loop.create_datagram_endpoint(
+        coro = self.loop.create_datagram_endpoint(
             MyDatagramProto, local_addr='localhost')
         self.assertRaises(
-            AssertionError, self.event_loop.run_until_complete, coro)
-        coro = self.event_loop.create_datagram_endpoint(
+            AssertionError, self.loop.run_until_complete, coro)
+        coro = self.loop.create_datagram_endpoint(
             MyDatagramProto, local_addr=('localhost', 1, 2, 3))
         self.assertRaises(
-            AssertionError, self.event_loop.run_until_complete, coro)
+            AssertionError, self.loop.run_until_complete, coro)
 
     def test_create_datagram_endpoint(self):
         class TestMyDatagramProto(MyDatagramProto):
@@ -806,21 +799,21 @@ class EventLoopTestsMixin:
                 super().datagram_received(data, addr)
                 self.transport.sendto(b'resp:'+data, addr)
 
-        coro = self.event_loop.create_datagram_endpoint(
+        coro = self.loop.create_datagram_endpoint(
             TestMyDatagramProto, local_addr=('127.0.0.1', 0))
-        s_transport, server = self.event_loop.run_until_complete(coro)
+        s_transport, server = self.loop.run_until_complete(coro)
         host, port = s_transport.get_extra_info('addr')
 
-        coro = self.event_loop.create_datagram_endpoint(
+        coro = self.loop.create_datagram_endpoint(
             lambda: MyDatagramProto(create_future=True),
             remote_addr=(host, port))
-        transport, client = self.event_loop.run_until_complete(coro)
+        transport, client = self.loop.run_until_complete(coro)
 
         self.assertEqual('INITIALIZED', client.state)
         transport.sendto(b'xxx')
-        self.event_loop.run_once(None)
+        self.loop.run_once(None)
         self.assertEqual(3, server.nbytes)
-        self.event_loop.run_once(None)
+        self.loop.run_once(None)
 
         # received
         self.assertEqual(8, client.nbytes)
@@ -832,18 +825,18 @@ class EventLoopTestsMixin:
 
         # close connection
         transport.close()
-        self.event_loop.run_until_complete(client.done)
+        self.loop.run_until_complete(client.done)
         self.assertEqual('CLOSED', client.state)
         server.transport.close()
 
     def test_create_datagram_endpoint_connect_err(self):
-        self.event_loop.sock_connect = unittest.mock.Mock()
-        self.event_loop.sock_connect.side_effect = socket.error
+        self.loop.sock_connect = unittest.mock.Mock()
+        self.loop.sock_connect.side_effect = socket.error
 
-        coro = self.event_loop.create_datagram_endpoint(
+        coro = self.loop.create_datagram_endpoint(
             protocols.DatagramProtocol, remote_addr=('127.0.0.1', 0))
         self.assertRaises(
-            socket.error, self.event_loop.run_until_complete, coro)
+            socket.error, self.loop.run_until_complete, coro)
 
     @unittest.mock.patch('tulip.base_events.socket')
     def test_create_datagram_endpoint_socket_err(self, m_socket):
@@ -851,39 +844,39 @@ class EventLoopTestsMixin:
         m_socket.getaddrinfo = socket.getaddrinfo
         m_socket.socket.side_effect = socket.error
 
-        coro = self.event_loop.create_datagram_endpoint(
+        coro = self.loop.create_datagram_endpoint(
             protocols.DatagramProtocol, family=socket.AF_INET)
         self.assertRaises(
-            socket.error, self.event_loop.run_until_complete, coro)
+            socket.error, self.loop.run_until_complete, coro)
 
-        coro = self.event_loop.create_datagram_endpoint(
+        coro = self.loop.create_datagram_endpoint(
             protocols.DatagramProtocol, local_addr=('127.0.0.1', 0))
         self.assertRaises(
-            socket.error, self.event_loop.run_until_complete, coro)
+            socket.error, self.loop.run_until_complete, coro)
 
     def test_create_datagram_endpoint_no_matching_family(self):
-        coro = self.event_loop.create_datagram_endpoint(
+        coro = self.loop.create_datagram_endpoint(
             protocols.DatagramProtocol,
             remote_addr=('127.0.0.1', 0), local_addr=('::1', 0))
         self.assertRaises(
-            ValueError, self.event_loop.run_until_complete, coro)
+            ValueError, self.loop.run_until_complete, coro)
 
     @unittest.mock.patch('tulip.base_events.socket')
     def test_create_datagram_endpoint_setblk_err(self, m_socket):
         m_socket.error = socket.error
         m_socket.socket.return_value.setblocking.side_effect = socket.error
 
-        coro = self.event_loop.create_datagram_endpoint(
+        coro = self.loop.create_datagram_endpoint(
             protocols.DatagramProtocol, family=socket.AF_INET)
         self.assertRaises(
-            socket.error, self.event_loop.run_until_complete, coro)
+            socket.error, self.loop.run_until_complete, coro)
         self.assertTrue(
             m_socket.socket.return_value.close.called)
 
     def test_create_datagram_endpoint_noaddr_nofamily(self):
-        coro = self.event_loop.create_datagram_endpoint(
+        coro = self.loop.create_datagram_endpoint(
             protocols.DatagramProtocol)
-        self.assertRaises(ValueError, self.event_loop.run_until_complete, coro)
+        self.assertRaises(ValueError, self.loop.run_until_complete, coro)
 
     @unittest.mock.patch('tulip.base_events.socket')
     def test_create_datagram_endpoint_cant_bind(self, m_socket):
@@ -896,17 +889,17 @@ class EventLoopTestsMixin:
         m_sock = m_socket.socket.return_value = unittest.mock.Mock()
         m_sock.bind.side_effect = Err
 
-        fut = self.event_loop.create_datagram_endpoint(
+        fut = self.loop.create_datagram_endpoint(
             MyDatagramProto,
             local_addr=('127.0.0.1', 0), family=socket.AF_INET)
-        self.assertRaises(Err, self.event_loop.run_until_complete, fut)
+        self.assertRaises(Err, self.loop.run_until_complete, fut)
         self.assertTrue(m_sock.close.called)
 
     def test_accept_connection_retry(self):
         sock = unittest.mock.Mock()
         sock.accept.side_effect = BlockingIOError()
 
-        self.event_loop._accept_connection(MyProto, sock)
+        self.loop._accept_connection(MyProto, sock)
         self.assertFalse(sock.close.called)
 
     @unittest.mock.patch('tulip.selector_events.tulip_log')
@@ -914,20 +907,20 @@ class EventLoopTestsMixin:
         sock = unittest.mock.Mock()
         sock.accept.side_effect = OSError()
 
-        self.event_loop._accept_connection(MyProto, sock)
+        self.loop._accept_connection(MyProto, sock)
         self.assertTrue(sock.close.called)
         self.assertTrue(m_log.exception.called)
 
     def test_internal_fds(self):
-        event_loop = self.create_event_loop()
-        if not isinstance(event_loop, selector_events.BaseSelectorEventLoop):
+        loop = self.create_event_loop()
+        if not isinstance(loop, selector_events.BaseSelectorEventLoop):
             return
 
-        self.assertEqual(1, event_loop._internal_fds)
-        event_loop.close()
-        self.assertEqual(0, event_loop._internal_fds)
-        self.assertIsNone(event_loop._csock)
-        self.assertIsNone(event_loop._ssock)
+        self.assertEqual(1, loop._internal_fds)
+        loop.close()
+        self.assertEqual(0, loop._internal_fds)
+        self.assertIsNone(loop._csock)
+        self.assertIsNone(loop._ssock)
 
     @unittest.skipUnless(sys.platform != 'win32',
                          "Don't support pipes for Windows")
@@ -944,26 +937,25 @@ class EventLoopTestsMixin:
 
         @tasks.task
         def connect():
-            t, p = yield from self.event_loop.connect_read_pipe(factory,
-                                                                pipeobj)
+            t, p = yield from self.loop.connect_read_pipe(factory, pipeobj)
             self.assertIs(p, proto)
             self.assertIs(t, proto.transport)
             self.assertEqual(['INITIAL', 'CONNECTED'], proto.state)
             self.assertEqual(0, proto.nbytes)
 
-        self.event_loop.run_until_complete(connect())
+        self.loop.run_until_complete(connect())
 
         os.write(wpipe, b'1')
-        self.event_loop.run_once()
+        self.loop.run_once()
         self.assertEqual(1, proto.nbytes)
 
         os.write(wpipe, b'2345')
-        self.event_loop.run_once()
+        self.loop.run_once()
         self.assertEqual(['INITIAL', 'CONNECTED'], proto.state)
         self.assertEqual(5, proto.nbytes)
 
         os.close(wpipe)
-        self.event_loop.run_until_complete(proto.done)
+        self.loop.run_until_complete(proto.done)
         self.assertEqual(
             ['INITIAL', 'CONNECTED', 'EOF', 'CLOSED'], proto.state)
         # extra info is available
@@ -986,22 +978,21 @@ class EventLoopTestsMixin:
         @tasks.task
         def connect():
             nonlocal transport
-            t, p = yield from self.event_loop.connect_write_pipe(factory,
-                                                                 pipeobj)
+            t, p = yield from self.loop.connect_write_pipe(factory, pipeobj)
             self.assertIs(p, proto)
             self.assertIs(t, proto.transport)
             self.assertEqual('CONNECTED', proto.state)
             transport = t
 
-        self.event_loop.run_until_complete(connect())
+        self.loop.run_until_complete(connect())
 
         transport.write(b'1')
-        self.event_loop.run_once()
+        self.loop.run_once()
         data = os.read(rpipe, 1024)
         self.assertEqual(b'1', data)
 
         transport.write(b'2345')
-        self.event_loop.run_once()
+        self.loop.run_once()
         data = os.read(rpipe, 1024)
         self.assertEqual(b'2345', data)
         self.assertEqual('CONNECTED', proto.state)
@@ -1013,7 +1004,7 @@ class EventLoopTestsMixin:
 
         # close connection
         proto.transport.close()
-        self.event_loop.run_until_complete(proto.done)
+        self.loop.run_until_complete(proto.done)
         self.assertEqual('CLOSED', proto.state)
 
 
@@ -1211,70 +1202,70 @@ class AbstractEventLoopTests(unittest.TestCase):
 
     def test_not_implemented(self):
         f = unittest.mock.Mock()
-        ev_loop = events.AbstractEventLoop()
+        loop = events.AbstractEventLoop()
         self.assertRaises(
-            NotImplementedError, ev_loop.run_forever)
+            NotImplementedError, loop.run_forever)
         self.assertRaises(
-            NotImplementedError, ev_loop.run_once)
+            NotImplementedError, loop.run_once)
         self.assertRaises(
-            NotImplementedError, ev_loop.run_until_complete, None)
+            NotImplementedError, loop.run_until_complete, None)
         self.assertRaises(
-            NotImplementedError, ev_loop.stop)
+            NotImplementedError, loop.stop)
         self.assertRaises(
-            NotImplementedError, ev_loop.is_running)
+            NotImplementedError, loop.is_running)
         self.assertRaises(
-            NotImplementedError, ev_loop.call_later, None, None)
+            NotImplementedError, loop.call_later, None, None)
         self.assertRaises(
-            NotImplementedError, ev_loop.call_soon, None)
+            NotImplementedError, loop.call_soon, None)
         self.assertRaises(
-            NotImplementedError, ev_loop.time)
+            NotImplementedError, loop.time)
         self.assertRaises(
-            NotImplementedError, ev_loop.call_soon_threadsafe, None)
+            NotImplementedError, loop.call_soon_threadsafe, None)
         self.assertRaises(
-            NotImplementedError, ev_loop.wrap_future, f)
+            NotImplementedError, loop.wrap_future, f)
         self.assertRaises(
-            NotImplementedError, ev_loop.run_in_executor, f, f)
+            NotImplementedError, loop.run_in_executor, f, f)
         self.assertRaises(
-            NotImplementedError, ev_loop.set_default_executor, f)
+            NotImplementedError, loop.set_default_executor, f)
         self.assertRaises(
-            NotImplementedError, ev_loop.getaddrinfo, 'localhost', 8080)
+            NotImplementedError, loop.getaddrinfo, 'localhost', 8080)
         self.assertRaises(
-            NotImplementedError, ev_loop.getnameinfo, ('localhost', 8080))
+            NotImplementedError, loop.getnameinfo, ('localhost', 8080))
         self.assertRaises(
-            NotImplementedError, ev_loop.create_connection, f)
+            NotImplementedError, loop.create_connection, f)
         self.assertRaises(
-            NotImplementedError, ev_loop.start_serving, f)
+            NotImplementedError, loop.start_serving, f)
         self.assertRaises(
-            NotImplementedError, ev_loop.stop_serving, f)
+            NotImplementedError, loop.stop_serving, f)
         self.assertRaises(
-            NotImplementedError, ev_loop.create_datagram_endpoint, f)
+            NotImplementedError, loop.create_datagram_endpoint, f)
         self.assertRaises(
-            NotImplementedError, ev_loop.add_reader, 1, f)
+            NotImplementedError, loop.add_reader, 1, f)
         self.assertRaises(
-            NotImplementedError, ev_loop.remove_reader, 1)
+            NotImplementedError, loop.remove_reader, 1)
         self.assertRaises(
-            NotImplementedError, ev_loop.add_writer, 1, f)
+            NotImplementedError, loop.add_writer, 1, f)
         self.assertRaises(
-            NotImplementedError, ev_loop.remove_writer, 1)
+            NotImplementedError, loop.remove_writer, 1)
         self.assertRaises(
-            NotImplementedError, ev_loop.sock_recv, f, 10)
+            NotImplementedError, loop.sock_recv, f, 10)
         self.assertRaises(
-            NotImplementedError, ev_loop.sock_sendall, f, 10)
+            NotImplementedError, loop.sock_sendall, f, 10)
         self.assertRaises(
-            NotImplementedError, ev_loop.sock_connect, f, f)
+            NotImplementedError, loop.sock_connect, f, f)
         self.assertRaises(
-            NotImplementedError, ev_loop.sock_accept, f)
+            NotImplementedError, loop.sock_accept, f)
         self.assertRaises(
-            NotImplementedError, ev_loop.add_signal_handler, 1, f)
+            NotImplementedError, loop.add_signal_handler, 1, f)
         self.assertRaises(
-            NotImplementedError, ev_loop.remove_signal_handler, 1)
+            NotImplementedError, loop.remove_signal_handler, 1)
         self.assertRaises(
-            NotImplementedError, ev_loop.remove_signal_handler, 1)
+            NotImplementedError, loop.remove_signal_handler, 1)
         self.assertRaises(
-            NotImplementedError, ev_loop.connect_read_pipe, f,
+            NotImplementedError, loop.connect_read_pipe, f,
             unittest.mock.sentinel.pipe)
         self.assertRaises(
-            NotImplementedError, ev_loop.connect_write_pipe, f,
+            NotImplementedError, loop.connect_write_pipe, f,
             unittest.mock.sentinel.pipe)
 
 
@@ -1305,13 +1296,13 @@ class PolicyTests(unittest.TestCase):
 
     def test_get_event_loop(self):
         policy = events.DefaultEventLoopPolicy()
-        self.assertIsNone(policy._event_loop)
+        self.assertIsNone(policy._loop)
 
-        event_loop = policy.get_event_loop()
-        self.assertIsInstance(event_loop, events.AbstractEventLoop)
+        loop = policy.get_event_loop()
+        self.assertIsInstance(loop, events.AbstractEventLoop)
 
-        self.assertIs(policy._event_loop, event_loop)
-        self.assertIs(event_loop, policy.get_event_loop())
+        self.assertIs(policy._loop, loop)
+        self.assertIs(loop, policy.get_event_loop())
 
     @unittest.mock.patch('tulip.events.threading')
     def test_get_event_loop_thread(self, m_threading):

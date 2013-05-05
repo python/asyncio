@@ -17,90 +17,90 @@ from tulip import tasks
 class BaseEventLoopTests(unittest.TestCase):
 
     def setUp(self):
-        self.event_loop = base_events.BaseEventLoop()
-        self.event_loop._selector = unittest.mock.Mock()
-        self.event_loop._selector.registered_count.return_value = 1
+        self.loop = base_events.BaseEventLoop()
+        self.loop._selector = unittest.mock.Mock()
+        self.loop._selector.registered_count.return_value = 1
 
     def test_not_implemented(self):
         m = unittest.mock.Mock()
         self.assertRaises(
             NotImplementedError,
-            self.event_loop._make_socket_transport, m, m)
+            self.loop._make_socket_transport, m, m)
         self.assertRaises(
             NotImplementedError,
-            self.event_loop._make_ssl_transport, m, m, m, m)
+            self.loop._make_ssl_transport, m, m, m, m)
         self.assertRaises(
             NotImplementedError,
-            self.event_loop._make_datagram_transport, m, m)
+            self.loop._make_datagram_transport, m, m)
         self.assertRaises(
-            NotImplementedError, self.event_loop._process_events, [])
+            NotImplementedError, self.loop._process_events, [])
         self.assertRaises(
-            NotImplementedError, self.event_loop._write_to_self)
+            NotImplementedError, self.loop._write_to_self)
         self.assertRaises(
-            NotImplementedError, self.event_loop._read_from_self)
-        self.assertRaises(
-            NotImplementedError,
-            self.event_loop._make_read_pipe_transport, m, m)
+            NotImplementedError, self.loop._read_from_self)
         self.assertRaises(
             NotImplementedError,
-            self.event_loop._make_write_pipe_transport, m, m)
+            self.loop._make_read_pipe_transport, m, m)
+        self.assertRaises(
+            NotImplementedError,
+            self.loop._make_write_pipe_transport, m, m)
 
     def test__add_callback_handle(self):
         h = events.Handle(lambda: False, ())
 
-        self.event_loop._add_callback(h)
-        self.assertFalse(self.event_loop._scheduled)
-        self.assertIn(h, self.event_loop._ready)
+        self.loop._add_callback(h)
+        self.assertFalse(self.loop._scheduled)
+        self.assertIn(h, self.loop._ready)
 
     def test__add_callback_cancelled_handle(self):
         h = events.Handle(lambda: False, ())
         h.cancel()
 
-        self.event_loop._add_callback(h)
-        self.assertFalse(self.event_loop._scheduled)
-        self.assertFalse(self.event_loop._ready)
+        self.loop._add_callback(h)
+        self.assertFalse(self.loop._scheduled)
+        self.assertFalse(self.loop._ready)
 
     def test_wrap_future(self):
-        f = futures.Future(event_loop=self.event_loop)
-        self.assertIs(self.event_loop.wrap_future(f), f)
+        f = futures.Future(loop=self.loop)
+        self.assertIs(self.loop.wrap_future(f), f)
         f.cancel()
 
     def test_wrap_future_concurrent(self):
         f = concurrent.futures.Future()
-        fut = self.event_loop.wrap_future(f)
+        fut = self.loop.wrap_future(f)
         self.assertIsInstance(fut, futures.Future)
         fut.cancel()
 
     def test_set_default_executor(self):
         executor = unittest.mock.Mock()
-        self.event_loop.set_default_executor(executor)
-        self.assertIs(executor, self.event_loop._default_executor)
+        self.loop.set_default_executor(executor)
+        self.assertIs(executor, self.loop._default_executor)
 
     def test_getnameinfo(self):
         sockaddr = unittest.mock.Mock()
-        self.event_loop.run_in_executor = unittest.mock.Mock()
-        self.event_loop.getnameinfo(sockaddr)
+        self.loop.run_in_executor = unittest.mock.Mock()
+        self.loop.getnameinfo(sockaddr)
         self.assertEqual(
             (None, socket.getnameinfo, sockaddr, 0),
-            self.event_loop.run_in_executor.call_args[0])
+            self.loop.run_in_executor.call_args[0])
 
     def test_call_soon(self):
         def cb():
             pass
 
-        h = self.event_loop.call_soon(cb)
+        h = self.loop.call_soon(cb)
         self.assertEqual(h._callback, cb)
         self.assertIsInstance(h, events.Handle)
-        self.assertIn(h, self.event_loop._ready)
+        self.assertIn(h, self.loop._ready)
 
     def test_call_later(self):
         def cb():
             pass
 
-        h = self.event_loop.call_later(10.0, cb)
+        h = self.loop.call_later(10.0, cb)
         self.assertIsInstance(h, events.TimerHandle)
-        self.assertIn(h, self.event_loop._scheduled)
-        self.assertNotIn(h, self.event_loop._ready)
+        self.assertIn(h, self.loop._scheduled)
+        self.assertNotIn(h, self.loop._ready)
 
     def test_call_later_negative_delays(self):
         calls = []
@@ -108,22 +108,22 @@ class BaseEventLoopTests(unittest.TestCase):
         def cb(arg):
             calls.append(arg)
 
-        self.event_loop._process_events = unittest.mock.Mock()
-        self.event_loop.call_later(-1, cb, 'a')
-        self.event_loop.call_later(-2, cb, 'b')
-        self.event_loop.run_once()
+        self.loop._process_events = unittest.mock.Mock()
+        self.loop.call_later(-1, cb, 'a')
+        self.loop.call_later(-2, cb, 'b')
+        self.loop.run_once()
         self.assertEqual(calls, ['b', 'a'])
 
     def test_time_and_call_at(self):
         def cb():
-            self.event_loop.stop()
+            self.loop.stop()
 
-        self.event_loop._process_events = unittest.mock.Mock()
-        when = self.event_loop.time() + 0.1
-        self.event_loop.call_at(when, cb)
-        t0 = self.event_loop.time()
-        self.event_loop.run_forever()
-        t1 = self.event_loop.time()
+        self.loop._process_events = unittest.mock.Mock()
+        when = self.loop.time() + 0.1
+        self.loop.call_at(when, cb)
+        t0 = self.loop.time()
+        self.loop.run_forever()
+        t1 = self.loop.time()
         self.assertTrue(0.09 <= t1-t0 <= 0.12, t1-t0)
 
     def test_run_once_in_executor_handle(self):
@@ -131,10 +131,10 @@ class BaseEventLoopTests(unittest.TestCase):
             pass
 
         self.assertRaises(
-            AssertionError, self.event_loop.run_in_executor,
+            AssertionError, self.loop.run_in_executor,
             None, events.Handle(cb, ()), ('',))
         self.assertRaises(
-            AssertionError, self.event_loop.run_in_executor,
+            AssertionError, self.loop.run_in_executor,
             None, events.TimerHandle(10, cb, ()))
 
     def test_run_once_in_executor_cancelled(self):
@@ -143,7 +143,7 @@ class BaseEventLoopTests(unittest.TestCase):
         h = events.Handle(cb, ())
         h.cancel()
 
-        f = self.event_loop.run_in_executor(None, h)
+        f = self.loop.run_in_executor(None, h)
         self.assertIsInstance(f, futures.Future)
         self.assertTrue(f.done())
         self.assertIsNone(f.result())
@@ -156,24 +156,24 @@ class BaseEventLoopTests(unittest.TestCase):
         executor = unittest.mock.Mock()
         executor.submit.return_value = f
 
-        self.event_loop.set_default_executor(executor)
+        self.loop.set_default_executor(executor)
 
-        res = self.event_loop.run_in_executor(None, h)
+        res = self.loop.run_in_executor(None, h)
         self.assertIs(f, res)
 
         executor = unittest.mock.Mock()
         executor.submit.return_value = f
-        res = self.event_loop.run_in_executor(executor, h)
+        res = self.loop.run_in_executor(executor, h)
         self.assertIs(f, res)
         self.assertTrue(executor.submit.called)
 
         f.cancel()  # Don't complain about abandoned Future.
 
     def test_run_once(self):
-        self.event_loop._run_once = unittest.mock.Mock()
-        self.event_loop._run_once.side_effect = base_events._StopError
-        self.event_loop.run_once()
-        self.assertTrue(self.event_loop._run_once.called)
+        self.loop._run_once = unittest.mock.Mock()
+        self.loop._run_once.side_effect = base_events._StopError
+        self.loop.run_once()
+        self.assertTrue(self.loop._run_once.called)
 
     def test__run_once(self):
         h1 = events.TimerHandle(time.monotonic() + 0.1, lambda: True, ())
@@ -181,34 +181,34 @@ class BaseEventLoopTests(unittest.TestCase):
 
         h1.cancel()
 
-        self.event_loop._process_events = unittest.mock.Mock()
-        self.event_loop._scheduled.append(h1)
-        self.event_loop._scheduled.append(h2)
-        self.event_loop._run_once()
+        self.loop._process_events = unittest.mock.Mock()
+        self.loop._scheduled.append(h1)
+        self.loop._scheduled.append(h2)
+        self.loop._run_once()
 
-        t = self.event_loop._selector.select.call_args[0][0]
+        t = self.loop._selector.select.call_args[0][0]
         self.assertTrue(9.99 < t < 10.1)
-        self.assertEqual([h2], self.event_loop._scheduled)
-        self.assertTrue(self.event_loop._process_events.called)
+        self.assertEqual([h2], self.loop._scheduled)
+        self.assertTrue(self.loop._process_events.called)
 
     def test__run_once_timeout(self):
         h = events.TimerHandle(time.monotonic() + 10.0, lambda: True, ())
 
-        self.event_loop._process_events = unittest.mock.Mock()
-        self.event_loop._scheduled.append(h)
-        self.event_loop._run_once(1.0)
-        self.assertEqual((1.0,), self.event_loop._selector.select.call_args[0])
+        self.loop._process_events = unittest.mock.Mock()
+        self.loop._scheduled.append(h)
+        self.loop._run_once(1.0)
+        self.assertEqual((1.0,), self.loop._selector.select.call_args[0])
 
     def test__run_once_timeout_with_ready(self):
         # If event loop has ready callbacks, select timeout is always 0.
         h = events.TimerHandle(time.monotonic() + 10.0, lambda: True, ())
 
-        self.event_loop._process_events = unittest.mock.Mock()
-        self.event_loop._scheduled.append(h)
-        self.event_loop._ready.append(h)
-        self.event_loop._run_once(1.0)
+        self.loop._process_events = unittest.mock.Mock()
+        self.loop._scheduled.append(h)
+        self.loop._ready.append(h)
+        self.loop._run_once(1.0)
 
-        self.assertEqual((0,), self.event_loop._selector.select.call_args[0])
+        self.assertEqual((0,), self.loop._selector.select.call_args[0])
 
     @unittest.mock.patch('tulip.base_events.time')
     @unittest.mock.patch('tulip.base_events.tulip_log')
@@ -226,40 +226,39 @@ class BaseEventLoopTests(unittest.TestCase):
         m_logging.INFO = logging.INFO
         m_logging.DEBUG = logging.DEBUG
 
-        self.event_loop._scheduled.append(events.TimerHandle(11.0,
-                                                             lambda: True, ()))
-        self.event_loop._process_events = unittest.mock.Mock()
-        self.event_loop._run_once()
+        self.loop._scheduled.append(
+            events.TimerHandle(11.0, lambda: True, ()))
+        self.loop._process_events = unittest.mock.Mock()
+        self.loop._run_once()
         self.assertEqual(logging.INFO, m_logging.log.call_args[0][0])
 
         idx = -1
         data = [10.0, 10.0, 10.3, 13.0]
-        self.event_loop._scheduled = [events.TimerHandle(11.0,
-                                                         lambda:True, ())]
-        self.event_loop._run_once()
+        self.loop._scheduled = [events.TimerHandle(11.0, lambda:True, ())]
+        self.loop._run_once()
         self.assertEqual(logging.DEBUG, m_logging.log.call_args[0][0])
 
     def test__run_once_schedule_handle(self):
         handle = None
         processed = False
 
-        def cb(event_loop):
+        def cb(loop):
             nonlocal processed, handle
             processed = True
-            handle = event_loop.call_soon(lambda: True)
+            handle = loop.call_soon(lambda: True)
 
-        h = events.TimerHandle(time.monotonic() - 1, cb, (self.event_loop,))
+        h = events.TimerHandle(time.monotonic() - 1, cb, (self.loop,))
 
-        self.event_loop._process_events = unittest.mock.Mock()
-        self.event_loop._scheduled.append(h)
-        self.event_loop._run_once()
+        self.loop._process_events = unittest.mock.Mock()
+        self.loop._scheduled.append(h)
+        self.loop._run_once()
 
         self.assertTrue(processed)
-        self.assertEqual([handle], list(self.event_loop._ready))
+        self.assertEqual([handle], list(self.loop._ready))
 
     def test_run_until_complete_assertion(self):
         self.assertRaises(
-            AssertionError, self.event_loop.run_until_complete, 'blah')
+            AssertionError, self.loop.run_until_complete, 'blah')
 
     @unittest.mock.patch('tulip.base_events.socket')
     def test_create_connection_mutiple_errors(self, m_socket):
@@ -284,10 +283,10 @@ class BaseEventLoopTests(unittest.TestCase):
         m_socket.socket = _socket
         m_socket.error = socket.error
 
-        self.event_loop.getaddrinfo = getaddrinfo
+        self.loop.getaddrinfo = getaddrinfo
 
         task = tasks.Task(
-            self.event_loop.create_connection(MyProto, 'example.com', 80))
+            self.loop.create_connection(MyProto, 'example.com', 80))
         yield from tasks.wait(task)
         exc = task.exception()
         self.assertEqual("Multiple exceptions: err1, err2", str(exc))

@@ -71,13 +71,13 @@ _marker = object()
 class Task(futures.Future):
     """A coroutine wrapped in a Future."""
 
-    def __init__(self, coro, event_loop=None, timeout=None):
+    def __init__(self, coro, *, loop=None, timeout=None):
         assert inspect.isgenerator(coro)  # Must be a coroutine *object*.
-        super().__init__(event_loop=event_loop, timeout=timeout)
+        super().__init__(loop=loop, timeout=timeout)
         self._coro = coro
         self._fut_waiter = None
         self._must_cancel = False
-        self._event_loop.call_soon(self._step)
+        self._loop.call_soon(self._step)
 
     def __repr__(self):
         res = super().__repr__()
@@ -99,7 +99,7 @@ class Task(futures.Future):
         if self._fut_waiter is not None:
             return self._fut_waiter.cancel()
         else:
-            self._event_loop.call_soon(self._step_maybe)
+            self._loop.call_soon(self._step_maybe)
             return True
 
     def cancelled(self):
@@ -166,11 +166,11 @@ class Task(futures.Future):
                 # because we don't create an extra Future.
                 result.add_done_callback(
                     lambda future:
-                        self._event_loop.call_soon_threadsafe(
+                        self._loop.call_soon_threadsafe(
                             self._wakeup, future))
             else:
                 if inspect.isgenerator(result):
-                    self._event_loop.call_soon(
+                    self._loop.call_soon(
                         self._step, None,
                         RuntimeError(
                             'yield was used instead of yield from for '
@@ -178,12 +178,12 @@ class Task(futures.Future):
                                 self, result)))
                 else:
                     if result is not None:
-                        self._event_loop.call_soon(
+                        self._loop.call_soon(
                             self._step, None,
                             RuntimeError(
                                 'Task got bad yield: {!r}'.format(result)))
                     else:
-                        self._event_loop.call_soon(self._step_maybe)
+                        self._loop.call_soon(self._step_maybe)
 
     def _wakeup(self, future):
         try:
@@ -330,7 +330,7 @@ def _wrap_coroutines(fs):
 def sleep(delay, result=None):
     """Coroutine that completes after a given time (in seconds)."""
     future = futures.Future()
-    h = future._event_loop.call_later(delay, future.set_result, result)
+    h = future._loop.call_later(delay, future.set_result, result)
     try:
         return (yield from future)
     finally:

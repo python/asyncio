@@ -45,16 +45,16 @@ class MyProto(protocols.Protocol):
 class FutureTests(unittest.TestCase):
 
     def setUp(self):
-        self.event_loop = events.new_event_loop()
-        events.set_event_loop(self.event_loop)
+        self.loop = events.new_event_loop()
+        events.set_event_loop(self.loop)
 
     def tearDown(self):
-        self.event_loop.close()
+        self.loop.close()
 
     def test_unix_subprocess(self):
         p = MyProto()
         subprocess_transport.UnixSubprocessTransport(p, ['/bin/ls', '-lR'])
-        self.event_loop.run_until_complete(p.done)
+        self.loop.run_until_complete(p.done)
 
 
 if __name__ == '__main__':

@@ -22,25 +22,25 @@ class Dummy:
 class TaskTests(unittest.TestCase):
 
     def setUp(self):
-        self.event_loop = events.new_event_loop()
-        events.set_event_loop(self.event_loop)
+        self.loop = events.new_event_loop()
+        events.set_event_loop(self.loop)
 
     def tearDown(self):
-        self.event_loop.close()
+        self.loop.close()
 
     def test_task_class(self):
         @tasks.coroutine
         def notmuch():
             return 'ok'
         t = tasks.Task(notmuch())
-        self.event_loop.run_until_complete(t)
+        self.loop.run_until_complete(t)
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'ok')
-        self.assertIs(t._event_loop, self.event_loop)
+        self.assertIs(t._loop, self.loop)
 
-        event_loop = events.new_event_loop()
-        t = tasks.Task(notmuch(), event_loop=event_loop)
-        self.assertIs(t._event_loop, event_loop)
+        loop = events.new_event_loop()
+        t = tasks.Task(notmuch(), loop=loop)
+        self.assertIs(t._loop, loop)
 
     def test_task_decorator(self):
         @tasks.task
@@ -48,7 +48,7 @@ class TaskTests(unittest.TestCase):
             yield from []
             return 'ko'
         t = notmuch()
-        self.event_loop.run_until_complete(t)
+        self.loop.run_until_complete(t)
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'ko')
 
@@ -57,7 +57,7 @@ class TaskTests(unittest.TestCase):
         def notmuch():
             return 'ko'
         t = notmuch()
-        self.event_loop.run_until_complete(t)
+        self.loop.run_until_complete(t)
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'ko')
 
@@ -69,7 +69,7 @@ class TaskTests(unittest.TestCase):
         def notmuch():
             return fut
         t = notmuch()
-        self.event_loop.run_until_complete(t)
+        self.loop.run_until_complete(t)
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'ko')
 
@@ -85,10 +85,10 @@ class TaskTests(unittest.TestCase):
         t.cancel()  # Does not take immediate effect!
         self.assertEqual(repr(t), 'Task(<notmuch>)<CANCELLING, [Dummy()]>')
         self.assertRaises(futures.CancelledError,
-                          self.event_loop.run_until_complete, t)
+                          self.loop.run_until_complete, t)
         self.assertEqual(repr(t), 'Task(<notmuch>)<CANCELLED>')
         t = notmuch()
-        self.event_loop.run_until_complete(t)
+        self.loop.run_until_complete(t)
         self.assertEqual(repr(t), "Task(<notmuch>)<result='abc'>")
 
     def test_task_repr_custom(self):
@@ -123,7 +123,7 @@ class TaskTests(unittest.TestCase):
             return 1000
 
         t = outer()
-        self.assertEqual(self.event_loop.run_until_complete(t), 1042)
+        self.assertEqual(self.loop.run_until_complete(t), 1042)
 
     def test_cancel(self):
         @tasks.task
@@ -132,10 +132,9 @@ class TaskTests(unittest.TestCase):
             return 12
 
         t = task()
-        self.event_loop.call_soon(t.cancel)
+        self.loop.call_soon(t.cancel)
         self.assertRaises(
-            futures.CancelledError,
-            self.event_loop.run_until_complete, t)
+            futures.CancelledError, self.loop.run_until_complete, t)
         self.assertTrue(t.done())
         self.assertFalse(t.cancel())
 
@@ -147,11 +146,10 @@ class TaskTests(unittest.TestCase):
             return 12
 
         t = task()
-        self.event_loop.run_once()  # start coro
+        self.loop.run_once()  # start coro
         t.cancel()
         self.assertRaises(
-            futures.CancelledError,
-            self.event_loop.run_until_complete, t)
+            futures.CancelledError, self.loop.run_until_complete, t)
         self.assertTrue(t.done())
         self.assertFalse(t.cancel())
 
@@ -170,14 +168,14 @@ class TaskTests(unittest.TestCase):
             yield from fut3
 
         t = task()
-        self.event_loop.run_once()
+        self.loop.run_once()
         fut1.set_result(None)
         t.cancel()
-        self.event_loop.run_once()  # process fut1 result, delay cancel
+        self.loop.run_once()  # process fut1 result, delay cancel
         self.assertFalse(t.done())
-        self.event_loop.run_once()  # cancel fut2, but coro still alive
+        self.loop.run_once()  # cancel fut2, but coro still alive
         self.assertFalse(t.done())
-        self.event_loop.run_once()  # cancel fut3
+        self.loop.run_once()  # cancel fut3
         self.assertTrue(t.done())
 
         self.assertEqual(fut1.result(), None)
@@ -195,7 +193,7 @@ class TaskTests(unittest.TestCase):
 
         self.assertRaises(
             futures.CancelledError,
-            self.event_loop.run_until_complete, t)
+            self.loop.run_until_complete, t)
         self.assertTrue(t.done())
         self.assertFalse(t.cancel())
 
@@ -216,7 +214,7 @@ class TaskTests(unittest.TestCase):
                 raise Cancelled()
 
         self.assertRaises(
-            Cancelled, self.event_loop.run_until_complete, coro2())
+            Cancelled, self.loop.run_until_complete, coro2())
 
     def test_cancel_in_coro(self):
         @tasks.coroutine
@@ -226,8 +224,7 @@ class TaskTests(unittest.TestCase):
 
         t = tasks.Task(task())
         self.assertRaises(
-            futures.CancelledError,
-            self.event_loop.run_until_complete, t)
+            futures.CancelledError, self.loop.run_until_complete, t)
         self.assertTrue(t.done())
         self.assertFalse(t.cancel())
 
@@ -241,13 +238,12 @@ class TaskTests(unittest.TestCase):
                 yield from tasks.sleep(0.1)
                 x += 1
                 if x == 2:
-                    self.event_loop.stop()
+                    self.loop.stop()
 
         t = tasks.Task(task())
         t0 = time.monotonic()
         self.assertRaises(
-            futures.InvalidStateError,
-            self.event_loop.run_until_complete, t)
+            futures.InvalidStateError, self.loop.run_until_complete, t)
         t1 = time.monotonic()
         self.assertFalse(t.done())
         self.assertTrue(0.18 <= t1-t0 <= 0.22)
@@ -262,8 +258,7 @@ class TaskTests(unittest.TestCase):
         t = task()
         t0 = time.monotonic()
         self.assertRaises(
-            futures.TimeoutError,
-            self.event_loop.run_until_complete, t, 0.1)
+            futures.TimeoutError, self.loop.run_until_complete, t, 0.1)
         t1 = time.monotonic()
         self.assertFalse(t.done())
         self.assertTrue(0.08 <= t1-t0 <= 0.12)
@@ -276,7 +271,7 @@ class TaskTests(unittest.TestCase):
 
         t = task()
         t0 = time.monotonic()
-        r = self.event_loop.run_until_complete(t, 10.0)
+        r = self.loop.run_until_complete(t, 10.0)
         t1 = time.monotonic()
         self.assertTrue(t.done())
         self.assertEqual(r, 42)
@@ -294,13 +289,13 @@ class TaskTests(unittest.TestCase):
             return 42
 
         t0 = time.monotonic()
-        res = self.event_loop.run_until_complete(tasks.Task(foo()))
+        res = self.loop.run_until_complete(tasks.Task(foo()))
         t1 = time.monotonic()
         self.assertTrue(t1-t0 >= 0.14)
         self.assertEqual(res, 42)
         # Doing it again should take no time and exercise a different path.
         t0 = time.monotonic()
-        res = self.event_loop.run_until_complete(tasks.Task(foo()))
+        res = self.loop.run_until_complete(tasks.Task(foo()))
         t1 = time.monotonic()
         self.assertTrue(t1-t0 <= 0.01)
         # TODO: Test different return_when values.
@@ -311,7 +306,7 @@ class TaskTests(unittest.TestCase):
         task = tasks.Task(tasks.wait(
             [b, a], return_when=tasks.FIRST_COMPLETED))
 
-        done, pending = self.event_loop.run_until_complete(task)
+        done, pending = self.loop.run_until_complete(task)
         self.assertEqual({b}, done)
         self.assertEqual({a}, pending)
         self.assertFalse(a.done())
@@ -336,7 +331,7 @@ class TaskTests(unittest.TestCase):
         task = tasks.Task(
             tasks.wait([b, a], return_when=tasks.FIRST_COMPLETED))
 
-        done, pending = self.event_loop.run_until_complete(task)
+        done, pending = self.loop.run_until_complete(task)
         self.assertEqual({a, b}, done)
         self.assertTrue(a.done())
         self.assertIsNone(a.result())
@@ -355,7 +350,7 @@ class TaskTests(unittest.TestCase):
         task = tasks.Task(tasks.wait(
             [b, a], return_when=tasks.FIRST_EXCEPTION))
 
-        done, pending = self.event_loop.run_until_complete(task)
+        done, pending = self.loop.run_until_complete(task)
         self.assertEqual({b}, done)
         self.assertEqual({a}, pending)
 
@@ -371,7 +366,7 @@ class TaskTests(unittest.TestCase):
         b = tasks.Task(exc())
         task = tasks.wait([b, a], return_when=tasks.FIRST_EXCEPTION)
 
-        done, pending = self.event_loop.run_until_complete(task)
+        done, pending = self.loop.run_until_complete(task)
         self.assertEqual({b}, done)
         self.assertEqual({a}, pending)
 
@@ -394,11 +389,11 @@ class TaskTests(unittest.TestCase):
             self.assertEqual(len(errors), 1)
 
         t0 = time.monotonic()
-        self.event_loop.run_until_complete(tasks.Task(foo()))
+        self.loop.run_until_complete(tasks.Task(foo()))
         t1 = time.monotonic()
         self.assertTrue(t1-t0 >= 0.14)
         t0 = time.monotonic()
-        self.event_loop.run_until_complete(tasks.Task(foo()))
+        self.loop.run_until_complete(tasks.Task(foo()))
         t1 = time.monotonic()
         self.assertTrue(t1-t0 <= 0.01)
 
@@ -413,7 +408,7 @@ class TaskTests(unittest.TestCase):
             self.assertEqual(pending, set([b]))
 
         t0 = time.monotonic()
-        self.event_loop.run_until_complete(tasks.Task(foo()))
+        self.loop.run_until_complete(tasks.Task(foo()))
         t1 = time.monotonic()
         self.assertTrue(t1-t0 >= 0.1)
         self.assertTrue(t1-t0 <= 0.13)
@@ -436,7 +431,7 @@ class TaskTests(unittest.TestCase):
             return values
 
         t0 = time.monotonic()
-        res = self.event_loop.run_until_complete(tasks.Task(foo()))
+        res = self.loop.run_until_complete(tasks.Task(foo()))
         t1 = time.monotonic()
         self.assertTrue(t1-t0 >= 0.14)
         self.assertTrue('a' in res[:2])
@@ -444,7 +439,7 @@ class TaskTests(unittest.TestCase):
         self.assertEqual(res[2], 'c')
         # Doing it again should take no time and exercise a different path.
         t0 = time.monotonic()
-        res = self.event_loop.run_until_complete(tasks.Task(foo()))
+        res = self.loop.run_until_complete(tasks.Task(foo()))
         t1 = time.monotonic()
         self.assertTrue(t1-t0 <= 0.01)
 
@@ -464,7 +459,7 @@ class TaskTests(unittest.TestCase):
             return values
 
         t0 = time.monotonic()
-        res = self.event_loop.run_until_complete(tasks.Task(foo()))
+        res = self.loop.run_until_complete(tasks.Task(foo()))
         t1 = time.monotonic()
         self.assertTrue(t1-t0 >= 0.11)
         self.assertEqual(len(res), 2, res)
@@ -481,7 +476,7 @@ class TaskTests(unittest.TestCase):
 
         t = tasks.Task(sleeper(0.1, 'yeah'))
         t0 = time.monotonic()
-        self.event_loop.run_until_complete(t)
+        self.loop.run_until_complete(t)
         t1 = time.monotonic()
         self.assertTrue(t1-t0 >= 0.09)
         self.assertTrue(t.done())
@@ -491,20 +486,20 @@ class TaskTests(unittest.TestCase):
         t = tasks.Task(tasks.sleep(10.0, 'yeah'))
 
         handle = None
-        orig_call_later = self.event_loop.call_later
+        orig_call_later = self.loop.call_later
 
         def call_later(self, delay, callback, *args):
             nonlocal handle
             handle = orig_call_later(self, delay, callback, *args)
             return handle
 
-        self.event_loop.call_later = call_later
-        self.event_loop.run_once()
+        self.loop.call_later = call_later
+        self.loop.run_once()
 
         self.assertFalse(handle.cancelled)
 
         t.cancel()
-        self.event_loop.run_once()
+        self.loop.run_once()
         self.assertTrue(handle.cancelled)
 
     def test_task_cancel_sleeping_task(self):
@@ -523,7 +518,7 @@ class TaskTests(unittest.TestCase):
         @tasks.task
         def doit():
             sleeper = sleep(5000)
-            self.event_loop.call_later(0.1, sleeper.cancel)
+            self.loop.call_later(0.1, sleeper.cancel)
             try:
                 time.monotonic()
                 yield from sleeper
@@ -535,7 +530,7 @@ class TaskTests(unittest.TestCase):
 
         t0 = time.monotonic()
         doer = doit()
-        self.assertEqual(self.event_loop.run_until_complete(doer), 'cancelled')
+        self.assertEqual(self.loop.run_until_complete(doer), 'cancelled')
         t1 = time.monotonic()
         self.assertTrue(0.09 <= t1-t0 <= 0.13, (t1-t0, sleepfut, doer))
 
@@ -550,12 +545,12 @@ class TaskTests(unittest.TestCase):
                 pass
 
         task = coro()
-        self.event_loop.run_once()
+        self.loop.run_once()
         self.assertIs(task._fut_waiter, fut)
 
         task.cancel()
         self.assertRaises(
-            futures.CancelledError, self.event_loop.run_until_complete, task)
+            futures.CancelledError, self.loop.run_until_complete, task)
         self.assertIsNone(task._fut_waiter)
         self.assertTrue(fut.cancelled())
 
@@ -577,7 +572,7 @@ class TaskTests(unittest.TestCase):
             return 'ko'
 
         self.assertRaises(
-            RuntimeError, self.event_loop.run_until_complete, notmuch())
+            RuntimeError, self.loop.run_until_complete, notmuch())
 
     def test_step_result_future(self):
         # If coroutine returns future, task waits on this future.
@@ -600,12 +595,12 @@ class TaskTests(unittest.TestCase):
             result = yield from fut
 
         t = wait_for_future()
-        self.event_loop.run_once()
+        self.loop.run_once()
         self.assertTrue(fut.cb_added)
 
         res = object()
         fut.set_result(res)
-        self.event_loop.run_once()
+        self.loop.run_once()
         self.assertIs(res, result)
         self.assertTrue(t.done())
         self.assertIsNone(t.result())
@@ -629,12 +624,12 @@ class TaskTests(unittest.TestCase):
             return (yield c_fut)
 
         task = tasks.Task(notmuch())
-        self.event_loop.run_once()
+        self.loop.run_once()
         self.assertTrue(c_fut.cb_added)
 
         res = object()
         c_fut.set_result(res)
-        self.event_loop.run_once()
+        self.loop.run_once()
         self.assertIs(res, task.result())
 
     def test_step_with_baseexception(self):
@@ -661,12 +656,12 @@ class TaskTests(unittest.TestCase):
                 raise BaseException()
 
         task = tasks.Task(notmutch())
-        self.event_loop.run_once()
+        self.loop.run_once()
 
         task.cancel()
         self.assertFalse(task.done())
 
-        self.assertRaises(BaseException, self.event_loop.run_once)
+        self.assertRaises(BaseException, self.loop.run_once)
 
         self.assertTrue(task.done())
         self.assertTrue(task.cancelled())
@@ -695,7 +690,7 @@ class TaskTests(unittest.TestCase):
 
         task = wait_for_future()
         with self.assertRaises(RuntimeError) as cm:
-            self.event_loop.run_until_complete(task)
+            self.loop.run_until_complete(task)
 
         self.assertTrue(fut.done())
         self.assertIs(fut.exception(), cm.exception)
@@ -712,7 +707,7 @@ class TaskTests(unittest.TestCase):
         task = wait_for_future()
         self.assertRaises(
             RuntimeError,
-            self.event_loop.run_until_complete, task)
+            self.loop.run_until_complete, task)
 
     def test_coroutine_non_gen_function(self):
         @tasks.coroutine
@@ -724,7 +719,7 @@ class TaskTests(unittest.TestCase):
         coro = func()
         self.assertTrue(tasks.iscoroutine(coro))
 
-        res = self.event_loop.run_until_complete(coro)
+        res = self.loop.run_until_complete(coro)
         self.assertEqual(res, 'test')
 
     def test_coroutine_non_gen_function_return_future(self):
@@ -740,7 +735,7 @@ class TaskTests(unittest.TestCase):
 
         t1 = tasks.Task(func())
         t2 = tasks.Task(coro())
-        res = self.event_loop.run_until_complete(t1)
+        res = self.loop.run_until_complete(t1)
         self.assertEqual(res, 'test')
         self.assertIsNone(t2.result())
 

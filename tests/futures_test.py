@@ -213,12 +213,6 @@ class _FakeEventLoop:
     def call_soon(self, fn, future):
         fn(future)
 
-    def set_log_level(self, val):
-        pass
-
-    def get_log_level(self):
-        return logging.CRITICAL
-
 
 class FutureDoneCallbackTests(unittest.TestCase):
 
@@ -229,7 +223,7 @@ class FutureDoneCallbackTests(unittest.TestCase):
         return bag_appender
 
     def _new_future(self):
-        return futures.Future(event_loop=_FakeEventLoop())
+        return futures.Future(loop=_FakeEventLoop())
 
     def test_callbacks_invoked_on_set_result(self):
         bag = []

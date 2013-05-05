@@ -312,7 +312,7 @@ class AbstractEventLoopPolicy:
         """XXX"""
         raise NotImplementedError
 
-    def set_event_loop(self, event_loop):
+    def set_event_loop(self, loop):
         """XXX"""
         raise NotImplementedError
 
@@ -334,23 +334,23 @@ class DefaultEventLoopPolicy(threading.local, AbstractEventLoopPolicy):
     associated).
     """
 
-    _event_loop = None
+    _loop = None
 
     def get_event_loop(self):
         """Get the event loop.
 
         This may be None or an instance of EventLoop.
         """
-        if (self._event_loop is None and
+        if (self._loop is None and
             threading.current_thread().name == 'MainThread'):
-            self._event_loop = self.new_event_loop()
-        return self._event_loop
+            self._loop = self.new_event_loop()
+        return self._loop
 
-    def set_event_loop(self, event_loop):
+    def set_event_loop(self, loop):
         """Set the event loop."""
         # TODO: The isinstance() test violates the PEP.
-        assert event_loop is None or isinstance(event_loop, AbstractEventLoop)
-        self._event_loop = event_loop
+        assert loop is None or isinstance(loop, AbstractEventLoop)
+        self._loop = loop
 
     def new_event_loop(self):
         """Create a new event loop.
@@ -394,9 +394,9 @@ def get_event_loop():
     return get_event_loop_policy().get_event_loop()
 
 
-def set_event_loop(event_loop):
+def set_event_loop(loop):
     """XXX"""
-    get_event_loop_policy().set_event_loop(event_loop)
+    get_event_loop_policy().set_event_loop(loop)
 
 
 def new_event_loop():

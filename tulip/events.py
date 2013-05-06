@@ -52,6 +52,7 @@ class Handle:
         except Exception:
             tulip_log.exception('Exception in callback %s %r',
                                 self._callback, self._args)
+        self = None  # Needed to break cycles when an exception occurs.
 
 
 def make_handle(callback, args):

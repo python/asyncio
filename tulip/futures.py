@@ -73,20 +73,33 @@ class _TracebackLogger:
     references the traceback, which references stack frames, which may
     reference the Future, which references the _TracebackLogger, and
     then the _TracebackLogger would be included in a cycle, which is
-    what we're trying to avoid!  As a compromise, we use
-    extract_exception() rather than format_exception().  (We may also
-    have to limit how many entries we extract, but then we'd need a
-    public API to change the limit; so let's punt on this for now.)
+    what we're trying to avoid!  As an optimization, we don't
+    immediately format the exception; we only do the work when
+    activate() is called, which call is delayed until after all the
+    Future's callbacks have run.  Since usually a Future has at least
+    one callback (typically set by 'yield from') and usually that
+    callback extracts the callback, thereby removing the need to
+    format the exception.
 
     PS. I don't claim credit for this solution.  I first heard of it
     in a discussion about closing files when they are collected.
     """
 
+    __slots__ = ['exc', 'tb']
+
     def __init__(self, exc):
-        self.tb = traceback.format_exception(exc.__class__, exc,
-                                             exc.__traceback__)
+        self.exc = exc
+        self.tb = None
+
+    def activate(self):
+        exc = self.exc
+        if exc is not None:
+            self.exc = None
+            self.tb = traceback.format_exception(exc.__class__, exc,
+                                                 exc.__traceback__)
 
     def clear(self):
+        self.exc = None
         self.tb = None
 
     def __del__(self):
@@ -301,6 +314,9 @@ class Future:
         self._tb_logger = _TracebackLogger(exception)
         self._state = _FINISHED
         self._schedule_callbacks()
+        # Arrange for the logger to be activated after all callbacks
+        # have had a chance to call result() or exception().
+        self._loop.call_soon(self._tb_logger.activate)
 
     # Truly internal methods.
 

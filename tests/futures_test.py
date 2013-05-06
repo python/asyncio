@@ -15,7 +15,11 @@ def _fakefunc(f):
 class FutureTests(unittest.TestCase):
 
     def setUp(self):
-        self.loop = events.get_event_loop()
+        self.loop = events.new_event_loop()
+        events.set_event_loop(self.loop)
+
+    def tearDown(self):
+        self.loop.close()
 
     def test_initial_state(self):
         f = futures.Future()
@@ -188,6 +192,7 @@ class FutureTests(unittest.TestCase):
         fut = futures.Future()
         fut.set_exception(RuntimeError('boom'))
         del fut
+        self.loop.run_once()
         self.assertTrue(m_log.error.called)
 
     @unittest.mock.patch('tulip.futures.tulip_log')
@@ -210,8 +215,8 @@ class FutureTests(unittest.TestCase):
 # A fake event loop for tests. All it does is implement a call_soon method
 # that immediately invokes the given function.
 class _FakeEventLoop:
-    def call_soon(self, fn, future):
-        fn(future)
+    def call_soon(self, fn, *args):
+        fn(*args)
 
 
 class FutureDoneCallbackTests(unittest.TestCase):

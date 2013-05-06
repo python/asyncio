@@ -564,3 +564,4 @@ class BaseEventLoop(events.AbstractEventLoop):
             handle = self._ready.popleft()
             if not handle.cancelled:
                 handle.run()
+        handle = None  # Needed to break cycles when an exception occurs.

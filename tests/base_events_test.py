@@ -52,6 +52,12 @@ class BaseEventLoopTests(unittest.TestCase):
         self.assertFalse(self.loop._scheduled)
         self.assertIn(h, self.loop._ready)
 
+    def test__add_callback_timer(self):
+        h = events.TimerHandle(time.monotonic()+10, lambda: False, ())
+
+        self.loop._add_callback(h)
+        self.assertIn(h, self.loop._scheduled)
+
     def test__add_callback_cancelled_handle(self):
         h = events.Handle(lambda: False, ())
         h.cancel()
@@ -260,6 +266,75 @@ class BaseEventLoopTests(unittest.TestCase):
         self.assertRaises(
             AssertionError, self.loop.run_until_complete, 'blah')
 
+
+class MyProto(protocols.Protocol):
+    done = None
+
+    def __init__(self, create_future=False):
+        self.state = 'INITIAL'
+        self.nbytes = 0
+        if create_future:
+            self.done = futures.Future()
+
+    def connection_made(self, transport):
+        self.transport = transport
+        assert self.state == 'INITIAL', self.state
+        self.state = 'CONNECTED'
+        transport.write(b'GET / HTTP/1.0\r\nHost: example.com\r\n\r\n')
+
+    def data_received(self, data):
+        assert self.state == 'CONNECTED', self.state
+        self.nbytes += len(data)
+
+    def eof_received(self):
+        assert self.state == 'CONNECTED', self.state
+        self.state = 'EOF'
+        self.transport.close()
+
+    def connection_lost(self, exc):
+        assert self.state in ('CONNECTED', 'EOF'), self.state
+        self.state = 'CLOSED'
+        if self.done:
+            self.done.set_result(None)
+
+
+class MyDatagramProto(protocols.DatagramProtocol):
+    done = None
+
+    def __init__(self, create_future=False):
+        self.state = 'INITIAL'
+        self.nbytes = 0
+        if create_future:
+            self.done = futures.Future()
+
+    def connection_made(self, transport):
+        self.transport = transport
+        assert self.state == 'INITIAL', self.state
+        self.state = 'INITIALIZED'
+
+    def datagram_received(self, data, addr):
+        assert self.state == 'INITIALIZED', self.state
+        self.nbytes += len(data)
+
+    def connection_refused(self, exc):
+        assert self.state == 'INITIALIZED', self.state
+
+    def connection_lost(self, exc):
+        assert self.state == 'INITIALIZED', self.state
+        self.state = 'CLOSED'
+        if self.done:
+            self.done.set_result(None)
+
+
+class BaseEventLoopWithSelectorTests(unittest.TestCase):
+
+    def setUp(self):
+        self.loop = events.new_event_loop()
+        events.set_event_loop(self.loop)
+
+    def tearDown(self):
+        self.loop.close()
+
     @unittest.mock.patch('tulip.base_events.socket')
     def test_create_connection_mutiple_errors(self, m_socket):
 
@@ -290,3 +365,241 @@ class BaseEventLoopTests(unittest.TestCase):
         yield from tasks.wait(task)
         exc = task.exception()
         self.assertEqual("Multiple exceptions: err1, err2", str(exc))
+
+    def test_create_connection_host_port_sock(self):
+        coro = self.loop.create_connection(
+            MyProto, 'example.com', 80, sock=object())
+        self.assertRaises(ValueError, self.loop.run_until_complete, coro)
+
+    def test_create_connection_no_host_port_sock(self):
+        coro = self.loop.create_connection(MyProto)
+        self.assertRaises(ValueError, self.loop.run_until_complete, coro)
+
+    def test_create_connection_no_getaddrinfo(self):
+        @tasks.task
+        def getaddrinfo(*args, **kw):
+            yield from []
+        self.loop.getaddrinfo = getaddrinfo
+        coro = self.loop.create_connection(MyProto, 'example.com', 80)
+        self.assertRaises(
+            socket.error, self.loop.run_until_complete, coro)
+
+    def test_create_connection_connect_err(self):
+        @tasks.task
+        def getaddrinfo(*args, **kw):
+            yield from []
+            return [(2, 1, 6, '', ('107.6.106.82', 80))]
+        self.loop.getaddrinfo = getaddrinfo
+        self.loop.sock_connect = unittest.mock.Mock()
+        self.loop.sock_connect.side_effect = socket.error
+
+        coro = self.loop.create_connection(MyProto, 'example.com', 80)
+        self.assertRaises(
+            socket.error, self.loop.run_until_complete, coro)
+
+    def test_create_connection_mutiple(self):
+        @tasks.task
+        def getaddrinfo(*args, **kw):
+            return [(2, 1, 6, '', ('0.0.0.1', 80)),
+                    (2, 1, 6, '', ('0.0.0.2', 80))]
+        self.loop.getaddrinfo = getaddrinfo
+        self.loop.sock_connect = unittest.mock.Mock()
+        self.loop.sock_connect.side_effect = socket.error
+
+        coro = self.loop.create_connection(
+            MyProto, 'example.com', 80, family=socket.AF_INET)
+        with self.assertRaises(socket.error):
+            self.loop.run_until_complete(coro)
+
+    @unittest.mock.patch('tulip.base_events.socket')
+    def test_create_connection_mutiple_errors_local_addr(self, m_socket):
+        m_socket.error = socket.error
+
+        def bind(addr):
+            if addr[0] == '0.0.0.1':
+                err = socket.error('Err')
+                err.strerror = 'Err'
+                raise err
+
+        m_socket.socket.return_value.bind = bind
+
+        @tasks.task
+        def getaddrinfo(*args, **kw):
+            return [(2, 1, 6, '', ('0.0.0.1', 80)),
+                    (2, 1, 6, '', ('0.0.0.2', 80))]
+        self.loop.getaddrinfo = getaddrinfo
+        self.loop.sock_connect = unittest.mock.Mock()
+        self.loop.sock_connect.side_effect = socket.error('Err2')
+
+        coro = self.loop.create_connection(
+            MyProto, 'example.com', 80, family=socket.AF_INET,
+            local_addr=(None, 8080))
+        with self.assertRaises(socket.error) as cm:
+            self.loop.run_until_complete(coro)
+
+        self.assertTrue(str(cm.exception), 'Multiple exceptions: ')
+
+    def test_create_connection_no_local_addr(self):
+        @tasks.task
+        def getaddrinfo(host, *args, **kw):
+            if host == 'example.com':
+                return [(2, 1, 6, '', ('107.6.106.82', 80)),
+                        (2, 1, 6, '', ('107.6.106.82', 80))]
+            else:
+                return []
+        self.loop.getaddrinfo = getaddrinfo
+
+        coro = self.loop.create_connection(
+            MyProto, 'example.com', 80, family=socket.AF_INET,
+            local_addr=(None, 8080))
+        self.assertRaises(
+            socket.error, self.loop.run_until_complete, coro)
+
+    def test_start_serving_empty_host(self):
+        # if host is empty string use None instead
+        host = object()
+
+        @tasks.task
+        def getaddrinfo(*args, **kw):
+            nonlocal host
+            host = args[0]
+            yield from []
+
+        self.loop.getaddrinfo = getaddrinfo
+        fut = self.loop.start_serving(MyProto, '', 0)
+        self.assertRaises(OSError, self.loop.run_until_complete, fut)
+        self.assertIsNone(host)
+
+    def test_start_serving_host_port_sock(self):
+        fut = self.loop.start_serving(
+            MyProto, '0.0.0.0', 0, sock=object())
+        self.assertRaises(ValueError, self.loop.run_until_complete, fut)
+
+    def test_start_serving_no_host_port_sock(self):
+        fut = self.loop.start_serving(MyProto)
+        self.assertRaises(ValueError, self.loop.run_until_complete, fut)
+
+    def test_start_serving_no_getaddrinfo(self):
+        getaddrinfo = self.loop.getaddrinfo = unittest.mock.Mock()
+        getaddrinfo.return_value = []
+
+        f = self.loop.start_serving(MyProto, '0.0.0.0', 0)
+        self.assertRaises(socket.error, self.loop.run_until_complete, f)
+
+    @unittest.mock.patch('tulip.base_events.socket')
+    def test_start_serving_cant_bind(self, m_socket):
+
+        class Err(socket.error):
+            strerror = 'error'
+
+        m_socket.error = socket.error
+        m_socket.getaddrinfo.return_value = [
+            (2, 1, 6, '', ('127.0.0.1', 10100))]
+        m_sock = m_socket.socket.return_value = unittest.mock.Mock()
+        m_sock.bind.side_effect = Err
+
+        fut = self.loop.start_serving(MyProto, '0.0.0.0', 0)
+        self.assertRaises(OSError, self.loop.run_until_complete, fut)
+        self.assertTrue(m_sock.close.called)
+
+    @unittest.mock.patch('tulip.base_events.socket')
+    def test_create_datagram_endpoint_no_addrinfo(self, m_socket):
+        m_socket.error = socket.error
+        m_socket.getaddrinfo.return_value = []
+
+        coro = self.loop.create_datagram_endpoint(
+            MyDatagramProto, local_addr=('localhost', 0))
+        self.assertRaises(
+            socket.error, self.loop.run_until_complete, coro)
+
+    def test_create_datagram_endpoint_addr_error(self):
+        coro = self.loop.create_datagram_endpoint(
+            MyDatagramProto, local_addr='localhost')
+        self.assertRaises(
+            AssertionError, self.loop.run_until_complete, coro)
+        coro = self.loop.create_datagram_endpoint(
+            MyDatagramProto, local_addr=('localhost', 1, 2, 3))
+        self.assertRaises(
+            AssertionError, self.loop.run_until_complete, coro)
+
+    def test_create_datagram_endpoint_connect_err(self):
+        self.loop.sock_connect = unittest.mock.Mock()
+        self.loop.sock_connect.side_effect = socket.error
+
+        coro = self.loop.create_datagram_endpoint(
+            protocols.DatagramProtocol, remote_addr=('127.0.0.1', 0))
+        self.assertRaises(
+            socket.error, self.loop.run_until_complete, coro)
+
+    @unittest.mock.patch('tulip.base_events.socket')
+    def test_create_datagram_endpoint_socket_err(self, m_socket):
+        m_socket.error = socket.error
+        m_socket.getaddrinfo = socket.getaddrinfo
+        m_socket.socket.side_effect = socket.error
+
+        coro = self.loop.create_datagram_endpoint(
+            protocols.DatagramProtocol, family=socket.AF_INET)
+        self.assertRaises(
+            socket.error, self.loop.run_until_complete, coro)
+
+        coro = self.loop.create_datagram_endpoint(
+            protocols.DatagramProtocol, local_addr=('127.0.0.1', 0))
+        self.assertRaises(
+            socket.error, self.loop.run_until_complete, coro)
+
+    def test_create_datagram_endpoint_no_matching_family(self):
+        coro = self.loop.create_datagram_endpoint(
+            protocols.DatagramProtocol,
+            remote_addr=('127.0.0.1', 0), local_addr=('::1', 0))
+        self.assertRaises(
+            ValueError, self.loop.run_until_complete, coro)
+
+    @unittest.mock.patch('tulip.base_events.socket')
+    def test_create_datagram_endpoint_setblk_err(self, m_socket):
+        m_socket.error = socket.error
+        m_socket.socket.return_value.setblocking.side_effect = socket.error
+
+        coro = self.loop.create_datagram_endpoint(
+            protocols.DatagramProtocol, family=socket.AF_INET)
+        self.assertRaises(
+            socket.error, self.loop.run_until_complete, coro)
+        self.assertTrue(
+            m_socket.socket.return_value.close.called)
+
+    def test_create_datagram_endpoint_noaddr_nofamily(self):
+        coro = self.loop.create_datagram_endpoint(
+            protocols.DatagramProtocol)
+        self.assertRaises(ValueError, self.loop.run_until_complete, coro)
+
+    @unittest.mock.patch('tulip.base_events.socket')
+    def test_create_datagram_endpoint_cant_bind(self, m_socket):
+        class Err(socket.error):
+            pass
+
+        m_socket.error = socket.error
+        m_socket.AF_INET6 = socket.AF_INET6
+        m_socket.getaddrinfo = socket.getaddrinfo
+        m_sock = m_socket.socket.return_value = unittest.mock.Mock()
+        m_sock.bind.side_effect = Err
+
+        fut = self.loop.create_datagram_endpoint(
+            MyDatagramProto,
+            local_addr=('127.0.0.1', 0), family=socket.AF_INET)
+        self.assertRaises(Err, self.loop.run_until_complete, fut)
+        self.assertTrue(m_sock.close.called)
+
+    def test_accept_connection_retry(self):
+        sock = unittest.mock.Mock()
+        sock.accept.side_effect = BlockingIOError()
+
+        self.loop._accept_connection(MyProto, sock)
+        self.assertFalse(sock.close.called)
+
+    @unittest.mock.patch('tulip.selector_events.tulip_log')
+    def test_accept_connection_exception(self, m_log):
+        sock = unittest.mock.Mock()
+        sock.accept.side_effect = OSError()
+
+        self.loop._accept_connection(MyProto, sock)
+        self.assertTrue(sock.close.called)
+        self.assertTrue(m_log.exception.called)

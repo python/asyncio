@@ -257,11 +257,13 @@ class BaseEventLoop(events.AbstractEventLoop):
                 raise ValueError(
                     'host/port and sock can not be specified at the same time')
 
-            f1 = self.getaddrinfo(host, port, family=family,
-                 type=socket.SOCK_STREAM, proto=proto, flags=flags)
+            f1 = self.getaddrinfo(
+                host, port, family=family,
+                type=socket.SOCK_STREAM, proto=proto, flags=flags)
             fs = [f1]
             if local_addr is not None:
-                f2 = self.getaddrinfo(*local_addr, family=family,
+                f2 = self.getaddrinfo(
+                    *local_addr, family=family,
                     type=socket.SOCK_STREAM, proto=proto, flags=flags)
                 fs.append(f2)
             else:

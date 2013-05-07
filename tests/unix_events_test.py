@@ -40,6 +40,14 @@ class SelectorEventLoopTests(unittest.TestCase):
     def test_handle_signal_no_handler(self):
         self.loop._handle_signal(signal.NSIG + 1, ())
 
+    def test_handle_signal_cancelled_handler(self):
+        h = events.Handle(unittest.mock.Mock(), ())
+        h.cancel()
+        self.loop._signal_handlers[signal.NSIG + 1] = h
+        self.loop.remove_signal_handler = unittest.mock.Mock()
+        self.loop._handle_signal(signal.NSIG + 1, ())
+        self.loop.remove_signal_handler.assert_called_with(signal.NSIG + 1)
+
     @unittest.mock.patch('tulip.unix_events.signal')
     def test_add_signal_handler_setup_error(self, m_signal):
         m_signal.NSIG = signal.NSIG

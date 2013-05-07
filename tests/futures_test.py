@@ -1,6 +1,5 @@
 """Tests for futures.py."""
 
-import logging
 import unittest
 import unittest.mock
 

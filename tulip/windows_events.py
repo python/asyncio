@@ -87,7 +87,19 @@ class IocpProactor:
 
     def connect(self, conn, address):
         self._register_with_iocp(conn)
-        _overlapped.BindLocal(conn.fileno(), len(address))
+        # the socket must be locally bound before calling ConnectEx()
+        try:
+            _overlapped.BindLocal(conn.fileno(), len(address))
+        except OSError as e:
+            if e.winerror == 10022:     # WSAEINVAL
+                # the socket is probably already locally bound
+                try:
+                    if conn.getsockname()[1] == 0:
+                        raise e
+                except:
+                    raise e
+            else:
+                raise
         ov = _overlapped.Overlapped(NULL)
         ov.ConnectEx(conn.fileno(), address)
 

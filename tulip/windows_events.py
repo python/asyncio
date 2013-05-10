@@ -1,5 +1,6 @@
 """Selector and proactor eventloops for Windows."""
 
+import errno
 import socket
 import weakref
 import struct
@@ -87,18 +88,14 @@ class IocpProactor:
 
     def connect(self, conn, address):
         self._register_with_iocp(conn)
-        # the socket must be locally bound before calling ConnectEx()
+        # the socket needs to be locally bound before we call ConnectEx()
         try:
             _overlapped.BindLocal(conn.fileno(), len(address))
         except OSError as e:
-            if e.winerror == 10022:     # WSAEINVAL
-                # the socket is probably already locally bound
-                try:
-                    if conn.getsockname()[1] == 0:
-                        raise e
-                except:
-                    raise e
-            else:
+            if e.winerror != errno.WSAEINVAL:
+                raise
+            # probably already locally bound; check using getsockname()
+            if conn.getsockname()[1] == 0:
                 raise
         ov = _overlapped.Overlapped(NULL)
         ov.ConnectEx(conn.fileno(), address)

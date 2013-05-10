@@ -576,11 +576,13 @@ class SelectorSocketTransportTests(unittest.TestCase):
         transport = _SelectorSocketTransport(
             self.loop, self.sock, self.protocol)
 
+        self.loop.reset_mock()
         self.sock.recv.return_value = b''
         transport._read_ready()
 
         self.assertTrue(self.loop.remove_reader.called)
         self.protocol.eof_received.assert_called_with()
+        self.loop.call_soon.assert_called_with(transport.close)
 
     @unittest.mock.patch('logging.exception')
     def test_read_ready_tryagain(self, m_exc):

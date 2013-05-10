@@ -353,6 +353,7 @@ class _SelectorSocketTransport(transports.Transport):
                 self._protocol.data_received(data)
             else:
                 self._loop.remove_reader(self._sock.fileno())
+                self._loop.call_soon(self.close)
                 self._protocol.eof_received()
 
     def write(self, data):

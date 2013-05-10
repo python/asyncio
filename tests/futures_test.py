@@ -1,5 +1,7 @@
 """Tests for futures.py."""
 
+import concurrent.futures
+import time
 import unittest
 import unittest.mock
 
@@ -209,6 +211,22 @@ class FutureTests(unittest.TestCase):
         self.assertRaises(RuntimeError, fut.result)
         del fut
         self.assertFalse(m_log.error.called)
+
+    def test_wrap_future(self):
+        def run(arg):
+            time.sleep(0.1)
+            return arg
+        ex = concurrent.futures.ThreadPoolExecutor(1)
+        f1 = ex.submit(run, 'oi')
+        f2 = futures.wrap_future(f1)
+        res = self.loop.run_until_complete(f2)
+        self.assertIsInstance(f2, futures.Future)
+        self.assertEqual(res, 'oi')
+
+    def test_wrap_future_future(self):
+        f1 = futures.Future()
+        f2 = futures.wrap_future(f1)
+        self.assertIs(f1, f2)
 
 
 # A fake event loop for tests. All it does is implement a call_soon method

@@ -234,7 +234,7 @@ class BaseEventLoop(events.AbstractEventLoop):
             if executor is None:
                 executor = concurrent.futures.ThreadPoolExecutor(_MAX_WORKERS)
                 self._default_executor = executor
-        return self.wrap_future(executor.submit(callback, *args))
+        return futures.wrap_future(executor.submit(callback, *args), loop=self)
 
     def set_default_executor(self, executor):
         self._default_executor = executor
@@ -501,16 +501,6 @@ class BaseEventLoop(events.AbstractEventLoop):
         """Like _add_callback() but called from a signal handler."""
         self._add_callback(handle)
         self._write_to_self()
-
-    def wrap_future(self, future):
-        """XXX"""
-        if isinstance(future, futures.Future):
-            return future  # Don't wrap our own type of Future.
-        new_future = futures.Future(loop=self)
-        future.add_done_callback(
-            lambda future:
-                self.call_soon_threadsafe(new_future._copy_state, future))
-        return new_future
 
     def _run_once(self, timeout=None):
         """Run one full iteration of the event loop.

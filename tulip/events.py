@@ -157,9 +157,6 @@ class AbstractEventLoop:
     def call_soon_threadsafe(self, callback, *args):
         raise NotImplementedError
 
-    def wrap_future(self, future):
-        raise NotImplementedError
-
     def run_in_executor(self, executor, callback, *args):
         raise NotImplementedError
 

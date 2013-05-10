@@ -1,6 +1,5 @@
 """Tests for base_events.py"""
 
-import concurrent.futures
 import logging
 import socket
 import time
@@ -65,17 +64,6 @@ class BaseEventLoopTests(unittest.TestCase):
         self.loop._add_callback(h)
         self.assertFalse(self.loop._scheduled)
         self.assertFalse(self.loop._ready)
-
-    def test_wrap_future(self):
-        f = futures.Future(loop=self.loop)
-        self.assertIs(self.loop.wrap_future(f), f)
-        f.cancel()
-
-    def test_wrap_future_concurrent(self):
-        f = concurrent.futures.Future()
-        fut = self.loop.wrap_future(f)
-        self.assertIsInstance(fut, futures.Future)
-        fut.cancel()
 
     def test_set_default_executor(self):
         executor = unittest.mock.Mock()

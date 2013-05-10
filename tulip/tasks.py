@@ -161,11 +161,6 @@ class Task(futures.Future):
                 if self._must_cancel:
                     self._fut_waiter.cancel()
 
-            elif isinstance(result, concurrent.futures.Future):
-                # Don't use a lambda here; mysteriously it creates an
-                # unnecessary memory cycle.
-                result.add_done_callback(self._wakeup_from_thread)
-
             else:
                 if inspect.isgenerator(result):
                     self._loop.call_soon(
@@ -183,10 +178,6 @@ class Task(futures.Future):
                     else:
                         self._loop.call_soon(self._step_maybe)
         self = None
-
-    def _wakeup_from_thread(self, future):
-        # Helper to wake up a task from a thread.
-        self._loop.call_soon_threadsafe(self._wakeup, future)
 
     def _wakeup(self, future):
         try:

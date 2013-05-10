@@ -2,7 +2,7 @@
 
 __all__ = ['CancelledError', 'TimeoutError',
            'InvalidStateError', 'InvalidTimeoutError',
-           'Future',
+           'Future', 'wrap_future',
            ]
 
 import concurrent.futures._base
@@ -343,3 +343,21 @@ class Future:
             yield self  # This tells Task to wait for completion.
         assert self.done(), "yield from wasn't used with future"
         return self.result()  # May raise too.
+
+
+def wrap_future(fut, *, loop=None):
+    """Wrap concurrent.futures.Future object."""
+    if isinstance(fut, Future):
+        return fut
+
+    assert isinstance(fut, concurrent.futures.Future), \
+        'concurrent.futures.Future is expected, got {!r}'.format(fut)
+
+    if loop is None:
+        loop = events.get_event_loop()
+
+    new_future = Future(loop=loop)
+    fut.add_done_callback(
+        lambda future: loop.call_soon_threadsafe(
+            new_future._copy_state, fut))
+    return new_future

@@ -1,6 +1,5 @@
 """Tests for events.py."""
 
-import concurrent.futures
 import gc
 import io
 import os
@@ -251,16 +250,6 @@ class EventLoopTestsMixin:
         self.loop.call_soon_threadsafe(callback, 'hello')
         self.loop.run_forever()
         self.assertEqual(results, ['hello', 'world'])
-
-    def test_wrap_future(self):
-        def run(arg):
-            time.sleep(0.1)
-            return arg
-        ex = concurrent.futures.ThreadPoolExecutor(1)
-        f1 = ex.submit(run, 'oi')
-        f2 = self.loop.wrap_future(f1)
-        res = self.loop.run_until_complete(f2)
-        self.assertEqual(res, 'oi')
 
     def test_run_in_executor(self):
         def run(arg):
@@ -1027,8 +1016,6 @@ class AbstractEventLoopTests(unittest.TestCase):
             NotImplementedError, loop.time)
         self.assertRaises(
             NotImplementedError, loop.call_soon_threadsafe, None)
-        self.assertRaises(
-            NotImplementedError, loop.wrap_future, f)
         self.assertRaises(
             NotImplementedError, loop.run_in_executor, f, f)
         self.assertRaises(

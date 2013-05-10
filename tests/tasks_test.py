@@ -1,6 +1,5 @@
 """Tests for tasks.py."""
 
-import concurrent.futures
 import time
 import unittest
 import unittest.mock
@@ -604,33 +603,6 @@ class TaskTests(unittest.TestCase):
         self.assertIs(res, result)
         self.assertTrue(t.done())
         self.assertIsNone(t.result())
-
-    def test_step_result_concurrent_future(self):
-        # Coroutine returns concurrent.futures.Future
-
-        class Fut(concurrent.futures.Future):
-            def __init__(self):
-                self.cb_added = False
-                super().__init__()
-
-            def add_done_callback(self, fn):
-                self.cb_added = True
-                super().add_done_callback(fn)
-
-        c_fut = Fut()
-
-        @tasks.coroutine
-        def notmuch():
-            return (yield c_fut)
-
-        task = tasks.Task(notmuch())
-        self.loop.run_once()
-        self.assertTrue(c_fut.cb_added)
-
-        res = object()
-        c_fut.set_result(res)
-        self.loop.run_once()
-        self.assertIs(res, task.result())
 
     def test_step_with_baseexception(self):
         @tasks.coroutine

@@ -31,22 +31,10 @@ class Handle:
             res += '<cancelled>'
         return res
 
-    @property
-    def callback(self):
-        return self._callback
-
-    @property
-    def args(self):
-        return self._args
-
-    @property
-    def cancelled(self):
-        return self._cancelled
-
     def cancel(self):
         self._cancelled = True
 
-    def run(self):
+    def _run(self):
         try:
             self._callback(*self._args)
         except Exception:
@@ -78,10 +66,6 @@ class TimerHandle(Handle):
             res += '<cancelled>'
 
         return res
-
-    @property
-    def when(self):
-        return self._when
 
     def __hash__(self):
         return hash(self._when)

@@ -896,9 +896,9 @@ class HandleTests(unittest.TestCase):
 
         args = ()
         h = events.Handle(callback, args)
-        self.assertIs(h.callback, callback)
-        self.assertIs(h.args, args)
-        self.assertFalse(h.cancelled)
+        self.assertIs(h._callback, callback)
+        self.assertIs(h._args, args)
+        self.assertFalse(h._cancelled)
 
         r = repr(h)
         self.assertTrue(r.startswith(
@@ -907,7 +907,7 @@ class HandleTests(unittest.TestCase):
         self.assertTrue(r.endswith('())'))
 
         h.cancel()
-        self.assertTrue(h.cancelled)
+        self.assertTrue(h._cancelled)
 
         r = repr(h)
         self.assertTrue(r.startswith(
@@ -928,7 +928,7 @@ class HandleTests(unittest.TestCase):
             raise ValueError()
 
         h = events.Handle(callback, ())
-        h.run()
+        h._run()
         self.assertTrue(log.exception.called)
 
 
@@ -946,15 +946,15 @@ class TimerTests(unittest.TestCase):
         args = ()
         when = time.monotonic()
         h = events.TimerHandle(when, callback, args)
-        self.assertIs(h.callback, callback)
-        self.assertIs(h.args, args)
-        self.assertFalse(h.cancelled)
+        self.assertIs(h._callback, callback)
+        self.assertIs(h._args, args)
+        self.assertFalse(h._cancelled)
 
         r = repr(h)
         self.assertTrue(r.endswith('())'))
 
         h.cancel()
-        self.assertTrue(h.cancelled)
+        self.assertTrue(h._cancelled)
 
         r = repr(h)
         self.assertTrue(r.endswith('())<cancelled>'))

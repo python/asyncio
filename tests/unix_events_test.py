@@ -66,7 +66,7 @@ class SelectorEventLoopTests(unittest.TestCase):
         self.loop.add_signal_handler(signal.SIGHUP, cb)
         h = self.loop._signal_handlers.get(signal.SIGHUP)
         self.assertTrue(isinstance(h, events.Handle))
-        self.assertEqual(h.callback, cb)
+        self.assertEqual(h._callback, cb)
 
     @unittest.mock.patch('tulip.unix_events.signal')
     def test_add_signal_handler_install_error(self, m_signal):

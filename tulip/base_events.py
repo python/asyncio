@@ -224,11 +224,11 @@ class BaseEventLoop(events.AbstractEventLoop):
         if isinstance(callback, events.Handle):
             assert not args
             assert not isinstance(callback, events.TimerHandle)
-            if callback.cancelled:
+            if callback._cancelled:
                 f = futures.Future()
                 f.set_result(None)
                 return f
-            callback, args = callback.callback, callback.args
+            callback, args = callback._callback, callback._args
         if executor is None:
             executor = self._default_executor
             if executor is None:
@@ -490,7 +490,7 @@ class BaseEventLoop(events.AbstractEventLoop):
     def _add_callback(self, handle):
         """Add a Handle to ready or scheduled."""
         assert isinstance(handle, events.Handle), 'A Handle is required here'
-        if handle.cancelled:
+        if handle._cancelled:
             return
         if isinstance(handle, events.TimerHandle):
             heapq.heappush(self._scheduled, handle)
@@ -520,14 +520,14 @@ class BaseEventLoop(events.AbstractEventLoop):
         'call_later' callbacks.
         """
         # Remove delayed calls that were cancelled from head of queue.
-        while self._scheduled and self._scheduled[0].cancelled:
+        while self._scheduled and self._scheduled[0]._cancelled:
             heapq.heappop(self._scheduled)
 
         if self._ready:
             timeout = 0
         elif self._scheduled:
             # Compute the desired timeout.
-            when = self._scheduled[0].when
+            when = self._scheduled[0]._when
             deadline = max(0, when - self.time())
             if timeout is None:
                 timeout = deadline
@@ -550,7 +550,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         now = self.time()
         while self._scheduled:
             handle = self._scheduled[0]
-            if handle.when > now:
+            if handle._when > now:
                 break
             handle = heapq.heappop(self._scheduled)
             self._ready.append(handle)
@@ -564,6 +564,6 @@ class BaseEventLoop(events.AbstractEventLoop):
         ntodo = len(self._ready)
         for i in range(ntodo):
             handle = self._ready.popleft()
-            if not handle.cancelled:
-                handle.run()
+            if not handle._cancelled:
+                handle._run()
         handle = None  # Needed to break cycles when an exception occurs.

@@ -387,7 +387,7 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         fd, mask, (r, w) = self.loop._selector.register.call_args[0]
         self.assertEqual(1, fd)
         self.assertEqual(selectors.EVENT_READ, mask)
-        self.assertEqual(cb, r.callback)
+        self.assertEqual(cb, r._callback)
         self.assertEqual(None, w)
 
     def test_add_reader_existing(self):
@@ -404,7 +404,7 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         fd, mask, (r, w) = self.loop._selector.modify.call_args[0]
         self.assertEqual(1, fd)
         self.assertEqual(selectors.EVENT_WRITE | selectors.EVENT_READ, mask)
-        self.assertEqual(cb, r.callback)
+        self.assertEqual(cb, r._callback)
         self.assertEqual(writer, w)
 
     def test_add_reader_existing_writer(self):
@@ -419,7 +419,7 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         fd, mask, (r, w) = self.loop._selector.modify.call_args[0]
         self.assertEqual(1, fd)
         self.assertEqual(selectors.EVENT_WRITE | selectors.EVENT_READ, mask)
-        self.assertEqual(cb, r.callback)
+        self.assertEqual(cb, r._callback)
         self.assertEqual(writer, w)
 
     def test_remove_reader(self):
@@ -457,7 +457,7 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         self.assertEqual(1, fd)
         self.assertEqual(selectors.EVENT_WRITE, mask)
         self.assertEqual(None, r)
-        self.assertEqual(cb, w.callback)
+        self.assertEqual(cb, w._callback)
 
     def test_add_writer_existing(self):
         reader = unittest.mock.Mock()
@@ -474,7 +474,7 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         self.assertEqual(1, fd)
         self.assertEqual(selectors.EVENT_WRITE | selectors.EVENT_READ, mask)
         self.assertEqual(reader, r)
-        self.assertEqual(cb, w.callback)
+        self.assertEqual(cb, w._callback)
 
     def test_remove_writer(self):
         self.loop._selector.get_info.return_value = (
@@ -503,7 +503,7 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
 
     def test_process_events_read(self):
         reader = unittest.mock.Mock()
-        reader.cancelled = False
+        reader._cancelled = False
 
         self.loop._add_callback = unittest.mock.Mock()
         self.loop._process_events(
@@ -522,7 +522,7 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
 
     def test_process_events_write(self):
         writer = unittest.mock.Mock()
-        writer.cancelled = False
+        writer._cancelled = False
 
         self.loop._add_callback = unittest.mock.Mock()
         self.loop._process_events(

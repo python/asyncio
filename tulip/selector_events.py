@@ -310,12 +310,12 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
     def _process_events(self, event_list):
         for fileobj, mask, (reader, writer) in event_list:
             if mask & selectors.EVENT_READ and reader is not None:
-                if reader.cancelled:
+                if reader._cancelled:
                     self.remove_reader(fileobj)
                 else:
                     self._add_callback(reader)
             if mask & selectors.EVENT_WRITE and writer is not None:
-                if writer.cancelled:
+                if writer._cancelled:
                     self.remove_writer(fileobj)
                 else:
                     self._add_callback(writer)

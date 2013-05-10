@@ -77,7 +77,7 @@ class SelectorEventLoop(selector_events.BaseSelectorEventLoop):
         handle = self._signal_handlers.get(sig)
         if handle is None:
             return  # Assume it's some race condition.
-        if handle.cancelled:
+        if handle._cancelled:
             self.remove_signal_handler(sig)  # Remove it properly.
         else:
             self._add_callback_signalsafe(handle)

@@ -496,11 +496,11 @@ class TaskTests(unittest.TestCase):
         self.loop.call_later = call_later
         self.loop.run_once()
 
-        self.assertFalse(handle.cancelled)
+        self.assertFalse(handle._cancelled)
 
         t.cancel()
         self.loop.run_once()
-        self.assertTrue(handle.cancelled)
+        self.assertTrue(handle._cancelled)
 
     def test_task_cancel_sleeping_task(self):
         sleepfut = None

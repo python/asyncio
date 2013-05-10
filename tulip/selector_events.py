@@ -327,19 +327,19 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
 
 class _SelectorSocketTransport(transports.Transport):
 
-    def __init__(self, event_loop, sock, protocol, waiter=None, extra=None):
+    def __init__(self, loop, sock, protocol, waiter=None, extra=None):
         super().__init__(extra)
         self._extra['socket'] = sock
-        self._event_loop = event_loop
+        self._loop = loop
         self._sock = sock
         self._protocol = protocol
         self._buffer = []
         self._conn_lost = 0
         self._closing = False  # Set when close() called.
-        self._event_loop.add_reader(self._sock.fileno(), self._read_ready)
-        self._event_loop.call_soon(self._protocol.connection_made, self)
+        self._loop.add_reader(self._sock.fileno(), self._read_ready)
+        self._loop.call_soon(self._protocol.connection_made, self)
         if waiter is not None:
-            self._event_loop.call_soon(waiter.set_result, None)
+            self._loop.call_soon(waiter.set_result, None)
 
     def _read_ready(self):
         try:
@@ -352,7 +352,7 @@ class _SelectorSocketTransport(transports.Transport):
             if data:
                 self._protocol.data_received(data)
             else:
-                self._event_loop.remove_reader(self._sock.fileno())
+                self._loop.remove_reader(self._sock.fileno())
                 self._protocol.eof_received()
 
     def write(self, data):
@@ -382,7 +382,7 @@ class _SelectorSocketTransport(transports.Transport):
                 return
             elif n:
                 data = data[n:]
-            self._event_loop.add_writer(self._sock.fileno(), self._write_ready)
+            self._loop.add_writer(self._sock.fileno(), self._write_ready)
 
         self._buffer.append(data)
 
@@ -400,7 +400,7 @@ class _SelectorSocketTransport(transports.Transport):
             self._fatal_error(exc)
         else:
             if n == len(data):
-                self._event_loop.remove_writer(self._sock.fileno())
+                self._loop.remove_writer(self._sock.fileno())
                 if self._closing:
                     self._call_connection_lost(None)
                 return
@@ -416,9 +416,9 @@ class _SelectorSocketTransport(transports.Transport):
 
     def close(self):
         self._closing = True
-        self._event_loop.remove_reader(self._sock.fileno())
+        self._loop.remove_reader(self._sock.fileno())
         if not self._buffer:
-            self._event_loop.call_soon(self._call_connection_lost, None)
+            self._loop.call_soon(self._call_connection_lost, None)
 
     def _fatal_error(self, exc):
         # should be called from exception handler only
@@ -426,10 +426,10 @@ class _SelectorSocketTransport(transports.Transport):
         self._close(exc)
 
     def _close(self, exc):
-        self._event_loop.remove_writer(self._sock.fileno())
-        self._event_loop.remove_reader(self._sock.fileno())
+        self._loop.remove_writer(self._sock.fileno())
+        self._loop.remove_reader(self._sock.fileno())
         self._buffer.clear()
-        self._event_loop.call_soon(self._call_connection_lost, exc)
+        self._loop.call_soon(self._call_connection_lost, exc)
 
     def _call_connection_lost(self, exc):
         try:
@@ -594,10 +594,10 @@ class _SelectorDatagramTransport(transports.DatagramTransport):
 
     max_size = 256 * 1024  # max bytes we read in one eventloop iteration
 
-    def __init__(self, event_loop, sock, protocol, address=None, extra=None):
+    def __init__(self, loop, sock, protocol, address=None, extra=None):
         super().__init__(extra)
         self._extra['socket'] = sock
-        self._event_loop = event_loop
+        self._loop = loop
         self._sock = sock
         self._fileno = sock.fileno()
         self._protocol = protocol
@@ -605,8 +605,8 @@ class _SelectorDatagramTransport(transports.DatagramTransport):
         self._buffer = collections.deque()
         self._conn_lost = 0
         self._closing = False  # Set when close() called.
-        self._event_loop.add_reader(self._fileno, self._read_ready)
-        self._event_loop.call_soon(self._protocol.connection_made, self)
+        self._loop.add_reader(self._fileno, self._read_ready)
+        self._loop.call_soon(self._protocol.connection_made, self)
 
     def _read_ready(self):
         try:
@@ -647,7 +647,7 @@ class _SelectorDatagramTransport(transports.DatagramTransport):
                     self._fatal_error(exc)
                 return
             except (BlockingIOError, InterruptedError):
-                self._event_loop.add_writer(self._fileno, self._sendto_ready)
+                self._loop.add_writer(self._fileno, self._sendto_ready)
             except Exception as exc:
                 self._conn_lost += 1
                 self._fatal_error(exc)
@@ -677,7 +677,7 @@ class _SelectorDatagramTransport(transports.DatagramTransport):
                 return
 
         if not self._buffer:
-            self._event_loop.remove_writer(self._fileno)
+            self._loop.remove_writer(self._fileno)
             if self._closing:
                 self._call_connection_lost(None)
 
@@ -686,9 +686,9 @@ class _SelectorDatagramTransport(transports.DatagramTransport):
 
     def close(self):
         self._closing = True
-        self._event_loop.remove_reader(self._fileno)
+        self._loop.remove_reader(self._fileno)
         if not self._buffer:
-            self._event_loop.call_soon(self._call_connection_lost, None)
+            self._loop.call_soon(self._call_connection_lost, None)
 
     def _fatal_error(self, exc):
         tulip_log.exception('Fatal error for %s', self)
@@ -696,11 +696,11 @@ class _SelectorDatagramTransport(transports.DatagramTransport):
 
     def _close(self, exc):
         self._buffer.clear()
-        self._event_loop.remove_writer(self._fileno)
-        self._event_loop.remove_reader(self._fileno)
+        self._loop.remove_writer(self._fileno)
+        self._loop.remove_reader(self._fileno)
         if self._address and isinstance(exc, ConnectionRefusedError):
             self._protocol.connection_refused(exc)
-        self._event_loop.call_soon(self._call_connection_lost, exc)
+        self._loop.call_soon(self._call_connection_lost, exc)
 
     def _call_connection_lost(self, exc):
         try:

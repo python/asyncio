@@ -983,11 +983,10 @@ class SelectorSslTransportTests(unittest.TestCase):
     def test_on_ready_recv_eof(self):
         self.sslsock.recv.return_value = b''
         transport = self._make_one()
+        transport.close = unittest.mock.Mock()
         transport._on_ready()
-        self.assertTrue(self.loop.remove_reader.called)
-        self.assertTrue(self.loop.remove_writer.called)
-        self.assertTrue(self.sslsock.close.called)
-        self.protocol.connection_lost.assert_called_with(None)
+        transport.close.assert_called_with()
+        self.protocol.eof_received.assert_called_with()
 
     def test_on_ready_recv_retry(self):
         self.sslsock.recv.side_effect = ssl.SSLWantReadError

@@ -506,27 +506,23 @@ class _SelectorSslTransport(transports.Transport):
             return
 
         # First try reading.
-        try:
-            data = self._sslsock.recv(8192)
-        except ssl.SSLWantReadError:
-            pass
-        except ssl.SSLWantWriteError:
-            pass
-        except (BlockingIOError, InterruptedError):
-            pass
-        except Exception as exc:
-            self._fatal_error(exc)
-        else:
-            if data:
-                self._protocol.data_received(data)
+        if not self._closing:
+            try:
+                data = self._sslsock.recv(8192)
+            except ssl.SSLWantReadError:
+                pass
+            except ssl.SSLWantWriteError:
+                pass
+            except (BlockingIOError, InterruptedError):
+                pass
+            except Exception as exc:
+                self._fatal_error(exc)
             else:
-                # TODO: Don't close when self._buffer is non-empty.
-                assert not self._buffer
-                self._loop.remove_reader(fd)
-                self._loop.remove_writer(fd)
-                self._sslsock.close()
-                self._protocol.connection_lost(None)
-                return
+                if data:
+                    self._protocol.data_received(data)
+                else:
+                    self._protocol.eof_received()
+                    self.close()
 
         # Now try writing, if there's anything to write.
         if not self._buffer:

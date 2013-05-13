@@ -357,6 +357,14 @@ class HttpClientFunctionalTests(unittest.TestCase):
             self.loop.run_until_complete,
             client.request('get', 'http://0.0.0.0:1', timeout=0.1))
 
+    def test_request_conn_closed(self):
+        with test_utils.run_test_server(self.loop, router=Functional) as httpd:
+            httpd['close'] = True
+            self.assertRaises(
+                tulip.http.HttpException,
+                self.loop.run_until_complete,
+                client.request('get', httpd.url('method', 'get')))
+
     def test_keepalive(self):
         from tulip.http import session
         s = session.Session()

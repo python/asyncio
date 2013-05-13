@@ -382,6 +382,20 @@ class ParseRequestTests(unittest.TestCase):
         self.assertEqual(
             ('GET', '/path', (1, 1), deque(), False, None), result)
 
+    def test_http_request_parser_eof(self):
+        # http_request_parser does not fail on EofStream()
+        p = protocol.http_request_parser()
+        next(p)
+        out = tulip.DataBuffer()
+        buf = tulip.ParserBuffer()
+        p.send((out, buf))
+        p.send(b'get /path HTTP/1.1\r\n')
+        try:
+            p.throw(tulip.EofStream())
+        except StopIteration:
+            pass
+        self.assertFalse(out._buffer)
+
     def test_http_request_parser_two_slashes(self):
         p = protocol.http_request_parser()
         next(p)

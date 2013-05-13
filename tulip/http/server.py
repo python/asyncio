@@ -34,34 +34,52 @@ class ServerHttpProtocol(tulip.Protocol):
     ServerHttpProtocol handles errors in incoming request, like bad
     status line, bad headers or incomplete payload. If any error occurs,
     connection gets closed.
-    """
-    _closing = False
-    _request_count = 0
-    _request_handle = None
 
-    def __init__(self, *, log=logging, debug=False, **kwargs):
+    log: custom logging object
+    debug: enable debug mode
+    keep_alive: number of seconds before closing keep alive connection
+    loop: event loop object
+    """
+    _request_count = 0
+    _request_handler = None
+    _keep_alive = False  # keep transport open
+    _keep_alive_handle = None  # keep alive timer handle
+
+    def __init__(self, *, log=logging, debug=False,
+                 keep_alive=None, loop=None, **kwargs):
         self.__dict__.update(kwargs)
         self.log = log
         self.debug = debug
 
+        self._keep_alive_period = keep_alive  # number of seconds to keep alive
+
+        if keep_alive and loop is None:
+            loop = tulip.get_event_loop()
+        self._loop = loop
+
     def connection_made(self, transport):
         self.transport = transport
         self.stream = tulip.StreamBuffer()
-        self._request_handle = self.start()
+        self._request_handler = self.start()
 
     def data_received(self, data):
         self.stream.feed_data(data)
 
-    def connection_lost(self, exc):
-        if self._request_handle is not None:
-            self._request_handle.cancel()
-            self._request_handle = None
-
     def eof_received(self):
         self.stream.feed_eof()
 
-    def close(self):
-        self._closing = True
+    def connection_lost(self, exc):
+        self.stream.feed_eof()
+
+        if self._request_handler is not None:
+            self._request_handler.cancel()
+            self._request_handler = None
+        if self._keep_alive_handle is not None:
+            self._keep_alive_handle.cancel()
+            self._keep_alive_handle = None
+
+    def keep_alive(self, val):
+        self._keep_alive = val
 
     def log_access(self, status, message, *args, **kw):
         pass
@@ -79,19 +97,26 @@ class ServerHttpProtocol(tulip.Protocol):
         It reads request line, request headers and request payload, then
         calls handle_request() method. Subclass has to override
         handle_request(). start() handles various excetions in request
-        or response handling. In case of any error connection is being closed.
+        or response handling. Connection is being closed always unless
+        keep_alive(True) specified.
         """
 
-        while self._request_handle is not None:
+        while True:
             info = None
             message = None
             self._request_count += 1
+            self._keep_alive = False
 
             try:
                 httpstream = self.stream.set_parser(
                     tulip.http.http_request_parser())
 
                 message = yield from httpstream.read()
+
+                # cancel keep-alive timer
+                if self._keep_alive_handle is not None:
+                    self._keep_alive_handle.cancel()
+                    self._keep_alive_handle = None
 
                 payload = self.stream.set_parser(
                     tulip.http.http_payload_parser(message))
@@ -109,8 +134,15 @@ class ServerHttpProtocol(tulip.Protocol):
             except Exception as exc:
                 self.handle_error(500, info, message, exc)
             finally:
-                if self._closing:
-                    self.transport.close()
+                if self._request_handler:
+                    if self._keep_alive and self._keep_alive_period:
+                        self._keep_alive_handle = self._loop.call_later(
+                            self._keep_alive_period, self.transport.close)
+                    else:
+                        self.transport.close()
+                        self._request_handler = None
+                        break
+                else:
                     break
 
     def handle_error(self, status=500,
@@ -120,7 +152,7 @@ class ServerHttpProtocol(tulip.Protocol):
         Returns http response with specific status code. Logs additional
         information. It always closes current connection."""
         try:
-            if self._request_handle is None:
+            if self._request_handler is None:
                 # client has been disconnected during writing.
                 return
 
@@ -156,7 +188,7 @@ class ServerHttpProtocol(tulip.Protocol):
             response.write(html.encode('ascii'))
             response.write_eof()
         finally:
-            self.close()
+            self.keep_alive(False)
 
     def handle_request(self, message, payload):
         """Handle a single http request.
@@ -179,5 +211,5 @@ class ServerHttpProtocol(tulip.Protocol):
         response.write(body)
         response.write_eof()
 
-        self.close()
+        self.keep_alive(False)
         self.log_access(404, message)

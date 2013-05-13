@@ -170,8 +170,8 @@ class WSGIServerHttpProtocol(server.ServerHttpProtocol):
             if hasattr(riter, 'close'):
                 riter.close()
 
-        if not resp.keep_alive():
-            self.close()
+        if resp.keep_alive():
+            self.keep_alive(True)
 
 
 class FileWrapper:

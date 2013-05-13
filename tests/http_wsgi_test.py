@@ -221,6 +221,7 @@ class HttpWsgiServerProtocolTests(unittest.TestCase):
             [c[1][0] for c in self.transport.write.mock_calls])
         self.assertTrue(content.startswith(b'HTTP/1.1 200 OK'))
         self.assertTrue(content.endswith(b'data\r\n0\r\n\r\n'))
+        self.assertFalse(srv._keep_alive)
 
     def test_handle_request_io(self):
 
@@ -239,3 +240,29 @@ class HttpWsgiServerProtocolTests(unittest.TestCase):
             [c[1][0] for c in self.transport.write.mock_calls])
         self.assertTrue(content.startswith(b'HTTP/1.0 200 OK'))
         self.assertTrue(content.endswith(b'data'))
+
+    def test_handle_request_keep_alive(self):
+
+        def wsgi_app(env, start):
+            start('200 OK', [('Content-Type', 'text/plain')])
+            return [b'data']
+
+        stream = tulip.StreamReader()
+        stream.feed_data(b'data')
+        stream.feed_eof()
+
+        self.message = protocol.RawRequestMessage(
+            'GET', '/path', (1, 1), self.headers, False, 'deflate')
+
+        srv = wsgi.WSGIServerHttpProtocol(wsgi_app, True)
+        srv.stream = self.stream
+        srv.transport = self.transport
+
+        self.loop.run_until_complete(
+            srv.handle_request(self.message, self.payload))
+
+        content = b''.join(
+            [c[1][0] for c in self.transport.write.mock_calls])
+        self.assertTrue(content.startswith(b'HTTP/1.1 200 OK'))
+        self.assertTrue(content.endswith(b'data\r\n0\r\n\r\n'))
+        self.assertTrue(srv._keep_alive)

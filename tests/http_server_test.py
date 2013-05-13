@@ -6,6 +6,7 @@ import unittest.mock
 import tulip
 from tulip.http import server
 from tulip.http import errors
+from tulip.test_utils import run_once
 
 
 class HttpServerProtocolTests(unittest.TestCase):
@@ -38,10 +39,10 @@ class HttpServerProtocolTests(unittest.TestCase):
 
     def test_connection_made(self):
         srv = server.ServerHttpProtocol()
-        self.assertIsNone(srv._request_handle)
+        self.assertIsNone(srv._request_handler)
 
         srv.connection_made(unittest.mock.Mock())
-        self.assertIsNotNone(srv._request_handle)
+        self.assertIsNotNone(srv._request_handler)
 
     def test_data_received(self):
         srv = server.ServerHttpProtocol()
@@ -64,31 +65,42 @@ class HttpServerProtocolTests(unittest.TestCase):
         srv.connection_made(unittest.mock.Mock())
         srv.data_received(b'123')
 
-        handle = srv._request_handle
+        keep_alive_handle = srv._keep_alive_handle = unittest.mock.Mock()
+
+        handle = srv._request_handler
         srv.connection_lost(None)
 
-        self.assertIsNone(srv._request_handle)
+        self.assertIsNone(srv._request_handler)
         self.assertTrue(handle.cancelled())
 
+        self.assertIsNone(srv._keep_alive_handle)
+        self.assertTrue(keep_alive_handle.cancel.called)
+
         srv.connection_lost(None)
-        self.assertIsNone(srv._request_handle)
+        self.assertIsNone(srv._request_handler)
+        self.assertIsNone(srv._keep_alive_handle)
 
-    def test_close(self):
+    def test_srv_keep_alive(self):
         srv = server.ServerHttpProtocol()
-        self.assertFalse(srv._closing)
+        self.assertFalse(srv._keep_alive)
 
-        srv.close()
-        self.assertTrue(srv._closing)
+        srv.keep_alive(True)
+        self.assertTrue(srv._keep_alive)
+
+        srv.keep_alive(False)
+        self.assertFalse(srv._keep_alive)
 
     def test_handle_error(self):
         transport = unittest.mock.Mock()
         srv = server.ServerHttpProtocol()
         srv.connection_made(transport)
+        srv.keep_alive(True)
 
         srv.handle_error(404, headers=(('X-Server', 'Tulip'),))
         content = b''.join([c[1][0] for c in list(transport.write.mock_calls)])
         self.assertIn(b'HTTP/1.1 404 Not Found', content)
         self.assertIn(b'X-SERVER: Tulip', content)
+        self.assertFalse(srv._keep_alive)
 
     @unittest.mock.patch('tulip.http.server.traceback')
     def test_handle_error_traceback_exc(self, m_trace):
@@ -141,10 +153,10 @@ class HttpServerProtocolTests(unittest.TestCase):
         srv.stream.feed_data(
             b'GET / HTTP/1.0\r\n'
             b'Host: example.com\r\n\r\n')
-        srv.close()
 
-        self.loop.run_until_complete(srv._request_handle)
+        self.loop.run_until_complete(srv._request_handler)
         self.assertTrue(handle.called)
+        self.assertTrue(transport.close.called)
 
     def test_handle_coro(self):
         transport = unittest.mock.Mock()
@@ -157,7 +169,6 @@ class HttpServerProtocolTests(unittest.TestCase):
             nonlocal called
             called = True
             srv.eof_received()
-            srv.close()
 
         srv.handle_request = coro
         srv.connection_made(transport)
@@ -165,24 +176,8 @@ class HttpServerProtocolTests(unittest.TestCase):
         srv.stream.feed_data(
             b'GET / HTTP/1.0\r\n'
             b'Host: example.com\r\n\r\n')
-        self.loop.run_until_complete(srv._request_handle)
+        self.loop.run_until_complete(srv._request_handler)
         self.assertTrue(called)
-
-    def test_handle_close(self):
-        transport = unittest.mock.Mock()
-        srv = server.ServerHttpProtocol()
-        srv.connection_made(transport)
-
-        handle = srv.handle_request = unittest.mock.Mock()
-
-        srv.stream.feed_data(
-            b'GET / HTTP/1.0\r\n'
-            b'Host: example.com\r\n\r\n')
-        srv.close()
-        self.loop.run_until_complete(srv._request_handle)
-
-        self.assertTrue(handle.called)
-        self.assertTrue(transport.close.called)
 
     def test_handle_cancel(self):
         log = unittest.mock.Mock()
@@ -195,26 +190,40 @@ class HttpServerProtocolTests(unittest.TestCase):
 
         @tulip.task
         def cancel():
-            srv._request_handle.cancel()
+            srv._request_handler.cancel()
 
-        srv.close()
         self.loop.run_until_complete(
-            tulip.wait([srv._request_handle, cancel()]))
+            tulip.wait([srv._request_handler, cancel()]))
         self.assertTrue(log.debug.called)
+
+    def test_handle_cancelled(self):
+        log = unittest.mock.Mock()
+        transport = unittest.mock.Mock()
+
+        srv = server.ServerHttpProtocol(log=log, debug=True)
+        srv.connection_made(transport)
+
+        srv.handle_request = unittest.mock.Mock()
+        run_once(self.loop)  # start request_handler task
+
+        srv.stream.feed_data(
+            b'GET / HTTP/1.0\r\n'
+            b'Host: example.com\r\n\r\n')
+
+        r_handler = srv._request_handler
+        srv._request_handler = None  # emulate srv.connection_lost()
+
+        self.assertIsNone(self.loop.run_until_complete(r_handler))
 
     def test_handle_400(self):
         transport = unittest.mock.Mock()
         srv = server.ServerHttpProtocol()
         srv.connection_made(transport)
         srv.handle_error = unittest.mock.Mock()
-
-        def side_effect(*args):
-            srv.close()
-        srv.handle_error.side_effect = side_effect
-
+        srv.keep_alive(True)
         srv.stream.feed_data(b'GET / HT/asd\r\n\r\n')
 
-        self.loop.run_until_complete(srv._request_handle)
+        self.loop.run_until_complete(srv._request_handler)
         self.assertTrue(srv.handle_error.called)
         self.assertTrue(400, srv.handle_error.call_args[0][0])
         self.assertTrue(transport.close.called)
@@ -227,12 +236,11 @@ class HttpServerProtocolTests(unittest.TestCase):
         handle = srv.handle_request = unittest.mock.Mock()
         handle.side_effect = ValueError
         srv.handle_error = unittest.mock.Mock()
-        srv.close()
 
         srv.stream.feed_data(
             b'GET / HTTP/1.0\r\n'
             b'Host: example.com\r\n\r\n')
-        self.loop.run_until_complete(srv._request_handle)
+        self.loop.run_until_complete(srv._request_handler)
 
         self.assertTrue(srv.handle_error.called)
         self.assertTrue(500, srv.handle_error.call_args[0][0])
@@ -240,9 +248,53 @@ class HttpServerProtocolTests(unittest.TestCase):
     def test_handle_error_no_handle_task(self):
         transport = unittest.mock.Mock()
         srv = server.ServerHttpProtocol()
+        srv.keep_alive(True)
         srv.connection_made(transport)
         srv.connection_lost(None)
-        close = srv.close = unittest.mock.Mock()
 
         srv.handle_error(300)
-        self.assertTrue(close.called)
+        self.assertFalse(srv._keep_alive)
+
+    def test_keep_alive(self):
+        srv = server.ServerHttpProtocol(keep_alive=0.1)
+        transport = unittest.mock.Mock()
+        closed = False
+
+        def close():
+            nonlocal closed
+            closed = True
+            srv.connection_lost(None)
+            self.loop.stop()
+
+        transport.close = close
+
+        srv.connection_made(transport)
+
+        handle = srv.handle_request = unittest.mock.Mock()
+
+        srv.stream.feed_data(
+            b'GET / HTTP/1.1\r\n'
+            b'CONNECTION: keep-alive\r\n'
+            b'HOST: example.com\r\n\r\n')
+
+        self.loop.run_forever()
+        self.assertTrue(handle.called)
+        self.assertTrue(closed)
+
+    def test_keep_alive_close_existing(self):
+        transport = unittest.mock.Mock()
+        srv = server.ServerHttpProtocol(keep_alive=15)
+        srv.connection_made(transport)
+
+        self.assertIsNone(srv._keep_alive_handle)
+        keep_alive_handle = srv._keep_alive_handle = unittest.mock.Mock()
+        srv.handle_request = unittest.mock.Mock()
+
+        srv.stream.feed_data(
+            b'GET / HTTP/1.0\r\n'
+            b'HOST: example.com\r\n\r\n')
+
+        self.loop.run_until_complete(srv._request_handler)
+        self.assertTrue(keep_alive_handle.cancel.called)
+        self.assertIsNone(srv._keep_alive_handle)
+        self.assertTrue(transport.close.called)

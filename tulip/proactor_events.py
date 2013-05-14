@@ -53,6 +53,7 @@ class _ProactorSocketTransport(transports.Transport):
                 self._protocol.data_received(data)
             elif data is not None:
                 self._protocol.eof_received()
+                self.close()
 
     def write(self, data):
         assert isinstance(data, bytes), repr(data)

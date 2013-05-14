@@ -52,10 +52,12 @@ class ProactorSocketTransportTests(unittest.TestCase):
 
         self.assertRaises(AssertionError, tr._loop_reading, res)
 
+        tr.close = unittest.mock.Mock()
         tr._read_fut = res
         tr._loop_reading(res)
         self.assertFalse(self.loop._proactor.recv.called)
         self.assertTrue(self.protocol.eof_received.called)
+        self.assertTrue(tr.close.called)
 
     def test_loop_reading_aborted(self):
         err = self.loop._proactor.recv.side_effect = ConnectionAbortedError()

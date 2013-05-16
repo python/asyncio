@@ -2,11 +2,14 @@
 
 PYTHON=python3
 VERBOSE=$(V)
-V=	1
+V=	0
 FLAGS=
 
 test:
 	$(PYTHON) runtests.py -v $(VERBOSE) $(FLAGS)
+
+vtest:
+	$(PYTHON) runtests.py -v 1 $(FLAGS)
 
 testloop:
 	while sleep 1; do $(PYTHON) runtests.py -v $(VERBOSE) $(FLAGS); done

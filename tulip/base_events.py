@@ -297,6 +297,8 @@ class BaseEventLoop(events.AbstractEventLoop):
                                         laddr, exc.strerror.lower()))
                                 exceptions.append(exc)
                         else:
+                            sock.close()
+                            sock = None
                             continue
                     yield from self.sock_connect(sock, address)
                 except socket.error as exc:

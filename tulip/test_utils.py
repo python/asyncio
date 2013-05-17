@@ -117,7 +117,11 @@ def run_test_server(loop, *, host='127.0.0.1', port=0,
             fut.set_result, (thread_loop, waiter, socks[0].getsockname()))
 
         thread_loop.run_until_complete(waiter)
+
+        for s in socks:
+            s.close()
         thread_loop.stop()
+        thread_loop.close()
         gc.collect()
 
     fut = tulip.Future()

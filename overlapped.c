@@ -249,6 +249,18 @@ overlapped_BindLocal(PyObject *self, PyObject *args)
 }
 
 /*
+ * Mark operation as completed - used when reading produces ERROR_BROKEN_PIPE
+ */
+
+static void
+mark_as_completed(OVERLAPPED *ov)
+{
+    ov->Internal = 0;
+    if (ov->hEvent != NULL)
+        SetEvent(ov->hEvent);
+}
+
+/*
  * A Python object wrapping an OVERLAPPED structure and other useful data
  * for overlapped I/O
  */
@@ -484,7 +496,7 @@ Overlapped_ReadFile(OverlappedObject *self, PyObject *args)
     self->error = err = ret ? ERROR_SUCCESS : GetLastError();
     switch (err) {
         case ERROR_BROKEN_PIPE:
-            self->type = TYPE_NOT_STARTED;
+            mark_as_completed(&self->overlapped);
             Py_RETURN_NONE;
         case ERROR_SUCCESS:
         case ERROR_MORE_DATA:
@@ -543,7 +555,7 @@ Overlapped_WSARecv(OverlappedObject *self, PyObject *args)
     self->error = err = (ret < 0 ? WSAGetLastError() : ERROR_SUCCESS);
     switch (err) {
         case ERROR_BROKEN_PIPE:
-            self->type = TYPE_NOT_STARTED;
+            mark_as_completed(&self->overlapped);
             Py_RETURN_NONE;
         case ERROR_SUCCESS:
         case ERROR_MORE_DATA:

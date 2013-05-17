@@ -426,6 +426,7 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
             self.loop.run_until_complete(coro)
 
         self.assertTrue(str(cm.exception), 'Multiple exceptions: ')
+        self.assertTrue(m_socket.socket.return_value.close.called)
 
     def test_create_connection_no_local_addr(self):
         @tasks.task

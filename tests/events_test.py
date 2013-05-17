@@ -436,6 +436,7 @@ class EventLoopTestsMixin:
             self.assertTrue(isinstance(pr, protocols.Protocol))
             self.loop.run_until_complete(pr.done)
             self.assertTrue(pr.nbytes > 0)
+            tr.close()
 
     def test_create_connection_sock(self):
         with test_utils.run_test_server(self.loop) as httpd:
@@ -463,6 +464,7 @@ class EventLoopTestsMixin:
             self.assertTrue(isinstance(pr, protocols.Protocol))
             self.loop.run_until_complete(pr.done)
             self.assertTrue(pr.nbytes > 0)
+            tr.close()
 
     @unittest.skipIf(ssl is None, 'No ssl module')
     def test_create_ssl_connection(self):
@@ -478,6 +480,7 @@ class EventLoopTestsMixin:
                 hasattr(tr.get_extra_info('socket'), 'getsockname'))
             self.loop.run_until_complete(pr.done)
             self.assertTrue(pr.nbytes > 0)
+            tr.close()
 
     def test_create_connection_local_addr(self):
         with test_utils.run_test_server(self.loop) as httpd:
@@ -488,6 +491,7 @@ class EventLoopTestsMixin:
             tr, pr = self.loop.run_until_complete(f)
             expected = pr.transport.get_extra_info('socket').getsockname()[1]
             self.assertEqual(port, expected)
+            tr.close()
 
     def test_create_connection_local_addr_in_use(self):
         with test_utils.run_test_server(self.loop) as httpd:

@@ -352,9 +352,10 @@ class _SelectorSocketTransport(transports.Transport):
             if data:
                 self._protocol.data_received(data)
             else:
-                self._loop.remove_reader(self._sock.fileno())
-                self._loop.call_soon(self.close)
-                self._protocol.eof_received()
+                try:
+                    self._protocol.eof_received()
+                finally:
+                    self.close()
 
     def write(self, data):
         assert isinstance(data, (bytes, bytearray)), repr(data)
@@ -526,8 +527,10 @@ class _SelectorSslTransport(transports.Transport):
                 if data:
                     self._protocol.data_received(data)
                 else:
-                    self._protocol.eof_received()
-                    self.close()
+                    try:
+                        self._protocol.eof_received()
+                    finally:
+                        self.close()
 
         # Now try writing, if there's anything to write.
         if not self._buffer:

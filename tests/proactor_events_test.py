@@ -157,12 +157,21 @@ class ProactorSocketTransportTests(unittest.TestCase):
         tr.abort()
         tr._fatal_error.assert_called_with(None)
 
+        tr._fatal_error.reset_mock()
+        tr._closing = True
+        tr.abort()
+        self.assertFalse(tr._fatal_error.called)
+
     def test_close(self):
         tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
         self.loop.reset_mock()
         tr.close()
         self.loop.call_soon.assert_called_with(tr._call_connection_lost, None)
         self.assertTrue(tr._closing)
+
+        self.loop.reset_mock()
+        tr.close()
+        self.assertFalse(self.loop.call_soon.called)
 
     def test_close_write_fut(self):
         tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)

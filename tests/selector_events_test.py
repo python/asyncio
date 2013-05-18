@@ -797,6 +797,25 @@ class SelectorSocketTransportTests(unittest.TestCase):
         self.loop.remove_reader.assert_called_with(7)
         self.protocol.connection_lost(None)
 
+        self.loop.reset_mock()
+        transport.close()
+        self.assertFalse(self.loop.remove_reader.called)
+
+    def test__close(self):
+        transport = _SelectorSocketTransport(
+            self.loop, self.sock, self.protocol)
+        transport._buffer = [b'1']
+        transport._close(None)
+
+        self.assertTrue(transport._closing)
+        self.assertEqual(transport._buffer, [])
+        self.loop.remove_reader.assert_called_with(7)
+        self.loop.remove_writer.assert_called_with(7)
+
+        self.loop.reset_mock()
+        transport._close(None)
+        self.assertFalse(self.loop.remove_reader.called)
+
     def test_close_write_buffer(self):
         transport = _SelectorSocketTransport(
             self.loop, self.sock, self.protocol)
@@ -956,6 +975,20 @@ class SelectorSslTransportTests(unittest.TestCase):
         transport.close()
         self.assertTrue(transport._closing)
         self.assertTrue(self.loop.remove_reader.called)
+
+        self.loop.reset_mock()
+        transport.close()
+        self.assertFalse(self.loop.remove_reader.called)
+
+    def test__close(self):
+        transport = self._make_one()
+        transport._close(None)
+        self.assertTrue(transport._closing)
+        self.assertTrue(self.loop.remove_reader.called)
+
+        self.loop.reset_mock()
+        transport._close(None)
+        self.assertFalse(self.loop.remove_reader.called)
 
     def test_on_ready_closed(self):
         self.sslsock.fileno.return_value = -1
@@ -1337,6 +1370,10 @@ class SelectorDatagramTransportTests(unittest.TestCase):
         self.loop.call_soon.assert_called_with(
             transport._call_connection_lost, None)
 
+        self.loop.reset_mock()
+        transport.close()
+        self.assertFalse(self.loop.remove_reader.called)
+
     def test_close_write_buffer(self):
         transport = _SelectorDatagramTransport(
             self.loop, self.sock, self.protocol)
@@ -1345,6 +1382,17 @@ class SelectorDatagramTransportTests(unittest.TestCase):
 
         self.loop.remove_reader.assert_called_with(7)
         self.assertFalse(self.protocol.connection_lost.called)
+
+    def test__close(self):
+        transport = _SelectorDatagramTransport(
+            self.loop, self.sock, self.protocol)
+        transport._close(None)
+        self.assertTrue(transport._closing)
+        self.assertTrue(self.loop.remove_reader.called)
+
+        self.loop.reset_mock()
+        transport._close(None)
+        self.assertFalse(self.loop.remove_reader.called)
 
     @unittest.mock.patch('tulip.log.tulip_log.exception')
     def test_fatal_error(self, m_exc):

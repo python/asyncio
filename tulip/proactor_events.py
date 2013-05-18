@@ -91,15 +91,20 @@ class _ProactorSocketTransport(transports.Transport):
     # TODO: write_eof(), can_write_eof().
 
     def abort(self):
+        if self._closing:
+            return
         self._fatal_error(None)
 
     def close(self):
+        if self._closing:
+            return
         self._closing = True
         if not self._buffer and self._write_fut is None:
             self._loop.call_soon(self._call_connection_lost, None)
 
     def _fatal_error(self, exc):
         tulip_log.exception('Fatal error for %s', self)
+        self._closing = True
         if self._write_fut:
             self._write_fut.cancel()
         if self._read_fut:            # XXX

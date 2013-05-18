@@ -416,6 +416,8 @@ class _SelectorSocketTransport(transports.Transport):
         self._close(None)
 
     def close(self):
+        if self._closing:
+            return
         self._closing = True
         self._loop.remove_reader(self._sock.fileno())
         if not self._buffer:
@@ -427,6 +429,9 @@ class _SelectorSocketTransport(transports.Transport):
         self._close(exc)
 
     def _close(self, exc):
+        if self._closing:
+            return
+        self._closing = True
         self._loop.remove_writer(self._sock.fileno())
         self._loop.remove_reader(self._sock.fileno())
         self._buffer.clear()
@@ -573,6 +578,8 @@ class _SelectorSslTransport(transports.Transport):
         self._close(None)
 
     def close(self):
+        if self._closing:
+            return
         self._closing = True
         self._loop.remove_reader(self._sslsock.fileno())
 
@@ -581,6 +588,9 @@ class _SelectorSslTransport(transports.Transport):
         self._close(exc)
 
     def _close(self, exc):
+        if self._closing:
+            return
+        self._closing = True
         self._loop.remove_writer(self._sslsock.fileno())
         self._loop.remove_reader(self._sslsock.fileno())
         self._buffer = []
@@ -688,6 +698,8 @@ class _SelectorDatagramTransport(transports.DatagramTransport):
         self._close(None)
 
     def close(self):
+        if self._closing:
+            return
         self._closing = True
         self._loop.remove_reader(self._fileno)
         if not self._buffer:
@@ -698,6 +710,9 @@ class _SelectorDatagramTransport(transports.DatagramTransport):
         self._close(exc)
 
     def _close(self, exc):
+        if self._closing:
+            return
+        self._closing = True
         self._buffer.clear()
         self._loop.remove_writer(self._fileno)
         self._loop.remove_reader(self._fileno)

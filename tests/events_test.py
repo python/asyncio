@@ -599,6 +599,8 @@ class EventLoopTestsMixin:
         # recv()/send() on the serving socket
         client.close()
 
+        self.loop.stop_serving(sock)
+
     def test_start_serving_sock(self):
         proto = futures.Future()
 

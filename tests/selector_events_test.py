@@ -948,7 +948,7 @@ class SelectorSslTransportTests(unittest.TestCase):
         self.assertTrue(self.loop.remove_writer.called)
         self.assertTrue(self.loop.remove_reader.called)
         self.loop.call_soon.assert_called_with(
-            self.protocol.connection_lost, exc)
+            transport._call_connection_lost, exc)
         m_exc.assert_called_with('Fatal error for %s', transport)
 
     def test_close(self):
@@ -956,16 +956,6 @@ class SelectorSslTransportTests(unittest.TestCase):
         transport.close()
         self.assertTrue(transport._closing)
         self.assertTrue(self.loop.remove_reader.called)
-        self.loop.call_soon.assert_called_with(
-            self.protocol.connection_lost, None)
-
-    def test_close_write_buffer1(self):
-        transport = self._make_one()
-        transport._buffer.append(b'data')
-        transport.close()
-
-        self.assertTrue(self.loop.remove_reader.called)
-        self.assertFalse(self.loop.call_soon.called)
 
     def test_on_ready_closed(self):
         self.sslsock.fileno.return_value = -1
@@ -1052,11 +1042,21 @@ class SelectorSslTransportTests(unittest.TestCase):
         transport = self._make_one()
         transport.close()
         transport._buffer = [b'data']
+        transport._call_connection_lost = unittest.mock.Mock()
         transport._on_ready()
-        self.assertTrue(self.sslsock.close.called)
         self.assertTrue(self.loop.remove_writer.called)
-        self.loop.call_soon.assert_called_with(
-            self.protocol.connection_lost, None)
+        self.assertTrue(transport._call_connection_lost.called)
+
+    def test_on_ready_send_closing_empty_buffer(self):
+        self.sslsock.recv.side_effect = ssl.SSLWantReadError
+        self.sslsock.send.return_value = 4
+        transport = self._make_one()
+        transport.close()
+        transport._buffer = []
+        transport._call_connection_lost = unittest.mock.Mock()
+        transport._on_ready()
+        self.assertTrue(self.loop.remove_writer.called)
+        self.assertTrue(transport._call_connection_lost.called)
 
     def test_on_ready_send_retry(self):
         self.sslsock.recv.side_effect = ssl.SSLWantReadError

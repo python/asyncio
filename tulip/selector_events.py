@@ -526,6 +526,9 @@ class _SelectorSslTransport(transports.Transport):
 
         # Now try writing, if there's anything to write.
         if not self._buffer:
+            if self._closing:
+                self._loop.remove_writer(self._sslsock.fileno())
+                self._call_connection_lost(None)
             return
 
         data = b''.join(self._buffer)
@@ -547,8 +550,7 @@ class _SelectorSslTransport(transports.Transport):
             self._buffer.append(data[n:])
         elif self._closing:
             self._loop.remove_writer(self._sslsock.fileno())
-            self._sslsock.close()
-            self._protocol.connection_lost(None)
+            self._call_connection_lost(None)
 
     def write(self, data):
         assert isinstance(data, bytes), repr(data)
@@ -573,8 +575,6 @@ class _SelectorSslTransport(transports.Transport):
     def close(self):
         self._closing = True
         self._loop.remove_reader(self._sslsock.fileno())
-        if not self._buffer:
-            self._loop.call_soon(self._protocol.connection_lost, None)
 
     def _fatal_error(self, exc):
         tulip_log.exception('Fatal error for %s', self)
@@ -584,7 +584,13 @@ class _SelectorSslTransport(transports.Transport):
         self._loop.remove_writer(self._sslsock.fileno())
         self._loop.remove_reader(self._sslsock.fileno())
         self._buffer = []
-        self._loop.call_soon(self._protocol.connection_lost, exc)
+        self._loop.call_soon(self._call_connection_lost, exc)
+
+    def _call_connection_lost(self, exc):
+        try:
+            self._protocol.connection_lost(exc)
+        finally:
+            self._sslsock.close()
 
 
 class _SelectorDatagramTransport(transports.DatagramTransport):

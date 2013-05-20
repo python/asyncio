@@ -97,7 +97,8 @@ class HttpServer(tulip.http.ServerHttpProtocol):
                 response.write(b'Cannot open')
 
         response.write_eof()
-        self.close()
+        if response.keep_alive():
+            self.keep_alive(True)
 
 
 ARGS = argparse.ArgumentParser(description="Run simple http server.")
@@ -148,7 +149,8 @@ def main():
 
     loop = tulip.get_event_loop()
     f = loop.start_serving(
-        lambda: HttpServer(debug=True), args.host, args.port, ssl=sslcontext)
+        lambda: HttpServer(debug=True, keep_alive=75), args.host, args.port,
+        ssl=sslcontext)
     socks = loop.run_until_complete(f)
     print('serving on', socks[0].getsockname())
     try:

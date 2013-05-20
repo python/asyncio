@@ -84,7 +84,6 @@ class HttpServer(tulip.http.ServerHttpProtocol):
             for wsc in self.clients:
                 wsc.send(b'Someone disconnected.')
 
-            self.close()
         else:
             # send html page with js chat
             response = tulip.http.Response(self.transport, 200)
@@ -103,7 +102,8 @@ class HttpServer(tulip.http.ServerHttpProtocol):
                 response.write(b'Cannot open')
 
             response.write_eof()
-            self.close()
+            if response.keep_alive():
+                self.keep_alive(True)
 
 
 class ChildProcess:
@@ -135,7 +135,8 @@ class ChildProcess:
     def start_server(self, writer):
         socks = yield from self.loop.start_serving(
             lambda: HttpServer(
-                debug=True, parent=writer, clients=self.clients),
+                debug=True, keep_alive=75,
+                parent=writer, clients=self.clients),
             sock=self.sock)
         print('Starting srv worker process {} on {}'.format(
             os.getpid(), socks[0].getsockname()))

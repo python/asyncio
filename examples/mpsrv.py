@@ -100,7 +100,8 @@ class HttpServer(tulip.http.ServerHttpProtocol):
                 response.write(b'Cannot open')
 
         response.write_eof()
-        self.close()
+        if response.keep_alive():
+            self.keep_alive(True)
 
 
 class ChildProcess:
@@ -121,7 +122,8 @@ class ChildProcess:
             os._exit(0)
         loop.add_signal_handler(signal.SIGINT, stop)
 
-        f = loop.start_serving(lambda: HttpServer(debug=True), sock=self.sock)
+        f = loop.start_serving(
+            lambda: HttpServer(debug=True, keep_alive=75), sock=self.sock)
         x = loop.run_until_complete(f)[0]
         print('Starting srv worker process {} on {}'.format(
             os.getpid(), x.getsockname()))

@@ -251,9 +251,9 @@ class BaseEventLoopTests(unittest.TestCase):
         self.assertTrue(processed)
         self.assertEqual([handle], list(self.loop._ready))
 
-    def test_run_until_complete_assertion(self):
+    def test_run_until_complete_type_error(self):
         self.assertRaises(
-            AssertionError, self.loop.run_until_complete, 'blah')
+            TypeError, self.loop.run_until_complete, 'blah')
 
 
 class MyProto(protocols.Protocol):

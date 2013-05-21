@@ -1,6 +1,6 @@
 """Support for tasks, coroutines and the scheduler."""
 
-__all__ = ['coroutine', 'task', 'Task',
+__all__ = ['coroutine', 'task', 'async', 'Task',
            'FIRST_COMPLETED', 'FIRST_EXCEPTION', 'ALL_COMPLETED',
            'wait', 'as_completed', 'sleep',
            ]
@@ -63,6 +63,24 @@ def task(func):
         return Task(coro(*args, **kwds))
 
     return task_wrapper
+
+
+def async(coro_or_future, *, loop=None, timeout=None):
+    """Wrap a coroutine in a future.
+    
+    If the argument is a Future, it is returned directly.
+    """
+    if isinstance(coro_or_future, futures.Future):
+        if ((loop != None and loop != coro_or_future._loop) or
+            (timeout != None and timeout != coro_or_future._timeout)):
+            raise ValueError(
+                'loop and timeout arguments must agree with Future')
+
+        return coro_or_future
+    elif iscoroutine(coro_or_future):
+        return Task(coro_or_future, loop=loop, timeout=timeout)
+    else:
+        raise TypeError('A Future or coroutine is required')
 
 
 _marker = object()
@@ -314,10 +332,7 @@ def _wrap_coroutines(fs):
     """
     wrapped = set()
     for f in fs:
-        if not isinstance(f, futures.Future):
-            assert iscoroutine(f)
-            f = Task(f)
-        wrapped.add(f)
+        wrapped.add(async(f))
     return wrapped
 
 

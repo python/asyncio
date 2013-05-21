@@ -129,6 +129,7 @@ class Future:
     _state = _PENDING
     _result = None
     _exception = None
+    _timeout = None
     _timeout_handle = None
     _loop = None
 
@@ -150,6 +151,7 @@ class Future:
         self._callbacks = []
 
         if timeout is not None:
+            self._timeout = timeout
             self._timeout_handle = self._loop.call_later(timeout, self.cancel)
 
     def __repr__(self):

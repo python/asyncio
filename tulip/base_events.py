@@ -132,12 +132,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         Return the Future's result, or raise its exception.  If the
         timeout is reached or stop() is called, raise TimeoutError.
         """
-        if not isinstance(future, futures.Future):
-            if tasks.iscoroutine(future):
-                future = tasks.Task(future)
-            else:
-                assert False, 'A Future or coroutine is required'
-
+        future = tasks.async(future)
         handle_called = False
 
         def stop_loop():

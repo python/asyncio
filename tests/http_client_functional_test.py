@@ -19,6 +19,9 @@ class HttpClientFunctionalTests(unittest.TestCase):
         tulip.set_event_loop(self.loop)
 
     def tearDown(self):
+        # just in case if we have transport close callbacks
+        test_utils.run_once(self.loop)
+
         self.loop.close()
         gc.collect()
 

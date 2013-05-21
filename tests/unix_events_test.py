@@ -21,6 +21,10 @@ class SelectorEventLoopTests(unittest.TestCase):
 
     def setUp(self):
         self.loop = unix_events.SelectorEventLoop()
+        events.set_event_loop(self.loop)
+
+    def tearDown(self):
+        self.loop.close()
 
     def test_check_signal(self):
         self.assertRaises(

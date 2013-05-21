@@ -146,18 +146,25 @@ class EventLoopTestsMixin:
         events.set_event_loop(self.loop)
 
     def tearDown(self):
+        # just in case if we have transport close callbacks
+        test_utils.run_once(self.loop)
+
         self.loop.close()
         gc.collect()
         super().tearDown()
 
     def test_run_nesting(self):
         @tasks.coroutine
-        def coro():
+        def coro1():
+            yield
+
+        @tasks.coroutine
+        def coro2():
             self.assertTrue(self.loop.is_running())
-            self.loop.run_until_complete(tasks.sleep(0.1))
+            self.loop.run_until_complete(coro1())
 
         self.assertRaises(
-            RuntimeError, self.loop.run_until_complete, coro())
+            RuntimeError, self.loop.run_until_complete, coro2())
 
     def test_run_once_nesting(self):
         @tasks.coroutine
@@ -545,6 +552,9 @@ class EventLoopTestsMixin:
         # recv()/send() on the serving socket
         client.close()
 
+        # close start_serving socks
+        self.loop.stop_serving(sock)
+
     @unittest.skipIf(ssl is None, 'No ssl module')
     def test_start_serving_ssl(self):
         proto = None
@@ -599,6 +609,7 @@ class EventLoopTestsMixin:
         # recv()/send() on the serving socket
         client.close()
 
+        # stop serving
         self.loop.stop_serving(sock)
 
     def test_start_serving_sock(self):
@@ -623,10 +634,14 @@ class EventLoopTestsMixin:
         client.connect(('127.0.0.1', port))
         client.send(b'xxx')
         self.loop.run_until_complete(proto)
-        sock.close()
         client.close()
 
-    def test_start_serving_addrinuse(self):
+        # wait until connection get closed
+        test_utils.run_once(self.loop)
+
+        self.loop.stop_serving(sock)
+
+    def test_start_serving_addr_in_use(self):
         sock_ob = socket.socket(type=socket.SOCK_STREAM)
         sock_ob.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock_ob.bind(('0.0.0.0', 0))
@@ -639,6 +654,8 @@ class EventLoopTestsMixin:
         with self.assertRaises(socket.error) as cm:
             self.loop.run_until_complete(f)
         self.assertEqual(cm.exception.errno, errno.EADDRINUSE)
+
+        self.loop.stop_serving(sock)
 
     @unittest.skipUnless(socket.has_ipv6, 'IPv6 not supported')
     def test_start_serving_dual_stack(self):
@@ -668,11 +685,12 @@ class EventLoopTestsMixin:
         client.close()
 
         for s in socks:
-            s.close()
+            self.loop.stop_serving(s)
 
     def test_stop_serving(self):
         f = self.loop.start_serving(MyProto, '0.0.0.0', 0)
-        sock = self.loop.run_until_complete(f)[0]
+        socks = self.loop.run_until_complete(f)
+        sock = socks[0]
         host, port = sock.getsockname()
 
         client = socket.socket()
@@ -685,6 +703,7 @@ class EventLoopTestsMixin:
         client = socket.socket()
         self.assertRaises(
             ConnectionRefusedError, client.connect, ('127.0.0.1', port))
+        client.close()
 
     def test_create_datagram_endpoint(self):
         class TestMyDatagramProto(MyDatagramProto):
@@ -1101,6 +1120,7 @@ class PolicyTests(unittest.TestCase):
 
         self.assertIs(policy._loop, loop)
         self.assertIs(loop, policy.get_event_loop())
+        loop.close()
 
     @unittest.mock.patch('tulip.events.threading')
     def test_get_event_loop_thread(self, m_threading):
@@ -1115,6 +1135,7 @@ class PolicyTests(unittest.TestCase):
 
         event_loop = policy.new_event_loop()
         self.assertIsInstance(event_loop, events.AbstractEventLoop)
+        event_loop.close()
 
     def test_set_event_loop(self):
         policy = events.DefaultEventLoopPolicy()
@@ -1126,6 +1147,8 @@ class PolicyTests(unittest.TestCase):
         policy.set_event_loop(event_loop)
         self.assertIs(event_loop, policy.get_event_loop())
         self.assertIsNot(old_event_loop, policy.get_event_loop())
+        event_loop.close()
+        old_event_loop.close()
 
     def test_get_event_loop_policy(self):
         policy = events.get_event_loop_policy()

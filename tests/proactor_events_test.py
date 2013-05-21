@@ -120,7 +120,7 @@ class ProactorSocketTransportTests(unittest.TestCase):
         tr._buffer = [b'da', b'ta']
         tr._loop_writing()
         tr._fatal_error.assert_called_with(err)
-        self.assertEqual(tr._conn_lost, 1)
+        tr._conn_lost = 1
 
         tr.write(b'data')
         tr.write(b'data')
@@ -153,14 +153,9 @@ class ProactorSocketTransportTests(unittest.TestCase):
 
     def test_abort(self):
         tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
-        tr._fatal_error = unittest.mock.Mock()
+        tr._force_close = unittest.mock.Mock()
         tr.abort()
-        tr._fatal_error.assert_called_with(None)
-
-        tr._fatal_error.reset_mock()
-        tr._closing = True
-        tr.abort()
-        self.assertFalse(tr._fatal_error.called)
+        tr._force_close.assert_called_with(None)
 
     def test_close(self):
         tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
@@ -168,6 +163,7 @@ class ProactorSocketTransportTests(unittest.TestCase):
         tr.close()
         self.loop.call_soon.assert_called_with(tr._call_connection_lost, None)
         self.assertTrue(tr._closing)
+        self.assertEqual(tr._conn_lost, 1)
 
         self.loop.reset_mock()
         tr.close()
@@ -190,21 +186,35 @@ class ProactorSocketTransportTests(unittest.TestCase):
     @unittest.mock.patch('tulip.proactor_events.tulip_log')
     def test_fatal_error(self, m_logging):
         tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
+        tr._force_close = unittest.mock.Mock()
+        tr._fatal_error(None)
+        self.assertTrue(tr._force_close.called)
+        self.assertTrue(m_logging.exception.called)
+
+    def test_force_close(self):
+        tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
         tr._buffer = [b'data']
         read_fut = tr._read_fut = unittest.mock.Mock()
         write_fut = tr._write_fut = unittest.mock.Mock()
-        tr._fatal_error(None)
+        tr._force_close(None)
 
         read_fut.cancel.assert_called_with()
         write_fut.cancel.assert_called_with()
         self.loop.call_soon.assert_called_with(tr._call_connection_lost, None)
         self.assertEqual([], tr._buffer)
+        self.assertEqual(tr._conn_lost, 1)
 
-    @unittest.mock.patch('tulip.proactor_events.tulip_log')
-    def test_fatal_error_2(self, m_logging):
+    def test_force_close_idempotent(self):
+        tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
+        tr._closing = True
+        self.loop.reset_mock()
+        tr._force_close(None)
+        self.assertFalse(self.loop.call_soon.called)
+
+    def test_fatal_error_2(self):
         tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
         tr._buffer = [b'data']
-        tr._fatal_error(None)
+        tr._force_close(None)
 
         self.loop.call_soon.assert_called_with(tr._call_connection_lost, None)
         self.assertEqual([], tr._buffer)

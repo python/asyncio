@@ -59,9 +59,9 @@ class _ProactorSocketTransport(transports.Transport):
 
     def write(self, data):
         assert isinstance(data, bytes), repr(data)
-        assert not self._closing
         if not data:
             return
+
         if self._conn_lost:
             if self._conn_lost >= constants.LOG_THRESHOLD_FOR_CONNLOST_WRITES:
                 tulip_log.warning('socket.send() raised exception.')
@@ -85,7 +85,6 @@ class _ProactorSocketTransport(transports.Transport):
                 return
             self._write_fut = self._loop._proactor.send(self._sock, data)
         except OSError as exc:
-            self._conn_lost += 1
             self._fatal_error(exc)
         else:
             self._write_fut.add_done_callback(self._loop_writing)
@@ -93,20 +92,25 @@ class _ProactorSocketTransport(transports.Transport):
     # TODO: write_eof(), can_write_eof().
 
     def abort(self):
-        if self._closing:
-            return
-        self._fatal_error(None)
+        self._force_close(None)
 
     def close(self):
         if self._closing:
             return
         self._closing = True
+        self._conn_lost += 1
         if not self._buffer and self._write_fut is None:
             self._loop.call_soon(self._call_connection_lost, None)
 
     def _fatal_error(self, exc):
         tulip_log.exception('Fatal error for %s', self)
+        self._force_close(exc)
+
+    def _force_close(self, exc):
+        if self._closing:
+            return
         self._closing = True
+        self._conn_lost += 1
         if self._write_fut:
             self._write_fut.cancel()
         if self._read_fut:            # XXX

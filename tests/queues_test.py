@@ -1,6 +1,7 @@
 """Tests for queues.py"""
 
 import unittest
+import unittest.mock
 import queue
 
 from tulip import events

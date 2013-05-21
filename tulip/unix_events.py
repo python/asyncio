@@ -253,7 +253,7 @@ class _UnixWritePipeTransport(transports.WriteTransport):
 
     def _write_ready(self):
         data = b''.join(self._buffer)
-        assert data, "Data should not be empty"
+        assert data, 'Data should not be empty'
 
         self._buffer.clear()
         try:

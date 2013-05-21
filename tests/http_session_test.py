@@ -21,6 +21,9 @@ class HttpSessionTests(unittest.TestCase):
         self.stream = tulip.StreamBuffer()
         self.response = HttpResponse('get', 'http://python.org')
 
+    def tearDown(self):
+        self.loop.close()
+
     def test_del(self):
         session = Session()
         close = session.close = unittest.mock.Mock()

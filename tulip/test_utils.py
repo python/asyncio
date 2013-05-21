@@ -42,6 +42,7 @@ def run_once(loop):
 def run_test_server(loop, *, host='127.0.0.1', port=0,
                     use_ssl=False, router=None):
     properties = {}
+    transports = []
 
     class HttpServer:
 
@@ -63,6 +64,10 @@ def run_test_server(loop, *, host='127.0.0.1', port=0,
                 self._url, '/'.join(str(s) for s in suffix))
 
     class TestHttpServer(tulip.http.ServerHttpProtocol):
+
+        def connection_made(self, transport):
+            transports.append(transport)
+            super().connection_made(transport)
 
         def handle_request(self, message, payload):
             if properties.get('close', False):
@@ -118,8 +123,15 @@ def run_test_server(loop, *, host='127.0.0.1', port=0,
 
         thread_loop.run_until_complete(waiter)
 
+        # close opened trnsports
+        for tr in transports:
+            tr.close()
+
         for s in socks:
             s.close()
+
+        run_once(thread_loop)  # call close callbacks
+
         thread_loop.stop()
         thread_loop.close()
         gc.collect()

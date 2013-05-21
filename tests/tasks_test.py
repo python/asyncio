@@ -40,6 +40,7 @@ class TaskTests(unittest.TestCase):
         loop = events.new_event_loop()
         t = tasks.Task(notmuch(), loop=loop)
         self.assertIs(t._loop, loop)
+        loop.close()
 
     def test_task_decorator(self):
         @tasks.task

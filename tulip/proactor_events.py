@@ -12,7 +12,8 @@ from .log import tulip_log
 
 class _ProactorSocketTransport(transports.Transport):
 
-    def __init__(self, loop, sock, protocol, waiter=None, extra=None):
+    def __init__(self, loop, sock, protocol, waiter=None, extra=None,
+                 write_only=False):
         super().__init__(extra)
         self._extra['socket'] = sock
         self._loop = loop
@@ -24,7 +25,8 @@ class _ProactorSocketTransport(transports.Transport):
         self._conn_lost = 0
         self._closing = False  # Set when close() called.
         self._loop.call_soon(self._protocol.connection_made, self)
-        self._loop.call_soon(self._loop_reading)
+        if not write_only:
+            self._loop.call_soon(self._loop_reading)
         if waiter is not None:
             self._loop.call_soon(waiter.set_result, None)
 
@@ -135,8 +137,10 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
         self._selector = proactor   # convenient alias
         self._make_self_pipe()
 
-    def _make_socket_transport(self, sock, protocol, waiter=None, extra=None):
-        return _ProactorSocketTransport(self, sock, protocol, waiter, extra)
+    def _make_socket_transport(self, sock, protocol, waiter=None, extra=None,
+                               write_only=False):
+        return _ProactorSocketTransport(self, sock, protocol, waiter, extra,
+                                        write_only)
 
     def close(self):
         if self._proactor is not None:

@@ -72,7 +72,7 @@ class TaskTests(unittest.TestCase):
         self.loop.run_until_complete(t)
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'ko')
-    
+
     def test_async_coroutine(self):
         @tasks.coroutine
         def notmuch():
@@ -82,27 +82,27 @@ class TaskTests(unittest.TestCase):
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'ok')
         self.assertIs(t._loop, self.loop)
-        
+
         loop = events.new_event_loop()
         t = tasks.async(notmuch(), loop=loop)
         self.assertIs(t._loop, loop)
-    
+
     def test_async_future(self):
         f_orig = futures.Future()
         f_orig.set_result('ko')
-        
+
         f = tasks.async(f_orig)
         self.loop.run_until_complete(f)
         self.assertTrue(f.done())
         self.assertEqual(f.result(), 'ko')
         self.assertIs(f, f_orig)
-        
+
         with self.assertRaises(ValueError):
             loop = events.new_event_loop()
             f = tasks.async(f_orig, loop=loop)
         f = tasks.async(f_orig, loop=self.loop)
         self.assertIs(f, f_orig)
-    
+
     def test_async_task(self):
         @tasks.coroutine
         def notmuch():
@@ -113,13 +113,13 @@ class TaskTests(unittest.TestCase):
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'ok')
         self.assertIs(t, t_orig)
-        
+
         with self.assertRaises(ValueError):
             loop = events.new_event_loop()
             t = tasks.async(t_orig, loop=loop)
         t = tasks.async(t_orig, loop=self.loop)
         self.assertIs(t, t_orig)
-    
+
     def test_async_neither(self):
         with self.assertRaises(TypeError):
             tasks.async('ok')

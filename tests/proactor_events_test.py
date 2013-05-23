@@ -348,3 +348,23 @@ class BaseProactorEventLoopTests(unittest.TestCase):
         loop(fut)
         self.assertTrue(self.sock.close.called)
         self.assertTrue(m_log.exception.called)
+
+    def test_start_serving_cancel(self):
+        pf = unittest.mock.Mock()
+        call_soon = self.loop.call_soon = unittest.mock.Mock()
+
+        self.loop._start_serving(pf, self.sock)
+        loop = call_soon.call_args[0][0]
+
+        # cancelled
+        self.sock.reset_mock()
+        fut = tulip.Future()
+        fut.cancel()
+        loop(fut)
+        self.assertTrue(self.sock.close.called)
+
+    def test_stop_serving(self):
+        sock = unittest.mock.Mock()
+        self.loop.stop_serving(sock)
+        self.assertTrue(sock.close.called)
+        self.proactor.stop_serving.assert_called_with(sock)

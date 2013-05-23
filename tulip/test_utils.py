@@ -127,10 +127,10 @@ def run_test_server(loop, *, host='127.0.0.1', port=0,
         for tr in transports:
             tr.close()
 
-        for s in socks:
-            s.close()
-
         run_once(thread_loop)  # call close callbacks
+
+        for s in socks:
+            thread_loop.stop_serving(s)
 
         thread_loop.stop()
         thread_loop.close()

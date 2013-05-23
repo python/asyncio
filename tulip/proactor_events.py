@@ -6,6 +6,7 @@ proactor is only implemented on Windows with IOCP.
 
 from . import base_events
 from . import constants
+from . import futures
 from . import transports
 from .log import tulip_log
 
@@ -41,6 +42,12 @@ class _ProactorSocketTransport(transports.Transport):
                 if not data:
                     self._read_fut = None
                     return
+
+            # iocp, it is possible to close transport and
+            # receive data from socket
+            if self._closing:
+                data = None
+                return
 
             self._read_fut = self._loop._proactor.recv(self._sock, 4096)
         except (ConnectionAbortedError, ConnectionResetError) as exc:
@@ -207,9 +214,15 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
             except OSError:
                 sock.close()
                 tulip_log.exception('Accept failed')
+            except futures.CancelledError:
+                sock.close()
             else:
                 f.add_done_callback(loop)
         self.call_soon(loop)
 
     def _process_events(self, event_list):
         pass    # XXX hard work currently done in poll
+
+    def stop_serving(self, sock):
+        self._proactor.stop_serving(sock)
+        sock.close()

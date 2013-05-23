@@ -633,11 +633,7 @@ class EventLoopTestsMixin:
         client = socket.socket()
         client.connect(('127.0.0.1', port))
         client.send(b'xxx')
-        self.loop.run_until_complete(proto)
         client.close()
-
-        # wait until connection get closed
-        test_utils.run_once(self.loop)
 
         self.loop.stop_serving(sock)
 
@@ -868,9 +864,6 @@ if sys.platform == 'win32':
         def test_create_datagram_endpoint(self):
             raise unittest.SkipTest(
                 "IocpEventLoop does not have create_datagram_endpoint()")
-        def test_stop_serving(self):
-            raise unittest.SkipTest(
-                "IocpEventLoop does not support stop_serving()")
 else:
     from tulip import selectors
     from tulip import unix_events

@@ -147,15 +147,25 @@ class IocpProactor:
                 return
             address = status[3]
             f, ov, obj, callback = self._cache.pop(address)
-            try:
-                value = callback()
-            except OSError as e:
-                f.set_exception(e)
-                self._results.append(f)
-            else:
-                f.set_result(value)
-                self._results.append(f)
+            if not f.cancelled():
+                try:
+                    value = callback()
+                except OSError as e:
+                    f.set_exception(e)
+                    self._results.append(f)
+                else:
+                    f.set_result(value)
+                    self._results.append(f)
             ms = 0
+
+    def stop_serving(self, obj):
+        for (f, ov, ob, callback) in self._cache.values():
+            if ob is obj:
+                f.cancel()
+                try:
+                    ov.cancel()
+                except OSError:
+                    pass
 
     def close(self):
         for (f, ov, obj, callback) in self._cache.values():

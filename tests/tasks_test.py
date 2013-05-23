@@ -351,6 +351,15 @@ class TaskTests(unittest.TestCase):
         self.assertTrue(t1-t0 <= 0.01)
         # TODO: Test different return_when values.
 
+    def test_wait_errors(self):
+        self.assertRaises(
+            ValueError, self.loop.run_until_complete,
+            tasks.wait(set()))
+
+        self.assertRaises(
+            ValueError, self.loop.run_until_complete,
+            tasks.wait([tasks.sleep(10.0)], return_when=-1))
+
     def test_wait_first_completed(self):
         a = tasks.Task(tasks.sleep(10.0))
         b = tasks.Task(tasks.sleep(0.1))
@@ -463,6 +472,16 @@ class TaskTests(unittest.TestCase):
         t1 = time.monotonic()
         self.assertTrue(t1-t0 >= 0.1)
         self.assertTrue(t1-t0 <= 0.13)
+
+    def test_wait_concurrent_complete(self):
+        a = tasks.Task(tasks.sleep(0.1))
+        b = tasks.Task(tasks.sleep(0.15))
+
+        done, pending = self.loop.run_until_complete(
+            tasks.wait([b, a], timeout=0.1))
+
+        self.assertEqual(done, set([a]))
+        self.assertEqual(pending, set([b]))
 
     def test_as_completed(self):
         @tasks.coroutine

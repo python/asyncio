@@ -67,12 +67,12 @@ def task(func):
 
 def async(coro_or_future, *, loop=None, timeout=None):
     """Wrap a coroutine in a future.
-    
+
     If the argument is a Future, it is returned directly.
     """
     if isinstance(coro_or_future, futures.Future):
-        if ((loop != None and loop != coro_or_future._loop) or
-            (timeout != None and timeout != coro_or_future._timeout)):
+        if ((loop is not None and loop is not coro_or_future._loop) or
+            (timeout is not None and timeout != coro_or_future._timeout)):
             raise ValueError(
                 'loop and timeout arguments must agree with Future')
 
@@ -214,9 +214,9 @@ FIRST_EXCEPTION = concurrent.futures.FIRST_EXCEPTION
 ALL_COMPLETED = concurrent.futures.ALL_COMPLETED
 
 
-# Even though this *is* a @coroutine, we don't mark it as such!
+@coroutine
 def wait(fs, timeout=None, return_when=ALL_COMPLETED):
-    """Wait for the Futures and and coroutines given by fs to complete.
+    """Wait for the Futures and coroutines given by fs to complete.
 
     Coroutines will be wrapped in Tasks.
 
@@ -229,58 +229,45 @@ def wait(fs, timeout=None, return_when=ALL_COMPLETED):
     Note: This does not raise TimeoutError!  Futures that aren't done
     when the timeout occurs are returned in the second set.
     """
-    fs = _wrap_coroutines(fs)
-    return _wait(fs, timeout, return_when)
+    fs = set(map(async, fs))
+    if not fs:
+        raise ValueError('Set of coroutines/Futures is empty.')
+    if return_when not in (FIRST_COMPLETED, FIRST_EXCEPTION, ALL_COMPLETED):
+        raise ValueError('Invalid return_when value: {}'.format(return_when))
+    return (yield from _wait(fs, timeout, return_when))
 
 
 @coroutine
-def _wait(fs, timeout=None, return_when=ALL_COMPLETED):
-    """Internal helper: Like wait() but does not wrap coroutines."""
-    done, pending = set(), set()
+def _wait(fs, timeout, return_when):
+    """Internal helper for wait(return_when=FIRST_COMPLETED).
 
-    errors = 0
-    for f in fs:
-        if f.done():
-            done.add(f)
-            if not f.cancelled() and f.exception() is not None:
-                errors += 1
-        else:
-            pending.add(f)
-
-    if (not pending or
-        timeout is not None and timeout <= 0 or
-        return_when == FIRST_COMPLETED and done or
-        return_when == FIRST_EXCEPTION and errors):
-        return done, pending
-
-    # Will always be cancelled eventually.
-    bail = futures.Future(timeout=timeout)
-
-    def _on_completion(fut):
-        pending.remove(fut)
-        done.add(fut)
-        if (not pending or
+    The fs argument must be a set of Futures.
+    The timeout argument is like for wait().
+    """
+    assert fs, 'Set of Futures is empty.'
+    waiter = futures.Future(timeout=timeout)
+    counter = len(fs)
+    def _on_completion(f):
+        nonlocal counter
+        counter -= 1
+        if (counter <= 0 or
             return_when == FIRST_COMPLETED or
-            (return_when == FIRST_EXCEPTION and
-             not fut.cancelled() and
-             fut.exception() is not None)):
-            bail.cancel()
-
-            for f in pending:
-                f.remove_done_callback(_on_completion)
-
-    for f in pending:
+            return_when == FIRST_EXCEPTION and (not f.cancelled() and
+                                                f.exception() is not None)):
+            waiter.cancel()
+    for f in fs:
         f.add_done_callback(_on_completion)
     try:
-        yield from bail
+        yield from waiter
     except futures.CancelledError:
         pass
-
-    really_done = set(f for f in pending if f.done())
-    if really_done:
-        done.update(really_done)
-        pending.difference_update(really_done)
-
+    done, pending = set(), set()
+    for f in fs:
+        f.remove_done_callback(_on_completion)
+        if f.done():
+            done.add(f)
+        else:
+            pending.add(f)
     return done, pending
 
 
@@ -304,7 +291,7 @@ def as_completed(fs, timeout=None):
         deadline = time.monotonic() + timeout
 
     done = None  # Make nonlocal happy.
-    fs = _wrap_coroutines(fs)
+    fs = set(map(async, fs))
 
     while fs:
         if deadline is not None:
@@ -323,17 +310,6 @@ def as_completed(fs, timeout=None):
         yield Task(_wait_for_some())
         for f in done:
             yield f
-
-
-def _wrap_coroutines(fs):
-    """Internal helper to process an iterator of Futures and coroutines.
-
-    Returns a set of Futures.
-    """
-    wrapped = set()
-    for f in fs:
-        wrapped.add(async(f))
-    return wrapped
 
 
 @coroutine

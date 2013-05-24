@@ -527,7 +527,7 @@ class EventLoopTestsMixin:
         client = socket.socket()
         client.connect(('127.0.0.1', port))
         client.send(b'xxx')
-        self.loop.run_once()
+        self.loop.run_once(0.001)
         self.assertIsInstance(proto, MyProto)
         self.assertEqual('INITIAL', proto.state)
         self.loop.run_once()

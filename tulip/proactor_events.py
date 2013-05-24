@@ -37,18 +37,19 @@ class _ProactorSocketTransport(transports.Transport):
         try:
             if fut is not None:
                 assert fut is self._read_fut
-
+                self._read_fut = None
                 data = fut.result()  # deliver data later in "finally" clause
-                if not data:
-                    self._read_fut = None
-                    return
 
-            # iocp, it is possible to close transport and
-            # receive data from socket
             if self._closing:
+                # since close() has been called we ignore any read data
                 data = None
                 return
 
+            if data == b'':
+                # we got end-of-file so no need to reschedule a new read
+                return
+
+            # reschedule a new read
             self._read_fut = self._loop._proactor.recv(self._sock, 4096)
         except (ConnectionAbortedError, ConnectionResetError) as exc:
             if not self._closing:

@@ -537,6 +537,27 @@ class TaskTests(unittest.TestCase):
         self.assertEqual(res[1][0], 2)
         self.assertTrue(isinstance(res[1][1], futures.TimeoutError))
 
+    def test_as_completed_reverse_wait(self):
+        a = tasks.sleep(0.05, 'a')
+        b = tasks.sleep(0.10, 'b')
+        fs = {a, b}
+        futs = list(tasks.as_completed(fs))
+        self.assertEqual(len(futs), 2)
+        x = self.loop.run_until_complete(futs[1])
+        self.assertEqual(x, 'a')
+        y = self.loop.run_until_complete(futs[0])
+        self.assertEqual(y, 'b')
+
+    def test_as_completed_concurrent(self):
+        a = tasks.sleep(0.05, 'a')
+        b = tasks.sleep(0.05, 'b')
+        fs = {a, b}
+        futs = list(tasks.as_completed(fs))
+        self.assertEqual(len(futs), 2)
+        waiter = tasks.wait(futs)
+        done, pending = self.loop.run_until_complete(waiter)
+        self.assertEqual(set(f.result() for f in done), {'a', 'b'})
+
     def test_sleep(self):
         @tasks.coroutine
         def sleeper(dt, arg):

@@ -5,11 +5,12 @@ __all__ = ['coroutine', 'task', 'async', 'Task',
            'wait', 'as_completed', 'sleep',
            ]
 
+import collections
 import concurrent.futures
 import functools
 import inspect
-import time
 
+from . import events
 from . import futures
 
 
@@ -286,30 +287,31 @@ def as_completed(fs, timeout=None):
 
     Note: The futures 'f' are not necessarily members of fs.
     """
-    deadline = None
-    if timeout is not None:
-        deadline = time.monotonic() + timeout
+    loop = events.get_event_loop()
+    deadline = None if timeout is None else loop.time() + timeout
+    todo = set(async(f, loop=loop) for f in fs)
+    completed = collections.deque()
 
-    done = None  # Make nonlocal happy.
-    fs = set(map(async, fs))
+    @coroutine
+    def _wait_for_one():
+        while not completed:
+            timeout = None
+            if deadline is not None:
+                timeout = deadline - loop.time()
+                if timeout < 0:
+                    raise futures.TimeoutError()
+            done, pending = yield from _wait(todo, timeout, FIRST_COMPLETED)
+            # Multiple callers might be waiting for the same events
+            # and getting the same outcome.  Dedupe by updating todo.
+            for f in done:
+                if f in todo:
+                    todo.remove(f)
+                    completed.append(f)
+        f = completed.popleft()
+        return f.result()  # May raise.
 
-    while fs:
-        if deadline is not None:
-            timeout = deadline - time.monotonic()
-
-        @coroutine
-        def _wait_for_some():
-            nonlocal done, fs
-            done, fs = yield from _wait(fs, timeout=timeout,
-                                        return_when=FIRST_COMPLETED)
-            if not done:
-                fs = set()
-                raise futures.TimeoutError()
-            return done.pop().result()  # May raise.
-
-        yield Task(_wait_for_some())
-        for f in done:
-            yield f
+    for _ in range(len(todo)):
+        yield _wait_for_one()
 
 
 @coroutine

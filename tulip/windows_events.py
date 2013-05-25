@@ -46,6 +46,7 @@ class IocpProactor:
             _overlapped.INVALID_HANDLE_VALUE, NULL, 0, concurrency)
         self._cache = {}
         self._registered = weakref.WeakSet()
+        self._stopped_serving = weakref.WeakSet()
 
     def registered_count(self):
         return len(self._cache)
@@ -147,7 +148,9 @@ class IocpProactor:
                 return
             address = status[3]
             f, ov, obj, callback = self._cache.pop(address)
-            if not f.cancelled():
+            if obj in self._stopped_serving:
+                f.cancel()
+            elif not f.cancelled():
                 try:
                     value = callback()
                 except OSError as e:
@@ -159,13 +162,10 @@ class IocpProactor:
             ms = 0
 
     def stop_serving(self, obj):
-        for (f, ov, ob, callback) in self._cache.values():
-            if ob is obj:
-                f.cancel()
-                try:
-                    ov.cancel()
-                except OSError:
-                    pass
+        # obj is a socket or pipe handle.  It will be closed in
+        # BaseProactorEventLoop.stop_serving() which will make any
+        # pending operations fail quickly.
+        self._stopped_serving.add(obj)
 
     def close(self):
         for (f, ov, obj, callback) in self._cache.values():

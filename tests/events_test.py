@@ -836,6 +836,39 @@ class EventLoopTestsMixin:
         self.loop.run_until_complete(proto.done)
         self.assertEqual('CLOSED', proto.state)
 
+    def test_prompt_cancellation(self):
+        r, w = test_utils.socketpair()
+        r.setblocking(False)
+        f = self.loop.sock_recv(r, 1)
+        ov = getattr(f, 'ov', None)
+        self.assertTrue(ov is None or ov.pending)
+
+        def main():
+            try:
+                self.loop.call_soon(f.cancel)
+                yield from f
+            except futures.CancelledError:
+                res = 'cancelled'
+            else:
+                res = None
+            finally:
+                self.loop.stop()
+            return res
+
+        start = time.monotonic()
+        t = tasks.Task(main(), timeout=1)
+        self.loop.run_forever()
+        elapsed = time.monotonic() - start
+
+        self.assertTrue(elapsed < 0.1)
+        self.assertEqual(t.result(), 'cancelled')
+        self.assertRaises(futures.CancelledError, f.result)
+        self.assertTrue(ov is None or not ov.pending)
+        self.loop.stop_serving(r)
+
+        r.close()
+        w.close()
+
 
 if sys.platform == 'win32':
     from tulip import windows_events

@@ -23,6 +23,24 @@ ERROR_CONNECTION_REFUSED = 1225
 ERROR_CONNECTION_ABORTED = 1236
 
 
+class _OverlappedFuture(futures.Future):
+    """Subclass of Future which represents an overlapped operation.
+
+    Cancelling it will immediately cancel the overlapped operation.
+    """
+
+    def __init__(self, ov):
+        super().__init__()
+        self.ov = ov
+
+    def cancel(self):
+        try:
+            self.ov.cancel()
+        except OSError:
+            pass
+        return super().cancel()
+
+
 class SelectorEventLoop(selector_events.BaseSelectorEventLoop):
     def _socketpair(self):
         return winsocketpair.socketpair()
@@ -124,7 +142,7 @@ class IocpProactor:
             _overlapped.CreateIoCompletionPort(obj.fileno(), self._iocp, 0, 0)
 
     def _register(self, ov, obj, callback):
-        f = futures.Future()
+        f = _OverlappedFuture(ov)
         self._cache[ov.address] = (f, ov, obj, callback)
         return f
 

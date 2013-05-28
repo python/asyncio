@@ -76,6 +76,25 @@ class ProactorSocketTransportTests(unittest.TestCase):
         tr._loop_reading()
         self.assertFalse(tr._fatal_error.called)
 
+    def test_loop_reading_aborted_is_fatal(self):
+        self.loop._proactor.recv.side_effect = ConnectionAbortedError()
+        tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
+        tr._closing = False
+        tr._fatal_error = unittest.mock.Mock()
+        tr._loop_reading()
+        self.assertTrue(tr._fatal_error.called)
+
+    def test_loop_reading_conn_reset_lost(self):
+        err = self.loop._proactor.recv.side_effect = ConnectionResetError()
+
+        tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
+        tr._closing = False
+        tr._fatal_error = unittest.mock.Mock()
+        tr._force_close = unittest.mock.Mock()
+        tr._loop_reading()
+        self.assertFalse(tr._fatal_error.called)
+        tr._force_close.assert_called_with(err)
+
     def test_loop_reading_exception(self):
         err = self.loop._proactor.recv.side_effect = (OSError())
 

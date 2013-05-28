@@ -389,6 +389,8 @@ class _SelectorSocketTransport(_SelectorTransport):
             data = self._sock.recv(16*1024)
         except (BlockingIOError, InterruptedError):
             pass
+        except ConnectionResetError as exc:
+            self._force_close(exc)
         except Exception as exc:
             self._fatal_error(exc)
         else:
@@ -533,6 +535,8 @@ class _SelectorSslTransport(_SelectorTransport):
             except (BlockingIOError, InterruptedError,
                     ssl.SSLWantReadError, ssl.SSLWantWriteError):
                 pass
+            except ConnectionResetError as exc:
+                self._force_close(exc)
             except Exception as exc:
                 self._fatal_error(exc)
             else:

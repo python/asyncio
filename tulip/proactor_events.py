@@ -51,9 +51,11 @@ class _ProactorSocketTransport(transports.Transport):
 
             # reschedule a new read
             self._read_fut = self._loop._proactor.recv(self._sock, 4096)
-        except (ConnectionAbortedError, ConnectionResetError) as exc:
+        except ConnectionAbortedError as exc:
             if not self._closing:
                 self._fatal_error(exc)
+        except ConnectionResetError as exc:
+            self._force_close(exc)
         except OSError as exc:
             self._fatal_error(exc)
         else:

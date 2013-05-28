@@ -37,7 +37,7 @@ class EchoServer(tulip.Protocol):
         pass
 
     def connection_lost(self, exc):
-        print('connection lost')
+        print('connection lost:', exc)
         self.h_timeout.cancel()
 
 
@@ -60,6 +60,7 @@ class EchoClient(tulip.Protocol):
         pass
 
     def connection_lost(self, exc):
+        print('connection lost:', exc)
         tulip.get_event_loop().stop()
 
 

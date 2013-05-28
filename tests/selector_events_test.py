@@ -201,6 +201,18 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
             (10, self.loop._sock_sendall, f, True, sock, b'data'),
             self.loop.add_writer.call_args[0])
 
+    def test__sock_sendall_interrupted(self):
+        f = futures.Future()
+        sock = unittest.mock.Mock()
+        sock.fileno.return_value = 10
+        sock.send.side_effect = InterruptedError
+
+        self.loop.add_writer = unittest.mock.Mock()
+        self.loop._sock_sendall(f, False, sock, b'data')
+        self.assertEqual(
+            (10, self.loop._sock_sendall, f, True, sock, b'data'),
+            self.loop.add_writer.call_args[0])
+
     def test__sock_sendall_exception(self):
         f = futures.Future()
         sock = unittest.mock.Mock()
@@ -675,6 +687,27 @@ class SelectorSocketTransportTests(unittest.TestCase):
         self.assertFalse(transport._fatal_error.called)
 
     @unittest.mock.patch('logging.exception')
+    def test_read_ready_tryagain_interrupted(self, m_exc):
+        self.sock.recv.side_effect = InterruptedError
+
+        transport = _SelectorSocketTransport(
+            self.loop, self.sock, self.protocol)
+        transport._fatal_error = unittest.mock.Mock()
+        transport._read_ready()
+
+        self.assertFalse(transport._fatal_error.called)
+
+    @unittest.mock.patch('logging.exception')
+    def test_read_ready_conn_reset(self, m_exc):
+        err = self.sock.recv.side_effect = ConnectionResetError()
+
+        transport = _SelectorSocketTransport(
+            self.loop, self.sock, self.protocol)
+        transport._force_close = unittest.mock.Mock()
+        transport._read_ready()
+        transport._force_close.assert_called_with(err)
+
+    @unittest.mock.patch('logging.exception')
     def test_read_ready_err(self, m_exc):
         err = self.sock.recv.side_effect = OSError()
 
@@ -1045,6 +1078,13 @@ class SelectorSslTransportTests(unittest.TestCase):
         transport.close.assert_called_with()
         self.protocol.eof_received.assert_called_with()
 
+    def test_on_ready_recv_conn_reset(self):
+        err = self.sslsock.recv.side_effect = ConnectionResetError()
+        transport = self._make_one()
+        transport._force_close = unittest.mock.Mock()
+        transport._on_ready()
+        transport._force_close.assert_called_with(err)
+
     def test_on_ready_recv_retry(self):
         self.sslsock.recv.side_effect = ssl.SSLWantReadError
         transport = self._make_one()
@@ -1057,6 +1097,10 @@ class SelectorSslTransportTests(unittest.TestCase):
         self.assertFalse(self.protocol.data_received.called)
 
         self.sslsock.recv.side_effect = BlockingIOError
+        transport._on_ready()
+        self.assertFalse(self.protocol.data_received.called)
+
+        self.sslsock.recv.side_effect = InterruptedError
         transport._on_ready()
         self.assertFalse(self.protocol.data_received.called)
 

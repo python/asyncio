@@ -28,12 +28,12 @@ RESPONSES = http.server.BaseHTTPRequestHandler.responses
 
 
 RawRequestMessage = collections.namedtuple(
-    'RawRequestLine',
+    'RawRequestMessage',
     ['method', 'path', 'version', 'headers', 'should_close', 'compression'])
 
 
 RawResponseMessage = collections.namedtuple(
-    'RawResponseStatus',
+    'RawResponseMessage',
     ['version', 'code', 'reason', 'headers', 'should_close', 'compression'])
 
 

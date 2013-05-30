@@ -1,4 +1,4 @@
-"""Tests for winsocketpair.py"""
+"""Tests for window_utils"""
 
 import sys
 import test.support

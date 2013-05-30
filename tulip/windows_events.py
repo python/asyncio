@@ -9,7 +9,7 @@ import _winapi
 from . import futures
 from . import proactor_events
 from . import selector_events
-from . import winsocketpair
+from . import windows_utils
 from . import _overlapped
 from .log import tulip_log
 
@@ -43,7 +43,7 @@ class _OverlappedFuture(futures.Future):
 
 class SelectorEventLoop(selector_events.BaseSelectorEventLoop):
     def _socketpair(self):
-        return winsocketpair.socketpair()
+        return windows_utils.socketpair()
 
 
 class ProactorEventLoop(proactor_events.BaseProactorEventLoop):
@@ -53,7 +53,7 @@ class ProactorEventLoop(proactor_events.BaseProactorEventLoop):
         super().__init__(proactor)
 
     def _socketpair(self):
-        return winsocketpair.socketpair()
+        return windows_utils.socketpair()
 
 
 class IocpProactor:

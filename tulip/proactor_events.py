@@ -147,10 +147,17 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
         self._selector = proactor   # convenient alias
         self._make_self_pipe()
 
-    def _make_socket_transport(self, sock, protocol, waiter=None, extra=None,
-                               write_only=False):
+    def _make_socket_transport(self, sock, protocol, waiter=None, extra=None):
+        return _ProactorSocketTransport(self, sock, protocol, waiter, extra)
+
+    def _make_read_pipe_transport(self, sock, protocol, waiter=None,
+                                  extra=None):
+        return _ProactorSocketTransport(self, sock, protocol, waiter, extra)
+
+    def _make_write_pipe_transport(self, sock, protocol, waiter=None,
+                                   extra=None):
         return _ProactorSocketTransport(self, sock, protocol, waiter, extra,
-                                        write_only)
+                                        write_only=True)
 
     def close(self):
         if self._proactor is not None:

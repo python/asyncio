@@ -26,7 +26,7 @@ from tulip.http import client
 
 
 if sys.platform == 'win32':  # pragma: no cover
-    from .winsocketpair import socketpair
+    from .windows_utils import socketpair
 else:
     from socket import socketpair  # pragma: no cover
 

@@ -401,7 +401,7 @@ class HttpRequest:
 
 class HttpResponse(http.client.HTTPMessage):
 
-    message = None  # RawResponseStatus object
+    message = None  # RawResponseMessage object
 
     # from the Status-Line of the response
     version = None  # HTTP-Version

@@ -6,7 +6,7 @@ import unittest.mock
 import tulip
 from tulip.http import server
 from tulip.http import errors
-from tulip.test_utils import run_once
+from tulip.test_utils import run_briefly
 
 
 class HttpServerProtocolTests(unittest.TestCase):
@@ -204,7 +204,7 @@ class HttpServerProtocolTests(unittest.TestCase):
         srv.connection_made(transport)
 
         srv.handle_request = unittest.mock.Mock()
-        run_once(self.loop)  # start request_handler task
+        run_briefly(self.loop)  # start request_handler task
 
         srv.stream.feed_data(
             b'GET / HTTP/1.0\r\n'

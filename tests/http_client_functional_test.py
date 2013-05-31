@@ -20,7 +20,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
 
     def tearDown(self):
         # just in case if we have transport close callbacks
-        test_utils.run_once(self.loop)
+        test_utils.run_briefly(self.loop)
 
         self.loop.close()
         gc.collect()

@@ -8,7 +8,7 @@ from tulip import events
 from tulip import futures
 from tulip import locks
 from tulip import tasks
-from tulip.test_utils import run_once
+from tulip.test_utils import run_briefly
 
 
 class LockTests(unittest.TestCase):
@@ -81,24 +81,24 @@ class LockTests(unittest.TestCase):
         t1 = tasks.Task(c1(result))
         t2 = tasks.Task(c2(result))
 
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual([], result)
 
         lock.release()
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual([1], result)
 
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual([1], result)
 
         t3 = tasks.Task(c3(result))
 
         lock.release()
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual([1, 2], result)
 
         lock.release()
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual([1, 2, 3], result)
 
         self.assertTrue(t1.done())
@@ -235,13 +235,13 @@ class EventWaiterTests(unittest.TestCase):
         t1 = tasks.Task(c1(result))
         t2 = tasks.Task(c2(result))
 
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual([], result)
 
         t3 = tasks.Task(c3(result))
 
         ev.set()
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual([3, 1, 2], result)
 
         self.assertTrue(t1.done())
@@ -319,7 +319,7 @@ class EventWaiterTests(unittest.TestCase):
             return True
 
         t = tasks.Task(c1(result))
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual([], result)
 
         ev.set()
@@ -330,7 +330,7 @@ class EventWaiterTests(unittest.TestCase):
         ev.set()
         self.assertEqual(1, len(ev._waiters))
 
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual([1], result)
         self.assertEqual(0, len(ev._waiters))
 
@@ -376,33 +376,33 @@ class ConditionTests(unittest.TestCase):
         t2 = tasks.Task(c2(result))
         t3 = tasks.Task(c3(result))
 
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual([], result)
         self.assertFalse(cond.locked())
 
         self.assertTrue(self.loop.run_until_complete(cond.acquire()))
         cond.notify()
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual([], result)
         self.assertTrue(cond.locked())
 
         cond.release()
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual([1], result)
         self.assertTrue(cond.locked())
 
         cond.notify(2)
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual([1], result)
         self.assertTrue(cond.locked())
 
         cond.release()
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual([1, 2], result)
         self.assertTrue(cond.locked())
 
         cond.release()
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual([1, 2, 3], result)
         self.assertTrue(cond.locked())
 
@@ -462,20 +462,20 @@ class ConditionTests(unittest.TestCase):
 
         t = tasks.Task(c1(result))
 
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual([], result)
 
         self.loop.run_until_complete(cond.acquire())
         cond.notify()
         cond.release()
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual([], result)
 
         presult = True
         self.loop.run_until_complete(cond.acquire())
         cond.notify()
         cond.release()
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual([1], result)
 
         self.assertTrue(t.done())
@@ -502,13 +502,13 @@ class ConditionTests(unittest.TestCase):
 
         t0 = time.monotonic()
 
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual([], result)
 
         self.loop.run_until_complete(cond.acquire())
         cond.notify()
         cond.release()
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual([], result)
 
         self.loop.run_until_complete(wait_for)
@@ -562,20 +562,20 @@ class ConditionTests(unittest.TestCase):
         t2 = tasks.Task(c2(result))
         t3 = tasks.Task(c3(result))
 
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual([], result)
 
         self.loop.run_until_complete(cond.acquire())
         cond.notify(1)
         cond.release()
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual([1], result)
 
         self.loop.run_until_complete(cond.acquire())
         cond.notify(1)
         cond.notify(2048)
         cond.release()
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual([1, 2, 3], result)
 
         self.assertTrue(t1.done())
@@ -609,13 +609,13 @@ class ConditionTests(unittest.TestCase):
         t1 = tasks.Task(c1(result))
         t2 = tasks.Task(c2(result))
 
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual([], result)
 
         self.loop.run_until_complete(cond.acquire())
         cond.notify_all()
         cond.release()
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual([1, 2], result)
 
         self.assertTrue(t1.done())
@@ -713,7 +713,7 @@ class SemaphoreTests(unittest.TestCase):
         t2 = tasks.Task(c2(result))
         t3 = tasks.Task(c3(result))
 
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual([1], result)
         self.assertTrue(sem.locked())
         self.assertEqual(2, len(sem._waiters))
@@ -725,7 +725,7 @@ class SemaphoreTests(unittest.TestCase):
         sem.release()
         self.assertEqual(2, sem._value)
 
-        run_once(self.loop)
+        run_briefly(self.loop)
         self.assertEqual(0, sem._value)
         self.assertEqual([1, 2, 3], result)
         self.assertTrue(sem.locked())

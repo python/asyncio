@@ -147,7 +147,7 @@ class EventLoopTestsMixin:
 
     def tearDown(self):
         # just in case if we have transport close callbacks
-        test_utils.run_once(self.loop)
+        test_utils.run_briefly(self.loop)
 
         self.loop.close()
         gc.collect()
@@ -390,9 +390,9 @@ class EventLoopTestsMixin:
         self.assertFalse(self.loop.remove_signal_handler(signal.SIGKILL))
         # Now set a handler and handle it.
         self.loop.add_signal_handler(signal.SIGINT, my_handler)
-        self.loop.run_once()
+        test_utils.run_briefly(self.loop)
         os.kill(os.getpid(), signal.SIGINT)
-        self.loop.run_once()
+        test_utils.run_briefly(self.loop)
         self.assertEqual(caught, 1)
         # Removing it should restore the default handler.
         self.assertTrue(self.loop.remove_signal_handler(signal.SIGINT))
@@ -527,12 +527,12 @@ class EventLoopTestsMixin:
         client = socket.socket()
         client.connect(('127.0.0.1', port))
         client.send(b'xxx')
-        self.loop.run_once(0.001)
+        test_utils.run_briefly(self.loop)
         self.assertIsInstance(proto, MyProto)
         self.assertEqual('INITIAL', proto.state)
-        self.loop.run_once()
+        test_utils.run_briefly(self.loop)
         self.assertEqual('CONNECTED', proto.state)
-        self.loop.run_once(0.001)  # windows iocp
+        test_utils.run_briefly(self.loop)  # windows iocp
         self.assertEqual(3, proto.nbytes)
 
         # extra info is available
@@ -544,7 +544,7 @@ class EventLoopTestsMixin:
 
         # close connection
         proto.transport.close()
-        self.loop.run_once(0.001)  # windows iocp
+        test_utils.run_briefly(self.loop)  # windows iocp
 
         self.assertEqual('CLOSED', proto.state)
 
@@ -587,9 +587,9 @@ class EventLoopTestsMixin:
         client, pr = self.loop.run_until_complete(f_c)
 
         client.write(b'xxx')
-        self.loop.run_once()
+        test_utils.run_briefly(self.loop)
         self.assertIsInstance(proto, MyProto)
-        self.loop.run_once()
+        test_utils.run_briefly(self.loop)
         self.assertEqual('CONNECTED', proto.state)
         self.assertEqual(3, proto.nbytes)
 
@@ -722,9 +722,9 @@ class EventLoopTestsMixin:
 
         self.assertEqual('INITIALIZED', client.state)
         transport.sendto(b'xxx')
-        self.loop.run_once(None)
+        test_utils.run_briefly(self.loop)
         self.assertEqual(3, server.nbytes)
-        self.loop.run_once(None)
+        test_utils.run_briefly(self.loop)
 
         # received
         self.assertEqual(8, client.nbytes)
@@ -775,11 +775,11 @@ class EventLoopTestsMixin:
         self.loop.run_until_complete(connect())
 
         os.write(wpipe, b'1')
-        self.loop.run_once()
+        test_utils.run_briefly(self.loop)
         self.assertEqual(1, proto.nbytes)
 
         os.write(wpipe, b'2345')
-        self.loop.run_once()
+        test_utils.run_briefly(self.loop)
         self.assertEqual(['INITIAL', 'CONNECTED'], proto.state)
         self.assertEqual(5, proto.nbytes)
 
@@ -816,12 +816,12 @@ class EventLoopTestsMixin:
         self.loop.run_until_complete(connect())
 
         transport.write(b'1')
-        self.loop.run_once()
+        test_utils.run_briefly(self.loop)
         data = os.read(rpipe, 1024)
         self.assertEqual(b'1', data)
 
         transport.write(b'2345')
-        self.loop.run_once()
+        test_utils.run_briefly(self.loop)
         data = os.read(rpipe, 1024)
         self.assertEqual(b'2345', data)
         self.assertEqual('CONNECTED', proto.state)
@@ -882,18 +882,25 @@ if sys.platform == 'win32':
 
         def create_event_loop(self):
             return windows_events.ProactorEventLoop()
+
         def test_create_ssl_connection(self):
             raise unittest.SkipTest("IocpEventLoop imcompatible with SSL")
+
         def test_start_serving_ssl(self):
             raise unittest.SkipTest("IocpEventLoop imcompatible with SSL")
+
         def test_reader_callback(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_reader()")
+
         def test_reader_callback_cancel(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_reader()")
+
         def test_writer_callback(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_writer()")
+
         def test_writer_callback_cancel(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_writer()")
+
         def test_create_datagram_endpoint(self):
             raise unittest.SkipTest(
                 "IocpEventLoop does not have create_datagram_endpoint()")

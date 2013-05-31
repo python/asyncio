@@ -7,6 +7,7 @@ import unittest.mock
 
 from tulip import events
 from tulip import futures
+from tulip import test_utils
 
 
 def _fakefunc(f):
@@ -193,7 +194,7 @@ class FutureTests(unittest.TestCase):
         fut = futures.Future()
         fut.set_exception(RuntimeError('boom'))
         del fut
-        self.loop.run_once()
+        test_utils.run_briefly(self.loop)
         self.assertTrue(m_log.error.called)
 
     @unittest.mock.patch('tulip.futures.tulip_log')

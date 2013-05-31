@@ -31,11 +31,21 @@ else:
     from socket import socketpair  # pragma: no cover
 
 
-def run_once(loop):
+def run_briefly(loop):
     @tulip.task
     def once():
         pass
     loop.run_until_complete(once())
+
+
+def run_once(loop):
+    """loop.stop() schedules _raise_stop_error()
+    and run_forever() runs until _raise_stop_error() callback.
+    this wont work if test waits for some IO events, because
+    _raise_stop_error() runs before any of io events callbacks.
+    """
+    loop.stop()
+    loop.run_forever()
 
 
 @contextlib.contextmanager
@@ -127,7 +137,7 @@ def run_test_server(loop, *, host='127.0.0.1', port=0,
         for tr in transports:
             tr.close()
 
-        run_once(thread_loop)  # call close callbacks
+        run_briefly(thread_loop)  # call close callbacks
 
         for s in socks:
             thread_loop.stop_serving(s)

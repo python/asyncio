@@ -7,6 +7,7 @@ import unittest.mock
 from tulip import events
 from tulip import futures
 from tulip import tasks
+from tulip import test_utils
 
 
 class Dummy:
@@ -197,7 +198,7 @@ class TaskTests(unittest.TestCase):
             return 12
 
         t = task()
-        self.loop.run_once()  # start coro
+        test_utils.run_briefly(self.loop)  # start coro
         t.cancel()
         self.assertRaises(
             futures.CancelledError, self.loop.run_until_complete, t)
@@ -219,14 +220,14 @@ class TaskTests(unittest.TestCase):
             yield from fut3
 
         t = task()
-        self.loop.run_once()
+        test_utils.run_briefly(self.loop)
         fut1.set_result(None)
         t.cancel()
-        self.loop.run_once()  # process fut1 result, delay cancel
+        test_utils.run_once(self.loop)  # process fut1 result, delay cancel
         self.assertFalse(t.done())
-        self.loop.run_once()  # cancel fut2, but coro still alive
+        test_utils.run_once(self.loop)  # cancel fut2, but coro still alive
         self.assertFalse(t.done())
-        self.loop.run_once()  # cancel fut3
+        test_utils.run_briefly(self.loop)  # cancel fut3
         self.assertTrue(t.done())
 
         self.assertEqual(fut1.result(), None)
@@ -585,12 +586,12 @@ class TaskTests(unittest.TestCase):
             return handle
 
         self.loop.call_later = call_later
-        self.loop.run_once()
+        test_utils.run_briefly(self.loop)
 
         self.assertFalse(handle._cancelled)
 
         t.cancel()
-        self.loop.run_once()
+        test_utils.run_briefly(self.loop)
         self.assertTrue(handle._cancelled)
 
     def test_task_cancel_sleeping_task(self):
@@ -636,7 +637,7 @@ class TaskTests(unittest.TestCase):
                 pass
 
         task = coro()
-        self.loop.run_once()
+        test_utils.run_briefly(self.loop)
         self.assertIs(task._fut_waiter, fut)
 
         task.cancel()
@@ -686,12 +687,12 @@ class TaskTests(unittest.TestCase):
             result = yield from fut
 
         t = wait_for_future()
-        self.loop.run_once()
+        test_utils.run_briefly(self.loop)
         self.assertTrue(fut.cb_added)
 
         res = object()
         fut.set_result(res)
-        self.loop.run_once()
+        test_utils.run_briefly(self.loop)
         self.assertIs(res, result)
         self.assertTrue(t.done())
         self.assertIsNone(t.result())
@@ -720,12 +721,12 @@ class TaskTests(unittest.TestCase):
                 raise BaseException()
 
         task = tasks.Task(notmutch())
-        self.loop.run_once()
+        test_utils.run_briefly(self.loop)
 
         task.cancel()
         self.assertFalse(task.done())
 
-        self.assertRaises(BaseException, self.loop.run_once)
+        self.assertRaises(BaseException, test_utils.run_briefly, self.loop)
 
         self.assertTrue(task.done())
         self.assertTrue(task.cancelled())

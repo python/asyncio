@@ -108,13 +108,6 @@ class AbstractEventLoop:
         """Run the event loop until stop() is called."""
         raise NotImplementedError
 
-    def run_once(self, timeout=None):
-        """Run one complete cycle of the event loop.
-
-        TODO: Deprecate this.
-        """
-        raise NotImplementedError
-
     def run_until_complete(self, future, timeout=None):
         """Run the event loop until a Future is done.
 

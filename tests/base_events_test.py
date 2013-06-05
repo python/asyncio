@@ -11,6 +11,7 @@ from tulip import events
 from tulip import futures
 from tulip import protocols
 from tulip import tasks
+from tulip import test_utils
 
 
 class BaseEventLoopTests(unittest.TestCase):
@@ -106,7 +107,7 @@ class BaseEventLoopTests(unittest.TestCase):
         self.loop._process_events = unittest.mock.Mock()
         self.loop.call_later(-1, cb, 'a')
         self.loop.call_later(-2, cb, 'b')
-        self.loop.run_once()
+        test_utils.run_briefly(self.loop)
         self.assertEqual(calls, ['b', 'a'])
 
     def test_time_and_call_at(self):
@@ -163,12 +164,6 @@ class BaseEventLoopTests(unittest.TestCase):
         self.assertTrue(executor.submit.called)
 
         f.cancel()  # Don't complain about abandoned Future.
-
-    def test_run_once(self):
-        self.loop._run_once = unittest.mock.Mock()
-        self.loop._run_once.side_effect = base_events._StopError
-        self.loop.run_once()
-        self.assertTrue(self.loop._run_once.called)
 
     def test__run_once(self):
         h1 = events.TimerHandle(time.monotonic() + 0.1, lambda: True, ())

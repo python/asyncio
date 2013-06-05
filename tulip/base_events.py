@@ -104,22 +104,6 @@ class BaseEventLoop(events.AbstractEventLoop):
         finally:
             self._running = False
 
-    def run_once(self, timeout=0):
-        """Run through all callbacks and all I/O polls once.
-
-        Calling stop() will break out of this too.
-        """
-        if self._running:
-            raise RuntimeError('Event loop is running.')
-
-        self._running = True
-        try:
-            self._run_once(timeout)
-        except _StopError:
-            pass
-        finally:
-            self._running = False
-
     def run_until_complete(self, future, timeout=None):
         """Run until the Future is done, or until a timeout.
 

@@ -166,38 +166,6 @@ class EventLoopTestsMixin:
         self.assertRaises(
             RuntimeError, self.loop.run_until_complete, coro2())
 
-    def test_run_once_nesting(self):
-        @tasks.coroutine
-        def coro():
-            tasks.sleep(0.1)
-            self.loop.run_once()
-
-        self.assertRaises(
-            RuntimeError,
-            self.loop.run_until_complete, coro())
-
-    def test_run_once_block(self):
-        called = False
-
-        def callback():
-            nonlocal called
-            called = True
-
-        def run():
-            time.sleep(0.1)
-            self.loop.call_soon_threadsafe(callback)
-
-        self.loop.run_once(0)  # windows iocp
-
-        t = threading.Thread(target=run)
-        t0 = time.monotonic()
-        t.start()
-        self.loop.run_once(None)
-        t1 = time.monotonic()
-        t.join()
-        self.assertTrue(called)
-        self.assertTrue(0.09 < t1-t0 <= 0.15)
-
     def test_call_later(self):
         results = []
 
@@ -1055,8 +1023,6 @@ class AbstractEventLoopTests(unittest.TestCase):
         loop = events.AbstractEventLoop()
         self.assertRaises(
             NotImplementedError, loop.run_forever)
-        self.assertRaises(
-            NotImplementedError, loop.run_once)
         self.assertRaises(
             NotImplementedError, loop.run_until_complete, None)
         self.assertRaises(

@@ -170,7 +170,7 @@ class EventLoopTestsMixin:
         t0 = self.loop.time()
         self.loop.run_until_complete(tasks.sleep(0.010))
         t1 = self.loop.time()
-        self.assertTrue(0.009 <= t1-t0 <= 0.012)
+        self.assertTrue(0.009 <= t1-t0 <= 0.018, t1-t0)
 
     def test_run_until_complete_stopped(self):
         @tasks.task
@@ -188,10 +188,10 @@ class EventLoopTestsMixin:
                           self.loop.run_until_complete,
                           task, timeout=0.010)
         t1 = self.loop.time()
-        self.assertTrue(0.009 <= t1-t0 <= 0.012)
+        self.assertTrue(0.009 <= t1-t0 <= 0.018, t1-t0)
         self.loop.run_until_complete(task)
         t2 = self.loop.time()
-        self.assertTrue(0.009 <= t2-t1 <= 0.012)
+        self.assertTrue(0.009 <= t2-t1 <= 0.018, t1-t0)
 
     def test_call_later(self):
         results = []

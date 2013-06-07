@@ -153,7 +153,7 @@ class EventLoopTestsMixin:
         gc.collect()
         super().tearDown()
 
-    def test_run_nesting(self):
+    def test_run_until_complete_nesting(self):
         @tasks.coroutine
         def coro1():
             yield
@@ -165,6 +165,33 @@ class EventLoopTestsMixin:
 
         self.assertRaises(
             RuntimeError, self.loop.run_until_complete, coro2())
+
+    def test_run_until_complete(self):
+        t0 = self.loop.time()
+        self.loop.run_until_complete(tasks.sleep(0.010))
+        t1 = self.loop.time()
+        self.assertTrue(0.009 <= t1-t0 <= 0.012)
+
+    def test_run_until_complete_stopped(self):
+        @tasks.task
+        def cb():
+            self.loop.stop()
+            yield from tasks.sleep(0.010)
+        task = cb()
+        self.assertRaises(RuntimeError,
+                          self.loop.run_until_complete, task)
+
+    def test_run_until_complete_timeout(self):
+        t0 = self.loop.time()
+        task = tasks.async(tasks.sleep(0.020))
+        self.assertRaises(futures.TimeoutError,
+                          self.loop.run_until_complete,
+                          task, timeout=0.010)
+        t1 = self.loop.time()
+        self.assertTrue(0.009 <= t1-t0 <= 0.012)
+        self.loop.run_until_complete(task)
+        t2 = self.loop.time()
+        self.assertTrue(0.009 <= t2-t1 <= 0.012)
 
     def test_call_later(self):
         results = []

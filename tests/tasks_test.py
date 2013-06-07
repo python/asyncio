@@ -295,7 +295,7 @@ class TaskTests(unittest.TestCase):
         t = tasks.Task(task())
         t0 = time.monotonic()
         self.assertRaises(
-            futures.InvalidStateError, self.loop.run_until_complete, t)
+            RuntimeError, self.loop.run_until_complete, t)
         t1 = time.monotonic()
         self.assertFalse(t.done())
         self.assertTrue(0.18 <= t1-t0 <= 0.22)

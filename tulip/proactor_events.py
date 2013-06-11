@@ -4,6 +4,8 @@ A proactor is a "notify-on-completion" multiplexer.  Currently a
 proactor is only implemented on Windows with IOCP.
 """
 
+import socket
+
 from . import base_events
 from . import constants
 from . import futures
@@ -11,25 +13,75 @@ from . import transports
 from .log import tulip_log
 
 
-class _ProactorSocketTransport(transports.Transport):
+class _ProactorBasePipeTransport(transports.BaseTransport):
+    """Base class for pipe and socket transports."""
 
-    def __init__(self, loop, sock, protocol, waiter=None, extra=None,
-                 write_only=False):
+    def __init__(self, loop, sock, protocol, waiter=None, extra=None):
         super().__init__(extra)
-        self._extra['socket'] = sock
+        self._set_extra(sock)
         self._loop = loop
         self._sock = sock
         self._protocol = protocol
         self._buffer = []
         self._read_fut = None
         self._write_fut = None
+        self._writing_disabled = False
         self._conn_lost = 0
         self._closing = False  # Set when close() called.
         self._loop.call_soon(self._protocol.connection_made, self)
-        if not write_only:
-            self._loop.call_soon(self._loop_reading)
         if waiter is not None:
             self._loop.call_soon(waiter.set_result, None)
+
+    def _set_extra(self, sock):
+        self._extra['pipe'] = sock
+
+    def close(self):
+        if self._closing:
+            return
+        self._closing = True
+        self._conn_lost += 1
+        if not self._buffer and self._write_fut is None:
+            self._loop.call_soon(self._call_connection_lost, None)
+        if self._read_fut is not None:
+            self._read_fut.cancel()
+
+    def _fatal_error(self, exc):
+        tulip_log.exception('Fatal error for %s', self)
+        self._force_close(exc)
+
+    def _force_close(self, exc):
+        if self._closing:
+            return
+        self._closing = True
+        self._conn_lost += 1
+        if self._write_fut:
+            self._write_fut.cancel()
+        if self._read_fut:
+            self._read_fut.cancel()
+        self._write_fut = self._read_fut = None
+        self._buffer = []
+        self._loop.call_soon(self._call_connection_lost, exc)
+
+    def _call_connection_lost(self, exc):
+        try:
+            self._protocol.connection_lost(exc)
+        finally:
+            # XXX If there is a pending overlapped read on the other
+            # end then it may fail with ERROR_NETNAME_DELETED if we
+            # just close our end.  First calling shutdown() seems to
+            # cure it, but maybe using DisconnectEx() would be better.
+            if hasattr(self._sock, 'shutdown'):
+                self._sock.shutdown(socket.SHUT_RDWR)
+            self._sock.close()
+
+
+class _ProactorReadPipeTransport(_ProactorBasePipeTransport,
+                                 transports.ReadTransport):
+    """Transport for read pipes."""
+
+    def __init__(self, loop, sock, protocol, waiter=None, extra=None):
+        super().__init__(loop, sock, protocol, waiter, extra)
+        self._loop.call_soon(self._loop_reading)
 
     def _loop_reading(self, fut=None):
         data = None
@@ -58,6 +110,9 @@ class _ProactorSocketTransport(transports.Transport):
             self._force_close(exc)
         except OSError as exc:
             self._fatal_error(exc)
+        except futures.CancelledError:
+            if not self._closing:
+                raise
         else:
             self._read_fut.add_done_callback(self._loop_reading)
         finally:
@@ -68,6 +123,11 @@ class _ProactorSocketTransport(transports.Transport):
                     self._protocol.eof_received()
                 finally:
                     self.close()
+
+
+class _ProactorWritePipeTransport(_ProactorBasePipeTransport,
+                                  transports.WriteTransport):
+    """Transport for write pipes."""
 
     def write(self, data):
         assert isinstance(data, bytes), repr(data)
@@ -80,62 +140,52 @@ class _ProactorSocketTransport(transports.Transport):
             self._conn_lost += 1
             return
         self._buffer.append(data)
-        if not self._write_fut:
+        if self._write_fut is None and not self._writing_disabled:
             self._loop_writing()
 
     def _loop_writing(self, f=None):
         try:
             assert f is self._write_fut
+            self._write_fut = None
             if f:
                 f.result()
             data = b''.join(self._buffer)
             self._buffer = []
             if not data:
-                self._write_fut = None
                 if self._closing:
                     self._loop.call_soon(self._call_connection_lost, None)
                 return
-            self._write_fut = self._loop._proactor.send(self._sock, data)
+            if not self._writing_disabled:
+                self._write_fut = self._loop._proactor.send(self._sock, data)
+                self._write_fut.add_done_callback(self._loop_writing)
         except OSError as exc:
             self._fatal_error(exc)
-        else:
-            self._write_fut.add_done_callback(self._loop_writing)
 
     # TODO: write_eof(), can_write_eof().
 
     def abort(self):
         self._force_close(None)
 
-    def close(self):
-        if self._closing:
-            return
-        self._closing = True
-        self._conn_lost += 1
-        if not self._buffer and self._write_fut is None:
-            self._loop.call_soon(self._call_connection_lost, None)
+    def pause_writing(self):
+        self._writing_disabled = True
 
-    def _fatal_error(self, exc):
-        tulip_log.exception('Fatal error for %s', self)
-        self._force_close(exc)
+    def resume_writing(self):
+        self._writing_disabled = False
+        if self._buffer and self._write_fut is None:
+            self._loop_writing()
 
-    def _force_close(self, exc):
-        if self._closing:
-            return
-        self._closing = True
-        self._conn_lost += 1
-        if self._write_fut:
-            self._write_fut.cancel()
-        if self._read_fut:            # XXX
-            self._read_fut.cancel()
-        self._write_fut = self._read_fut = None
-        self._buffer = []
-        self._loop.call_soon(self._call_connection_lost, exc)
+    def discard_output(self):
+        if self._buffer:
+            self._buffer = []
 
-    def _call_connection_lost(self, exc):
-        try:
-            self._protocol.connection_lost(exc)
-        finally:
-            self._sock.close()
+
+class _ProactorSocketTransport(_ProactorReadPipeTransport,
+                               _ProactorWritePipeTransport,
+                               transports.Transport):
+    """Transport for connected sockets."""
+
+    def _set_extra(self, sock):
+        self._extra['socket'] = sock
 
 
 class BaseProactorEventLoop(base_events.BaseEventLoop):
@@ -152,12 +202,11 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
 
     def _make_read_pipe_transport(self, sock, protocol, waiter=None,
                                   extra=None):
-        return _ProactorSocketTransport(self, sock, protocol, waiter, extra)
+        return _ProactorReadPipeTransport(self, sock, protocol, waiter, extra)
 
     def _make_write_pipe_transport(self, sock, protocol, waiter=None,
                                    extra=None):
-        return _ProactorSocketTransport(self, sock, protocol, waiter, extra,
-                                        write_only=True)
+        return _ProactorWritePipeTransport(self, sock, protocol, waiter, extra)
 
     def close(self):
         if self._proactor is not None:

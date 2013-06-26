@@ -149,6 +149,7 @@ class WSGIServerHttpProtocol(server.ServerHttpProtocol):
             while chunk:
                 wsgiinput.write(chunk)
                 chunk = yield from payload.read()
+            wsgiinput.seek(0)
             payload = wsgiinput
 
         environ = self.create_wsgi_environ(message, payload)

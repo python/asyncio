@@ -20,7 +20,6 @@ class HttpWsgiServerProtocolTests(unittest.TestCase):
         self.transport = unittest.mock.Mock()
         self.transport.get_extra_info.return_value = '127.0.0.1'
 
-        self.payload = b'data'
         self.headers = []
         self.message = protocol.RawRequestMessage(
             'GET', '/path', (1, 0), self.headers, True, 'deflate')
@@ -210,7 +209,7 @@ class HttpWsgiServerProtocolTests(unittest.TestCase):
         self.message = protocol.RawRequestMessage(
             'GET', '/path', (1, 1), self.headers, True, 'deflate')
 
-        srv = wsgi.WSGIServerHttpProtocol(wsgi_app, True)
+        srv = wsgi.WSGIServerHttpProtocol(wsgi_app, readpayload=True)
         srv.stream = self.stream
         srv.transport = self.transport
 
@@ -254,7 +253,7 @@ class HttpWsgiServerProtocolTests(unittest.TestCase):
         self.message = protocol.RawRequestMessage(
             'GET', '/path', (1, 1), self.headers, False, 'deflate')
 
-        srv = wsgi.WSGIServerHttpProtocol(wsgi_app, True)
+        srv = wsgi.WSGIServerHttpProtocol(wsgi_app, readpayload=True)
         srv.stream = self.stream
         srv.transport = self.transport
 
@@ -266,3 +265,21 @@ class HttpWsgiServerProtocolTests(unittest.TestCase):
         self.assertTrue(content.startswith(b'HTTP/1.1 200 OK'))
         self.assertTrue(content.endswith(b'data\r\n0\r\n\r\n'))
         self.assertTrue(srv._keep_alive)
+
+    def test_handle_request_readpayload(self):
+
+        def wsgi_app(env, start):
+            start('200 OK', [('Content-Type', 'text/plain')])
+            return [env['wsgi.input'].read()]
+
+        srv = wsgi.WSGIServerHttpProtocol(wsgi_app, readpayload=True)
+        srv.stream = self.stream
+        srv.transport = self.transport
+
+        self.loop.run_until_complete(
+            srv.handle_request(self.message, self.payload))
+
+        content = b''.join(
+            [c[1][0] for c in self.transport.write.mock_calls])
+        self.assertTrue(content.startswith(b'HTTP/1.0 200 OK'))
+        self.assertTrue(content.endswith(b'data'))

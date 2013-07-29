@@ -184,16 +184,22 @@ class WebSocketWriter:
             opcode=OPCODE_CLOSE)
 
 
-def do_handshake(message, transport):
+def do_handshake(method, headers, transport):
     """Prepare WebSocket handshake. It return http response code,
     response headers, websocket parser, websocket writer. It does not
-    do any IO."""
-    headers = dict(((hdr, val)
-                    for hdr, val in message.headers if hdr in WS_HDRS))
+    perform any IO."""
+
+    # WebSocket accepts only GET
+    if method.upper() != 'GET':
+        raise errors.HttpErrorException(405, headers=(('Allow', 'GET'),))
+
+    headers = dict(((hdr, val) for hdr, val in headers if hdr in WS_HDRS))
 
     if 'websocket' != headers.get('UPGRADE', '').lower().strip():
-        raise errors.BadRequestException('No WebSocket UPGRADE hdr: {}'.format(
-            headers.get('UPGRADE')))
+        raise errors.BadRequestException(
+            'No WebSocket UPGRADE hdr: {}\n'
+            'Can "Upgrade" only to "WebSocket".'.format(
+                headers.get('UPGRADE')))
 
     if 'upgrade' not in headers.get('CONNECTION', '').lower():
         raise errors.BadRequestException(
@@ -202,7 +208,7 @@ def do_handshake(message, transport):
 
     # check supported version
     version = headers.get('SEC-WEBSOCKET-VERSION')
-    if version not in ('13', '8'):
+    if version not in ('13', '8', '7'):
         raise errors.BadRequestException(
             'Unsupported version: {}'.format(version))
 

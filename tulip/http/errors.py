@@ -1,6 +1,6 @@
 """http related errors."""
 
-__all__ = ['HttpException', 'HttpStatusException',
+__all__ = ['HttpException', 'HttpErrorException', 'BadRequestException',
            'IncompleteRead', 'BadStatusLine', 'LineTooLong', 'InvalidHeader']
 
 import http.client
@@ -10,11 +10,12 @@ class HttpException(http.client.HTTPException):
 
     code = None
     headers = ()
+    message = ''
 
 
-class HttpStatusException(HttpException):
+class HttpErrorException(HttpException):
 
-    def __init__(self, code, headers=None, message=''):
+    def __init__(self, code, message='', headers=None):
         self.code = code
         self.headers = headers
         self.message = message
@@ -23,6 +24,7 @@ class HttpStatusException(HttpException):
 class BadRequestException(HttpException):
 
     code = 400
+    message = 'Bad Request'
 
 
 class IncompleteRead(BadRequestException, http.client.IncompleteRead):

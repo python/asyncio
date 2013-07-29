@@ -468,6 +468,8 @@ class HttpMessage:
 
     status = None
     status_line = b''
+    upgrade = False  # Connection: UPGRADE
+    websocket = False  # Upgrade: WEBSOCKET
 
     # subclass can enable auto sending headers with write() call,
     # this is useful for wsgi's start_response implementation.
@@ -481,7 +483,6 @@ class HttpMessage:
 
         self.chunked = False
         self.length = None
-        self.upgrade = False
         self.headers = collections.deque()
         self.headers_sent = False
 
@@ -525,6 +526,7 @@ class HttpMessage:
 
         elif name == 'UPGRADE':
             if 'websocket' in value.lower():
+                self.websocket = True
                 self.headers.append((name, value))
 
         elif name == 'TRANSFER-ENCODING' and not self.chunked:

@@ -214,9 +214,14 @@ class WsgiResponse:
         status_code = int(status.split(' ', 1)[0])
 
         self.status = status
-        self.response = tulip.http.Response(
+        resp = self.response = tulip.http.Response(
             self.transport, status_code,
             self.message.version, self.message.should_close)
-        self.response.add_headers(*headers)
-        self.response._send_headers = True
+        resp.add_headers(*headers)
+
+        # send headers immediately for websocket connection
+        if status_code == 101 and resp.upgrade and resp.websocket:
+            resp.send_headers()
+        else:
+            resp._send_headers = True
         return self.response.write

@@ -161,6 +161,19 @@ class HttpWsgiServerProtocolTests(unittest.TestCase):
             resp.start_response,
             '500 Err', [('CONTENT-TYPE', 'text/plain')], ['', ValueError()])
 
+    @unittest.mock.patch('tulip.http.wsgi.tulip')
+    def test_wsgi_response_101_upgrade_to_websocket(self, m_tulip):
+        srv = wsgi.WSGIServerHttpProtocol(self.wsgi)
+        srv.stream = self.stream
+        srv.transport = self.transport
+
+        resp = srv.create_wsgi_response(self.message)
+        resp.start_response(
+            '101 Switching Protocols', (('UPGRADE', 'websocket'),
+                                        ('CONNECTION', 'upgrade')))
+        self.assertEqual(resp.status, '101 Switching Protocols')
+        self.assertTrue(m_tulip.http.Response.return_value.send_headers.called)
+
     def test_file_wrapper(self):
         fobj = io.BytesIO(b'data')
         wrapper = wsgi.FileWrapper(fobj, 2)

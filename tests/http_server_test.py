@@ -18,8 +18,8 @@ class HttpServerProtocolTests(unittest.TestCase):
     def tearDown(self):
         self.loop.close()
 
-    def test_http_status_exception(self):
-        exc = errors.HttpStatusException(500, message='Internal error')
+    def test_http_error_exception(self):
+        exc = errors.HttpErrorException(500, message='Internal error')
         self.assertEqual(exc.code, 500)
         self.assertEqual(exc.message, 'Internal error')
 

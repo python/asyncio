@@ -358,31 +358,41 @@ class WebSocketHandshakeTests(unittest.TestCase):
         self.message = protocol.RawRequestMessage(
             'GET', '/path', (1, 0), self.headers, True, None)
 
+    def test_not_get(self):
+        self.assertRaises(
+            errors.HttpErrorException,
+            websocket.do_handshake,
+            'POST', self.message.headers, self.transport)
+
     def test_no_upgrade(self):
         self.assertRaises(
             errors.BadRequestException,
-            websocket.do_handshake, self.message, self.transport)
+            websocket.do_handshake,
+            self.message.method, self.message.headers, self.transport)
 
     def test_no_connection(self):
         self.headers.extend([('UPGRADE', 'websocket'),
                              ('CONNECTION', 'keep-alive')])
         self.assertRaises(
             errors.BadRequestException,
-            websocket.do_handshake, self.message, self.transport)
+            websocket.do_handshake,
+            self.message.method, self.message.headers, self.transport)
 
     def test_protocol_version(self):
         self.headers.extend([('UPGRADE', 'websocket'),
                              ('CONNECTION', 'upgrade')])
         self.assertRaises(
             errors.BadRequestException,
-            websocket.do_handshake, self.message, self.transport)
+            websocket.do_handshake,
+            self.message.method, self.message.headers, self.transport)
 
         self.headers.extend([('UPGRADE', 'websocket'),
                              ('CONNECTION', 'upgrade'),
                              ('SEC-WEBSOCKET-VERSION', '1')])
         self.assertRaises(
             errors.BadRequestException,
-            websocket.do_handshake, self.message, self.transport)
+            websocket.do_handshake,
+            self.message.method, self.message.headers, self.transport)
 
     def test_protocol_key(self):
         self.headers.extend([('UPGRADE', 'websocket'),
@@ -390,7 +400,8 @@ class WebSocketHandshakeTests(unittest.TestCase):
                              ('SEC-WEBSOCKET-VERSION', '13')])
         self.assertRaises(
             errors.BadRequestException,
-            websocket.do_handshake, self.message, self.transport)
+            websocket.do_handshake,
+            self.message.method, self.message.headers, self.transport)
 
         self.headers.extend([('UPGRADE', 'websocket'),
                              ('CONNECTION', 'upgrade'),
@@ -398,7 +409,8 @@ class WebSocketHandshakeTests(unittest.TestCase):
                              ('SEC-WEBSOCKET-KEY', '123')])
         self.assertRaises(
             errors.BadRequestException,
-            websocket.do_handshake, self.message, self.transport)
+            websocket.do_handshake,
+            self.message.method, self.message.headers, self.transport)
 
         sec_key = base64.b64encode(os.urandom(2))
         self.headers.extend([('UPGRADE', 'websocket'),
@@ -407,7 +419,8 @@ class WebSocketHandshakeTests(unittest.TestCase):
                              ('SEC-WEBSOCKET-KEY', sec_key.decode())])
         self.assertRaises(
             errors.BadRequestException,
-            websocket.do_handshake, self.message, self.transport)
+            websocket.do_handshake,
+            self.message.method, self.message.headers, self.transport)
 
     def test_handshake(self):
         sec_key = base64.b64encode(os.urandom(16)).decode()
@@ -417,7 +430,7 @@ class WebSocketHandshakeTests(unittest.TestCase):
                              ('SEC-WEBSOCKET-VERSION', '13'),
                              ('SEC-WEBSOCKET-KEY', sec_key)])
         status, headers, parser, writer = websocket.do_handshake(
-            self.message, self.transport)
+            self.message.method, self.message.headers, self.transport)
         self.assertEqual(status, 101)
 
         key = base64.b64encode(

@@ -41,7 +41,7 @@ class HttpServer(tulip.http.ServerHttpProtocol):
         if upgrade:
             # websocket handshake
             status, headers, parser, writer = websocket.do_handshake(
-                message, self.transport)
+                message.method, message.headers, self.transport)
 
             resp = tulip.http.Response(self.transport, status)
             resp.add_headers(*headers)

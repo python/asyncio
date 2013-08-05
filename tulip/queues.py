@@ -1,6 +1,6 @@
 """Queues"""
 
-__all__ = ['Queue', 'PriorityQueue', 'LifoQueue', 'JoinableQueue']
+__all__ = ['Queue', 'PriorityQueue', 'LifoQueue', 'JoinableQueue', 'Full', 'Empty']
 
 import collections
 import concurrent.futures
@@ -11,6 +11,11 @@ from . import events
 from . import futures
 from . import locks
 from .tasks import coroutine
+
+
+# Re-export queue.Full and .Empty exceptions.
+Full = queue.Full
+Empty = queue.Empty
 
 
 class Queue:
@@ -105,7 +110,7 @@ class Queue:
         If you yield from put() and timeout is None (the default), wait until a
         free slot is available before adding item.
 
-        If a timeout is provided, raise queue.Full if no free slot becomes
+        If a timeout is provided, raise Full if no free slot becomes
         available before the timeout.
         """
         self._consume_done_getters(self._getters)
@@ -127,7 +132,7 @@ class Queue:
             try:
                 yield from waiter
             except concurrent.futures.CancelledError:
-                raise queue.Full
+                raise Full
 
         else:
             self._put(item)
@@ -135,7 +140,7 @@ class Queue:
     def put_nowait(self, item):
         """Put an item into the queue without blocking.
 
-        If no free slot is immediately available, raise queue.Full.
+        If no free slot is immediately available, raise Full.
         """
         self._consume_done_getters(self._getters)
         if self._getters:
@@ -150,7 +155,7 @@ class Queue:
             getter.set_result(self._get())
 
         elif self._maxsize > 0 and self._maxsize == self.qsize():
-            raise queue.Full
+            raise Full
         else:
             self._put(item)
 
@@ -161,7 +166,7 @@ class Queue:
         If you yield from get() and timeout is None (the default), wait until a
         item is available.
 
-        If a timeout is provided, raise queue.Empty if no item is available
+        If a timeout is provided, raise Empty if no item is available
         before the timeout.
         """
         self._consume_done_putters()
@@ -187,12 +192,12 @@ class Queue:
             try:
                 return (yield from waiter)
             except concurrent.futures.CancelledError:
-                raise queue.Empty
+                raise Empty
 
     def get_nowait(self):
         """Remove and return an item from the queue.
 
-        Return an item if one is immediately available, else raise queue.Full.
+        Return an item if one is immediately available, else raise Full.
         """
         self._consume_done_putters()
         if self._putters:
@@ -207,7 +212,7 @@ class Queue:
         elif self.qsize():
             return self._get()
         else:
-            raise queue.Empty
+            raise Empty
 
 
 class PriorityQueue(Queue):

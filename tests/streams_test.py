@@ -1,10 +1,12 @@
 """Tests for streams.py."""
 
+from unittest import mock
 import unittest
 
 from tulip import events
 from tulip import streams
 from tulip import tasks
+from tulip import test_utils
 
 
 class StreamReaderTests(unittest.TestCase):
@@ -17,6 +19,36 @@ class StreamReaderTests(unittest.TestCase):
 
     def tearDown(self):
         self.loop.close()
+
+    def test_open_connection(self):
+        with test_utils.run_test_server(self.loop) as httpd:
+            f = streams.open_connection(*httpd.address, loop=self.loop)
+            reader, writer = self.loop.run_until_complete(f)
+            writer.write(b'GET / HTTP/1.0\r\n\r\n')
+            f = reader.readline()
+            data = self.loop.run_until_complete(f)
+            self.assertEqual(data, b'HTTP/1.0 200 OK\r\n')
+            f = reader.read()
+            data = self.loop.run_until_complete(f)
+            self.assertTrue(data.endswith(b'\r\n\r\nTest message'))
+
+    def test_open_connection_no_loop_ssl(self):
+        with test_utils.run_test_server(self.loop, use_ssl=True) as httpd:
+            f = streams.open_connection(*httpd.address, ssl=True)
+            reader, writer = self.loop.run_until_complete(f)
+            writer.write(b'GET / HTTP/1.0\r\n\r\n')
+            f = reader.read()
+            data = self.loop.run_until_complete(f)
+            self.assertTrue(data.endswith(b'\r\n\r\nTest message'))
+
+    def test_open_connection_error(self):
+        with test_utils.run_test_server(self.loop) as httpd:
+            f = streams.open_connection(*httpd.address)
+            reader, writer = self.loop.run_until_complete(f)
+            writer._protocol.connection_lost(ZeroDivisionError())
+            f = reader.read()
+            with self.assertRaises(ZeroDivisionError):
+                self.loop.run_until_complete(f)
 
     def test_feed_empty_data(self):
         stream = streams.StreamReader()

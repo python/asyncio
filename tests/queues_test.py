@@ -2,7 +2,6 @@
 
 import unittest
 import unittest.mock
-import queue
 
 from tulip import events
 from tulip import futures
@@ -190,14 +189,14 @@ class QueueGetTests(_QueueTestBase):
 
     def test_nonblocking_get_exception(self):
         q = queues.Queue()
-        self.assertRaises(queue.Empty, q.get_nowait)
+        self.assertRaises(queues.Empty, q.get_nowait)
 
     def test_get_timeout(self):
         q = queues.Queue()
 
         @tasks.coroutine
         def queue_get():
-            with self.assertRaises(queue.Empty):
+            with self.assertRaises(queues.Empty):
                 return (yield from q.get(timeout=0.01))
 
             # Get works after timeout, with blocking and non-blocking put.
@@ -273,7 +272,7 @@ class QueuePutTests(_QueueTestBase):
     def test_nonblocking_put_exception(self):
         q = queues.Queue(maxsize=1)
         q.put_nowait(1)
-        self.assertRaises(queue.Full, q.put_nowait, 2)
+        self.assertRaises(queues.Full, q.put_nowait, 2)
 
     def test_put_timeout(self):
         q = queues.Queue(1)
@@ -281,7 +280,7 @@ class QueuePutTests(_QueueTestBase):
 
         @tasks.coroutine
         def queue_put():
-            with self.assertRaises(queue.Full):
+            with self.assertRaises(queues.Full):
                 return (yield from q.put(1, timeout=0.01))
 
             self.assertEqual(0, q.get_nowait())

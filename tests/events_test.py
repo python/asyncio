@@ -191,7 +191,7 @@ class EventLoopTestsMixin:
         self.assertTrue(0.009 <= t1-t0 <= 0.018, t1-t0)
         self.loop.run_until_complete(task)
         t2 = self.loop.time()
-        self.assertTrue(0.009 <= t2-t1 <= 0.018, t2-t1)
+        self.assertTrue(0.018 <= t2-t0 <= 0.028, t2-t0)
 
     def test_call_later(self):
         results = []

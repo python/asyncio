@@ -305,7 +305,7 @@ class Future:
         self._schedule_callbacks()
 
     def set_exception(self, exception):
-        """ Mark the future done and set an exception.
+        """Mark the future done and set an exception.
 
         If the future is already done when this method is called, raises
         InvalidStateError.

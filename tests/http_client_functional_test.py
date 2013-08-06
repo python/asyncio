@@ -29,7 +29,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
             for meth in ('get', 'post', 'put', 'delete', 'head'):
                 r = self.loop.run_until_complete(
-                    client.request(meth, httpd.url('method', meth)))
+                    client.request(meth, httpd.url('method', meth), loop=self.loop))
                 content1 = self.loop.run_until_complete(r.read())
                 content2 = self.loop.run_until_complete(r.read())
                 content = content1.decode()
@@ -42,7 +42,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
     def test_HTTP_302_REDIRECT_GET(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
             r = self.loop.run_until_complete(
-                client.request('get', httpd.url('redirect', 2)))
+                client.request('get', httpd.url('redirect', 2), loop=self.loop))
 
             self.assertEqual(r.status, 200)
             self.assertEqual(2, httpd['redirects'])
@@ -52,13 +52,13 @@ class HttpClientFunctionalTests(unittest.TestCase):
             self.assertRaises(
                 ValueError,
                 self.loop.run_until_complete,
-                client.request('get', httpd.url('redirect_err')))
+                client.request('get', httpd.url('redirect_err'), loop=self.loop))
 
     def test_HTTP_302_REDIRECT_POST(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
             r = self.loop.run_until_complete(
                 client.request('post', httpd.url('redirect', 2),
-                               data={'some': 'data'}))
+                               data={'some': 'data'}, loop=self.loop))
             content = self.loop.run_until_complete(r.content.read())
             content = content.decode()
 
@@ -70,7 +70,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
             r = self.loop.run_until_complete(
                 client.request('get', httpd.url('redirect', 5),
-                               max_redirects=2))
+                               max_redirects=2, loop=self.loop))
 
             self.assertEqual(r.status, 302)
             self.assertEqual(2, httpd['redirects'])
@@ -79,7 +79,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
             r = self.loop.run_until_complete(
                 client.request('get', httpd.url('method', 'get'),
-                               params={'q': 'test'}))
+                               params={'q': 'test'}, loop=self.loop))
             content = self.loop.run_until_complete(r.content.read())
             content = content.decode()
 
@@ -91,7 +91,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
             r = self.loop.run_until_complete(
                 client.request(
                     'get', httpd.url('method', 'get') + '?test=true',
-                    params={'q': 'test'}))
+                    params={'q': 'test'}, loop=self.loop))
             content = self.loop.run_until_complete(r.content.read())
             content = content.decode()
 
@@ -102,7 +102,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
             url = httpd.url('method', 'post')
             r = self.loop.run_until_complete(
-                client.request('post', url, data={'some': 'data'}))
+                client.request('post', url, data={'some': 'data'}, loop=self.loop))
             self.assertEqual(r.status, 200)
 
             content = self.loop.run_until_complete(r.read(True))
@@ -114,7 +114,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
             url = httpd.url('method', 'post')
             r = self.loop.run_until_complete(
                 client.request('post', url,
-                               data={'some': 'data'}, compress=True))
+                               data={'some': 'data'}, compress=True, loop=self.loop))
             self.assertEqual(r.status, 200)
 
             content = self.loop.run_until_complete(r.read(True))
@@ -130,7 +130,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
                 r = self.loop.run_until_complete(
                     client.request(
                         'post', url, files={'some': f}, chunked=1024,
-                        headers={'Transfer-Encoding': 'chunked'}))
+                        headers={'Transfer-Encoding': 'chunked'}, loop=self.loop))
                 content = self.loop.run_until_complete(r.read(True))
 
                 f.seek(0)
@@ -152,7 +152,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
             with open(__file__) as f:
                 r = self.loop.run_until_complete(
                     client.request('post', url, files={'some': f},
-                                   chunked=1024, compress='deflate'))
+                                   chunked=1024, compress='deflate', loop=self.loop))
 
                 content = self.loop.run_until_complete(r.read(True))
 
@@ -175,7 +175,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
 
             with open(__file__) as f:
                 r = self.loop.run_until_complete(
-                    client.request('post', url, files=[('some', f.read())]))
+                    client.request('post', url, files=[('some', f.read())], loop=self.loop))
 
                 content = self.loop.run_until_complete(r.read(True))
 
@@ -195,7 +195,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
 
             with open(__file__) as f:
                 r = self.loop.run_until_complete(
-                    client.request('post', url, files=[('some', f)]))
+                    client.request('post', url, files=[('some', f)], loop=self.loop))
 
                 content = self.loop.run_until_complete(r.read(True))
 

@@ -116,7 +116,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         Return the Future's result, or raise its exception.  If the
         timeout is reached or stop() is called, raise TimeoutError.
         """
-        future = tasks.async(future)
+        future = tasks.async(future, loop=self)
         future.add_done_callback(_raise_stop_error)
         handle_called = False
 
@@ -209,7 +209,7 @@ class BaseEventLoop(events.AbstractEventLoop):
             assert not args
             assert not isinstance(callback, events.TimerHandle)
             if callback._cancelled:
-                f = futures.Future()
+                f = futures.Future(loop=self)
                 f.set_result(None)
                 return f
             callback, args = callback._callback, callback._args
@@ -311,7 +311,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         sock.setblocking(False)
 
         protocol = protocol_factory()
-        waiter = futures.Future()
+        waiter = futures.Future(loop=self)
         if ssl:
             sslcontext = None if isinstance(ssl, bool) else ssl
             transport = self._make_ssl_transport(
@@ -458,7 +458,7 @@ class BaseEventLoop(events.AbstractEventLoop):
     @tasks.coroutine
     def connect_read_pipe(self, protocol_factory, pipe):
         protocol = protocol_factory()
-        waiter = futures.Future()
+        waiter = futures.Future(loop=self)
         transport = self._make_read_pipe_transport(pipe, protocol, waiter,
                                                    extra={})
         yield from waiter
@@ -467,7 +467,7 @@ class BaseEventLoop(events.AbstractEventLoop):
     @tasks.coroutine
     def connect_write_pipe(self, protocol_factory, pipe):
         protocol = protocol_factory()
-        waiter = futures.Future()
+        waiter = futures.Future(loop=self)
         transport = self._make_write_pipe_transport(pipe, protocol, waiter,
                                                     extra={})
         yield from waiter

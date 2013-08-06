@@ -127,7 +127,7 @@ def run_test_server(loop, *, host='127.0.0.1', port=0,
                 lambda: TestHttpServer(keep_alive=0.5),
                 host, port, ssl=sslcontext))
 
-        waiter = tulip.Future()
+        waiter = tulip.Future(loop=thread_loop)
         loop.call_soon_threadsafe(
             fut.set_result, (thread_loop, waiter, socks[0].getsockname()))
 
@@ -146,7 +146,7 @@ def run_test_server(loop, *, host='127.0.0.1', port=0,
         thread_loop.close()
         gc.collect()
 
-    fut = tulip.Future()
+    fut = tulip.Future(loop=loop)
     server_thread = threading.Thread(target=run, args=(loop, fut))
     server_thread.start()
 

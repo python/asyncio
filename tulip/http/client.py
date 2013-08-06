@@ -42,7 +42,8 @@ def request(method, url, *,
             timeout=None,
             compress=None,
             chunked=None,
-            session=None):
+            session=None,
+            loop=None):
     """Constructs and sends a request. Returns response object.
 
     method: http method
@@ -65,6 +66,7 @@ def request(method, url, *,
        transfer encoding.
     session: tulip.http.Session instance to support connection pooling and
        session cookies.
+    loop: Optional event loop.
 
     Usage:
 
@@ -77,7 +79,8 @@ def request(method, url, *,
 
     """
     redirects = 0
-    loop = tulip.get_event_loop()
+    if loop is None:
+        loop = tulip.get_event_loop()
 
     while True:
         req = HttpRequest(
@@ -92,7 +95,7 @@ def request(method, url, *,
 
         # connection timeout
         try:
-            resp = yield from tulip.Task(conn, timeout=timeout)
+            resp = yield from tulip.Task(conn, timeout=timeout, loop=loop)
         except tulip.CancelledError:
             raise tulip.TimeoutError from None
 

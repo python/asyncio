@@ -148,7 +148,7 @@ class BaseEventLoopTests(unittest.TestCase):
         def cb():
             pass
         h = events.Handle(cb, ())
-        f = futures.Future()
+        f = futures.Future(loop=self.loop)
         executor = unittest.mock.Mock()
         executor.submit.return_value = f
 

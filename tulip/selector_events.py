@@ -194,7 +194,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
 
     def sock_recv(self, sock, n):
         """XXX"""
-        fut = futures.Future()
+        fut = futures.Future(loop=self)
         self._sock_recv(fut, False, sock, n)
         return fut
 
@@ -218,7 +218,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
 
     def sock_sendall(self, sock, data):
         """XXX"""
-        fut = futures.Future()
+        fut = futures.Future(loop=self)
         if data:
             self._sock_sendall(fut, False, sock, data)
         else:
@@ -254,7 +254,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         # self.getaddrinfo() for you here.  But verifying this is
         # complicated; the socket module doesn't have a pattern for
         # IPv6 addresses (there are too many forms, apparently).
-        fut = futures.Future()
+        fut = futures.Future(loop=self)
         self._sock_connect(fut, False, sock, address)
         return fut
 
@@ -288,7 +288,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
 
     def sock_accept(self, sock):
         """XXX"""
-        fut = futures.Future()
+        fut = futures.Future(loop=self)
         self._sock_accept(fut, False, sock)
         return fut
 

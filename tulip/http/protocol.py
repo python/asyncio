@@ -72,8 +72,10 @@ def http_request_parser(max_line_size=8190,
         # read headers
         headers, close, compression = parse_headers(
             lines, max_line_size, max_headers, max_field_size)
-        if close is None:
-            close = version <= (1, 0)
+        if version <= (1, 0):
+            close = True
+        elif close is None:
+            close = False
 
         out.feed_data(
             RawRequestMessage(
@@ -479,7 +481,12 @@ class HttpMessage:
         self.transport = transport
         self.version = version
         self.closing = close
-        self.keepalive = None
+
+        # disable keep-alive for http/1.0
+        if version <= (1, 0):
+            self.keepalive = False
+        else:
+            self.keepalive = None
 
         self.chunked = False
         self.length = None
@@ -521,7 +528,7 @@ class HttpMessage:
             # connection keep-alive
             elif 'close' in val:
                 self.keepalive = False
-            elif 'keep-alive' in val:
+            elif 'keep-alive' in val and self.version >= (1, 1):
                 self.keepalive = True
 
         elif name == 'UPGRADE':

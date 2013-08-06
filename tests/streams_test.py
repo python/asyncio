@@ -1,6 +1,5 @@
 """Tests for streams.py."""
 
-from unittest import mock
 import unittest
 
 from tulip import events

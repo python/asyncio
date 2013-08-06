@@ -1,6 +1,7 @@
 """Queues"""
 
-__all__ = ['Queue', 'PriorityQueue', 'LifoQueue', 'JoinableQueue', 'Full', 'Empty']
+__all__ = ['Queue', 'PriorityQueue', 'LifoQueue', 'JoinableQueue',
+           'Full', 'Empty']
 
 import collections
 import concurrent.futures

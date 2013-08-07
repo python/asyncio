@@ -96,7 +96,8 @@ class StreamReader:
         waiter = self.waiter
         if waiter is not None:
             self.waiter = None
-            waiter.set_result(True)
+            if not waiter.done():
+                waiter.set_result(True)
 
     def feed_data(self, data):
         if not data:
@@ -108,7 +109,8 @@ class StreamReader:
         waiter = self.waiter
         if waiter is not None:
             self.waiter = None
-            waiter.set_result(False)
+            if not waiter.done():
+                waiter.set_result(False)
 
     @tasks.coroutine
     def readline(self):

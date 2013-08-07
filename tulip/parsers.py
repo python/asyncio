@@ -81,7 +81,8 @@ class StreamBuffer:
     unset_parser() sends EofStream into parser and then removes it.
     """
 
-    def __init__(self):
+    def __init__(self, *, loop=None):
+        self._loop = loop
         self._buffer = ParserBuffer()
         self._eof = False
         self._parser = None
@@ -139,7 +140,7 @@ class StreamBuffer:
         if self._parser:
             self.unset_parser()
 
-        out = DataBuffer()
+        out = DataBuffer(loop=self._loop)
         if self._exception:
             out.set_exception(self._exception)
             return out
@@ -205,7 +206,8 @@ class StreamProtocol(StreamBuffer, protocols.Protocol):
 class DataBuffer:
     """DataBuffer is a destination for parsed data."""
 
-    def __init__(self):
+    def __init__(self, *, loop=None):
+        self._loop = loop
         self._buffer = collections.deque()
         self._eof = False
         self._waiter = None
@@ -220,7 +222,7 @@ class DataBuffer:
         waiter = self._waiter
         if waiter is not None:
             self._waiter = None
-            if not waiter.cancelled():
+            if not waiter.done():
                 waiter.set_exception(exc)
 
     def feed_data(self, data):
@@ -246,7 +248,7 @@ class DataBuffer:
 
         if not self._buffer and not self._eof:
             assert not self._waiter
-            self._waiter = futures.Future()
+            self._waiter = futures.Future(loop=self._loop)
             yield from self._waiter
 
         if self._buffer:

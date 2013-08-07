@@ -35,7 +35,7 @@ def open_connection(host=None, port=None, *,
     """
     if loop is None:
         loop = events.get_event_loop()
-    reader = StreamReader(limit=limit)
+    reader = StreamReader(limit=limit, loop=loop)
     protocol = StreamReaderProtocol(reader)
     transport, _ = yield from loop.create_connection(
         lambda: protocol, host, port, **kwds)
@@ -69,8 +69,11 @@ class StreamReaderProtocol(protocols.Protocol):
 
 class StreamReader:
 
-    def __init__(self, limit=_DEFAULT_LIMIT):
+    def __init__(self, limit=_DEFAULT_LIMIT, loop=None):
         self.limit = limit  # Max line length.  (Security feature.)
+        if loop is None:
+            loop = events.get_event_loop()
+        self.loop = loop
         self.buffer = collections.deque()  # Deque of bytes objects.
         self.byte_count = 0  # Bytes in buffer.
         self.eof = False  # Whether we're done.
@@ -141,7 +144,7 @@ class StreamReader:
 
             if not_enough:
                 assert self.waiter is None
-                self.waiter = futures.Future()
+                self.waiter = futures.Future(loop=self.loop)
                 yield from self.waiter
 
         line = b''.join(parts)
@@ -160,12 +163,12 @@ class StreamReader:
         if n < 0:
             while not self.eof:
                 assert not self.waiter
-                self.waiter = futures.Future()
+                self.waiter = futures.Future(loop=self.loop)
                 yield from self.waiter
         else:
             if not self.byte_count and not self.eof:
                 assert not self.waiter
-                self.waiter = futures.Future()
+                self.waiter = futures.Future(loop=self.loop)
                 yield from self.waiter
 
         if n < 0 or self.byte_count <= n:
@@ -200,7 +203,7 @@ class StreamReader:
 
         while self.byte_count < n and not self.eof:
             assert not self.waiter
-            self.waiter = futures.Future()
+            self.waiter = futures.Future(loop=self.loop)
             yield from self.waiter
 
         return (yield from self.read(n))

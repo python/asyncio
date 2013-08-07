@@ -50,20 +50,20 @@ class StreamReaderTests(unittest.TestCase):
                 self.loop.run_until_complete(f)
 
     def test_feed_empty_data(self):
-        stream = streams.StreamReader()
+        stream = streams.StreamReader(loop=self.loop)
 
         stream.feed_data(b'')
         self.assertEqual(0, stream.byte_count)
 
     def test_feed_data_byte_count(self):
-        stream = streams.StreamReader()
+        stream = streams.StreamReader(loop=self.loop)
 
         stream.feed_data(self.DATA)
         self.assertEqual(len(self.DATA), stream.byte_count)
 
     def test_read_zero(self):
         # Read zero bytes.
-        stream = streams.StreamReader()
+        stream = streams.StreamReader(loop=self.loop)
         stream.feed_data(self.DATA)
 
         data = self.loop.run_until_complete(stream.read(0))
@@ -72,8 +72,8 @@ class StreamReaderTests(unittest.TestCase):
 
     def test_read(self):
         # Read bytes.
-        stream = streams.StreamReader()
-        read_task = tasks.Task(stream.read(30))
+        stream = streams.StreamReader(loop=self.loop)
+        read_task = tasks.Task(stream.read(30), loop=self.loop)
 
         def cb():
             stream.feed_data(self.DATA)
@@ -85,7 +85,7 @@ class StreamReaderTests(unittest.TestCase):
 
     def test_read_line_breaks(self):
         # Read bytes without line breaks.
-        stream = streams.StreamReader()
+        stream = streams.StreamReader(loop=self.loop)
         stream.feed_data(b'line1')
         stream.feed_data(b'line2')
 
@@ -96,8 +96,8 @@ class StreamReaderTests(unittest.TestCase):
 
     def test_read_eof(self):
         # Read bytes, stop at eof.
-        stream = streams.StreamReader()
-        read_task = tasks.Task(stream.read(1024))
+        stream = streams.StreamReader(loop=self.loop)
+        read_task = tasks.Task(stream.read(1024), loop=self.loop)
 
         def cb():
             stream.feed_eof()
@@ -109,8 +109,8 @@ class StreamReaderTests(unittest.TestCase):
 
     def test_read_until_eof(self):
         # Read all bytes until eof.
-        stream = streams.StreamReader()
-        read_task = tasks.Task(stream.read(-1))
+        stream = streams.StreamReader(loop=self.loop)
+        read_task = tasks.Task(stream.read(-1), loop=self.loop)
 
         def cb():
             stream.feed_data(b'chunk1\n')
@@ -124,7 +124,7 @@ class StreamReaderTests(unittest.TestCase):
         self.assertFalse(stream.byte_count)
 
     def test_read_exception(self):
-        stream = streams.StreamReader()
+        stream = streams.StreamReader(loop=self.loop)
         stream.feed_data(b'line\n')
 
         data = self.loop.run_until_complete(stream.read(2))
@@ -136,9 +136,9 @@ class StreamReaderTests(unittest.TestCase):
 
     def test_readline(self):
         # Read one line.
-        stream = streams.StreamReader()
+        stream = streams.StreamReader(loop=self.loop)
         stream.feed_data(b'chunk1 ')
-        read_task = tasks.Task(stream.readline())
+        read_task = tasks.Task(stream.readline(), loop=self.loop)
 
         def cb():
             stream.feed_data(b'chunk2 ')
@@ -151,7 +151,7 @@ class StreamReaderTests(unittest.TestCase):
         self.assertEqual(len(b'\n chunk4')-1, stream.byte_count)
 
     def test_readline_limit_with_existing_data(self):
-        stream = streams.StreamReader(3)
+        stream = streams.StreamReader(3, loop=self.loop)
         stream.feed_data(b'li')
         stream.feed_data(b'ne1\nline2\n')
 
@@ -159,7 +159,7 @@ class StreamReaderTests(unittest.TestCase):
             ValueError, self.loop.run_until_complete, stream.readline())
         self.assertEqual([b'line2\n'], list(stream.buffer))
 
-        stream = streams.StreamReader(3)
+        stream = streams.StreamReader(3, loop=self.loop)
         stream.feed_data(b'li')
         stream.feed_data(b'ne1')
         stream.feed_data(b'li')
@@ -170,7 +170,7 @@ class StreamReaderTests(unittest.TestCase):
         self.assertEqual(2, stream.byte_count)
 
     def test_readline_limit(self):
-        stream = streams.StreamReader(7)
+        stream = streams.StreamReader(7, loop=self.loop)
 
         def cb():
             stream.feed_data(b'chunk1')
@@ -185,7 +185,7 @@ class StreamReaderTests(unittest.TestCase):
         self.assertEqual(7, stream.byte_count)
 
     def test_readline_line_byte_count(self):
-        stream = streams.StreamReader()
+        stream = streams.StreamReader(loop=self.loop)
         stream.feed_data(self.DATA[:6])
         stream.feed_data(self.DATA[6:])
 
@@ -195,7 +195,7 @@ class StreamReaderTests(unittest.TestCase):
         self.assertEqual(len(self.DATA) - len(b'line1\n'), stream.byte_count)
 
     def test_readline_eof(self):
-        stream = streams.StreamReader()
+        stream = streams.StreamReader(loop=self.loop)
         stream.feed_data(b'some data')
         stream.feed_eof()
 
@@ -203,14 +203,14 @@ class StreamReaderTests(unittest.TestCase):
         self.assertEqual(b'some data', line)
 
     def test_readline_empty_eof(self):
-        stream = streams.StreamReader()
+        stream = streams.StreamReader(loop=self.loop)
         stream.feed_eof()
 
         line = self.loop.run_until_complete(stream.readline())
         self.assertEqual(b'', line)
 
     def test_readline_read_byte_count(self):
-        stream = streams.StreamReader()
+        stream = streams.StreamReader(loop=self.loop)
         stream.feed_data(self.DATA)
 
         self.loop.run_until_complete(stream.readline())
@@ -223,7 +223,7 @@ class StreamReaderTests(unittest.TestCase):
             stream.byte_count)
 
     def test_readline_exception(self):
-        stream = streams.StreamReader()
+        stream = streams.StreamReader(loop=self.loop)
         stream.feed_data(b'line\n')
 
         data = self.loop.run_until_complete(stream.readline())
@@ -235,7 +235,7 @@ class StreamReaderTests(unittest.TestCase):
 
     def test_readexactly_zero_or_less(self):
         # Read exact number of bytes (zero or less).
-        stream = streams.StreamReader()
+        stream = streams.StreamReader(loop=self.loop)
         stream.feed_data(self.DATA)
 
         data = self.loop.run_until_complete(stream.readexactly(0))
@@ -248,10 +248,10 @@ class StreamReaderTests(unittest.TestCase):
 
     def test_readexactly(self):
         # Read exact number of bytes.
-        stream = streams.StreamReader()
+        stream = streams.StreamReader(loop=self.loop)
 
         n = 2 * len(self.DATA)
-        read_task = tasks.Task(stream.readexactly(n))
+        read_task = tasks.Task(stream.readexactly(n), loop=self.loop)
 
         def cb():
             stream.feed_data(self.DATA)
@@ -265,9 +265,9 @@ class StreamReaderTests(unittest.TestCase):
 
     def test_readexactly_eof(self):
         # Read exact number of bytes (eof).
-        stream = streams.StreamReader()
+        stream = streams.StreamReader(loop=self.loop)
         n = 2 * len(self.DATA)
-        read_task = tasks.Task(stream.readexactly(n))
+        read_task = tasks.Task(stream.readexactly(n), loop=self.loop)
 
         def cb():
             stream.feed_data(self.DATA)
@@ -279,7 +279,7 @@ class StreamReaderTests(unittest.TestCase):
         self.assertFalse(stream.byte_count)
 
     def test_readexactly_exception(self):
-        stream = streams.StreamReader()
+        stream = streams.StreamReader(loop=self.loop)
         stream.feed_data(b'line\n')
 
         data = self.loop.run_until_complete(stream.readexactly(2))
@@ -290,7 +290,7 @@ class StreamReaderTests(unittest.TestCase):
             ValueError, self.loop.run_until_complete, stream.readexactly(2))
 
     def test_exception(self):
-        stream = streams.StreamReader()
+        stream = streams.StreamReader(loop=self.loop)
         self.assertIsNone(stream.exception())
 
         exc = ValueError()
@@ -298,7 +298,7 @@ class StreamReaderTests(unittest.TestCase):
         self.assertIs(stream.exception(), exc)
 
     def test_exception_waiter(self):
-        stream = streams.StreamReader()
+        stream = streams.StreamReader(loop=self.loop)
 
         @tasks.coroutine
         def set_err():
@@ -308,8 +308,8 @@ class StreamReaderTests(unittest.TestCase):
         def readline():
             yield from stream.readline()
 
-        t1 = tasks.Task(stream.readline())
-        t2 = tasks.Task(set_err())
+        t1 = tasks.Task(stream.readline(), loop=self.loop)
+        t2 = tasks.Task(set_err(), loop=self.loop)
 
         self.loop.run_until_complete(tasks.wait([t1, t2]))
 

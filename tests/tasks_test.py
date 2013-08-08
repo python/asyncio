@@ -63,7 +63,7 @@ class TaskTests(unittest.TestCase):
         self.assertEqual(t.result(), 'ko')
 
     def test_task_decorator_fut(self):
-        fut = futures.Future()
+        fut = futures.Future(loop=self.loop)
         fut.set_result('ko')
 
         @tasks.task
@@ -89,7 +89,7 @@ class TaskTests(unittest.TestCase):
         self.assertIs(t._loop, loop)
 
     def test_async_future(self):
-        f_orig = futures.Future()
+        f_orig = futures.Future(loop=self.loop)
         f_orig.set_result('ko')
 
         f = tasks.async(f_orig)
@@ -206,9 +206,9 @@ class TaskTests(unittest.TestCase):
         self.assertFalse(t.cancel())
 
     def test_cancel_done_future(self):
-        fut1 = futures.Future()
-        fut2 = futures.Future()
-        fut3 = futures.Future()
+        fut1 = futures.Future(loop=self.loop)
+        fut2 = futures.Future(loop=self.loop)
+        fut3 = futures.Future(loop=self.loop)
 
         @tasks.task
         def task():
@@ -627,7 +627,7 @@ class TaskTests(unittest.TestCase):
         self.assertTrue(0.09 <= t1-t0 <= 0.13, (t1-t0, sleepfut, doer))
 
     def test_task_cancel_waiter_future(self):
-        fut = futures.Future()
+        fut = futures.Future(loop=self.loop)
 
         @tasks.task
         def coro():
@@ -747,7 +747,7 @@ class TaskTests(unittest.TestCase):
         self.assertTrue(tasks.iscoroutinefunction(fn2))
 
     def test_yield_vs_yield_from(self):
-        fut = futures.Future()
+        fut = futures.Future(loop=self.loop)
 
         @tasks.task
         def wait_for_future():
@@ -788,7 +788,7 @@ class TaskTests(unittest.TestCase):
         self.assertEqual(res, 'test')
 
     def test_coroutine_non_gen_function_return_future(self):
-        fut = futures.Future()
+        fut = futures.Future(loop=self.loop)
 
         @tasks.coroutine
         def func():

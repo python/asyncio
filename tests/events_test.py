@@ -831,6 +831,43 @@ class EventLoopTestsMixin:
         self.loop.run_until_complete(proto.done)
         self.assertEqual('CLOSED', proto.state)
 
+    @unittest.skipUnless(sys.platform != 'win32',
+                         "Don't support pipes for Windows")
+    def test_write_pipe_disconnect_on_close(self):
+        proto = None
+        transport = None
+
+        def factory():
+            nonlocal proto
+            proto = MyWritePipeProto(create_future=True)
+            return proto
+
+        rpipe, wpipe = os.pipe()
+        pipeobj = io.open(wpipe, 'wb', 1024)
+
+        @tasks.task
+        def connect():
+            nonlocal transport
+            t, p = yield from self.loop.connect_write_pipe(factory,
+                                                           pipeobj)
+            self.assertIs(p, proto)
+            self.assertIs(t, proto.transport)
+            self.assertEqual('CONNECTED', proto.state)
+            transport = t
+
+        self.loop.run_until_complete(connect())
+        self.assertEqual('CONNECTED', proto.state)
+
+        transport.write(b'1')
+        test_utils.run_briefly(self.loop)
+        data = os.read(rpipe, 1024)
+        self.assertEqual(b'1', data)
+
+        os.close(rpipe)
+
+        self.loop.run_until_complete(proto.done)
+        self.assertEqual('CLOSED', proto.state)
+
     def test_prompt_cancellation(self):
         r, w = test_utils.socketpair()
         r.setblocking(False)

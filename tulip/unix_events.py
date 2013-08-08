@@ -4,6 +4,7 @@ import errno
 import fcntl
 import os
 import socket
+import stat
 import sys
 
 try:
@@ -149,19 +150,19 @@ class _UnixReadPipeTransport(transports.ReadTransport):
 
     max_size = 256 * 1024  # max bytes we read in one eventloop iteration
 
-    def __init__(self, event_loop, pipe, protocol, waiter=None, extra=None):
+    def __init__(self, loop, pipe, protocol, waiter=None, extra=None):
         super().__init__(extra)
         self._extra['pipe'] = pipe
-        self._event_loop = event_loop
+        self._loop = loop
         self._pipe = pipe
         self._fileno = pipe.fileno()
         _set_nonblocking(self._fileno)
         self._protocol = protocol
         self._closing = False
-        self._event_loop.add_reader(self._fileno, self._read_ready)
-        self._event_loop.call_soon(self._protocol.connection_made, self)
+        self._loop.add_reader(self._fileno, self._read_ready)
+        self._loop.call_soon(self._protocol.connection_made, self)
         if waiter is not None:
-            self._event_loop.call_soon(waiter.set_result, None)
+            self._loop.call_soon(waiter.set_result, None)
 
     def _read_ready(self):
         try:
@@ -174,14 +175,14 @@ class _UnixReadPipeTransport(transports.ReadTransport):
             if data:
                 self._protocol.data_received(data)
             else:
-                self._event_loop.remove_reader(self._fileno)
+                self._loop.remove_reader(self._fileno)
                 self._protocol.eof_received()
 
     def pause(self):
-        self._event_loop.remove_reader(self._fileno)
+        self._loop.remove_reader(self._fileno)
 
     def resume(self):
-        self._event_loop.add_reader(self._fileno, self._read_ready)
+        self._loop.add_reader(self._fileno, self._read_ready)
 
     def close(self):
         if not self._closing:
@@ -194,8 +195,8 @@ class _UnixReadPipeTransport(transports.ReadTransport):
 
     def _close(self, exc):
         self._closing = True
-        self._event_loop.remove_reader(self._fileno)
-        self._event_loop.call_soon(self._call_connection_lost, exc)
+        self._loop.remove_reader(self._fileno)
+        self._loop.call_soon(self._call_connection_lost, exc)
 
     def _call_connection_lost(self, exc):
         try:
@@ -206,10 +207,10 @@ class _UnixReadPipeTransport(transports.ReadTransport):
 
 class _UnixWritePipeTransport(transports.WriteTransport):
 
-    def __init__(self, event_loop, pipe, protocol, waiter=None, extra=None):
+    def __init__(self, loop, pipe, protocol, waiter=None, extra=None):
         super().__init__(extra)
         self._extra['pipe'] = pipe
-        self._event_loop = event_loop
+        self._loop = loop
         self._pipe = pipe
         self._fileno = pipe.fileno()
         _set_nonblocking(self._fileno)
@@ -217,9 +218,28 @@ class _UnixWritePipeTransport(transports.WriteTransport):
         self._buffer = []
         self._conn_lost = 0
         self._closing = False  # Set when close() or write_eof() called.
-        self._event_loop.call_soon(self._protocol.connection_made, self)
+        self._writing = True
+        # Do nothing if it is a regular file.
+        # Enable hack only if pipe is FIFO object.
+        # Look on twisted.internet.process:ProcessWriter.__init__
+        if stat.S_ISFIFO(os.fstat(self._fileno).st_mode):
+            self._enable_read_hack = True
+        else:
+            # If the pipe is not a unix pipe, then the read hack is never
+            # applicable.  This case arises when _UnixWritePipeTransport
+            # is used by subprocess and stdout/stderr
+            # are redirected to a normal file.
+            self._enable_read_hack = False
+        if self._enable_read_hack:
+            self._loop.add_reader(self._fileno, self._read_ready)
+
+        self._loop.call_soon(self._protocol.connection_made, self)
         if waiter is not None:
-            self._event_loop.call_soon(waiter.set_result, None)
+            self._loop.call_soon(waiter.set_result, None)
+
+    def _read_ready(self):
+        # pipe was closed by peer
+        self._close()
 
     def write(self, data):
         assert isinstance(data, bytes), repr(data)
@@ -233,7 +253,7 @@ class _UnixWritePipeTransport(transports.WriteTransport):
             self._conn_lost += 1
             return
 
-        if not self._buffer:
+        if not self._buffer and self._writing:
             # Attempt to send it right away first.
             try:
                 n = os.write(self._fileno, data)
@@ -247,11 +267,14 @@ class _UnixWritePipeTransport(transports.WriteTransport):
                 return
             elif n > 0:
                 data = data[n:]
-            self._event_loop.add_writer(self._fileno, self._write_ready)
+            self._loop.add_writer(self._fileno, self._write_ready)
 
         self._buffer.append(data)
 
     def _write_ready(self):
+        if not self._writing:
+            return
+
         data = b''.join(self._buffer)
         assert data, 'Data should not be empty'
 
@@ -265,8 +288,10 @@ class _UnixWritePipeTransport(transports.WriteTransport):
             self._fatal_error(exc)
         else:
             if n == len(data):
-                self._event_loop.remove_writer(self._fileno)
+                self._loop.remove_writer(self._fileno)
                 if self._closing:
+                    if self._enable_read_hack:
+                        self._loop.remove_reader(self._fileno)
                     self._call_connection_lost(None)
                 return
             elif n > 0:
@@ -282,7 +307,9 @@ class _UnixWritePipeTransport(transports.WriteTransport):
         assert self._pipe
         self._closing = True
         if not self._buffer:
-            self._event_loop.call_soon(self._call_connection_lost, None)
+            if self._enable_read_hack:
+                self._loop.remove_reader(self._fileno)
+            self._loop.call_soon(self._call_connection_lost, None)
 
     def close(self):
         if not self._closing:
@@ -300,11 +327,30 @@ class _UnixWritePipeTransport(transports.WriteTransport):
     def _close(self, exc=None):
         self._closing = True
         self._buffer.clear()
-        self._event_loop.remove_writer(self._fileno)
-        self._event_loop.call_soon(self._call_connection_lost, exc)
+        self._loop.remove_writer(self._fileno)
+        if self._enable_read_hack:
+            self._loop.remove_reader(self._fileno)
+        self._loop.call_soon(self._call_connection_lost, exc)
 
     def _call_connection_lost(self, exc):
         try:
             self._protocol.connection_lost(exc)
         finally:
             self._pipe.close()
+
+    def pause_writing(self):
+        if self._writing:
+            if self._buffer:
+                self._loop.remove_writer(self._fileno)
+            self._writing = False
+
+    def resume_writing(self):
+        if not self._writing:
+            if self._buffer:
+                self._loop.add_writer(self._fileno, self._write_ready)
+            self._writing = True
+
+    def discard_output(self):
+        if self._buffer:
+            self._loop.remove_writer(self._fileno)
+            self._buffer.clear()

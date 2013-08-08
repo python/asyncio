@@ -27,21 +27,26 @@ else:
 # Return a write-only transport wrapping a writable pipe
 #
 
+@tulip.coroutine
 def connect_write_pipe(file):
     loop = tulip.get_event_loop()
     protocol = protocols.Protocol()
-    return loop._make_write_pipe_transport(file, protocol)
+    transport, _ =  yield from loop.connect_write_pipe(tulip.Protocol, file)
+    return transport
 
 #
 # Wrap a readable pipe in a stream
 #
 
+@tulip.coroutine
 def connect_read_pipe(file):
     loop = tulip.get_event_loop()
     stream_reader = streams.StreamReader(loop=loop)
-    protocol = streams.StreamReaderProtocol(stream_reader)
-    transport = loop._make_read_pipe_transport(file, protocol)
-    return stream_reader
+    def factory():
+        return streams.StreamReaderProtocol(stream_reader)
+    transport, _ = yield from loop.connect_read_pipe(factory, file)
+    return stream_reader, transport
+
 
 #
 # Example
@@ -76,9 +81,10 @@ def main(loop):
     # start subprocess and wrap stdin, stdout, stderr
     p = Popen([sys.executable, '-c', code],
               stdin=PIPE, stdout=PIPE, stderr=PIPE)
-    stdin = connect_write_pipe(p.stdin)
-    stdout = connect_read_pipe(p.stdout)
-    stderr = connect_read_pipe(p.stderr)
+
+    stdin = yield from connect_write_pipe(p.stdin)
+    stdout, stdout_transport = yield from connect_read_pipe(p.stdout)
+    stderr, stderr_transport = yield from connect_read_pipe(p.stderr)
 
     # interact with subprocess
     name = {stdout:'OUT', stderr:'ERR'}
@@ -108,6 +114,8 @@ def main(loop):
                     registered[tulip.Task(stream.readline())] = stream
             timeout = 0.0
 
+    stdout_transport.close()
+    stderr_transport.close()
 
 if __name__ == '__main__':
     if sys.platform == 'win32':

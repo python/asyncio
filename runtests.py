@@ -40,6 +40,9 @@ ARGS.add_argument(
 ARGS.add_argument(
     '-x', action="store_true", dest='exclude', help='exclude tests')
 ARGS.add_argument(
+    '-f', '--failfast', action="store_true", default=False,
+    dest='failfast', help='Stop on first fail or error')
+ARGS.add_argument(
     '-q', action="store_true", dest='quiet', help='quiet')
 ARGS.add_argument(
     '--tests', action="store", dest='testsdir', default='tests',
@@ -138,6 +141,7 @@ def runtests():
         includes = args.pattern
 
     v = 0 if args.quiet else args.verbose + 1
+    failfast = args.failfast
 
     tests = load_tests(args.testsdir, includes, excludes)
     logger = logging.getLogger()
@@ -151,7 +155,7 @@ def runtests():
         logger.setLevel(logging.INFO)
     elif v >= 4:
         logger.setLevel(logging.DEBUG)
-    result = unittest.TextTestRunner(verbosity=v).run(tests)
+    result = unittest.TextTestRunner(verbosity=v, failfast=failfast).run(tests)
     sys.exit(not result.wasSuccessful())
 
 

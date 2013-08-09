@@ -941,8 +941,8 @@ class EventLoopTestsMixin:
         r.close()
         w.close()
 
-    @unittest.skipUnless(sys.platform != 'win32',
-                         "Don't support subprocess for Windows yet")
+    @unittest.skipIf(sys.platform == 'win32',
+                     "Don't support subprocess for Windows yet")
     def test_subprocess_exec(self):
         proto = None
         transp = None
@@ -967,8 +967,8 @@ class EventLoopTestsMixin:
         self.assertEqual(0, proto.returncode)
         self.assertEqual(b'PYTHON THE WINNER', proto.data[1])
 
-    @unittest.skipUnless(sys.platform != 'win32',
-                         "Don't support subprocess for Windows yet")
+    @unittest.skipIf(sys.platform == 'win32',
+                     "Don't support subprocess for Windows yet")
     def test_subprocess_interactive(self):
         proto = None
         transp = None
@@ -1003,7 +1003,7 @@ class EventLoopTestsMixin:
         self.loop.run_until_complete(proto.completed)
         self.assertEqual(-signal.SIGTERM, proto.returncode)
 
-    @unittest.skipUnless(sys.platform != 'win32',
+    @unittest.skipIf(sys.platform == 'win32',
                          "Don't support subprocess for Windows yet")
     def test_subprocess_shell(self):
         proto = None
@@ -1026,8 +1026,8 @@ class EventLoopTestsMixin:
         self.assertTrue(all(f.done() for f in proto.disconnects.values()))
         self.assertEqual({1: b'Python\n', 2: b''}, proto.data)
 
-    @unittest.skipUnless(sys.platform != 'win32',
-                         "Don't support subprocess for Windows yet")
+    @unittest.skipIf(sys.platform == 'win32',
+                     "Don't support subprocess for Windows yet")
     def test_subprocess_exitcode(self):
         proto = None
         transp = None

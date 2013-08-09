@@ -26,7 +26,6 @@ class FutureTests(unittest.TestCase):
     def test_initial_state(self):
         f = futures.Future(loop=self.loop)
         self.assertFalse(f.cancelled())
-        self.assertFalse(f.running())
         self.assertFalse(f.done())
         f.cancel()
         self.assertTrue(f.cancelled())
@@ -47,7 +46,6 @@ class FutureTests(unittest.TestCase):
         f = futures.Future(loop=self.loop)
         self.assertTrue(f.cancel())
         self.assertTrue(f.cancelled())
-        self.assertFalse(f.running())
         self.assertTrue(f.done())
         self.assertRaises(futures.CancelledError, f.result)
         self.assertRaises(futures.CancelledError, f.exception)
@@ -62,7 +60,6 @@ class FutureTests(unittest.TestCase):
 
         f.set_result(42)
         self.assertFalse(f.cancelled())
-        self.assertFalse(f.running())
         self.assertTrue(f.done())
         self.assertEqual(f.result(), 42)
         self.assertEqual(f.exception(), None)
@@ -78,7 +75,6 @@ class FutureTests(unittest.TestCase):
 
         f.set_exception(exc)
         self.assertFalse(f.cancelled())
-        self.assertFalse(f.running())
         self.assertTrue(f.done())
         self.assertRaises(RuntimeError, f.result)
         self.assertEqual(f.exception(), exc)

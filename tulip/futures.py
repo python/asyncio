@@ -209,13 +209,7 @@ class Future:
         """Return True if the future was cancelled."""
         return self._state == _CANCELLED
 
-    def running(self):
-        """Always return False.
-
-        This method is for compatibility with concurrent.futures; we don't
-        have a running state.
-        """
-        return False  # We don't have a running state.
+    # Don't implement running(); see http://bugs.python.org/issue18699
 
     def done(self):
         """Return True if the future is done.

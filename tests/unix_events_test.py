@@ -233,7 +233,9 @@ class UnixReadPipeTransportTests(unittest.TestCase):
 
         m_read.assert_called_with(5, tr.max_size)
         self.loop.remove_reader.assert_called_with(5)
-        self.protocol.eof_received.assert_called_with()
+        self.loop.call_soon.assert_has_calls([
+            unittest.mock.call(self.protocol.eof_received),
+            unittest.mock.call(tr._call_connection_lost, None)])
 
     @unittest.mock.patch('os.read')
     def test__read_ready_blocked(self, m_read):

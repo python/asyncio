@@ -76,3 +76,25 @@ class DatagramProtocol(BaseProtocol):
 
     def connection_refused(self, exc):
         """Connection is refused."""
+
+
+class SubprocessProtocol(BaseProtocol):
+    """ABC representing a protocol for subprocess calls."""
+
+    def pipe_data_received(self, fd, data):
+        """Called when subprocess write a data into stdout/stderr pipes.
+
+        fd is int file dascriptor.
+        data is bytes object.
+        """
+
+    def pipe_connection_lost(self, fd, exc):
+        """Called when a file descriptor associated with the child process is
+        closed.
+
+        fd is the int file descriptor that was closed.
+        """
+
+    def process_exited(self):
+        """Called when subprocess has exited.
+        """

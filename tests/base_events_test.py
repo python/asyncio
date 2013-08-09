@@ -20,7 +20,7 @@ class BaseEventLoopTests(unittest.TestCase):
         self.loop = base_events.BaseEventLoop()
         self.loop._selector = unittest.mock.Mock()
         self.loop._selector.registered_count.return_value = 1
-        events.set_event_loop(self.loop)
+        events.set_event_loop(None)
 
     def test_not_implemented(self):
         m = unittest.mock.Mock()
@@ -314,7 +314,7 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
 
     def setUp(self):
         self.loop = events.new_event_loop()
-        events.set_event_loop(self.loop)
+        events.set_event_loop(None)
 
     def tearDown(self):
         self.loop.close()
@@ -331,6 +331,9 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
             return [(2, 1, 6, '', ('107.6.106.82', 80)),
                     (2, 1, 6, '', ('107.6.106.82', 80))]
 
+        def getaddrinfo_task(*args, **kwds):
+            return tasks.Task(getaddrinfo(*args, **kwds), loop=self.loop)
+
         idx = -1
         errors = ['err1', 'err2']
 
@@ -342,7 +345,7 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
         m_socket.socket = _socket
         m_socket.error = socket.error
 
-        self.loop.getaddrinfo = getaddrinfo
+        self.loop.getaddrinfo = getaddrinfo_task
 
         task = tasks.Task(
             self.loop.create_connection(MyProto, 'example.com', 80))
@@ -360,20 +363,24 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
         self.assertRaises(ValueError, self.loop.run_until_complete, coro)
 
     def test_create_connection_no_getaddrinfo(self):
-        @tasks.task
+        @tasks.coroutine
         def getaddrinfo(*args, **kw):
             yield from []
-        self.loop.getaddrinfo = getaddrinfo
+        def getaddrinfo_task(*args, **kwds):
+            return tasks.Task(getaddrinfo(*args, **kwds), loop=self.loop)
+        self.loop.getaddrinfo = getaddrinfo_task
         coro = self.loop.create_connection(MyProto, 'example.com', 80)
         self.assertRaises(
             socket.error, self.loop.run_until_complete, coro)
 
     def test_create_connection_connect_err(self):
-        @tasks.task
+        @tasks.coroutine
         def getaddrinfo(*args, **kw):
             yield from []
             return [(2, 1, 6, '', ('107.6.106.82', 80))]
-        self.loop.getaddrinfo = getaddrinfo
+        def getaddrinfo_task(*args, **kwds):
+            return tasks.Task(getaddrinfo(*args, **kwds), loop=self.loop)
+        self.loop.getaddrinfo = getaddrinfo_task
         self.loop.sock_connect = unittest.mock.Mock()
         self.loop.sock_connect.side_effect = socket.error
 
@@ -381,12 +388,14 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
         self.assertRaises(
             socket.error, self.loop.run_until_complete, coro)
 
-    def test_create_connection_mutiple(self):
-        @tasks.task
+    def test_create_connection_multiple(self):
+        @tasks.coroutine
         def getaddrinfo(*args, **kw):
             return [(2, 1, 6, '', ('0.0.0.1', 80)),
                     (2, 1, 6, '', ('0.0.0.2', 80))]
-        self.loop.getaddrinfo = getaddrinfo
+        def getaddrinfo_task(*args, **kwds):
+            return tasks.Task(getaddrinfo(*args, **kwds), loop=self.loop)
+        self.loop.getaddrinfo = getaddrinfo_task
         self.loop.sock_connect = unittest.mock.Mock()
         self.loop.sock_connect.side_effect = socket.error
 
@@ -407,11 +416,13 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
 
         m_socket.socket.return_value.bind = bind
 
-        @tasks.task
+        @tasks.coroutine
         def getaddrinfo(*args, **kw):
             return [(2, 1, 6, '', ('0.0.0.1', 80)),
                     (2, 1, 6, '', ('0.0.0.2', 80))]
-        self.loop.getaddrinfo = getaddrinfo
+        def getaddrinfo_task(*args, **kwds):
+            return tasks.Task(getaddrinfo(*args, **kwds), loop=self.loop)
+        self.loop.getaddrinfo = getaddrinfo_task
         self.loop.sock_connect = unittest.mock.Mock()
         self.loop.sock_connect.side_effect = socket.error('Err2')
 
@@ -425,14 +436,16 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
         self.assertTrue(m_socket.socket.return_value.close.called)
 
     def test_create_connection_no_local_addr(self):
-        @tasks.task
+        @tasks.coroutine
         def getaddrinfo(host, *args, **kw):
             if host == 'example.com':
                 return [(2, 1, 6, '', ('107.6.106.82', 80)),
                         (2, 1, 6, '', ('107.6.106.82', 80))]
             else:
                 return []
-        self.loop.getaddrinfo = getaddrinfo
+        def getaddrinfo_task(*args, **kwds):
+            return tasks.Task(getaddrinfo(*args, **kwds), loop=self.loop)
+        self.loop.getaddrinfo = getaddrinfo_task
 
         coro = self.loop.create_connection(
             MyProto, 'example.com', 80, family=socket.AF_INET,
@@ -444,13 +457,16 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
         # if host is empty string use None instead
         host = object()
 
-        @tasks.task
+        @tasks.coroutine
         def getaddrinfo(*args, **kw):
             nonlocal host
             host = args[0]
             yield from []
 
-        self.loop.getaddrinfo = getaddrinfo
+        def getaddrinfo_task(*args, **kwds):
+            return tasks.Task(getaddrinfo(*args, **kwds), loop=self.loop)
+
+        self.loop.getaddrinfo = getaddrinfo_task
         fut = self.loop.start_serving(MyProto, '', 0)
         self.assertRaises(OSError, self.loop.run_until_complete, fut)
         self.assertIsNone(host)

@@ -22,6 +22,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
         # just in case if we have transport close callbacks
         test_utils.run_briefly(self.loop)
 
+        tulip.set_event_loop(None)
         self.loop.close()
         gc.collect()
 

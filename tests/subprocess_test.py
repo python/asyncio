@@ -15,10 +15,10 @@ from tulip import subprocess_transport
 
 class MyProto(protocols.Protocol):
 
-    def __init__(self):
+    def __init__(self, loop):
         self.state = 'INITIAL'
         self.nbytes = 0
-        self.done = futures.Future()
+        self.done = futures.Future(loop=loop)
 
     def connection_made(self, transport):
         self.transport = transport
@@ -46,14 +46,15 @@ class FutureTests(unittest.TestCase):
 
     def setUp(self):
         self.loop = events.new_event_loop()
-        events.set_event_loop(self.loop)
+        events.set_event_loop(None)
 
     def tearDown(self):
         self.loop.close()
 
     def test_unix_subprocess(self):
-        p = MyProto()
-        subprocess_transport.UnixSubprocessTransport(p, ['/bin/ls', '-lR'])
+        p = MyProto(self.loop)
+        subprocess_transport.UnixSubprocessTransport(p, ['/bin/ls', '-lR'],
+                                                     loop=self.loop)
         self.loop.run_until_complete(p.done)
 
 

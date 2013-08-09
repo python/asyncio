@@ -32,10 +32,11 @@ else:
 
 
 def run_briefly(loop):
-    @tulip.task
+    @tulip.coroutine
     def once():
         pass
-    loop.run_until_complete(once())
+    t = tulip.Task(once(), loop=loop)
+    loop.run_until_complete(t)
 
 
 def run_once(loop):

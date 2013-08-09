@@ -22,6 +22,7 @@ class HttpSessionTests(unittest.TestCase):
         self.response = HttpResponse('get', 'http://python.org')
 
     def tearDown(self):
+        tulip.set_event_loop(None)
         self.loop.close()
 
     def test_del(self):

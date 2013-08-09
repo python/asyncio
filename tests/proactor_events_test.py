@@ -17,7 +17,7 @@ class ProactorSocketTransportTests(unittest.TestCase):
         self.protocol = unittest.mock.Mock(tulip.Protocol)
 
     def test_ctor(self):
-        fut = tulip.Future()
+        fut = tulip.Future(loop=self.loop)
         tr = _ProactorSocketTransport(
             self.loop, self.sock, self.protocol, fut)
         self.loop.call_soon.mock_calls[0].assert_called_with(tr._loop_reading)
@@ -34,7 +34,7 @@ class ProactorSocketTransportTests(unittest.TestCase):
         self.assertFalse(self.protocol.eof_received.called)
 
     def test_loop_reading_data(self):
-        res = tulip.Future()
+        res = tulip.Future(loop=self.loop)
         res.set_result(b'data')
 
         tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
@@ -45,7 +45,7 @@ class ProactorSocketTransportTests(unittest.TestCase):
         self.protocol.data_received.assert_called_with(b'data')
 
     def test_loop_reading_no_data(self):
-        res = tulip.Future()
+        res = tulip.Future(loop=self.loop)
         res.set_result(b'')
 
         tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
@@ -150,7 +150,7 @@ class ProactorSocketTransportTests(unittest.TestCase):
         m_log.warning.assert_called_with('socket.send() raised exception.')
 
     def test_loop_writing_stop(self):
-        fut = tulip.Future()
+        fut = tulip.Future(loop=self.loop)
         fut.set_result(b'data')
 
         tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
@@ -159,7 +159,7 @@ class ProactorSocketTransportTests(unittest.TestCase):
         self.assertIsNone(tr._write_fut)
 
     def test_loop_writing_closing(self):
-        fut = tulip.Future()
+        fut = tulip.Future(loop=self.loop)
         fut.set_result(1)
 
         tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
@@ -377,7 +377,7 @@ class BaseProactorEventLoopTests(unittest.TestCase):
 
         # cancelled
         self.sock.reset_mock()
-        fut = tulip.Future()
+        fut = tulip.Future(loop=self.loop)
         fut.cancel()
         loop(fut)
         self.assertTrue(self.sock.close.called)

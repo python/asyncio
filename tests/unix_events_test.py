@@ -23,7 +23,7 @@ class SelectorEventLoopTests(unittest.TestCase):
 
     def setUp(self):
         self.loop = unix_events.SelectorEventLoop()
-        events.set_event_loop(self.loop)
+        events.set_event_loop(None)
 
     def tearDown(self):
         self.loop.close()
@@ -208,7 +208,7 @@ class UnixReadPipeTransportTests(unittest.TestCase):
             self.protocol.connection_made, tr)
 
     def test_ctor_with_waiter(self):
-        fut = futures.Future()
+        fut = futures.Future(loop=self.loop)
         unix_events._UnixReadPipeTransport(
             self.loop, self.pipe, self.protocol, fut)
         self.loop.call_soon.assert_called_with(fut.set_result, None)
@@ -353,7 +353,7 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         self.assertTrue(tr._enable_read_hack)
 
     def test_ctor_with_waiter(self):
-        fut = futures.Future()
+        fut = futures.Future(loop=self.loop)
         tr = unix_events._UnixWritePipeTransport(
             self.loop, self.pipe, self.protocol, fut)
         self.loop.call_soon.assert_called_with(fut.set_result, None)

@@ -14,7 +14,7 @@ class StreamReaderTests(unittest.TestCase):
 
     def setUp(self):
         self.loop = events.new_event_loop()
-        events.set_event_loop(self.loop)
+        events.set_event_loop(None)
 
     def tearDown(self):
         self.loop.close()
@@ -33,8 +33,12 @@ class StreamReaderTests(unittest.TestCase):
 
     def test_open_connection_no_loop_ssl(self):
         with test_utils.run_test_server(self.loop, use_ssl=True) as httpd:
-            f = streams.open_connection(*httpd.address, ssl=True)
-            reader, writer = self.loop.run_until_complete(f)
+            try:
+                events.set_event_loop(self.loop)
+                f = streams.open_connection(*httpd.address, ssl=True)
+                reader, writer = self.loop.run_until_complete(f)
+            finally:
+                events.set_event_loop(None)
             writer.write(b'GET / HTTP/1.0\r\n\r\n')
             f = reader.read()
             data = self.loop.run_until_complete(f)
@@ -42,7 +46,7 @@ class StreamReaderTests(unittest.TestCase):
 
     def test_open_connection_error(self):
         with test_utils.run_test_server(self.loop) as httpd:
-            f = streams.open_connection(*httpd.address)
+            f = streams.open_connection(*httpd.address, loop=self.loop)
             reader, writer = self.loop.run_until_complete(f)
             writer._protocol.connection_lost(ZeroDivisionError())
             f = reader.read()
@@ -311,7 +315,7 @@ class StreamReaderTests(unittest.TestCase):
         t1 = tasks.Task(stream.readline(), loop=self.loop)
         t2 = tasks.Task(set_err(), loop=self.loop)
 
-        self.loop.run_until_complete(tasks.wait([t1, t2]))
+        self.loop.run_until_complete(tasks.wait([t1, t2], loop=self.loop))
 
         self.assertRaises(ValueError, t1.result)
 

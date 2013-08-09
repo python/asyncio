@@ -29,6 +29,7 @@ class HttpWsgiServerProtocolTests(unittest.TestCase):
         self.payload.feed_eof()
 
     def tearDown(self):
+        tulip.set_event_loop(None)
         self.loop.close()
 
     def test_ctor(self):

@@ -253,7 +253,7 @@ class BaseEventLoop(events.AbstractEventLoop):
             else:
                 f2 = None
 
-            yield from tasks.wait(fs)
+            yield from tasks.wait(fs, loop=self)
 
             infos = f1.result()
             if not infos:
@@ -393,10 +393,40 @@ class BaseEventLoop(events.AbstractEventLoop):
             sock, protocol, r_addr, extra={'addr': l_addr})
         return transport, protocol
 
-    @tasks.task
-    def start_serving(self, protocol_factory, host=None, port=None, *,
-                      family=socket.AF_UNSPEC, flags=socket.AI_PASSIVE,
-                      sock=None, backlog=100, ssl=None, reuse_address=None):
+    # This returns a Task made from self._start_serving_internal().
+    # We want start_serving() to return a Task so that it will start
+    # running right away (when the event loop runs) even if the caller
+    # doesn't wait for it.  Note that this is different from
+    # e.g. create_connection(), or create_datagram_endpoint(), which
+    # are a "mere" coroutines and require their caller to wait for
+    # them.  The reason for the difference is that only
+    # start_serving() creates multiple transports and protocols.
+    def start_serving(self, protocol_factory, host=None, port=None,
+                      *,
+                      family=socket.AF_UNSPEC,
+                      flags=socket.AI_PASSIVE,
+                      sock=None,
+                      backlog=100,
+                      ssl=None,
+                      reuse_address=None):
+        coro = self._start_serving_internal(protocol_factory, host, port,
+                                            family=family,
+                                            flags=flags,
+                                            sock=sock,
+                                            backlog=backlog,
+                                            ssl=ssl,
+                                            reuse_address=reuse_address)
+        return tasks.Task(coro, loop=self)
+
+    @tasks.coroutine
+    def _start_serving_internal(self, protocol_factory, host=None, port=None,
+                                *,
+                                family=socket.AF_UNSPEC,
+                                flags=socket.AI_PASSIVE,
+                                sock=None,
+                                backlog=100,
+                                ssl=None,
+                                reuse_address=None):
         """XXX"""
         if host is not None or port is not None:
             if sock is not None:

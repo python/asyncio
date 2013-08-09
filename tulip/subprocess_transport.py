@@ -18,10 +18,12 @@ class UnixSubprocessTransport(transports.Transport):
     and something else that handles pipe setup, fork, and exec.
     """
 
-    def __init__(self, protocol, args):
+    def __init__(self, protocol, args, *, loop=None):
         self._protocol = protocol  # Not a factory! :-)
         self._args = args  # args[0] must be full path of binary.
-        self._event_loop = events.get_event_loop()
+        if loop is None:
+            loop = events.get_event_loop()
+        self._event_loop = loop
         self._buffer = []
         self._eof = False
         rstdin, self._wstdin = os.pipe()

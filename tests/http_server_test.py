@@ -16,6 +16,7 @@ class HttpServerProtocolTests(unittest.TestCase):
         tulip.set_event_loop(self.loop)
 
     def tearDown(self):
+        tulip.set_event_loop(None)
         self.loop.close()
 
     def test_http_error_exception(self):

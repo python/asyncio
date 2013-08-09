@@ -10,6 +10,7 @@ __all__ = ['AbstractEventLoopPolicy', 'DefaultEventLoopPolicy',
            'get_event_loop', 'set_event_loop', 'new_event_loop',
            ]
 
+import subprocess
 import sys
 import threading
 import socket
@@ -237,8 +238,15 @@ class AbstractEventLoop:
         # close fd in pipe transport then close f and vise versa.
         raise NotImplementedError
 
-    #def spawn_subprocess(self, protocol_factory, pipe):
-    #    raise NotImplementedError
+    def subprocess_shell(self, protocol_factory, cmd, *, stdin=subprocess.PIPE,
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                         **kwargs):
+        raise NotImplementedError
+
+    def subprocess_exec(self, protocol_factory, *args, stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                        **kwargs):
+        raise NotImplementedError
 
     # Ready-based callback registration methods.
     # The add_*() methods return None.

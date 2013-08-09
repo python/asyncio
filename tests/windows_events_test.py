@@ -30,9 +30,10 @@ class ProactorTests(unittest.TestCase):
 
     def setUp(self):
         self.loop = windows_events.ProactorEventLoop()
-        tulip.set_event_loop(self.loop)
+        tulip.set_event_loop(self.loop)  # TODO: Use None, test on Windows.
 
     def tearDown(self):
+        tulip.set_event_loop(None)
         self.loop.close()
 
     def test_pause_resume_discard(self):

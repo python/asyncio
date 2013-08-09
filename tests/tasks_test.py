@@ -23,7 +23,7 @@ class TaskTests(unittest.TestCase):
 
     def setUp(self):
         self.loop = events.new_event_loop()
-        events.set_event_loop(self.loop)
+        events.set_event_loop(None)
 
     def tearDown(self):
         self.loop.close()
@@ -32,7 +32,7 @@ class TaskTests(unittest.TestCase):
         @tasks.coroutine
         def notmuch():
             return 'ok'
-        t = tasks.Task(notmuch())
+        t = tasks.Task(notmuch(), loop=self.loop)
         self.loop.run_until_complete(t)
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'ok')
@@ -44,20 +44,20 @@ class TaskTests(unittest.TestCase):
         loop.close()
 
     def test_task_decorator(self):
-        @tasks.task
+        @tasks.coroutine
         def notmuch():
             yield from []
             return 'ko'
-        t = notmuch()
+        t = tasks.Task(notmuch(), loop=self.loop)
         self.loop.run_until_complete(t)
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'ko')
 
     def test_task_decorator_func(self):
-        @tasks.task
+        @tasks.coroutine
         def notmuch():
             return 'ko'
-        t = notmuch()
+        t = tasks.Task(notmuch(), loop=self.loop)
         self.loop.run_until_complete(t)
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'ko')
@@ -66,10 +66,10 @@ class TaskTests(unittest.TestCase):
         fut = futures.Future(loop=self.loop)
         fut.set_result('ko')
 
-        @tasks.task
+        @tasks.coroutine
         def notmuch():
             return fut
-        t = notmuch()
+        t = tasks.Task(notmuch(), loop=self.loop)
         self.loop.run_until_complete(t)
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'ko')
@@ -78,7 +78,7 @@ class TaskTests(unittest.TestCase):
         @tasks.coroutine
         def notmuch():
             return 'ok'
-        t = tasks.async(notmuch())
+        t = tasks.async(notmuch(), loop=self.loop)
         self.loop.run_until_complete(t)
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'ok')
@@ -108,7 +108,7 @@ class TaskTests(unittest.TestCase):
         @tasks.coroutine
         def notmuch():
             return 'ok'
-        t_orig = tasks.Task(notmuch())
+        t_orig = tasks.Task(notmuch(), loop=self.loop)
         t = tasks.async(t_orig)
         self.loop.run_until_complete(t)
         self.assertTrue(t.done())
@@ -126,12 +126,12 @@ class TaskTests(unittest.TestCase):
             tasks.async('ok')
 
     def test_task_repr(self):
-        @tasks.task
+        @tasks.coroutine
         def notmuch():
             yield from []
             return 'abc'
 
-        t = notmuch()
+        t = tasks.Task(notmuch(), loop=self.loop)
         t.add_done_callback(Dummy())
         self.assertEqual(repr(t), 'Task(<notmuch>)<PENDING, [Dummy()]>')
         t.cancel()  # Does not take immediate effect!
@@ -139,7 +139,7 @@ class TaskTests(unittest.TestCase):
         self.assertRaises(futures.CancelledError,
                           self.loop.run_until_complete, t)
         self.assertEqual(repr(t), 'Task(<notmuch>)<CANCELLED>')
-        t = notmuch()
+        t = tasks.Task(notmuch(), loop=self.loop)
         self.loop.run_until_complete(t)
         self.assertEqual(repr(t), "Task(<notmuch>)<result='abc'>")
 
@@ -156,21 +156,21 @@ class TaskTests(unittest.TestCase):
             def __repr__(self):
                 return super().__repr__()
 
-        t = MyTask(coro())
+        t = MyTask(coro(), loop=self.loop)
         self.assertEqual(repr(t), 'T[](<coro>)')
 
     def test_task_basics(self):
-        @tasks.task
+        @tasks.coroutine
         def outer():
             a = yield from inner1()
             b = yield from inner2()
             return a+b
 
-        @tasks.task
+        @tasks.coroutine
         def inner1():
             return 42
 
-        @tasks.task
+        @tasks.coroutine
         def inner2():
             return 1000
 
@@ -178,12 +178,12 @@ class TaskTests(unittest.TestCase):
         self.assertEqual(self.loop.run_until_complete(t), 1042)
 
     def test_cancel(self):
-        @tasks.task
+        @tasks.coroutine
         def task():
-            yield from tasks.sleep(10.0)
+            yield from tasks.sleep(10.0, loop=self.loop)
             return 12
 
-        t = task()
+        t = tasks.Task(task(), loop=self.loop)
         self.loop.call_soon(t.cancel)
         self.assertRaises(
             futures.CancelledError, self.loop.run_until_complete, t)
@@ -191,13 +191,13 @@ class TaskTests(unittest.TestCase):
         self.assertFalse(t.cancel())
 
     def test_cancel_yield(self):
-        @tasks.task
+        @tasks.coroutine
         def task():
             yield
             yield
             return 12
 
-        t = task()
+        t = tasks.Task(task(), loop=self.loop)
         test_utils.run_briefly(self.loop)  # start coro
         t.cancel()
         self.assertRaises(
@@ -210,7 +210,7 @@ class TaskTests(unittest.TestCase):
         fut2 = futures.Future(loop=self.loop)
         fut3 = futures.Future(loop=self.loop)
 
-        @tasks.task
+        @tasks.coroutine
         def task():
             yield from fut1
             try:
@@ -219,7 +219,7 @@ class TaskTests(unittest.TestCase):
                 pass
             yield from fut3
 
-        t = task()
+        t = tasks.Task(task(), loop=self.loop)
         test_utils.run_briefly(self.loop)
         fut1.set_result(None)
         t.cancel()
@@ -238,10 +238,10 @@ class TaskTests(unittest.TestCase):
     def test_future_timeout(self):
         @tasks.coroutine
         def coro():
-            yield from tasks.sleep(10.0)
+            yield from tasks.sleep(10.0, loop=self.loop)
             return 12
 
-        t = tasks.Task(coro(), timeout=0.1)
+        t = tasks.Task(coro(), timeout=0.1, loop=self.loop)
 
         self.assertRaises(
             futures.CancelledError,
@@ -252,7 +252,7 @@ class TaskTests(unittest.TestCase):
     def test_future_timeout_catch(self):
         @tasks.coroutine
         def coro():
-            yield from tasks.sleep(10.0)
+            yield from tasks.sleep(10.0, loop=self.loop)
             return 12
 
         class Cancelled(Exception):
@@ -261,7 +261,7 @@ class TaskTests(unittest.TestCase):
         @tasks.coroutine
         def coro2():
             try:
-                yield from tasks.Task(coro(), timeout=0.1)
+                yield from tasks.Task(coro(), timeout=0.1, loop=self.loop)
             except futures.CancelledError:
                 raise Cancelled()
 
@@ -274,7 +274,7 @@ class TaskTests(unittest.TestCase):
             t.cancel()
             return 12
 
-        t = tasks.Task(task())
+        t = tasks.Task(task(), loop=self.loop)
         self.assertRaises(
             futures.CancelledError, self.loop.run_until_complete, t)
         self.assertTrue(t.done())
@@ -287,12 +287,12 @@ class TaskTests(unittest.TestCase):
         def task():
             nonlocal x
             while x < 10:
-                yield from tasks.sleep(0.1)
+                yield from tasks.sleep(0.1, loop=self.loop)
                 x += 1
                 if x == 2:
                     self.loop.stop()
 
-        t = tasks.Task(task())
+        t = tasks.Task(task(), loop=self.loop)
         t0 = time.monotonic()
         self.assertRaises(
             RuntimeError, self.loop.run_until_complete, t)
@@ -302,12 +302,12 @@ class TaskTests(unittest.TestCase):
         self.assertEqual(x, 2)
 
     def test_timeout(self):
-        @tasks.task
+        @tasks.coroutine
         def task():
-            yield from tasks.sleep(10.0)
+            yield from tasks.sleep(10.0, loop=self.loop)
             return 42
 
-        t = task()
+        t = tasks.Task(task(), loop=self.loop)
         t0 = time.monotonic()
         self.assertRaises(
             futures.TimeoutError, self.loop.run_until_complete, t, 0.1)
@@ -316,12 +316,12 @@ class TaskTests(unittest.TestCase):
         self.assertTrue(0.08 <= t1-t0 <= 0.12)
 
     def test_timeout_not(self):
-        @tasks.task
+        @tasks.coroutine
         def task():
-            yield from tasks.sleep(0.1)
+            yield from tasks.sleep(0.1, loop=self.loop)
             return 42
 
-        t = task()
+        t = tasks.Task(task(), loop=self.loop)
         t0 = time.monotonic()
         r = self.loop.run_until_complete(t, 10.0)
         t1 = time.monotonic()
@@ -330,24 +330,24 @@ class TaskTests(unittest.TestCase):
         self.assertTrue(0.08 <= t1-t0 <= 0.12)
 
     def test_wait(self):
-        a = tasks.Task(tasks.sleep(0.1))
-        b = tasks.Task(tasks.sleep(0.15))
+        a = tasks.Task(tasks.sleep(0.1, loop=self.loop), loop=self.loop)
+        b = tasks.Task(tasks.sleep(0.15, loop=self.loop), loop=self.loop)
 
         @tasks.coroutine
         def foo():
-            done, pending = yield from tasks.wait([b, a])
+            done, pending = yield from tasks.wait([b, a], loop=self.loop)
             self.assertEqual(done, set([a, b]))
             self.assertEqual(pending, set())
             return 42
 
         t0 = time.monotonic()
-        res = self.loop.run_until_complete(tasks.Task(foo()))
+        res = self.loop.run_until_complete(tasks.Task(foo(), loop=self.loop))
         t1 = time.monotonic()
         self.assertTrue(t1-t0 >= 0.14)
         self.assertEqual(res, 42)
         # Doing it again should take no time and exercise a different path.
         t0 = time.monotonic()
-        res = self.loop.run_until_complete(tasks.Task(foo()))
+        res = self.loop.run_until_complete(tasks.Task(foo(), loop=self.loop))
         t1 = time.monotonic()
         self.assertTrue(t1-t0 <= 0.01)
         # TODO: Test different return_when values.
@@ -355,17 +355,20 @@ class TaskTests(unittest.TestCase):
     def test_wait_errors(self):
         self.assertRaises(
             ValueError, self.loop.run_until_complete,
-            tasks.wait(set()))
+            tasks.wait(set(), loop=self.loop))
 
         self.assertRaises(
             ValueError, self.loop.run_until_complete,
-            tasks.wait([tasks.sleep(10.0)], return_when=-1))
+            tasks.wait([tasks.sleep(10.0, loop=self.loop)],
+                       return_when=-1, loop=self.loop))
 
     def test_wait_first_completed(self):
-        a = tasks.Task(tasks.sleep(10.0))
-        b = tasks.Task(tasks.sleep(0.1))
-        task = tasks.Task(tasks.wait(
-            [b, a], return_when=tasks.FIRST_COMPLETED))
+        a = tasks.Task(tasks.sleep(10.0, loop=self.loop), loop=self.loop)
+        b = tasks.Task(tasks.sleep(0.1, loop=self.loop), loop=self.loop)
+        task = tasks.Task(
+            tasks.wait([b, a], return_when=tasks.FIRST_COMPLETED,
+                       loop=self.loop),
+            loop=self.loop)
 
         done, pending = self.loop.run_until_complete(task)
         self.assertEqual({b}, done)
@@ -387,10 +390,12 @@ class TaskTests(unittest.TestCase):
             yield
             yield
 
-        a = tasks.Task(coro1())
-        b = tasks.Task(coro2())
+        a = tasks.Task(coro1(), loop=self.loop)
+        b = tasks.Task(coro2(), loop=self.loop)
         task = tasks.Task(
-            tasks.wait([b, a], return_when=tasks.FIRST_COMPLETED))
+            tasks.wait([b, a], return_when=tasks.FIRST_COMPLETED,
+                       loop=self.loop),
+            loop=self.loop)
 
         done, pending = self.loop.run_until_complete(task)
         self.assertEqual({a, b}, done)
@@ -401,15 +406,17 @@ class TaskTests(unittest.TestCase):
 
     def test_wait_first_exception(self):
         # first_exception, task already has exception
-        a = tasks.Task(tasks.sleep(10.0))
+        a = tasks.Task(tasks.sleep(10.0, loop=self.loop), loop=self.loop)
 
         @tasks.coroutine
         def exc():
             raise ZeroDivisionError('err')
 
-        b = tasks.Task(exc())
-        task = tasks.Task(tasks.wait(
-            [b, a], return_when=tasks.FIRST_EXCEPTION))
+        b = tasks.Task(exc(), loop=self.loop)
+        task = tasks.Task(
+            tasks.wait([b, a], return_when=tasks.FIRST_EXCEPTION,
+                       loop=self.loop),
+            loop=self.loop)
 
         done, pending = self.loop.run_until_complete(task)
         self.assertEqual({b}, done)
@@ -417,69 +424,71 @@ class TaskTests(unittest.TestCase):
 
     def test_wait_first_exception_in_wait(self):
         # first_exception, exception during waiting
-        a = tasks.Task(tasks.sleep(10.0))
+        a = tasks.Task(tasks.sleep(10.0, loop=self.loop), loop=self.loop)
 
         @tasks.coroutine
         def exc():
-            yield from tasks.sleep(0.01)
+            yield from tasks.sleep(0.01, loop=self.loop)
             raise ZeroDivisionError('err')
 
-        b = tasks.Task(exc())
-        task = tasks.wait([b, a], return_when=tasks.FIRST_EXCEPTION)
+        b = tasks.Task(exc(), loop=self.loop)
+        task = tasks.wait([b, a], return_when=tasks.FIRST_EXCEPTION,
+                          loop=self.loop)
 
         done, pending = self.loop.run_until_complete(task)
         self.assertEqual({b}, done)
         self.assertEqual({a}, pending)
 
     def test_wait_with_exception(self):
-        a = tasks.Task(tasks.sleep(0.1))
+        a = tasks.Task(tasks.sleep(0.1, loop=self.loop), loop=self.loop)
 
         @tasks.coroutine
         def sleeper():
-            yield from tasks.sleep(0.15)
+            yield from tasks.sleep(0.15, loop=self.loop)
             raise ZeroDivisionError('really')
 
-        b = tasks.Task(sleeper())
+        b = tasks.Task(sleeper(), loop=self.loop)
 
         @tasks.coroutine
         def foo():
-            done, pending = yield from tasks.wait([b, a])
+            done, pending = yield from tasks.wait([b, a], loop=self.loop)
             self.assertEqual(len(done), 2)
             self.assertEqual(pending, set())
             errors = set(f for f in done if f.exception() is not None)
             self.assertEqual(len(errors), 1)
 
         t0 = time.monotonic()
-        self.loop.run_until_complete(tasks.Task(foo()))
+        self.loop.run_until_complete(tasks.Task(foo(), loop=self.loop))
         t1 = time.monotonic()
         self.assertTrue(t1-t0 >= 0.14)
         t0 = time.monotonic()
-        self.loop.run_until_complete(tasks.Task(foo()))
+        self.loop.run_until_complete(tasks.Task(foo(), loop=self.loop))
         t1 = time.monotonic()
         self.assertTrue(t1-t0 <= 0.01)
 
     def test_wait_with_timeout(self):
-        a = tasks.Task(tasks.sleep(0.1))
-        b = tasks.Task(tasks.sleep(0.15))
+        a = tasks.Task(tasks.sleep(0.1, loop=self.loop), loop=self.loop)
+        b = tasks.Task(tasks.sleep(0.15, loop=self.loop), loop=self.loop)
 
         @tasks.coroutine
         def foo():
-            done, pending = yield from tasks.wait([b, a], timeout=0.11)
+            done, pending = yield from tasks.wait([b, a], timeout=0.11,
+                                                  loop=self.loop)
             self.assertEqual(done, set([a]))
             self.assertEqual(pending, set([b]))
 
         t0 = time.monotonic()
-        self.loop.run_until_complete(tasks.Task(foo()))
+        self.loop.run_until_complete(tasks.Task(foo(), loop=self.loop))
         t1 = time.monotonic()
         self.assertTrue(t1-t0 >= 0.1)
         self.assertTrue(t1-t0 <= 0.13)
 
     def test_wait_concurrent_complete(self):
-        a = tasks.Task(tasks.sleep(0.1))
-        b = tasks.Task(tasks.sleep(0.15))
+        a = tasks.Task(tasks.sleep(0.1, loop=self.loop), loop=self.loop)
+        b = tasks.Task(tasks.sleep(0.15, loop=self.loop), loop=self.loop)
 
         done, pending = self.loop.run_until_complete(
-            tasks.wait([b, a], timeout=0.1))
+            tasks.wait([b, a], timeout=0.1, loop=self.loop))
 
         self.assertEqual(done, set([a]))
         self.assertEqual(pending, set([b]))
@@ -487,7 +496,7 @@ class TaskTests(unittest.TestCase):
     def test_as_completed(self):
         @tasks.coroutine
         def sleeper(dt, x):
-            yield from tasks.sleep(dt)
+            yield from tasks.sleep(dt, loop=self.loop)
             return x
 
         a = sleeper(0.1, 'a')
@@ -497,12 +506,12 @@ class TaskTests(unittest.TestCase):
         @tasks.coroutine
         def foo():
             values = []
-            for f in tasks.as_completed([b, c, a]):
+            for f in tasks.as_completed([b, c, a], loop=self.loop):
                 values.append((yield from f))
             return values
 
         t0 = time.monotonic()
-        res = self.loop.run_until_complete(tasks.Task(foo()))
+        res = self.loop.run_until_complete(tasks.Task(foo(), loop=self.loop))
         t1 = time.monotonic()
         self.assertTrue(t1-t0 >= 0.14)
         self.assertTrue('a' in res[:2])
@@ -510,18 +519,18 @@ class TaskTests(unittest.TestCase):
         self.assertEqual(res[2], 'c')
         # Doing it again should take no time and exercise a different path.
         t0 = time.monotonic()
-        res = self.loop.run_until_complete(tasks.Task(foo()))
+        res = self.loop.run_until_complete(tasks.Task(foo(), loop=self.loop))
         t1 = time.monotonic()
         self.assertTrue(t1-t0 <= 0.01)
 
     def test_as_completed_with_timeout(self):
-        a = tasks.sleep(0.1, 'a')
-        b = tasks.sleep(0.15, 'b')
+        a = tasks.sleep(0.1, 'a', loop=self.loop)
+        b = tasks.sleep(0.15, 'b', loop=self.loop)
 
         @tasks.coroutine
         def foo():
             values = []
-            for f in tasks.as_completed([a, b], timeout=0.12):
+            for f in tasks.as_completed([a, b], timeout=0.12, loop=self.loop):
                 try:
                     v = yield from f
                     values.append((1, v))
@@ -530,7 +539,7 @@ class TaskTests(unittest.TestCase):
             return values
 
         t0 = time.monotonic()
-        res = self.loop.run_until_complete(tasks.Task(foo()))
+        res = self.loop.run_until_complete(tasks.Task(foo(), loop=self.loop))
         t1 = time.monotonic()
         self.assertTrue(t1-t0 >= 0.11)
         self.assertEqual(len(res), 2, res)
@@ -539,10 +548,10 @@ class TaskTests(unittest.TestCase):
         self.assertTrue(isinstance(res[1][1], futures.TimeoutError))
 
     def test_as_completed_reverse_wait(self):
-        a = tasks.sleep(0.05, 'a')
-        b = tasks.sleep(0.10, 'b')
+        a = tasks.sleep(0.05, 'a', loop=self.loop)
+        b = tasks.sleep(0.10, 'b', loop=self.loop)
         fs = {a, b}
-        futs = list(tasks.as_completed(fs))
+        futs = list(tasks.as_completed(fs, loop=self.loop))
         self.assertEqual(len(futs), 2)
         x = self.loop.run_until_complete(futs[1])
         self.assertEqual(x, 'a')
@@ -550,23 +559,23 @@ class TaskTests(unittest.TestCase):
         self.assertEqual(y, 'b')
 
     def test_as_completed_concurrent(self):
-        a = tasks.sleep(0.05, 'a')
-        b = tasks.sleep(0.05, 'b')
+        a = tasks.sleep(0.05, 'a', loop=self.loop)
+        b = tasks.sleep(0.05, 'b', loop=self.loop)
         fs = {a, b}
-        futs = list(tasks.as_completed(fs))
+        futs = list(tasks.as_completed(fs, loop=self.loop))
         self.assertEqual(len(futs), 2)
-        waiter = tasks.wait(futs)
+        waiter = tasks.wait(futs, loop=self.loop)
         done, pending = self.loop.run_until_complete(waiter)
         self.assertEqual(set(f.result() for f in done), {'a', 'b'})
 
     def test_sleep(self):
         @tasks.coroutine
         def sleeper(dt, arg):
-            yield from tasks.sleep(dt/2)
-            res = yield from tasks.sleep(dt/2, arg)
+            yield from tasks.sleep(dt/2, loop=self.loop)
+            res = yield from tasks.sleep(dt/2, arg, loop=self.loop)
             return res
 
-        t = tasks.Task(sleeper(0.1, 'yeah'))
+        t = tasks.Task(sleeper(0.1, 'yeah'), loop=self.loop)
         t0 = time.monotonic()
         self.loop.run_until_complete(t)
         t1 = time.monotonic()
@@ -575,7 +584,8 @@ class TaskTests(unittest.TestCase):
         self.assertEqual(t.result(), 'yeah')
 
     def test_sleep_cancel(self):
-        t = tasks.Task(tasks.sleep(10.0, 'yeah'))
+        t = tasks.Task(tasks.sleep(10.0, 'yeah', loop=self.loop),
+                       loop=self.loop)
 
         handle = None
         orig_call_later = self.loop.call_later
@@ -597,19 +607,19 @@ class TaskTests(unittest.TestCase):
     def test_task_cancel_sleeping_task(self):
         sleepfut = None
 
-        @tasks.task
+        @tasks.coroutine
         def sleep(dt):
             nonlocal sleepfut
-            sleepfut = tasks.sleep(dt)
+            sleepfut = tasks.sleep(dt, loop=self.loop)
             try:
                 time.monotonic()
                 yield from sleepfut
             finally:
                 time.monotonic()
 
-        @tasks.task
+        @tasks.coroutine
         def doit():
-            sleeper = sleep(5000)
+            sleeper = tasks.Task(sleep(5000), loop=self.loop)
             self.loop.call_later(0.1, sleeper.cancel)
             try:
                 time.monotonic()
@@ -629,14 +639,14 @@ class TaskTests(unittest.TestCase):
     def test_task_cancel_waiter_future(self):
         fut = futures.Future(loop=self.loop)
 
-        @tasks.task
+        @tasks.coroutine
         def coro():
             try:
                 yield from fut
             except futures.CancelledError:
                 pass
 
-        task = coro()
+        task = tasks.Task(coro(), loop=self.loop)
         test_utils.run_briefly(self.loop)
         self.assertIs(task._fut_waiter, fut)
 
@@ -651,7 +661,7 @@ class TaskTests(unittest.TestCase):
         def notmuch():
             return 'ko'
 
-        task = tasks.Task(notmuch())
+        task = tasks.Task(notmuch(), loop=self.loop)
         task.set_result('ok')
 
         self.assertRaises(AssertionError, task._step)
@@ -670,23 +680,23 @@ class TaskTests(unittest.TestCase):
         # If coroutine returns future, task waits on this future.
 
         class Fut(futures.Future):
-            def __init__(self, *args):
+            def __init__(self, *args, **kwds):
                 self.cb_added = False
-                super().__init__(*args)
+                super().__init__(*args, **kwds)
 
             def add_done_callback(self, fn):
                 self.cb_added = True
                 super().add_done_callback(fn)
 
-        fut = Fut()
+        fut = Fut(loop=self.loop)
         result = None
 
-        @tasks.task
+        @tasks.coroutine
         def wait_for_future():
             nonlocal result
             result = yield from fut
 
-        t = wait_for_future()
+        t = tasks.Task(wait_for_future(), loop=self.loop)
         test_utils.run_briefly(self.loop)
         self.assertTrue(fut.cb_added)
 
@@ -702,7 +712,7 @@ class TaskTests(unittest.TestCase):
         def notmutch():
             raise BaseException()
 
-        task = tasks.Task(notmutch())
+        task = tasks.Task(notmutch(), loop=self.loop)
         self.assertRaises(BaseException, task._step)
 
         self.assertTrue(task.done())
@@ -711,7 +721,7 @@ class TaskTests(unittest.TestCase):
     def test_baseexception_during_cancel(self):
         @tasks.coroutine
         def sleeper():
-            yield from tasks.sleep(10)
+            yield from tasks.sleep(10, loop=self.loop)
 
         @tasks.coroutine
         def notmutch():
@@ -720,7 +730,7 @@ class TaskTests(unittest.TestCase):
             except futures.CancelledError:
                 raise BaseException()
 
-        task = tasks.Task(notmutch())
+        task = tasks.Task(notmutch(), loop=self.loop)
         test_utils.run_briefly(self.loop)
 
         task.cancel()
@@ -749,7 +759,7 @@ class TaskTests(unittest.TestCase):
     def test_yield_vs_yield_from(self):
         fut = futures.Future(loop=self.loop)
 
-        @tasks.task
+        @tasks.coroutine
         def wait_for_future():
             yield fut
 
@@ -765,7 +775,7 @@ class TaskTests(unittest.TestCase):
         def coro():
             yield
 
-        @tasks.task
+        @tasks.coroutine
         def wait_for_future():
             yield coro()
 
@@ -798,8 +808,8 @@ class TaskTests(unittest.TestCase):
         def coro():
             fut.set_result('test')
 
-        t1 = tasks.Task(func())
-        t2 = tasks.Task(coro())
+        t1 = tasks.Task(func(), loop=self.loop)
+        t2 = tasks.Task(coro(), loop=self.loop)
         res = self.loop.run_until_complete(t1)
         self.assertEqual(res, 'test')
         self.assertIsNone(t2.result())

@@ -18,25 +18,33 @@ class FutureTests(unittest.TestCase):
 
     def setUp(self):
         self.loop = events.new_event_loop()
-        events.set_event_loop(self.loop)
+        events.set_event_loop(None)
 
     def tearDown(self):
         self.loop.close()
 
     def test_initial_state(self):
-        f = futures.Future()
+        f = futures.Future(loop=self.loop)
         self.assertFalse(f.cancelled())
         self.assertFalse(f.running())
         self.assertFalse(f.done())
         f.cancel()
         self.assertTrue(f.cancelled())
 
-    def test_init_event_loop_positional(self):
+    def test_init_constructor_default_loop(self):
+        try:
+            events.set_event_loop(self.loop)
+            f = futures.Future()
+            self.assertIs(f._loop, self.loop)
+        finally:
+            events.set_event_loop(None)
+
+    def test_constructor_positional(self):
         # Make sure Future does't accept a positional argument
         self.assertRaises(TypeError, futures.Future, 42)
 
     def test_cancel(self):
-        f = futures.Future()
+        f = futures.Future(loop=self.loop)
         self.assertTrue(f.cancel())
         self.assertTrue(f.cancelled())
         self.assertFalse(f.running())
@@ -48,7 +56,7 @@ class FutureTests(unittest.TestCase):
         self.assertFalse(f.cancel())
 
     def test_result(self):
-        f = futures.Future()
+        f = futures.Future(loop=self.loop)
         self.assertRaises(futures.InvalidStateError, f.result)
         self.assertRaises(futures.InvalidTimeoutError, f.result, 10)
 
@@ -64,7 +72,7 @@ class FutureTests(unittest.TestCase):
 
     def test_exception(self):
         exc = RuntimeError()
-        f = futures.Future()
+        f = futures.Future(loop=self.loop)
         self.assertRaises(futures.InvalidStateError, f.exception)
         self.assertRaises(futures.InvalidTimeoutError, f.exception, 10)
 
@@ -79,7 +87,7 @@ class FutureTests(unittest.TestCase):
         self.assertFalse(f.cancel())
 
     def test_yield_from_twice(self):
-        f = futures.Future()
+        f = futures.Future(loop=self.loop)
 
         def fixture():
             yield 'A'
@@ -97,32 +105,32 @@ class FutureTests(unittest.TestCase):
         self.assertEqual(next(g), ('C', 42))  # yield 'C', y.
 
     def test_repr(self):
-        f_pending = futures.Future()
+        f_pending = futures.Future(loop=self.loop)
         self.assertEqual(repr(f_pending), 'Future<PENDING>')
         f_pending.cancel()
 
-        f_cancelled = futures.Future()
+        f_cancelled = futures.Future(loop=self.loop)
         f_cancelled.cancel()
         self.assertEqual(repr(f_cancelled), 'Future<CANCELLED>')
 
-        f_result = futures.Future()
+        f_result = futures.Future(loop=self.loop)
         f_result.set_result(4)
         self.assertEqual(repr(f_result), 'Future<result=4>')
         self.assertEqual(f_result.result(), 4)
 
         exc = RuntimeError()
-        f_exception = futures.Future()
+        f_exception = futures.Future(loop=self.loop)
         f_exception.set_exception(exc)
         self.assertEqual(repr(f_exception), 'Future<exception=RuntimeError()>')
         self.assertIs(f_exception.exception(), exc)
 
-        f_few_callbacks = futures.Future()
+        f_few_callbacks = futures.Future(loop=self.loop)
         f_few_callbacks.add_done_callback(_fakefunc)
         self.assertIn('Future<PENDING, [<function _fakefunc',
                       repr(f_few_callbacks))
         f_few_callbacks.cancel()
 
-        f_many_callbacks = futures.Future()
+        f_many_callbacks = futures.Future(loop=self.loop)
         for i in range(20):
             f_many_callbacks.add_done_callback(_fakefunc)
         r = repr(f_many_callbacks)
@@ -133,31 +141,31 @@ class FutureTests(unittest.TestCase):
     def test_copy_state(self):
         # Test the internal _copy_state method since it's being directly
         # invoked in other modules.
-        f = futures.Future()
+        f = futures.Future(loop=self.loop)
         f.set_result(10)
 
-        newf = futures.Future()
+        newf = futures.Future(loop=self.loop)
         newf._copy_state(f)
         self.assertTrue(newf.done())
         self.assertEqual(newf.result(), 10)
 
-        f_exception = futures.Future()
+        f_exception = futures.Future(loop=self.loop)
         f_exception.set_exception(RuntimeError())
 
-        newf_exception = futures.Future()
+        newf_exception = futures.Future(loop=self.loop)
         newf_exception._copy_state(f_exception)
         self.assertTrue(newf_exception.done())
         self.assertRaises(RuntimeError, newf_exception.result)
 
-        f_cancelled = futures.Future()
+        f_cancelled = futures.Future(loop=self.loop)
         f_cancelled.cancel()
 
-        newf_cancelled = futures.Future()
+        newf_cancelled = futures.Future(loop=self.loop)
         newf_cancelled._copy_state(f_cancelled)
         self.assertTrue(newf_cancelled.cancelled())
 
     def test_iter(self):
-        fut = futures.Future()
+        fut = futures.Future(loop=self.loop)
 
         def coro():
             yield from fut
@@ -170,20 +178,20 @@ class FutureTests(unittest.TestCase):
 
     @unittest.mock.patch('tulip.futures.tulip_log')
     def test_tb_logger_abandoned(self, m_log):
-        fut = futures.Future()
+        fut = futures.Future(loop=self.loop)
         del fut
         self.assertFalse(m_log.error.called)
 
     @unittest.mock.patch('tulip.futures.tulip_log')
     def test_tb_logger_result_unretrieved(self, m_log):
-        fut = futures.Future()
+        fut = futures.Future(loop=self.loop)
         fut.set_result(42)
         del fut
         self.assertFalse(m_log.error.called)
 
     @unittest.mock.patch('tulip.futures.tulip_log')
     def test_tb_logger_result_retrieved(self, m_log):
-        fut = futures.Future()
+        fut = futures.Future(loop=self.loop)
         fut.set_result(42)
         fut.result()
         del fut
@@ -191,7 +199,7 @@ class FutureTests(unittest.TestCase):
 
     @unittest.mock.patch('tulip.futures.tulip_log')
     def test_tb_logger_exception_unretrieved(self, m_log):
-        fut = futures.Future()
+        fut = futures.Future(loop=self.loop)
         fut.set_exception(RuntimeError('boom'))
         del fut
         test_utils.run_briefly(self.loop)
@@ -199,7 +207,7 @@ class FutureTests(unittest.TestCase):
 
     @unittest.mock.patch('tulip.futures.tulip_log')
     def test_tb_logger_exception_retrieved(self, m_log):
-        fut = futures.Future()
+        fut = futures.Future(loop=self.loop)
         fut.set_exception(RuntimeError('boom'))
         fut.exception()
         del fut
@@ -207,7 +215,7 @@ class FutureTests(unittest.TestCase):
 
     @unittest.mock.patch('tulip.futures.tulip_log')
     def test_tb_logger_exception_result_retrieved(self, m_log):
-        fut = futures.Future()
+        fut = futures.Future(loop=self.loop)
         fut.set_exception(RuntimeError('boom'))
         self.assertRaises(RuntimeError, fut.result)
         del fut
@@ -219,13 +227,13 @@ class FutureTests(unittest.TestCase):
             return arg
         ex = concurrent.futures.ThreadPoolExecutor(1)
         f1 = ex.submit(run, 'oi')
-        f2 = futures.wrap_future(f1)
+        f2 = futures.wrap_future(f1, loop=self.loop)
         res = self.loop.run_until_complete(f2)
         self.assertIsInstance(f2, futures.Future)
         self.assertEqual(res, 'oi')
 
     def test_wrap_future_future(self):
-        f1 = futures.Future()
+        f1 = futures.Future(loop=self.loop)
         f2 = futures.wrap_future(f1)
         self.assertIs(f1, f2)
 

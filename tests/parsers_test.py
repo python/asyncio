@@ -14,7 +14,7 @@ class StreamBufferTests(unittest.TestCase):
 
     def setUp(self):
         self.loop = events.new_event_loop()
-        events.set_event_loop(self.loop)
+        events.set_event_loop(None)
 
     def tearDown(self):
         self.loop.close()
@@ -31,7 +31,7 @@ class StreamBufferTests(unittest.TestCase):
         stream = parsers.StreamBuffer()
 
         stream._parser = parsers.lines_parser()
-        buf = stream._parser_buffer = parsers.DataBuffer()
+        buf = stream._parser_buffer = parsers.DataBuffer(loop=self.loop)
 
         exc = ValueError()
         stream.set_exception(exc)
@@ -318,27 +318,27 @@ class DataBufferTests(unittest.TestCase):
 
     def setUp(self):
         self.loop = events.new_event_loop()
-        events.set_event_loop(self.loop)
+        events.set_event_loop(None)
 
     def tearDown(self):
         self.loop.close()
 
     def test_feed_data(self):
-        buffer = parsers.DataBuffer()
+        buffer = parsers.DataBuffer(loop=self.loop)
 
         item = object()
         buffer.feed_data(item)
         self.assertEqual([item], list(buffer._buffer))
 
     def test_feed_eof(self):
-        buffer = parsers.DataBuffer()
+        buffer = parsers.DataBuffer(loop=self.loop)
         buffer.feed_eof()
         self.assertTrue(buffer._eof)
 
     def test_read(self):
         item = object()
-        buffer = parsers.DataBuffer()
-        read_task = tasks.Task(buffer.read())
+        buffer = parsers.DataBuffer(loop=self.loop)
+        read_task = tasks.Task(buffer.read(), loop=self.loop)
 
         def cb():
             buffer.feed_data(item)
@@ -348,8 +348,8 @@ class DataBufferTests(unittest.TestCase):
         self.assertIs(item, data)
 
     def test_read_eof(self):
-        buffer = parsers.DataBuffer()
-        read_task = tasks.Task(buffer.read())
+        buffer = parsers.DataBuffer(loop=self.loop)
+        read_task = tasks.Task(buffer.read(), loop=self.loop)
 
         def cb():
             buffer.feed_eof()
@@ -360,7 +360,7 @@ class DataBufferTests(unittest.TestCase):
 
     def test_read_until_eof(self):
         item = object()
-        buffer = parsers.DataBuffer()
+        buffer = parsers.DataBuffer(loop=self.loop)
         buffer.feed_data(item)
         buffer.feed_eof()
 
@@ -371,7 +371,7 @@ class DataBufferTests(unittest.TestCase):
         self.assertIsNone(data)
 
     def test_read_exception(self):
-        buffer = parsers.DataBuffer()
+        buffer = parsers.DataBuffer(loop=self.loop)
         buffer.feed_data(object())
         buffer.set_exception(ValueError())
 
@@ -379,7 +379,7 @@ class DataBufferTests(unittest.TestCase):
             ValueError, self.loop.run_until_complete, buffer.read())
 
     def test_exception(self):
-        buffer = parsers.DataBuffer()
+        buffer = parsers.DataBuffer(loop=self.loop)
         self.assertIsNone(buffer.exception())
 
         exc = ValueError()
@@ -387,16 +387,16 @@ class DataBufferTests(unittest.TestCase):
         self.assertIs(buffer.exception(), exc)
 
     def test_exception_waiter(self):
-        buffer = parsers.DataBuffer()
+        buffer = parsers.DataBuffer(loop=self.loop)
 
         @tasks.coroutine
         def set_err():
             buffer.set_exception(ValueError())
 
-        t1 = tasks.Task(buffer.read())
-        t2 = tasks.Task(set_err())
+        t1 = tasks.Task(buffer.read(), loop=self.loop)
+        t2 = tasks.Task(set_err(), loop=self.loop)
 
-        self.loop.run_until_complete(tasks.wait([t1, t2]))
+        self.loop.run_until_complete(tasks.wait([t1, t2], loop=self.loop))
 
         self.assertRaises(ValueError, t1.result)
 
@@ -559,7 +559,7 @@ class ParserBuffer(unittest.TestCase):
         self.assertEqual(b'', bytes(buf))
 
     def test_lines_parser(self):
-        out = parsers.DataBuffer()
+        out = parsers.DataBuffer(loop=self.loop)
         buf = self._make_one()
         p = parsers.lines_parser()
         next(p)
@@ -579,7 +579,7 @@ class ParserBuffer(unittest.TestCase):
         self.assertEqual(bytes(buf), b'data')
 
     def test_chunks_parser(self):
-        out = parsers.DataBuffer()
+        out = parsers.DataBuffer(loop=self.loop)
         buf = self._make_one()
         p = parsers.chunks_parser(5)
         next(p)

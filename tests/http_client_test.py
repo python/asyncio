@@ -22,6 +22,7 @@ class HttpResponseTests(unittest.TestCase):
         self.response = HttpResponse('get', 'http://python.org')
 
     def tearDown(self):
+        tulip.set_event_loop(None)
         self.loop.close()
 
     def test_close(self):
@@ -49,6 +50,7 @@ class HttpRequestTests(unittest.TestCase):
         self.stream = tulip.StreamBuffer()
 
     def tearDown(self):
+        tulip.set_event_loop(None)
         self.loop.close()
 
     def test_method(self):

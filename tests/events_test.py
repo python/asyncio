@@ -31,11 +31,11 @@ from tulip import test_utils
 class MyProto(protocols.Protocol):
     done = None
 
-    def __init__(self, create_future=False):
+    def __init__(self, loop=None):
         self.state = 'INITIAL'
         self.nbytes = 0
-        if create_future:
-            self.done = futures.Future()
+        if loop is not None:
+            self.done = futures.Future(loop=loop)
 
     def connection_made(self, transport):
         self.transport = transport
@@ -61,11 +61,11 @@ class MyProto(protocols.Protocol):
 class MyDatagramProto(protocols.DatagramProtocol):
     done = None
 
-    def __init__(self, create_future=False):
+    def __init__(self, loop=None):
         self.state = 'INITIAL'
         self.nbytes = 0
-        if create_future:
-            self.done = futures.Future()
+        if loop is not None:
+            self.done = futures.Future(loop=loop)
 
     def connection_made(self, transport):
         self.transport = transport
@@ -89,12 +89,12 @@ class MyDatagramProto(protocols.DatagramProtocol):
 class MyReadPipeProto(protocols.Protocol):
     done = None
 
-    def __init__(self, create_future=False):
+    def __init__(self, loop=None):
         self.state = ['INITIAL']
         self.nbytes = 0
         self.transport = None
-        if create_future:
-            self.done = futures.Future()
+        if loop is not None:
+            self.done = futures.Future(loop=loop)
 
     def connection_made(self, transport):
         self.transport = transport
@@ -120,11 +120,11 @@ class MyReadPipeProto(protocols.Protocol):
 class MyWritePipeProto(protocols.Protocol):
     done = None
 
-    def __init__(self, create_future=False):
+    def __init__(self, loop=None):
         self.state = 'INITIAL'
         self.transport = None
-        if create_future:
-            self.done = futures.Future()
+        if loop is not None:
+            self.done = futures.Future(loop=loop)
 
     def connection_made(self, transport):
         self.transport = transport
@@ -143,7 +143,7 @@ class EventLoopTestsMixin:
     def setUp(self):
         super().setUp()
         self.loop = self.create_event_loop()
-        events.set_event_loop(self.loop)
+        events.set_event_loop(None)
 
     def tearDown(self):
         # just in case if we have transport close callbacks
@@ -168,22 +168,22 @@ class EventLoopTestsMixin:
 
     def test_run_until_complete(self):
         t0 = self.loop.time()
-        self.loop.run_until_complete(tasks.sleep(0.010))
+        self.loop.run_until_complete(tasks.sleep(0.010, loop=self.loop))
         t1 = self.loop.time()
         self.assertTrue(0.009 <= t1-t0 <= 0.018, t1-t0)
 
     def test_run_until_complete_stopped(self):
-        @tasks.task
+        @tasks.coroutine
         def cb():
             self.loop.stop()
-            yield from tasks.sleep(0.010)
+            yield from tasks.sleep(0.010, loop=self.loop)
         task = cb()
         self.assertRaises(RuntimeError,
                           self.loop.run_until_complete, task)
 
     def test_run_until_complete_timeout(self):
         t0 = self.loop.time()
-        task = tasks.async(tasks.sleep(0.020))
+        task = tasks.async(tasks.sleep(0.020, loop=self.loop), loop=self.loop)
         self.assertRaises(futures.TimeoutError,
                           self.loop.run_until_complete,
                           task, timeout=0.010)
@@ -432,7 +432,7 @@ class EventLoopTestsMixin:
     def test_create_connection(self):
         with test_utils.run_test_server(self.loop) as httpd:
             f = self.loop.create_connection(
-                lambda: MyProto(create_future=True), *httpd.address)
+                lambda: MyProto(loop=self.loop), *httpd.address)
             tr, pr = self.loop.run_until_complete(f)
             self.assertTrue(isinstance(tr, transports.Transport))
             self.assertTrue(isinstance(pr, protocols.Protocol))
@@ -460,7 +460,7 @@ class EventLoopTestsMixin:
                 assert False, 'Can not create socket.'
 
             f = self.loop.create_connection(
-                lambda: MyProto(create_future=True), sock=sock)
+                lambda: MyProto(loop=self.loop), sock=sock)
             tr, pr = self.loop.run_until_complete(f)
             self.assertTrue(isinstance(tr, transports.Transport))
             self.assertTrue(isinstance(pr, protocols.Protocol))
@@ -473,7 +473,7 @@ class EventLoopTestsMixin:
         with test_utils.run_test_server(
                 self.loop, use_ssl=True) as httpd:
             f = self.loop.create_connection(
-                lambda: MyProto(create_future=True), *httpd.address, ssl=True)
+                lambda: MyProto(loop=self.loop), *httpd.address, ssl=True)
             tr, pr = self.loop.run_until_complete(f)
             self.assertTrue(isinstance(tr, transports.Transport))
             self.assertTrue(isinstance(pr, protocols.Protocol))
@@ -488,7 +488,7 @@ class EventLoopTestsMixin:
         with test_utils.run_test_server(self.loop) as httpd:
             port = find_unused_port()
             f = self.loop.create_connection(
-                lambda: MyProto(create_future=True),
+                lambda: MyProto(loop=self.loop),
                 *httpd.address, local_addr=(httpd.address[0], port))
             tr, pr = self.loop.run_until_complete(f)
             expected = pr.transport.get_extra_info('socket').getsockname()[1]
@@ -498,7 +498,7 @@ class EventLoopTestsMixin:
     def test_create_connection_local_addr_in_use(self):
         with test_utils.run_test_server(self.loop) as httpd:
             f = self.loop.create_connection(
-                lambda: MyProto(create_future=True),
+                lambda: MyProto(loop=self.loop),
                 *httpd.address, local_addr=httpd.address)
             with self.assertRaises(socket.error) as cm:
                 self.loop.run_until_complete(f)
@@ -562,7 +562,7 @@ class EventLoopTestsMixin:
 
         def factory():
             nonlocal proto
-            proto = MyProto(create_future=True)
+            proto = MyProto(loop=self.loop)
             return proto
 
         here = os.path.dirname(__file__)
@@ -608,7 +608,7 @@ class EventLoopTestsMixin:
         self.loop.stop_serving(sock)
 
     def test_start_serving_sock(self):
-        proto = futures.Future()
+        proto = futures.Future(loop=self.loop)
 
         class TestMyProto(MyProto):
             def connection_made(self, transport):
@@ -650,7 +650,7 @@ class EventLoopTestsMixin:
 
     @unittest.skipUnless(socket.has_ipv6, 'IPv6 not supported')
     def test_start_serving_dual_stack(self):
-        f_proto = futures.Future()
+        f_proto = futures.Future(loop=self.loop)
 
         class TestMyProto(MyProto):
             def connection_made(self, transport):
@@ -667,7 +667,7 @@ class EventLoopTestsMixin:
         proto.transport.close()
         client.close()
 
-        f_proto = futures.Future()
+        f_proto = futures.Future(loop=self.loop)
         client = socket.socket(socket.AF_INET6)
         client.connect(('::1', port))
         client.send(b'xxx')
@@ -698,8 +698,8 @@ class EventLoopTestsMixin:
 
     def test_create_datagram_endpoint(self):
         class TestMyDatagramProto(MyDatagramProto):
-            def __init__(self):
-                super().__init__(create_future=True)
+            def __init__(inner_self):
+                super().__init__(loop=self.loop)
 
             def datagram_received(self, data, addr):
                 super().datagram_received(data, addr)
@@ -711,7 +711,7 @@ class EventLoopTestsMixin:
         host, port = s_transport.get_extra_info('addr')
 
         coro = self.loop.create_datagram_endpoint(
-            lambda: MyDatagramProto(create_future=True),
+            lambda: MyDatagramProto(loop=self.loop),
             remote_addr=(host, port))
         transport, client = self.loop.run_until_complete(coro)
 
@@ -753,13 +753,13 @@ class EventLoopTestsMixin:
 
         def factory():
             nonlocal proto
-            proto = MyReadPipeProto(create_future=True)
+            proto = MyReadPipeProto(loop=self.loop)
             return proto
 
         rpipe, wpipe = os.pipe()
         pipeobj = io.open(rpipe, 'rb', 1024)
 
-        @tasks.task
+        @tasks.coroutine
         def connect():
             t, p = yield from self.loop.connect_read_pipe(factory, pipeobj)
             self.assertIs(p, proto)
@@ -793,13 +793,13 @@ class EventLoopTestsMixin:
 
         def factory():
             nonlocal proto
-            proto = MyWritePipeProto(create_future=True)
+            proto = MyWritePipeProto(loop=self.loop)
             return proto
 
         rpipe, wpipe = os.pipe()
         pipeobj = io.open(wpipe, 'wb', 1024)
 
-        @tasks.task
+        @tasks.coroutine
         def connect():
             nonlocal transport
             t, p = yield from self.loop.connect_write_pipe(factory, pipeobj)
@@ -839,13 +839,13 @@ class EventLoopTestsMixin:
 
         def factory():
             nonlocal proto
-            proto = MyWritePipeProto(create_future=True)
+            proto = MyWritePipeProto(loop=self.loop)
             return proto
 
         rpipe, wpipe = os.pipe()
         pipeobj = io.open(wpipe, 'wb', 1024)
 
-        @tasks.task
+        @tasks.coroutine
         def connect():
             nonlocal transport
             t, p = yield from self.loop.connect_write_pipe(factory,
@@ -888,7 +888,7 @@ class EventLoopTestsMixin:
             return res
 
         start = time.monotonic()
-        t = tasks.Task(main(), timeout=1)
+        t = tasks.Task(main(), timeout=1, loop=self.loop)
         self.loop.run_forever()
         elapsed = time.monotonic() - start
 
@@ -1185,33 +1185,38 @@ class PolicyTests(unittest.TestCase):
         self.assertIs(loop, policy.get_event_loop())
         loop.close()
 
+    def test_get_event_loop_after_set_none(self):
+        policy = events.DefaultEventLoopPolicy()
+        policy.set_event_loop(None)
+        self.assertRaises(AssertionError, policy.get_event_loop)
+
     @unittest.mock.patch('tulip.events.threading')
     def test_get_event_loop_thread(self, m_threading):
         m_t = m_threading.current_thread.return_value = unittest.mock.Mock()
         m_t.name = 'Thread 1'
 
         policy = events.DefaultEventLoopPolicy()
-        self.assertIsNone(policy.get_event_loop())
+        self.assertRaises(AssertionError, policy.get_event_loop)
 
     def test_new_event_loop(self):
         policy = events.DefaultEventLoopPolicy()
 
-        event_loop = policy.new_event_loop()
-        self.assertIsInstance(event_loop, events.AbstractEventLoop)
-        event_loop.close()
+        loop = policy.new_event_loop()
+        self.assertIsInstance(loop, events.AbstractEventLoop)
+        loop.close()
 
     def test_set_event_loop(self):
         policy = events.DefaultEventLoopPolicy()
-        old_event_loop = policy.get_event_loop()
+        old_loop = policy.get_event_loop()
 
         self.assertRaises(AssertionError, policy.set_event_loop, object())
 
-        event_loop = policy.new_event_loop()
-        policy.set_event_loop(event_loop)
-        self.assertIs(event_loop, policy.get_event_loop())
-        self.assertIsNot(old_event_loop, policy.get_event_loop())
-        event_loop.close()
-        old_event_loop.close()
+        loop = policy.new_event_loop()
+        policy.set_event_loop(loop)
+        self.assertIs(loop, policy.get_event_loop())
+        self.assertIsNot(old_loop, policy.get_event_loop())
+        loop.close()
+        old_loop.close()
 
     def test_get_event_loop_policy(self):
         policy = events.get_event_loop_policy()

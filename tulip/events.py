@@ -172,9 +172,9 @@ class AbstractEventLoop:
     def start_serving(self, protocol_factory, host=None, port=None, *,
                       family=socket.AF_UNSPEC, flags=socket.AI_PASSIVE,
                       sock=None, backlog=100, ssl=None, reuse_address=None):
-        """Creates a TCP server bound to host and port and return
-        a list of socket objects which will later be handled by
-        protocol_factory.
+        """Creates a TCP server bound to host and port and return a
+        Task whose result will be a list of socket objects which will
+        later be handled by protocol_factory.
 
         If host is an empty string or None all interfaces are assumed
         and a list of multiple sockets will be returned (most likely
@@ -310,6 +310,7 @@ class DefaultEventLoopPolicy(threading.local, AbstractEventLoopPolicy):
     """
 
     _loop = None
+    _set_called = False
 
     def get_event_loop(self):
         """Get the event loop.
@@ -317,13 +318,18 @@ class DefaultEventLoopPolicy(threading.local, AbstractEventLoopPolicy):
         This may be None or an instance of EventLoop.
         """
         if (self._loop is None and
+            not self._set_called and
             threading.current_thread().name == 'MainThread'):
             self._loop = self.new_event_loop()
+        assert self._loop is not None, \
+               ('There is no current event loop in thread %r.' %
+                threading.current_thread().name)
         return self._loop
 
     def set_event_loop(self, loop):
         """Set the event loop."""
         # TODO: The isinstance() test violates the PEP.
+        self._set_called = True
         assert loop is None or isinstance(loop, AbstractEventLoop)
         self._loop = loop
 

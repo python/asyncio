@@ -178,9 +178,15 @@ class SelectorEventLoop(selector_events.BaseSelectorEventLoop):
                 pid, status = os.waitpid(0, os.WNOHANG)
                 if pid == 0:
                     break
+                if os.WIFSIGNALED(status):
+                    returncode = -os.WTERMSIG(status)
+                elif os.WIFEXITED(status):
+                    returncode = os.WEXITSTATUS(status)
+                else:
+                    break
                 transp = self._subprocesses.get(pid)
                 if transp is not None:
-                    transp._poll(status)
+                    transp._poll(returncode)
         except ChildProcessError:
             pass
 
@@ -450,8 +456,8 @@ class _UnixSubprocessTransport(transports.SubprocessTransport):
         if stderr == subprocess.PIPE:
             self._pipes[2] = None
         self._pending_calls = collections.deque()
-        self._exited = False
         self._done = False
+        self._returncode = None
 
         self._proc = subprocess.Popen(
             args, shell=shell, stdin=stdin, stdout=stdout, stderr=stderr,
@@ -464,13 +470,14 @@ class _UnixSubprocessTransport(transports.SubprocessTransport):
     def close(self):
         for proto in self._pipes.values():
             proto.pipe.close()
-        self.terminate()
+        if self._returncode is None:
+            self.terminate()
 
     def get_pid(self):
         return self._proc.pid
 
     def get_returncode(self):
-        return self._proc.returncode
+        return self._returncode
 
     def get_pipe_transport(self, fd):
         if fd in self._pipes:
@@ -525,17 +532,14 @@ class _UnixSubprocessTransport(transports.SubprocessTransport):
     def _pipe_data_received(self, fd, data):
         self._call(self._protocol.pipe_data_received, fd, data)
 
-    def _poll(self, status=None):
-        if not self._exited:
-            if status is None:
+    def _poll(self, returncode=None):
+        if self._returncode is None:
+            if returncode is None:
                 returncode = self._proc.poll()
-            else:
-                self._proc._handle_exitstatus(status)
-                returncode = self._proc.returncode
             if returncode is not None:
-                self._exited = True
+                self._returncode = returncode
                 self._call(self._protocol.process_exited)
-        if self._exited and not self._done:
+        if self._returncode is not None and not self._done:
             if all(p is not None and p.disconnected
                    for p in self._pipes.values()):
                 self._call(self._protocol.connection_lost, None)

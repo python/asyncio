@@ -175,14 +175,12 @@ class SelectorEventLoop(selector_events.BaseSelectorEventLoop):
         try:
             while True:
                 grp = os.getpgrp()
-                ret = os.waitid(os.P_PGID, grp,
-                                os.WNOHANG|os.WNOWAIT|os.WEXITED)
-                if ret is None:
+                pid, status = os.waitpid(0, os.WNOHANG)
+                if pid == 0:
                     break
-                pid = ret.si_pid
                 transp = self._subprocesses.get(pid)
                 if transp is not None:
-                    transp._poll()
+                    transp._poll(status)
         except ChildProcessError:
             pass
 
@@ -527,9 +525,13 @@ class _UnixSubprocessTransport(transports.SubprocessTransport):
     def _pipe_data_received(self, fd, data):
         self._call(self._protocol.pipe_data_received, fd, data)
 
-    def _poll(self):
+    def _poll(self, status=None):
         if not self._exited:
-            returncode = self._proc.poll()
+            if status is None:
+                returncode = self._proc.poll()
+            else:
+                self._proc._handle_exitstatus(status)
+                returncode = self._proc.returncode
             if returncode is not None:
                 self._exited = True
                 self._call(self._protocol.process_exited)

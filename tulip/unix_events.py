@@ -9,7 +9,6 @@ import socket
 import stat
 import subprocess
 import sys
-import weakref
 
 try:
     import signal
@@ -41,7 +40,7 @@ class SelectorEventLoop(selector_events.BaseSelectorEventLoop):
     def __init__(self, selector=None):
         super().__init__(selector)
         self._signal_handlers = {}
-        self._subprocesses = weakref.WeakValueDictionary()
+        self._subprocesses = {}
 
     def _socketpair(self):
         return socket.socketpair()
@@ -189,6 +188,11 @@ class SelectorEventLoop(selector_events.BaseSelectorEventLoop):
                     transp._poll(returncode)
         except ChildProcessError:
             pass
+
+    def _subprocess_closed(self, transport):
+        pid = transport.get_pid()
+        if self._subprocesses.get(pid):
+            del self._subprocesses[pid]
 
 
 def _set_nonblocking(fd):
@@ -538,6 +542,7 @@ class _UnixSubprocessTransport(transports.SubprocessTransport):
                 returncode = self._proc.poll()
             if returncode is not None:
                 self._returncode = returncode
+                self._loop._subprocess_closed(self)
                 self._call(self._protocol.process_exited)
         if self._returncode is not None and not self._done:
             if all(p is not None and p.disconnected

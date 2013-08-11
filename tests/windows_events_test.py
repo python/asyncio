@@ -9,7 +9,7 @@ from tulip import test_utils
 
 
 def connect_read_pipe(loop, file):
-    stream_reader = streams.StreamReader()
+    stream_reader = streams.StreamReader(loop=loop)
     protocol = _StreamReaderProtocol(stream_reader)
     transport = loop._make_read_pipe_transport(file, protocol)
     return stream_reader
@@ -30,22 +30,22 @@ class ProactorTests(unittest.TestCase):
 
     def setUp(self):
         self.loop = windows_events.ProactorEventLoop()
-        tulip.set_event_loop(self.loop)  # TODO: Use None, test on Windows.
+        tulip.set_event_loop(None)
 
     def tearDown(self):
-        tulip.set_event_loop(None)
         self.loop.close()
+        self.loop = None
 
     def test_pause_resume_discard(self):
         a, b = self.loop._socketpair()
         trans = self.loop._make_write_pipe_transport(a, protocols.Protocol())
         reader = connect_read_pipe(self.loop, b)
-        f = tulip.async(reader.readline())
+        f = tulip.async(reader.readline(), loop=self.loop)
 
         trans.write(b'msg1\n')
         self.loop.run_until_complete(f, timeout=0.01)
         self.assertEqual(f.result(), b'msg1\n')
-        f = tulip.async(reader.readline())
+        f = tulip.async(reader.readline(), loop=self.loop)
 
         trans.pause_writing()
         trans.write(b'msg2\n')
@@ -56,7 +56,7 @@ class ProactorTests(unittest.TestCase):
         trans.resume_writing()
         self.loop.run_until_complete(f, timeout=0.1)
         self.assertEqual(f.result(), b'msg2\n')
-        f = tulip.async(reader.readline())
+        f = tulip.async(reader.readline(), loop=self.loop)
 
         trans.pause_writing()
         trans.write(b'msg3\n')

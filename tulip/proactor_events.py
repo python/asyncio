@@ -195,6 +195,7 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
         tulip_log.debug('Using proactor: %s', proactor.__class__.__name__)
         self._proactor = proactor
         self._selector = proactor   # convenient alias
+        proactor.set_loop(self)
         self._make_self_pipe()
 
     def _make_socket_transport(self, sock, protocol, waiter=None, extra=None):

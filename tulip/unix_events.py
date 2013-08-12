@@ -537,8 +537,6 @@ class _UnixSubprocessTransport(transports.SubprocessTransport):
 
     def _process_exited(self, returncode):
         assert returncode is not None
-        if self._returncode is not None:
-            return
         self._returncode = returncode
         self._loop._subprocess_closed(self)
         self._call(self._protocol.process_exited)

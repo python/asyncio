@@ -171,28 +171,30 @@ class SelectorEventLoop(selector_events.BaseSelectorEventLoop):
                                     self._sig_chld)
 
     def _sig_chld(self):
-        try:
-            while True:
-                grp = os.getpgrp()
+        while True:
+            try:
                 pid, status = os.waitpid(0, os.WNOHANG)
-                if pid == 0:
-                    break
-                if os.WIFSIGNALED(status):
-                    returncode = -os.WTERMSIG(status)
-                elif os.WIFEXITED(status):
-                    returncode = os.WEXITSTATUS(status)
-                else:
-                    break
-                transp = self._subprocesses.get(pid)
-                if transp is not None:
-                    transp._process_exited(returncode)
-        except ChildProcessError:
-            pass
+            except ChildProcessError:
+                break
+            if pid == 0:
+                continue
+            elif os.WIFSIGNALED(status):
+                returncode = -os.WTERMSIG(status)
+            elif os.WIFEXITED(status):
+                returncode = os.WEXITSTATUS(status)
+            else:
+                # covered by
+                # SelectorEventLoopTests.test__sig_chld_unknown_status
+                # from tests/unix_events_test.py
+                # bug in coverage.py version 3.6 ???
+                continue  # pragma: no cover
+            transp = self._subprocesses.get(pid)
+            if transp is not None:
+                transp._process_exited(returncode)
 
     def _subprocess_closed(self, transport):
         pid = transport.get_pid()
-        if self._subprocesses.get(pid):
-            del self._subprocesses[pid]
+        self._subprocesses.pop(pid, None)
 
 
 def _set_nonblocking(fd):
@@ -426,7 +428,7 @@ class _UnixWriteSubprocessPipeProto(protocols.BaseProtocol):
     def connection_made(self, transport):
         self.connected = True
         self.pipe = transport
-        self.proc._pipe_connection_made(self.fd)
+        self.proc._try_connected()
 
     def connection_lost(self, exc):
         self.disconnected = True
@@ -467,9 +469,6 @@ class _UnixSubprocessTransport(transports.SubprocessTransport):
             args, shell=shell, stdin=stdin, stdout=stdout, stderr=stderr,
             universal_newlines=False, bufsize=bufsize, **kwargs)
         self._extra['subprocess'] = self._proc
-
-        if not self._pipes:
-            self._loop.call_soon(self._protocol.connection_made, self)
 
     def close(self):
         for proto in self._pipes.values():
@@ -514,6 +513,8 @@ class _UnixSubprocessTransport(transports.SubprocessTransport):
             transp, proto = yield from loop.connect_read_pipe(
                 functools.partial(_UnixReadSubprocessPipeProto, self, 2),
                 proc.stderr)
+        if not self._pipes:
+            self._try_connected()
 
     def _call(self, cb, *data):
         if self._pending_calls is not None:
@@ -521,7 +522,8 @@ class _UnixSubprocessTransport(transports.SubprocessTransport):
         else:
             self._loop.call_soon(cb, *data)
 
-    def _pipe_connection_made(self, fd):
+    def _try_connected(self):
+        assert self._pending_calls is not None
         if all(p is not None and p.connected for p in self._pipes.values()):
             self._loop.call_soon(self._protocol.connection_made, self)
             for callback, data in self._pending_calls:
@@ -536,7 +538,8 @@ class _UnixSubprocessTransport(transports.SubprocessTransport):
         self._call(self._protocol.pipe_data_received, fd, data)
 
     def _process_exited(self, returncode):
-        assert returncode is not None
+        assert returncode is not None, returncode
+        assert self._returncode is None, self._returncode
         self._returncode = returncode
         self._loop._subprocess_closed(self)
         self._call(self._protocol.process_exited)

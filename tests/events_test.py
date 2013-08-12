@@ -169,12 +169,14 @@ class MySubprocessProtocol(protocols.SubprocessProtocol):
         self.got_data.set()
 
     def pipe_connection_lost(self, fd, exc):
+        assert self.state == 'CONNECTED', self.state
         if exc:
             self.disconnects[fd].set_exception(exc)
         else:
             self.disconnects[fd].set_result(exc)
 
     def process_exited(self):
+        assert self.state == 'CONNECTED', self.state
         self.returncode = self.transport.get_returncode()
 
 
@@ -947,12 +949,14 @@ class EventLoopTestsMixin:
         proto = None
         transp = None
 
+        prog = os.path.join(os.path.dirname(__file__), 'echo.py')
+
         @tasks.coroutine
         def connect():
             nonlocal proto, transp
             transp, proto = yield from self.loop.subprocess_exec(
                 functools.partial(MySubprocessProtocol, self.loop),
-                'tr', '[a-z]', '[A-Z]')
+                sys.executable, prog)
             self.assertIsInstance(proto, MySubprocessProtocol)
 
         self.loop.run_until_complete(connect())
@@ -960,12 +964,12 @@ class EventLoopTestsMixin:
         self.assertEqual('CONNECTED', proto.state)
 
         stdin = transp.get_pipe_transport(0)
-        stdin.write(b'Python ')
-        stdin.write(b'The Winner')
-        stdin.close()
+        stdin.write(b'Python The Winner')
+        self.loop.run_until_complete(proto.got_data.wait(10))
+        transp.close()
         self.loop.run_until_complete(proto.completed)
-        self.assertEqual(0, proto.returncode)
-        self.assertEqual(b'PYTHON THE WINNER', proto.data[1])
+        self.assertEqual(-signal.SIGTERM, proto.returncode)
+        self.assertEqual(b'Python The Winner', proto.data[1])
 
     @unittest.skipIf(sys.platform == 'win32',
                      "Don't support subprocess for Windows yet")
@@ -1037,12 +1041,78 @@ class EventLoopTestsMixin:
             nonlocal proto, transp
             transp, proto = yield from self.loop.subprocess_shell(
                 functools.partial(MySubprocessProtocol, self.loop),
-                'exit 7')
+                'exit 7', stdin=None, stdout=None, stderr=None)
             self.assertIsInstance(proto, MySubprocessProtocol)
 
         self.loop.run_until_complete(connect())
         self.loop.run_until_complete(proto.completed)
         self.assertEqual(7, proto.returncode)
+
+    @unittest.skipIf(sys.platform == 'win32',
+                     "Don't support subprocess for Windows yet")
+    def test_subprocess_close_after_finish(self):
+        proto = None
+        transp = None
+
+        @tasks.coroutine
+        def connect():
+            nonlocal proto, transp
+            transp, proto = yield from self.loop.subprocess_shell(
+                functools.partial(MySubprocessProtocol, self.loop),
+                'exit 7', stdin=None, stdout=None, stderr=None)
+            self.assertIsInstance(proto, MySubprocessProtocol)
+
+        self.loop.run_until_complete(connect())
+        self.assertIsNone(transp.get_pipe_transport(0))
+        self.loop.run_until_complete(proto.completed)
+        self.assertEqual(7, proto.returncode)
+        self.assertIsNone(transp.close())
+
+    @unittest.skipIf(sys.platform == 'win32',
+                     "Don't support subprocess for Windows yet")
+    def test_subprocess_kill(self):
+        proto = None
+        transp = None
+
+        prog = os.path.join(os.path.dirname(__file__), 'echo.py')
+
+        @tasks.coroutine
+        def connect():
+            nonlocal proto, transp
+            transp, proto = yield from self.loop.subprocess_exec(
+                functools.partial(MySubprocessProtocol, self.loop),
+                sys.executable, prog)
+            self.assertIsInstance(proto, MySubprocessProtocol)
+
+        self.loop.run_until_complete(connect())
+        self.loop.run_until_complete(proto.connected)
+
+        transp.kill()
+        self.loop.run_until_complete(proto.completed)
+        self.assertEqual(-signal.SIGKILL, proto.returncode)
+
+    @unittest.skipIf(sys.platform == 'win32',
+                     "Don't support subprocess for Windows yet")
+    def test_subprocess_send_signal(self):
+        proto = None
+        transp = None
+
+        prog = os.path.join(os.path.dirname(__file__), 'echo.py')
+
+        @tasks.coroutine
+        def connect():
+            nonlocal proto, transp
+            transp, proto = yield from self.loop.subprocess_exec(
+                functools.partial(MySubprocessProtocol, self.loop),
+                sys.executable, prog)
+            self.assertIsInstance(proto, MySubprocessProtocol)
+
+        self.loop.run_until_complete(connect())
+        self.loop.run_until_complete(proto.connected)
+
+        transp.send_signal(signal.SIGQUIT)
+        self.loop.run_until_complete(proto.completed)
+        self.assertEqual(-signal.SIGQUIT, proto.returncode)
 
 
 if sys.platform == 'win32':
@@ -1307,6 +1377,13 @@ class ProtocolsAbsTests(unittest.TestCase):
         self.assertIsNone(dp.connection_lost(f))
         self.assertIsNone(dp.connection_refused(f))
         self.assertIsNone(dp.datagram_received(f, f))
+
+        sp = protocols.SubprocessProtocol()
+        self.assertIsNone(sp.connection_made(f))
+        self.assertIsNone(sp.connection_lost(f))
+        self.assertIsNone(sp.pipe_data_received(1, f))
+        self.assertIsNone(sp.pipe_connection_lost(1, f))
+        self.assertIsNone(sp.process_exited())
 
 
 class PolicyTests(unittest.TestCase):

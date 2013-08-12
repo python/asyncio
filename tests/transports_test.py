@@ -46,3 +46,13 @@ class TransportTests(unittest.TestCase):
 
         self.assertRaises(NotImplementedError, transport.sendto, 'data')
         self.assertRaises(NotImplementedError, transport.abort)
+
+    def test_subprocess_transport_not_implemented(self):
+        transport = transports.SubprocessTransport()
+
+        self.assertRaises(NotImplementedError, transport.get_pid)
+        self.assertRaises(NotImplementedError, transport.get_returncode)
+        self.assertRaises(NotImplementedError, transport.get_pipe_transport, 1)
+        self.assertRaises(NotImplementedError, transport.send_signal, 1)
+        self.assertRaises(NotImplementedError, transport.terminate)
+        self.assertRaises(NotImplementedError, transport.kill)

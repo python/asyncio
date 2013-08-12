@@ -232,7 +232,7 @@ class Future:
         if self._state == _CANCELLED:
             raise CancelledError
         if self._state != _FINISHED:
-            raise InvalidStateError
+            raise InvalidStateError('Result is not ready.')
         if self._tb_logger is not None:
             self._tb_logger.clear()
             self._tb_logger = None
@@ -253,7 +253,7 @@ class Future:
         if self._state == _CANCELLED:
             raise CancelledError
         if self._state != _FINISHED:
-            raise InvalidStateError
+            raise InvalidStateError('Exception is not set.')
         if self._tb_logger is not None:
             self._tb_logger.clear()
             self._tb_logger = None
@@ -293,7 +293,7 @@ class Future:
         InvalidStateError.
         """
         if self._state != _PENDING:
-            raise InvalidStateError
+            raise InvalidStateError('{}: {!r}'.format(self._state, self))
         self._result = result
         self._state = _FINISHED
         self._schedule_callbacks()
@@ -305,7 +305,7 @@ class Future:
         InvalidStateError.
         """
         if self._state != _PENDING:
-            raise InvalidStateError
+            raise InvalidStateError('{}: {!r}'.format(self._state, self))
         self._exception = exception
         self._tb_logger = _TracebackLogger(exception)
         self._state = _FINISHED

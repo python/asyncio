@@ -187,6 +187,95 @@ class SelectorEventLoopTests(unittest.TestCase):
         self.assertRaises(
             RuntimeError, self.loop.remove_signal_handler, signal.SIGHUP)
 
+    @unittest.mock.patch('os.WTERMSIG')
+    @unittest.mock.patch('os.WEXITSTATUS')
+    @unittest.mock.patch('os.WIFSIGNALED')
+    @unittest.mock.patch('os.WIFEXITED')
+    @unittest.mock.patch('os.waitpid')
+    def test__sig_chld(self, m_waitpid, m_WIFEXITED, m_WIFSIGNALED,
+                       m_WEXITSTATUS, m_WTERMSIG):
+        m_waitpid.side_effect = [(7, object()), ChildProcessError]
+        m_WIFEXITED.return_value = True
+        m_WIFSIGNALED.return_value = False
+        m_WEXITSTATUS.return_value = 3
+        transp = unittest.mock.Mock()
+        self.loop._subprocesses[7] = transp
+
+        self.loop._sig_chld()
+        transp._process_exited.assert_called_with(3)
+        self.assertFalse(m_WTERMSIG.called)
+
+    @unittest.mock.patch('os.WTERMSIG')
+    @unittest.mock.patch('os.WEXITSTATUS')
+    @unittest.mock.patch('os.WIFSIGNALED')
+    @unittest.mock.patch('os.WIFEXITED')
+    @unittest.mock.patch('os.waitpid')
+    def test__sig_chld_signal(self, m_waitpid, m_WIFEXITED, m_WIFSIGNALED,
+                       m_WEXITSTATUS, m_WTERMSIG):
+        m_waitpid.side_effect = [(7, object()), ChildProcessError]
+        m_WIFEXITED.return_value = False
+        m_WIFSIGNALED.return_value = True
+        m_WTERMSIG.return_value = 1
+        transp = unittest.mock.Mock()
+        self.loop._subprocesses[7] = transp
+
+        self.loop._sig_chld()
+        transp._process_exited.assert_called_with(-1)
+        self.assertFalse(m_WEXITSTATUS.called)
+
+    @unittest.mock.patch('os.WTERMSIG')
+    @unittest.mock.patch('os.WEXITSTATUS')
+    @unittest.mock.patch('os.WIFSIGNALED')
+    @unittest.mock.patch('os.WIFEXITED')
+    @unittest.mock.patch('os.waitpid')
+    def test__sig_chld_zero_pid(self, m_waitpid, m_WIFEXITED, m_WIFSIGNALED,
+                       m_WEXITSTATUS, m_WTERMSIG):
+        m_waitpid.side_effect = [(0, object()), ChildProcessError]
+        transp = unittest.mock.Mock()
+        self.loop._subprocesses[7] = transp
+
+        self.loop._sig_chld()
+        self.assertFalse(transp._process_exited.called)
+        self.assertFalse(m_WIFSIGNALED.called)
+        self.assertFalse(m_WIFEXITED.called)
+        self.assertFalse(m_WTERMSIG.called)
+        self.assertFalse(m_WEXITSTATUS.called)
+
+    @unittest.mock.patch('os.WTERMSIG')
+    @unittest.mock.patch('os.WEXITSTATUS')
+    @unittest.mock.patch('os.WIFSIGNALED')
+    @unittest.mock.patch('os.WIFEXITED')
+    @unittest.mock.patch('os.waitpid')
+    def test__sig_chld_not_registered_subprocess(self, m_waitpid,
+                                                 m_WIFEXITED, m_WIFSIGNALED,
+                                                 m_WEXITSTATUS, m_WTERMSIG):
+        m_waitpid.side_effect = [(7, object()), ChildProcessError]
+        m_WIFEXITED.return_value = True
+        m_WIFSIGNALED.return_value = False
+        m_WEXITSTATUS.return_value = 3
+
+        self.loop._sig_chld()
+        self.assertFalse(m_WTERMSIG.called)
+
+    @unittest.mock.patch('os.WTERMSIG')
+    @unittest.mock.patch('os.WEXITSTATUS')
+    @unittest.mock.patch('os.WIFSIGNALED')
+    @unittest.mock.patch('os.WIFEXITED')
+    @unittest.mock.patch('os.waitpid')
+    def test__sig_chld_unknown_status(self, m_waitpid,
+                                      m_WIFEXITED, m_WIFSIGNALED,
+                                      m_WEXITSTATUS, m_WTERMSIG):
+        m_waitpid.side_effect = [(7, object()), ChildProcessError]
+        m_WIFEXITED.return_value = False
+        m_WIFSIGNALED.return_value = False
+        transp = unittest.mock.Mock()
+        self.loop._subprocesses[7] = transp
+
+        self.loop._sig_chld()
+        self.assertFalse(transp._process_exited.called)
+        self.assertFalse(m_WEXITSTATUS.called)
+        self.assertFalse(m_WTERMSIG.called)
+
 
 class UnixReadPipeTransportTests(unittest.TestCase):
 

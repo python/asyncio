@@ -185,7 +185,7 @@ class SelectorEventLoop(selector_events.BaseSelectorEventLoop):
                     break
                 transp = self._subprocesses.get(pid)
                 if transp is not None:
-                    transp._poll(returncode)
+                    transp._process_exited(returncode)
         except ChildProcessError:
             pass
 
@@ -460,7 +460,7 @@ class _UnixSubprocessTransport(transports.SubprocessTransport):
         if stderr == subprocess.PIPE:
             self._pipes[2] = None
         self._pending_calls = collections.deque()
-        self._done = False
+        self._finished = False
         self._returncode = None
 
         self._proc = subprocess.Popen(
@@ -514,7 +514,6 @@ class _UnixSubprocessTransport(transports.SubprocessTransport):
             transp, proto = yield from loop.connect_read_pipe(
                 functools.partial(_UnixReadSubprocessPipeProto, self, 2),
                 proc.stderr)
-        self._poll()
 
     def _call(self, cb, *data):
         if self._pending_calls is not None:
@@ -531,21 +530,25 @@ class _UnixSubprocessTransport(transports.SubprocessTransport):
 
     def _pipe_connection_lost(self, fd, exc):
         self._call(self._protocol.pipe_connection_lost, fd, exc)
-        self._poll()
+        self._try_finish()
 
     def _pipe_data_received(self, fd, data):
         self._call(self._protocol.pipe_data_received, fd, data)
 
-    def _poll(self, returncode=None):
+    def _process_exited(self, returncode):
+        assert returncode is not None
+        if self._returncode is not None:
+            return
+        self._returncode = returncode
+        self._loop._subprocess_closed(self)
+        self._call(self._protocol.process_exited)
+        self._try_finish()
+
+    def _try_finish(self):
+        assert not self._finished
         if self._returncode is None:
-            if returncode is None:
-                returncode = self._proc.poll()
-            if returncode is not None:
-                self._returncode = returncode
-                self._loop._subprocess_closed(self)
-                self._call(self._protocol.process_exited)
-        if self._returncode is not None and not self._done:
-            if all(p is not None and p.disconnected
-                   for p in self._pipes.values()):
-                self._call(self._protocol.connection_lost, None)
-                self._done = True
+            return
+        if all(p is not None and p.disconnected
+               for p in self._pipes.values()):
+            self._finished = True
+            self._loop.call_soon(self._protocol.connection_lost, None)

@@ -162,7 +162,7 @@ def runtests():
 def runcoverage(sdir, args):
     """
     To install coverage3 for Python 3, you need:
-      - Setiptools (https://pypi.python.org/pypi/setuptools)
+      - Setuptools (https://pypi.python.org/pypi/setuptools)
 
       What worked for me:
       - download https://bitbucket.org/pypa/setuptools/raw/bootstrap/ez_setup.py

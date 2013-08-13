@@ -1066,6 +1066,8 @@ class EventLoopTestsMixin:
 
         self.loop.run_until_complete(connect())
         self.assertIsNone(transp.get_pipe_transport(0))
+        self.assertIsNone(transp.get_pipe_transport(1))
+        self.assertIsNone(transp.get_pipe_transport(2))
         self.loop.run_until_complete(proto.completed)
         self.assertEqual(7, proto.returncode)
         self.assertIsNone(transp.close())
@@ -1170,6 +1172,8 @@ class EventLoopTestsMixin:
         self.loop.run_until_complete(proto.got_data[1].wait(10))
         self.assertEqual(b'OUT:testERR:test', proto.data[1])
         self.assertEqual(b'', proto.data[2])
+        self.assertIsNotNone(transp.get_pipe_transport(1))
+        self.assertIsNone(transp.get_pipe_transport(2))
 
         transp.close()
         self.loop.run_until_complete(proto.completed)

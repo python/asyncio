@@ -11,6 +11,7 @@ try:
     import ssl
 except ImportError:
     ssl = None
+import subprocess
 import sys
 import threading
 import time
@@ -1140,6 +1141,35 @@ class EventLoopTestsMixin:
         self.assertEqual(b'OUT:test', proto.data[1])
         self.loop.run_until_complete(proto.got_data[2].wait(10))
         self.assertEqual(b'ERR:test', proto.data[2])
+
+        transp.close()
+        self.loop.run_until_complete(proto.completed)
+        self.assertEqual(-signal.SIGTERM, proto.returncode)
+
+    @unittest.skipIf(sys.platform == 'win32',
+                     "Don't support subprocess for Windows yet")
+    def test_subprocess_stderr_redirect_to_stdout(self):
+        proto = None
+        transp = None
+
+        prog = os.path.join(os.path.dirname(__file__), 'echo2.py')
+
+        @tasks.coroutine
+        def connect():
+            nonlocal proto, transp
+            transp, proto = yield from self.loop.subprocess_exec(
+                functools.partial(MySubprocessProtocol, self.loop),
+                sys.executable, prog, stderr=subprocess.STDOUT)
+            self.assertIsInstance(proto, MySubprocessProtocol)
+
+        self.loop.run_until_complete(connect())
+        self.loop.run_until_complete(proto.connected)
+
+        stdin = transp.get_pipe_transport(0)
+        stdin.write(b'test')
+        self.loop.run_until_complete(proto.got_data[1].wait(10))
+        self.assertEqual(b'OUT:testERR:test', proto.data[1])
+        self.assertEqual(b'', proto.data[2])
 
         transp.close()
         self.loop.run_until_complete(proto.completed)

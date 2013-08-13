@@ -276,6 +276,29 @@ class SelectorEventLoopTests(unittest.TestCase):
         self.assertFalse(m_WEXITSTATUS.called)
         self.assertFalse(m_WTERMSIG.called)
 
+    @unittest.mock.patch('tulip.unix_events.tulip_log')
+    @unittest.mock.patch('os.WTERMSIG')
+    @unittest.mock.patch('os.WEXITSTATUS')
+    @unittest.mock.patch('os.WIFSIGNALED')
+    @unittest.mock.patch('os.WIFEXITED')
+    @unittest.mock.patch('os.waitpid')
+    def test__sig_chld_unknown_status(self, m_waitpid,
+                                      m_WIFEXITED, m_WIFSIGNALED,
+                                      m_WEXITSTATUS, m_WTERMSIG,
+                                      m_log):
+        m_waitpid.side_effect = Exception
+        transp = unittest.mock.Mock()
+        self.loop._subprocesses[7] = transp
+
+        self.loop._sig_chld()
+        self.assertFalse(transp._process_exited.called)
+        self.assertFalse(m_WIFSIGNALED.called)
+        self.assertFalse(m_WIFEXITED.called)
+        self.assertFalse(m_WTERMSIG.called)
+        self.assertFalse(m_WEXITSTATUS.called)
+        m_log.exception.assert_called_with(
+            'Unknown exception in SIGCHLD handler')
+
 
 class UnixReadPipeTransportTests(unittest.TestCase):
 

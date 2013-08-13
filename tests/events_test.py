@@ -150,7 +150,8 @@ class MySubprocessProtocol(protocols.SubprocessProtocol):
         self.disconnects = {fd: futures.Future(loop=loop) for fd in range(3)}
         self.data = {1: b'', 2: b''}
         self.returncode = None
-        self.got_data = locks.EventWaiter(loop=loop)
+        self.got_data = {1: locks.EventWaiter(loop=loop),
+                         2: locks.EventWaiter(loop=loop)}
 
     def connection_made(self, transport):
         self.transport = transport
@@ -166,7 +167,7 @@ class MySubprocessProtocol(protocols.SubprocessProtocol):
     def pipe_data_received(self, fd, data):
         assert self.state == 'CONNECTED', self.state
         self.data[fd] += data
-        self.got_data.set()
+        self.got_data[fd].set()
 
     def pipe_connection_lost(self, fd, exc):
         assert self.state == 'CONNECTED', self.state
@@ -965,7 +966,7 @@ class EventLoopTestsMixin:
 
         stdin = transp.get_pipe_transport(0)
         stdin.write(b'Python The Winner')
-        self.loop.run_until_complete(proto.got_data.wait(10))
+        self.loop.run_until_complete(proto.got_data[1].wait(10))
         transp.close()
         self.loop.run_until_complete(proto.completed)
         self.assertEqual(-signal.SIGTERM, proto.returncode)
@@ -994,12 +995,12 @@ class EventLoopTestsMixin:
         try:
             stdin = transp.get_pipe_transport(0)
             stdin.write(b'Python ')
-            self.loop.run_until_complete(proto.got_data.wait(10))
-            proto.got_data.clear()
+            self.loop.run_until_complete(proto.got_data[1].wait(10))
+            proto.got_data[1].clear()
             self.assertEqual(b'Python ', proto.data[1])
 
             stdin.write(b'The Winner')
-            self.loop.run_until_complete(proto.got_data.wait(10))
+            self.loop.run_until_complete(proto.got_data[1].wait(10))
             self.assertEqual(b'Python The Winner', proto.data[1])
         finally:
             transp.close()
@@ -1113,6 +1114,36 @@ class EventLoopTestsMixin:
         transp.send_signal(signal.SIGQUIT)
         self.loop.run_until_complete(proto.completed)
         self.assertEqual(-signal.SIGQUIT, proto.returncode)
+
+    @unittest.skipIf(sys.platform == 'win32',
+                     "Don't support subprocess for Windows yet")
+    def test_subprocess_stderr(self):
+        proto = None
+        transp = None
+
+        prog = os.path.join(os.path.dirname(__file__), 'echo2.py')
+
+        @tasks.coroutine
+        def connect():
+            nonlocal proto, transp
+            transp, proto = yield from self.loop.subprocess_exec(
+                functools.partial(MySubprocessProtocol, self.loop),
+                sys.executable, prog)
+            self.assertIsInstance(proto, MySubprocessProtocol)
+
+        self.loop.run_until_complete(connect())
+        self.loop.run_until_complete(proto.connected)
+
+        stdin = transp.get_pipe_transport(0)
+        stdin.write(b'test')
+        self.loop.run_until_complete(proto.got_data[1].wait(10))
+        self.assertEqual(b'OUT:test', proto.data[1])
+        self.loop.run_until_complete(proto.got_data[2].wait(10))
+        self.assertEqual(b'ERR:test', proto.data[2])
+
+        transp.close()
+        self.loop.run_until_complete(proto.completed)
+        self.assertEqual(-signal.SIGTERM, proto.returncode)
 
 
 if sys.platform == 'win32':

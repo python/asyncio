@@ -2,6 +2,7 @@
 
 __all__ = ['Session']
 
+import functools
 import tulip
 import http.cookies
 
@@ -47,7 +48,8 @@ class Session:
         if new_conn or transport is None:
             new = True
             transport, proto = yield from loop.create_connection(
-                tulip.StreamProtocol, req.host, req.port, ssl=req.ssl)
+                functools.partial(tulip.StreamProtocol, loop=loop),
+                req.host, req.port, ssl=req.ssl)
         else:
             new = False
 

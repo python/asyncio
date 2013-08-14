@@ -13,6 +13,7 @@ __all__ = ['request']
 
 import base64
 import email.message
+import functools
 import http.client
 import http.cookies
 import json
@@ -127,7 +128,8 @@ def request(method, url, *,
 @tulip.coroutine
 def start(req, loop):
     transport, p = yield from loop.create_connection(
-        tulip.StreamProtocol, req.host, req.port, ssl=req.ssl)
+        functools.partial(tulip.StreamProtocol, loop=loop),
+        req.host, req.port, ssl=req.ssl)
 
     try:
         resp = req.send(transport)

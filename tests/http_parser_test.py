@@ -12,6 +12,9 @@ from tulip.http import protocol
 
 class ParseHeadersTests(unittest.TestCase):
 
+    def setUp(self):
+        tulip.set_event_loop(None)
+
     def test_parse_headers(self):
         hdrs = ('', 'test: line\r\n', ' continue\r\n',
                 'test2: data\r\n', '\r\n')
@@ -96,6 +99,9 @@ class ParseHeadersTests(unittest.TestCase):
 
 class DeflateBufferTests(unittest.TestCase):
 
+    def setUp(self):
+        tulip.set_event_loop(None)
+
     def test_feed_data(self):
         buf = tulip.DataBuffer()
         dbuf = protocol.DeflateBuffer(buf, 'deflate')
@@ -139,6 +145,9 @@ class DeflateBufferTests(unittest.TestCase):
 
 
 class ParsePayloadTests(unittest.TestCase):
+
+    def setUp(self):
+        tulip.set_event_loop(None)
 
     def test_parse_eof_payload(self):
         out = tulip.DataBuffer()
@@ -356,6 +365,9 @@ class ParsePayloadTests(unittest.TestCase):
 
 class ParseRequestTests(unittest.TestCase):
 
+    def setUp(self):
+        tulip.set_event_loop(None)
+
     def test_http_request_parser_max_headers(self):
         p = protocol.http_request_parser(8190, 20, 8190)
         next(p)
@@ -440,6 +452,9 @@ class ParseRequestTests(unittest.TestCase):
 
 
 class ParseResponseTests(unittest.TestCase):
+
+    def setUp(self):
+        tulip.set_event_loop(None)
 
     def test_http_response_parser_bad_status_line(self):
         p = protocol.http_response_parser()

@@ -4,6 +4,7 @@ import unittest
 import unittest.mock
 import zlib
 
+import tulip
 from tulip.http import protocol
 
 
@@ -11,6 +12,7 @@ class HttpMessageTests(unittest.TestCase):
 
     def setUp(self):
         self.transport = unittest.mock.Mock()
+        tulip.set_event_loop(None)
 
     def test_start_request(self):
         msg = protocol.Request(

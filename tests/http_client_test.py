@@ -15,14 +15,13 @@ class HttpResponseTests(unittest.TestCase):
 
     def setUp(self):
         self.loop = tulip.new_event_loop()
-        tulip.set_event_loop(self.loop)
+        tulip.set_event_loop(None)
 
         self.transport = unittest.mock.Mock()
-        self.stream = tulip.StreamBuffer()
+        self.stream = tulip.StreamBuffer(loop=self.loop)
         self.response = HttpResponse('get', 'http://python.org')
 
     def tearDown(self):
-        tulip.set_event_loop(None)
         self.loop.close()
 
     def test_close(self):
@@ -44,13 +43,12 @@ class HttpRequestTests(unittest.TestCase):
 
     def setUp(self):
         self.loop = tulip.new_event_loop()
-        tulip.set_event_loop(self.loop)
+        tulip.set_event_loop(None)
 
         self.transport = unittest.mock.Mock()
-        self.stream = tulip.StreamBuffer()
+        self.stream = tulip.StreamBuffer(loop=self.loop)
 
     def tearDown(self):
-        tulip.set_event_loop(None)
         self.loop.close()
 
     def test_method(self):

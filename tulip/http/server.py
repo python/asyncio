@@ -59,8 +59,8 @@ class ServerHttpProtocol(tulip.Protocol):
 
     def connection_made(self, transport):
         self.transport = transport
-        self.stream = tulip.StreamBuffer()
-        self._request_handler = self.start()
+        self.stream = tulip.StreamBuffer(loop=self._loop)
+        self._request_handler = tulip.Task(self.start(), loop=self._loop)
 
     def data_received(self, data):
         self.stream.feed_data(data)
@@ -91,7 +91,7 @@ class ServerHttpProtocol(tulip.Protocol):
     def log_exception(self, *args, **kw):
         self.log.exception(*args, **kw)
 
-    @tulip.task
+    @tulip.coroutine
     def start(self):
         """Start processing of incoming requests.
         It reads request line, request headers and request payload, then

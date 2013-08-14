@@ -211,7 +211,7 @@ class SelectorEventLoopTests(unittest.TestCase):
     @unittest.mock.patch('os.WIFEXITED')
     @unittest.mock.patch('os.waitpid')
     def test__sig_chld_signal(self, m_waitpid, m_WIFEXITED, m_WIFSIGNALED,
-                       m_WEXITSTATUS, m_WTERMSIG):
+                              m_WEXITSTATUS, m_WTERMSIG):
         m_waitpid.side_effect = [(7, object()), ChildProcessError]
         m_WIFEXITED.return_value = False
         m_WIFSIGNALED.return_value = True
@@ -229,7 +229,7 @@ class SelectorEventLoopTests(unittest.TestCase):
     @unittest.mock.patch('os.WIFEXITED')
     @unittest.mock.patch('os.waitpid')
     def test__sig_chld_zero_pid(self, m_waitpid, m_WIFEXITED, m_WIFSIGNALED,
-                       m_WEXITSTATUS, m_WTERMSIG):
+                                m_WEXITSTATUS, m_WTERMSIG):
         m_waitpid.side_effect = [(0, object()), ChildProcessError]
         transp = unittest.mock.Mock()
         self.loop._subprocesses[7] = transp
@@ -282,10 +282,10 @@ class SelectorEventLoopTests(unittest.TestCase):
     @unittest.mock.patch('os.WIFSIGNALED')
     @unittest.mock.patch('os.WIFEXITED')
     @unittest.mock.patch('os.waitpid')
-    def test__sig_chld_unknown_status(self, m_waitpid,
-                                      m_WIFEXITED, m_WIFSIGNALED,
-                                      m_WEXITSTATUS, m_WTERMSIG,
-                                      m_log):
+    def test__sig_chld_unknown_status_in_handler(self, m_waitpid,
+                                                 m_WIFEXITED, m_WIFSIGNALED,
+                                                 m_WEXITSTATUS, m_WTERMSIG,
+                                                 m_log):
         m_waitpid.side_effect = Exception
         transp = unittest.mock.Mock()
         self.loop._subprocesses[7] = transp

@@ -44,32 +44,52 @@ class TaskTests(unittest.TestCase):
         loop.close()
 
     def test_task_decorator(self):
-        @tasks.coroutine
+        @tasks.task
         def notmuch():
             yield from []
             return 'ko'
-        t = tasks.Task(notmuch(), loop=self.loop)
+
+        try:
+            events.set_event_loop(self.loop)
+            t = notmuch()
+        finally:
+            events.set_event_loop(None)
+
+        self.assertIsInstance(t, tasks.Task)
         self.loop.run_until_complete(t)
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'ko')
 
     def test_task_decorator_func(self):
-        @tasks.coroutine
+        @tasks.task
         def notmuch():
             return 'ko'
-        t = tasks.Task(notmuch(), loop=self.loop)
+
+        try:
+            events.set_event_loop(self.loop)
+            t = notmuch()
+        finally:
+            events.set_event_loop(None)
+
+        self.assertIsInstance(t, tasks.Task)
         self.loop.run_until_complete(t)
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'ko')
 
     def test_task_decorator_fut(self):
-        fut = futures.Future(loop=self.loop)
-        fut.set_result('ko')
-
-        @tasks.coroutine
+        @tasks.task
         def notmuch():
+            fut = futures.Future(loop=self.loop)
+            fut.set_result('ko')
             return fut
-        t = tasks.Task(notmuch(), loop=self.loop)
+
+        try:
+            events.set_event_loop(self.loop)
+            t = notmuch()
+        finally:
+            events.set_event_loop(None)
+
+        self.assertIsInstance(t, tasks.Task)
         self.loop.run_until_complete(t)
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'ko')

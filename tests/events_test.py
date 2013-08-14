@@ -1010,7 +1010,7 @@ class EventLoopTestsMixin:
         self.assertEqual(-signal.SIGTERM, proto.returncode)
 
     @unittest.skipIf(sys.platform == 'win32',
-                         "Don't support subprocess for Windows yet")
+                     "Don't support subprocess for Windows yet")
     def test_subprocess_shell(self):
         proto = None
         transp = None
@@ -1036,11 +1036,10 @@ class EventLoopTestsMixin:
                      "Don't support subprocess for Windows yet")
     def test_subprocess_exitcode(self):
         proto = None
-        transp = None
 
         @tasks.coroutine
         def connect():
-            nonlocal proto, transp
+            nonlocal proto
             transp, proto = yield from self.loop.subprocess_shell(
                 functools.partial(MySubprocessProtocol, self.loop),
                 'exit 7', stdin=None, stdout=None, stderr=None)
@@ -1425,6 +1424,11 @@ class AbstractEventLoopTests(unittest.TestCase):
         self.assertRaises(
             NotImplementedError, loop.connect_write_pipe, f,
             unittest.mock.sentinel.pipe)
+        self.assertRaises(
+            NotImplementedError, loop.subprocess_shell, f,
+            unittest.mock.sentinel)
+        self.assertRaises(
+            NotImplementedError, loop.subprocess_exec, f)
 
 
 class ProtocolsAbsTests(unittest.TestCase):

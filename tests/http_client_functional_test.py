@@ -16,13 +16,12 @@ class HttpClientFunctionalTests(unittest.TestCase):
 
     def setUp(self):
         self.loop = tulip.new_event_loop()
-        tulip.set_event_loop(self.loop)
+        tulip.set_event_loop(None)
 
     def tearDown(self):
         # just in case if we have transport close callbacks
         test_utils.run_briefly(self.loop)
 
-        tulip.set_event_loop(None)
         self.loop.close()
         gc.collect()
 
@@ -40,6 +39,23 @@ class HttpClientFunctionalTests(unittest.TestCase):
                 self.assertIn('"method": "%s"' % meth.upper(), content)
                 self.assertEqual(content1, content2)
                 r.close()
+
+    def test_use_global_loop(self):
+        with test_utils.run_test_server(self.loop, router=Functional) as httpd:
+            try:
+                tulip.set_event_loop(self.loop)
+                r = self.loop.run_until_complete(
+                    client.request('get', httpd.url('method', 'get')))
+            finally:
+                tulip.set_event_loop(None)
+            content1 = self.loop.run_until_complete(r.read())
+            content2 = self.loop.run_until_complete(r.read())
+            content = content1.decode()
+
+            self.assertEqual(r.status, 200)
+            self.assertIn('"method": "GET"', content)
+            self.assertEqual(content1, content2)
+            r.close()
 
     def test_HTTP_302_REDIRECT_GET(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
@@ -227,7 +243,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
 
             with open(__file__) as f:
                 r = self.loop.run_until_complete(
-                    client.request('post', url,
+                    client.request('post', url, loop=self.loop,
                                    files=[('some', f, 'text/plain')]))
 
                 content = self.loop.run_until_complete(r.read(True))
@@ -252,7 +268,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
 
             with open(__file__) as f:
                 r = self.loop.run_until_complete(
-                    client.request('post', url, files=[f]))
+                    client.request('post', url, files=[f], loop=self.loop))
 
                 content = self.loop.run_until_complete(r.read(True))
 
@@ -275,7 +291,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
             data = io.BytesIO(b'data')
 
             r = self.loop.run_until_complete(
-                client.request('post', url, files=[data]))
+                client.request('post', url, files=[data], loop=self.loop))
 
             content = self.loop.run_until_complete(r.read(True))
 
@@ -293,7 +309,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
 
             with open(__file__) as f:
                 r = self.loop.run_until_complete(
-                    client.request('post', url,
+                    client.request('post', url, loop=self.loop,
                                    data={'test': 'true'}, files={'some': f}))
 
                 content = self.loop.run_until_complete(r.read(True))
@@ -317,11 +333,13 @@ class HttpClientFunctionalTests(unittest.TestCase):
     def test_encoding(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
             r = self.loop.run_until_complete(
-                client.request('get', httpd.url('encoding', 'deflate')))
+                client.request('get', httpd.url('encoding', 'deflate'),
+                               loop=self.loop))
             self.assertEqual(r.status, 200)
 
             r = self.loop.run_until_complete(
-                client.request('get', httpd.url('encoding', 'gzip')))
+                client.request('get', httpd.url('encoding', 'gzip'),
+                               loop=self.loop))
             self.assertEqual(r.status, 200)
 
     def test_cookies(self):
@@ -331,7 +349,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
 
             r = self.loop.run_until_complete(
                 client.request(
-                    'get', httpd.url('method', 'get'),
+                    'get', httpd.url('method', 'get'), loop=self.loop,
                     cookies={'test1': '123', 'test2': c}))
             self.assertEqual(r.status, 200)
 
@@ -341,7 +359,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
     def test_set_cookies(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
             resp = self.loop.run_until_complete(
-                client.request('get', httpd.url('cookies')))
+                client.request('get', httpd.url('cookies'), loop=self.loop))
             self.assertEqual(resp.status, 200)
 
             self.assertEqual(resp.cookies['c1'].value, 'cookie1')
@@ -350,7 +368,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
     def test_chunked(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
             r = self.loop.run_until_complete(
-                client.request('get', httpd.url('chunked')))
+                client.request('get', httpd.url('chunked'), loop=self.loop))
             self.assertEqual(r.status, 200)
             self.assertEqual(r['Transfer-Encoding'], 'chunked')
             content = self.loop.run_until_complete(r.read(True))
@@ -362,13 +380,15 @@ class HttpClientFunctionalTests(unittest.TestCase):
             self.assertRaises(
                 tulip.TimeoutError,
                 self.loop.run_until_complete,
-                client.request('get', httpd.url('method', 'get'), timeout=0.1))
+                client.request('get', httpd.url('method', 'get'),
+                               timeout=0.1, loop=self.loop))
 
     def test_request_conn_error(self):
         self.assertRaises(
             OSError,
             self.loop.run_until_complete,
-            client.request('get', 'http://0.0.0.0:1', timeout=0.1))
+            client.request('get', 'http://0.0.0.0:1',
+                           timeout=0.1, loop=self.loop))
 
     def test_request_conn_closed(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
@@ -376,7 +396,8 @@ class HttpClientFunctionalTests(unittest.TestCase):
             self.assertRaises(
                 tulip.http.HttpException,
                 self.loop.run_until_complete,
-                client.request('get', httpd.url('method', 'get')))
+                client.request('get', httpd.url('method', 'get'),
+                               loop=self.loop))
 
     def test_keepalive(self):
         from tulip.http import session
@@ -384,14 +405,16 @@ class HttpClientFunctionalTests(unittest.TestCase):
 
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
             r = self.loop.run_until_complete(
-                client.request('get', httpd.url('keepalive',), session=s))
+                client.request('get', httpd.url('keepalive',),
+                               session=s, loop=self.loop))
             self.assertEqual(r.status, 200)
             content = self.loop.run_until_complete(r.read(True))
             self.assertEqual(content['content'], 'requests=1')
             r.close()
 
             r = self.loop.run_until_complete(
-                client.request('get', httpd.url('keepalive'), session=s))
+                client.request('get', httpd.url('keepalive'),
+                               session=s, loop=self.loop))
             self.assertEqual(r.status, 200)
             content = self.loop.run_until_complete(r.read(True))
             self.assertEqual(content['content'], 'requests=2')
@@ -404,14 +427,16 @@ class HttpClientFunctionalTests(unittest.TestCase):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
             r = self.loop.run_until_complete(
                 client.request(
-                    'get', httpd.url('keepalive') + '?close=1', session=s))
+                    'get', httpd.url('keepalive') + '?close=1',
+                    session=s, loop=self.loop))
             self.assertEqual(r.status, 200)
             content = self.loop.run_until_complete(r.read(True))
             self.assertEqual(content['content'], 'requests=1')
             r.close()
 
             r = self.loop.run_until_complete(
-                client.request('get', httpd.url('keepalive'), session=s))
+                client.request('get', httpd.url('keepalive'),
+                               session=s, loop=self.loop))
             self.assertEqual(r.status, 200)
             content = self.loop.run_until_complete(r.read(True))
             self.assertEqual(content['content'], 'requests=1')
@@ -424,8 +449,8 @@ class HttpClientFunctionalTests(unittest.TestCase):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
             s.update_cookies({'test': '1'})
             r = self.loop.run_until_complete(
-                client.request(
-                    'get', httpd.url('cookies'), session=s))
+                client.request('get', httpd.url('cookies'),
+                               session=s, loop=self.loop))
             self.assertEqual(r.status, 200)
             content = self.loop.run_until_complete(r.read(True))
 

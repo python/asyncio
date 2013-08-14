@@ -19,6 +19,11 @@ class StreamReaderTests(unittest.TestCase):
     def tearDown(self):
         self.loop.close()
 
+    @unittest.mock.patch('tulip.streams.events')
+    def test_ctor_global_loop(self, m_events):
+        stream = streams.StreamReader()
+        self.assertIs(stream.loop, m_events.get_event_loop.return_value)
+
     def test_open_connection(self):
         with test_utils.run_test_server(self.loop) as httpd:
             f = streams.open_connection(*httpd.address, loop=self.loop)

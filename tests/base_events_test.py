@@ -45,6 +45,9 @@ class BaseEventLoopTests(unittest.TestCase):
         self.assertRaises(
             NotImplementedError,
             self.loop._make_write_pipe_transport, m, m)
+        self.assertRaises(
+            NotImplementedError,
+            next, self.loop._make_subprocess_transport(m, m, m, m, m, m, m))
 
     def test__add_callback_handle(self):
         h = events.Handle(lambda: False, ())
@@ -366,8 +369,10 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
         @tasks.coroutine
         def getaddrinfo(*args, **kw):
             yield from []
+
         def getaddrinfo_task(*args, **kwds):
             return tasks.Task(getaddrinfo(*args, **kwds), loop=self.loop)
+
         self.loop.getaddrinfo = getaddrinfo_task
         coro = self.loop.create_connection(MyProto, 'example.com', 80)
         self.assertRaises(
@@ -378,8 +383,10 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
         def getaddrinfo(*args, **kw):
             yield from []
             return [(2, 1, 6, '', ('107.6.106.82', 80))]
+
         def getaddrinfo_task(*args, **kwds):
             return tasks.Task(getaddrinfo(*args, **kwds), loop=self.loop)
+
         self.loop.getaddrinfo = getaddrinfo_task
         self.loop.sock_connect = unittest.mock.Mock()
         self.loop.sock_connect.side_effect = socket.error
@@ -393,8 +400,10 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
         def getaddrinfo(*args, **kw):
             return [(2, 1, 6, '', ('0.0.0.1', 80)),
                     (2, 1, 6, '', ('0.0.0.2', 80))]
+
         def getaddrinfo_task(*args, **kwds):
             return tasks.Task(getaddrinfo(*args, **kwds), loop=self.loop)
+
         self.loop.getaddrinfo = getaddrinfo_task
         self.loop.sock_connect = unittest.mock.Mock()
         self.loop.sock_connect.side_effect = socket.error
@@ -420,8 +429,10 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
         def getaddrinfo(*args, **kw):
             return [(2, 1, 6, '', ('0.0.0.1', 80)),
                     (2, 1, 6, '', ('0.0.0.2', 80))]
+
         def getaddrinfo_task(*args, **kwds):
             return tasks.Task(getaddrinfo(*args, **kwds), loop=self.loop)
+
         self.loop.getaddrinfo = getaddrinfo_task
         self.loop.sock_connect = unittest.mock.Mock()
         self.loop.sock_connect.side_effect = socket.error('Err2')
@@ -443,6 +454,7 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
                         (2, 1, 6, '', ('107.6.106.82', 80))]
             else:
                 return []
+
         def getaddrinfo_task(*args, **kwds):
             return tasks.Task(getaddrinfo(*args, **kwds), loop=self.loop)
         self.loop.getaddrinfo = getaddrinfo_task

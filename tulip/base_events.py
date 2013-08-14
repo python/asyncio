@@ -85,7 +85,6 @@ class BaseEventLoop(events.AbstractEventLoop):
                                    extra=None, **kwargs):
         """Create subprocess transport."""
         raise NotImplementedError
-        yield
 
     def _read_from_self(self):
         """XXX"""

@@ -13,7 +13,7 @@ class HttpWsgiServerProtocolTests(unittest.TestCase):
 
     def setUp(self):
         self.loop = tulip.new_event_loop()
-        tulip.set_event_loop(self.loop)
+        tulip.set_event_loop(None)
 
         self.wsgi = unittest.mock.Mock()
         self.stream = unittest.mock.Mock()
@@ -29,16 +29,15 @@ class HttpWsgiServerProtocolTests(unittest.TestCase):
         self.payload.feed_eof()
 
     def tearDown(self):
-        tulip.set_event_loop(None)
         self.loop.close()
 
     def test_ctor(self):
-        srv = wsgi.WSGIServerHttpProtocol(self.wsgi)
+        srv = wsgi.WSGIServerHttpProtocol(self.wsgi, loop=self.loop)
         self.assertIs(srv.wsgi, self.wsgi)
         self.assertFalse(srv.readpayload)
 
     def _make_one(self, **kw):
-        srv = wsgi.WSGIServerHttpProtocol(self.wsgi, **kw)
+        srv = wsgi.WSGIServerHttpProtocol(self.wsgi, loop=self.loop, **kw)
         srv.stream = self.stream
         srv.transport = self.transport
         return srv.create_wsgi_environ(self.message, self.payload)
@@ -120,7 +119,7 @@ class HttpWsgiServerProtocolTests(unittest.TestCase):
         self.assertEqual(environ['REMOTE_PORT'], '80')
 
     def test_wsgi_response(self):
-        srv = wsgi.WSGIServerHttpProtocol(self.wsgi)
+        srv = wsgi.WSGIServerHttpProtocol(self.wsgi, loop=self.loop)
         srv.stream = self.stream
         srv.transport = self.transport
 
@@ -128,7 +127,7 @@ class HttpWsgiServerProtocolTests(unittest.TestCase):
         self.assertIsInstance(resp, wsgi.WsgiResponse)
 
     def test_wsgi_response_start_response(self):
-        srv = wsgi.WSGIServerHttpProtocol(self.wsgi)
+        srv = wsgi.WSGIServerHttpProtocol(self.wsgi, loop=self.loop)
         srv.stream = self.stream
         srv.transport = self.transport
 
@@ -139,7 +138,7 @@ class HttpWsgiServerProtocolTests(unittest.TestCase):
         self.assertIsInstance(resp.response, protocol.Response)
 
     def test_wsgi_response_start_response_exc(self):
-        srv = wsgi.WSGIServerHttpProtocol(self.wsgi)
+        srv = wsgi.WSGIServerHttpProtocol(self.wsgi, loop=self.loop)
         srv.stream = self.stream
         srv.transport = self.transport
 
@@ -150,7 +149,7 @@ class HttpWsgiServerProtocolTests(unittest.TestCase):
         self.assertIsInstance(resp.response, protocol.Response)
 
     def test_wsgi_response_start_response_exc_status(self):
-        srv = wsgi.WSGIServerHttpProtocol(self.wsgi)
+        srv = wsgi.WSGIServerHttpProtocol(self.wsgi, loop=self.loop)
         srv.stream = self.stream
         srv.transport = self.transport
 
@@ -164,7 +163,7 @@ class HttpWsgiServerProtocolTests(unittest.TestCase):
 
     @unittest.mock.patch('tulip.http.wsgi.tulip')
     def test_wsgi_response_101_upgrade_to_websocket(self, m_tulip):
-        srv = wsgi.WSGIServerHttpProtocol(self.wsgi)
+        srv = wsgi.WSGIServerHttpProtocol(self.wsgi, loop=self.loop)
         srv.stream = self.stream
         srv.transport = self.transport
 
@@ -192,13 +191,13 @@ class HttpWsgiServerProtocolTests(unittest.TestCase):
 
         def wsgi_app(env, start):
             start('200 OK', [('Content-Type', 'text/plain')])
-            f1 = tulip.Future()
+            f1 = tulip.Future(loop=self.loop)
             f1.set_result(b'data')
-            fut = tulip.Future()
+            fut = tulip.Future(loop=self.loop)
             fut.set_result([f1])
             return fut
 
-        srv = wsgi.WSGIServerHttpProtocol(wsgi_app)
+        srv = wsgi.WSGIServerHttpProtocol(wsgi_app, loop=self.loop)
         srv.stream = self.stream
         srv.transport = self.transport
 
@@ -216,14 +215,15 @@ class HttpWsgiServerProtocolTests(unittest.TestCase):
             start('200 OK', [('Content-Type', 'text/plain')])
             return [b'data']
 
-        stream = tulip.StreamReader()
+        stream = tulip.StreamReader(loop=self.loop)
         stream.feed_data(b'data')
         stream.feed_eof()
 
         self.message = protocol.RawRequestMessage(
             'GET', '/path', (1, 1), self.headers, True, 'deflate')
 
-        srv = wsgi.WSGIServerHttpProtocol(wsgi_app, readpayload=True)
+        srv = wsgi.WSGIServerHttpProtocol(
+            wsgi_app, readpayload=True, loop=self.loop)
         srv.stream = self.stream
         srv.transport = self.transport
 
@@ -242,7 +242,7 @@ class HttpWsgiServerProtocolTests(unittest.TestCase):
             start('200 OK', [('Content-Type', 'text/plain')])
             return io.BytesIO(b'data')
 
-        srv = wsgi.WSGIServerHttpProtocol(wsgi_app)
+        srv = wsgi.WSGIServerHttpProtocol(wsgi_app, loop=self.loop)
         srv.stream = self.stream
         srv.transport = self.transport
 
@@ -260,14 +260,15 @@ class HttpWsgiServerProtocolTests(unittest.TestCase):
             start('200 OK', [('Content-Type', 'text/plain')])
             return [b'data']
 
-        stream = tulip.StreamReader()
+        stream = tulip.StreamReader(loop=self.loop)
         stream.feed_data(b'data')
         stream.feed_eof()
 
         self.message = protocol.RawRequestMessage(
             'GET', '/path', (1, 1), self.headers, False, 'deflate')
 
-        srv = wsgi.WSGIServerHttpProtocol(wsgi_app, readpayload=True)
+        srv = wsgi.WSGIServerHttpProtocol(
+            wsgi_app, readpayload=True, loop=self.loop)
         srv.stream = self.stream
         srv.transport = self.transport
 
@@ -286,7 +287,8 @@ class HttpWsgiServerProtocolTests(unittest.TestCase):
             start('200 OK', [('Content-Type', 'text/plain')])
             return [env['wsgi.input'].read()]
 
-        srv = wsgi.WSGIServerHttpProtocol(wsgi_app, readpayload=True)
+        srv = wsgi.WSGIServerHttpProtocol(
+            wsgi_app, readpayload=True, loop=self.loop)
         srv.stream = self.stream
         srv.transport = self.transport
 

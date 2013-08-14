@@ -233,6 +233,16 @@ class FutureTests(unittest.TestCase):
         f2 = futures.wrap_future(f1)
         self.assertIs(f1, f2)
 
+    @unittest.mock.patch('tulip.futures.events')
+    def test_wrap_future_use_global_loop(self, m_events):
+        def run(arg):
+            time.sleep(0.1)
+            return arg
+        ex = concurrent.futures.ThreadPoolExecutor(1)
+        f1 = ex.submit(run, 'oi')
+        f2 = futures.wrap_future(f1)
+        self.assertIs(m_events.get_event_loop.return_value, f2._loop)
+
 
 # A fake event loop for tests. All it does is implement a call_soon method
 # that immediately invokes the given function.

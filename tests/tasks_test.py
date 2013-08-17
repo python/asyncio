@@ -1,5 +1,6 @@
 """Tests for tasks.py."""
 
+import gc
 import time
 import unittest
 import unittest.mock
@@ -27,6 +28,7 @@ class TaskTests(unittest.TestCase):
 
     def tearDown(self):
         self.loop.close()
+        gc.collect()
 
     def test_task_class(self):
         @tasks.coroutine
@@ -107,6 +109,7 @@ class TaskTests(unittest.TestCase):
         loop = events.new_event_loop()
         t = tasks.async(notmuch(), loop=loop)
         self.assertIs(t._loop, loop)
+        loop.close()
 
     def test_async_future(self):
         f_orig = futures.Future(loop=self.loop)
@@ -118,9 +121,13 @@ class TaskTests(unittest.TestCase):
         self.assertEqual(f.result(), 'ko')
         self.assertIs(f, f_orig)
 
+        loop = events.new_event_loop()
+
         with self.assertRaises(ValueError):
-            loop = events.new_event_loop()
             f = tasks.async(f_orig, loop=loop)
+
+        loop.close()
+
         f = tasks.async(f_orig, loop=self.loop)
         self.assertIs(f, f_orig)
 
@@ -135,9 +142,13 @@ class TaskTests(unittest.TestCase):
         self.assertEqual(t.result(), 'ok')
         self.assertIs(t, t_orig)
 
+        loop = events.new_event_loop()
+
         with self.assertRaises(ValueError):
-            loop = events.new_event_loop()
             t = tasks.async(t_orig, loop=loop)
+
+        loop.close()
+
         t = tasks.async(t_orig, loop=self.loop)
         self.assertIs(t, t_orig)
 

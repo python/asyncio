@@ -1,5 +1,6 @@
 """Tests for streams.py."""
 
+import gc
 import unittest
 import unittest.mock
 
@@ -18,7 +19,11 @@ class StreamReaderTests(unittest.TestCase):
         events.set_event_loop(None)
 
     def tearDown(self):
+        # just in case if we have transport close callbacks
+        test_utils.run_briefly(self.loop)
+
         self.loop.close()
+        gc.collect()
 
     @unittest.mock.patch('tulip.streams.events')
     def test_ctor_global_loop(self, m_events):
@@ -37,6 +42,8 @@ class StreamReaderTests(unittest.TestCase):
             data = self.loop.run_until_complete(f)
             self.assertTrue(data.endswith(b'\r\n\r\nTest message'))
 
+            writer.close()
+
     def test_open_connection_no_loop_ssl(self):
         with test_utils.run_test_server(self.loop, use_ssl=True) as httpd:
             try:
@@ -50,6 +57,8 @@ class StreamReaderTests(unittest.TestCase):
             data = self.loop.run_until_complete(f)
             self.assertTrue(data.endswith(b'\r\n\r\nTest message'))
 
+            writer.close()
+
     def test_open_connection_error(self):
         with test_utils.run_test_server(self.loop) as httpd:
             f = streams.open_connection(*httpd.address, loop=self.loop)
@@ -58,6 +67,8 @@ class StreamReaderTests(unittest.TestCase):
             f = reader.read()
             with self.assertRaises(ZeroDivisionError):
                 self.loop.run_until_complete(f)
+
+            writer.close()
 
     def test_feed_empty_data(self):
         stream = streams.StreamReader(loop=self.loop)

@@ -265,11 +265,11 @@ class BaseEventLoop(events.AbstractEventLoop):
 
             infos = f1.result()
             if not infos:
-                raise socket.error('getaddrinfo() returned empty list')
+                raise OSError('getaddrinfo() returned empty list')
             if f2 is not None:
                 laddr_infos = f2.result()
                 if not laddr_infos:
-                    raise socket.error('getaddrinfo() returned empty list')
+                    raise OSError('getaddrinfo() returned empty list')
 
             exceptions = []
             for family, type, proto, cname, address in infos:
@@ -281,8 +281,8 @@ class BaseEventLoop(events.AbstractEventLoop):
                             try:
                                 sock.bind(laddr)
                                 break
-                            except socket.error as exc:
-                                exc = socket.error(
+                            except OSError as exc:
+                                exc = OSError(
                                     exc.errno, 'error while '
                                     'attempting to bind on address '
                                     '{!r}: {}'.format(
@@ -293,7 +293,7 @@ class BaseEventLoop(events.AbstractEventLoop):
                             sock = None
                             continue
                     yield from self.sock_connect(sock, address)
-                except socket.error as exc:
+                except OSError as exc:
                     if sock is not None:
                         sock.close()
                     exceptions.append(exc)
@@ -309,7 +309,7 @@ class BaseEventLoop(events.AbstractEventLoop):
                         raise exceptions[0]
                     # Raise a combined exception so the user can see all
                     # the various error messages.
-                    raise socket.error('Multiple exceptions: {}'.format(
+                    raise OSError('Multiple exceptions: {}'.format(
                         ', '.join(str(exc) for exc in exceptions)))
 
         elif sock is None:
@@ -351,7 +351,7 @@ class BaseEventLoop(events.AbstractEventLoop):
                         *addr, family=family, type=socket.SOCK_DGRAM,
                         proto=proto, flags=flags)
                     if not infos:
-                        raise socket.error('getaddrinfo() returned empty list')
+                        raise OSError('getaddrinfo() returned empty list')
 
                     for fam, _, pro, _, address in infos:
                         key = (fam, pro)
@@ -387,7 +387,7 @@ class BaseEventLoop(events.AbstractEventLoop):
                 if remote_addr:
                     yield from self.sock_connect(sock, remote_address)
                     r_addr = remote_address
-            except socket.error as exc:
+            except OSError as exc:
                 if sock is not None:
                     sock.close()
                 exceptions.append(exc)
@@ -452,7 +452,7 @@ class BaseEventLoop(events.AbstractEventLoop):
                 host, port, family=family,
                 type=socket.SOCK_STREAM, proto=0, flags=flags)
             if not infos:
-                raise socket.error('getaddrinfo() returned empty list')
+                raise OSError('getaddrinfo() returned empty list')
 
             completed = False
             try:
@@ -472,8 +472,8 @@ class BaseEventLoop(events.AbstractEventLoop):
                                         True)
                     try:
                         sock.bind(sa)
-                    except socket.error as err:
-                        raise socket.error(err.errno, 'error while attempting '
+                    except OSError as err:
+                        raise OSError(err.errno, 'error while attempting '
                                            'to bind on address %r: %s'
                                            % (sa, err.strerror.lower()))
                 completed = True

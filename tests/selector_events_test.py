@@ -325,7 +325,7 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
 
         self.loop.remove_writer = unittest.mock.Mock()
         self.loop._sock_connect(f, True, sock, ('127.0.0.1', 8080))
-        self.assertIsInstance(f.exception(), socket.error)
+        self.assertIsInstance(f.exception(), OSError)
 
     def test_sock_accept(self):
         sock = unittest.mock.Mock()

@@ -544,7 +544,7 @@ class EventLoopTestsMixin:
             f = self.loop.create_connection(
                 lambda: MyProto(loop=self.loop),
                 *httpd.address, local_addr=httpd.address)
-            with self.assertRaises(socket.error) as cm:
+            with self.assertRaises(OSError) as cm:
                 self.loop.run_until_complete(f)
             self.assertEqual(cm.exception.errno, errno.EADDRINUSE)
             self.assertIn(str(httpd.address), cm.exception.strerror)
@@ -686,7 +686,7 @@ class EventLoopTestsMixin:
         host, port = sock.getsockname()
 
         f = self.loop.start_serving(MyProto, host=host, port=port)
-        with self.assertRaises(socket.error) as cm:
+        with self.assertRaises(OSError) as cm:
             self.loop.run_until_complete(f)
         self.assertEqual(cm.exception.errno, errno.EADDRINUSE)
 

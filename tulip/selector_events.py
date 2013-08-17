@@ -279,7 +279,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
                 err = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
                 if err != 0:
                     # Jump to the except clause below.
-                    raise socket.error(err, 'Connect call failed')
+                    raise OSError(err, 'Connect call failed')
             fut.set_result(None)
         except (BlockingIOError, InterruptedError):
             self.add_writer(fd, self._sock_connect, fut, True, sock, address)
@@ -419,7 +419,7 @@ class _SelectorSocketTransport(_SelectorTransport):
                 n = self._sock.send(data)
             except (BlockingIOError, InterruptedError):
                 n = 0
-            except socket.error as exc:
+            except OSError as exc:
                 self._fatal_error(exc)
                 return
 

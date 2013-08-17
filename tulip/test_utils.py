@@ -135,6 +135,9 @@ def run_test_server(loop, *, host='127.0.0.1', port=0,
         try:
             thread_loop.run_until_complete(waiter)
         finally:
+            # call pending connection_made if present
+            run_briefly(thread_loop)
+
             # close opened trnsports
             for tr in transports:
                 tr.close()

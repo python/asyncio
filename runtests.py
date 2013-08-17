@@ -31,6 +31,8 @@ import subprocess
 import unittest
 import importlib.machinery
 
+from unittest.signals import installHandler
+
 assert sys.version >= '3.3', 'Please use Python 3.3 or higher.'
 
 ARGS = argparse.ArgumentParser(description="Run all unittests.")
@@ -42,6 +44,9 @@ ARGS.add_argument(
 ARGS.add_argument(
     '-f', '--failfast', action="store_true", default=False,
     dest='failfast', help='Stop on first fail or error')
+ARGS.add_argument(
+    '-c', '--catch', action="store_true", default=False,
+    dest='catchbreak', help='Catch control-C and display results')
 ARGS.add_argument(
     '-q', action="store_true", dest='quiet', help='quiet')
 ARGS.add_argument(
@@ -142,6 +147,7 @@ def runtests():
 
     v = 0 if args.quiet else args.verbose + 1
     failfast = args.failfast
+    catchbreak = args.catchbreak
 
     tests = load_tests(args.testsdir, includes, excludes)
     logger = logging.getLogger()
@@ -155,6 +161,8 @@ def runtests():
         logger.setLevel(logging.INFO)
     elif v >= 4:
         logger.setLevel(logging.DEBUG)
+    if catchbreak:
+        installHandler()
     result = unittest.TextTestRunner(verbosity=v, failfast=failfast).run(tests)
     sys.exit(not result.wasSuccessful())
 

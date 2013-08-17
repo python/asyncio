@@ -1138,14 +1138,13 @@ class EventLoopTestsMixin:
 
         stdin = transp.get_pipe_transport(0)
         stdin.write(b'test')
-        self.loop.run_until_complete(proto.got_data[1].wait(1))
-        self.assertEqual(b'OUT:test', proto.data[1])
-        self.loop.run_until_complete(proto.got_data[2].wait(1))
-        self.assertEqual(b'ERR:test', proto.data[2])
+
+        self.loop.run_until_complete(proto.completed)
 
         transp.close()
-        self.loop.run_until_complete(proto.completed)
-        self.assertEqual(-signal.SIGTERM, proto.returncode)
+        self.assertEqual(b'OUT:test', proto.data[1])
+        self.assertEqual(b'ERR:test', proto.data[2])
+        self.assertEqual(0, proto.returncode)
 
     @unittest.skipIf(sys.platform == 'win32',
                      "Don't support subprocess for Windows yet")
@@ -1167,16 +1166,16 @@ class EventLoopTestsMixin:
         self.loop.run_until_complete(proto.connected)
 
         stdin = transp.get_pipe_transport(0)
-        stdin.write(b'test')
-        self.loop.run_until_complete(proto.got_data[1].wait(1))
-        self.assertEqual(b'OUT:testERR:test', proto.data[1])
-        self.assertEqual(b'', proto.data[2])
         self.assertIsNotNone(transp.get_pipe_transport(1))
         self.assertIsNone(transp.get_pipe_transport(2))
 
-        transp.close()
+        stdin.write(b'test')
         self.loop.run_until_complete(proto.completed)
-        self.assertEqual(-signal.SIGTERM, proto.returncode)
+        self.assertEqual(b'OUT:testERR:test', proto.data[1])
+        self.assertEqual(b'', proto.data[2])
+
+        transp.close()
+        self.assertEqual(0, proto.returncode)
 
     @unittest.skipIf(sys.platform == 'win32',
                      "Don't support subprocess for Windows yet")

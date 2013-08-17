@@ -132,20 +132,21 @@ def run_test_server(loop, *, host='127.0.0.1', port=0,
         loop.call_soon_threadsafe(
             fut.set_result, (thread_loop, waiter, socks[0].getsockname()))
 
-        thread_loop.run_until_complete(waiter)
+        try:
+            thread_loop.run_until_complete(waiter)
+        finally:
+            # close opened trnsports
+            for tr in transports:
+                tr.close()
 
-        # close opened trnsports
-        for tr in transports:
-            tr.close()
+            run_briefly(thread_loop)  # call close callbacks
 
-        run_briefly(thread_loop)  # call close callbacks
+            for s in socks:
+                thread_loop.stop_serving(s)
 
-        for s in socks:
-            thread_loop.stop_serving(s)
-
-        thread_loop.stop()
-        thread_loop.close()
-        gc.collect()
+            thread_loop.stop()
+            thread_loop.close()
+            gc.collect()
 
     fut = tulip.Future(loop=loop)
     server_thread = threading.Thread(target=run, args=(loop, fut))

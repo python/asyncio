@@ -173,8 +173,9 @@ def runcoverage(sdir, args):
       - Setuptools (https://pypi.python.org/pypi/setuptools)
 
       What worked for me:
-      - download https://bitbucket.org/pypa/setuptools/raw/bootstrap/ez_setup.py
-         * curl -O https://bitbucket.org/pypa/setuptools/raw/bootstrap/ez_setup.py
+      - download bitbucket.org/pypa/setuptools/raw/bootstrap/ez_setup.py
+         * curl -O \
+             https://bitbucket.org/pypa/setuptools/raw/bootstrap/ez_setup.py
       - python3 ez_setup.py
       - python3 -m easy_install coverage
     """

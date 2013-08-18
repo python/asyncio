@@ -171,7 +171,7 @@ class SubprocessTransport(BaseTransport):
         """Send signal to subprocess.
 
         See also:
-        http://docs.python.org/3/library/subprocess#subprocess.Popen.send_signal
+        docs.python.org/3/library/subprocess#subprocess.Popen.send_signal
         """
         raise NotImplementedError
 

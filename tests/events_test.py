@@ -1113,9 +1113,9 @@ class EventLoopTestsMixin:
         self.loop.run_until_complete(connect())
         self.loop.run_until_complete(proto.connected)
 
-        transp.send_signal(signal.SIGQUIT)
+        transp.send_signal(signal.SIGHUP)
         self.loop.run_until_complete(proto.completed)
-        self.assertEqual(-signal.SIGQUIT, proto.returncode)
+        self.assertEqual(-signal.SIGHUP, proto.returncode)
 
     @unittest.skipIf(sys.platform == 'win32',
                      "Don't support subprocess for Windows yet")

@@ -20,19 +20,6 @@ from . import transports
 from .log import tulip_log
 
 
-# Errno values indicating the connection was disconnected.
-# Comment out _DISCONNECTED as never used
-# TODO: make sure that errors has processed properly
-# for now we have no exception clsses for ENOTCONN and EBADF
-# _DISCONNECTED = frozenset((errno.ECONNRESET,
-#                            errno.ENOTCONN,
-#                            errno.ESHUTDOWN,
-#                            errno.ECONNABORTED,
-#                            errno.EPIPE,
-#                            errno.EBADF,
-#                            ))
-
-
 class BaseSelectorEventLoop(base_events.BaseEventLoop):
     """Selector event loop.
 

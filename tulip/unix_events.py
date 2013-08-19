@@ -281,19 +281,9 @@ class _UnixWritePipeTransport(transports.WriteTransport):
         self._conn_lost = 0
         self._closing = False  # Set when close() or write_eof() called.
         self._writing = True
-        # Do nothing if it is a regular file.
-        # Enable hack only if pipe is FIFO object.
-        # Look on twisted.internet.process:ProcessWriter.__init__
-        if stat.S_ISFIFO(os.fstat(self._fileno).st_mode):
-            self._enable_read_hack = True
-        else:
-            # If the pipe is not a unix pipe, then the read hack is never
-            # applicable.  This case arises when _UnixWritePipeTransport
-            # is used by subprocess and stdout/stderr
-            # are redirected to a normal file.
-            self._enable_read_hack = False
-        if self._enable_read_hack:
-            self._loop.add_reader(self._fileno, self._read_ready)
+        if not stat.S_ISFIFO(os.fstat(self._fileno).st_mode):
+            raise ValueError("Pipe transport is for pipes only.")
+        self._loop.add_reader(self._fileno, self._read_ready)
 
         self._loop.call_soon(self._protocol.connection_made, self)
         if waiter is not None:
@@ -352,8 +342,7 @@ class _UnixWritePipeTransport(transports.WriteTransport):
             if n == len(data):
                 self._loop.remove_writer(self._fileno)
                 if self._closing:
-                    if self._enable_read_hack:
-                        self._loop.remove_reader(self._fileno)
+                    self._loop.remove_reader(self._fileno)
                     self._call_connection_lost(None)
                 return
             elif n > 0:
@@ -369,8 +358,7 @@ class _UnixWritePipeTransport(transports.WriteTransport):
         assert self._pipe
         self._closing = True
         if not self._buffer:
-            if self._enable_read_hack:
-                self._loop.remove_reader(self._fileno)
+            self._loop.remove_reader(self._fileno)
             self._loop.call_soon(self._call_connection_lost, None)
 
     def close(self):
@@ -390,8 +378,7 @@ class _UnixWritePipeTransport(transports.WriteTransport):
         self._closing = True
         self._buffer.clear()
         self._loop.remove_writer(self._fileno)
-        if self._enable_read_hack:
-            self._loop.remove_reader(self._fileno)
+        self._loop.remove_reader(self._fileno)
         self._loop.call_soon(self._call_connection_lost, exc)
 
     def _call_connection_lost(self, exc):

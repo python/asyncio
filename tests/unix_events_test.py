@@ -464,7 +464,6 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         self.loop.add_reader.assert_called_with(5, tr._read_ready)
         self.loop.call_soon.assert_called_with(
             self.protocol.connection_made, tr)
-        self.assertTrue(tr._enable_read_hack)
 
     def test_ctor_with_waiter(self):
         fut = futures.Future(loop=self.loop)
@@ -472,7 +471,6 @@ class UnixWritePipeTransportTests(unittest.TestCase):
             self.loop, self.pipe, self.protocol, fut)
         self.loop.call_soon.assert_called_with(fut.set_result, None)
         self.loop.add_reader.assert_called_with(5, tr._read_ready)
-        self.assertTrue(tr._enable_read_hack)
         fut.cancel()
 
     def test_can_write_eof(self):
@@ -782,65 +780,3 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         self.assertTrue(tr._writing)
         self.assertFalse(self.loop.remove_writer.called)
         self.assertEqual([], tr._buffer)
-
-
-class UnixWritePipeRegularFileTests(unittest.TestCase):
-
-    def setUp(self):
-        self.loop = unittest.mock.Mock(spec_set=events.AbstractEventLoop)
-        self.protocol = unittest.mock.Mock(spec_set=protocols.Protocol)
-
-    def test_ctor_with_regular_file(self):
-        with tempfile.TemporaryFile() as f:
-            tr = unix_events._UnixWritePipeTransport(self.loop, f,
-                                                     self.protocol)
-            self.assertFalse(self.loop.add_reader.called)
-            self.loop.call_soon.assert_called_with(
-                self.protocol.connection_made, tr)
-            self.assertFalse(tr._enable_read_hack)
-
-    def test_write_eof(self):
-        with tempfile.TemporaryFile() as f:
-            tr = unix_events._UnixWritePipeTransport(
-                self.loop, f, self.protocol)
-
-            tr.write_eof()
-            self.assertTrue(tr._closing)
-            self.assertFalse(self.loop.remove_reader.called)
-            self.loop.call_soon.assert_called_with(
-                tr._call_connection_lost, None)
-
-    @unittest.mock.patch('os.write')
-    def test__write_ready_closing(self, m_write):
-        with tempfile.TemporaryFile() as f:
-            fileno = f.fileno()
-            tr = unix_events._UnixWritePipeTransport(
-                self.loop, f, self.protocol)
-
-            tr._closing = True
-            tr._buffer = [b'da', b'ta']
-            m_write.return_value = 4
-            tr._write_ready()
-            m_write.assert_called_with(fileno, b'data')
-            self.loop.remove_writer.assert_called_with(fileno)
-            self.assertFalse(self.loop.remove_reader.called)
-            self.assertEqual([], tr._buffer)
-            self.protocol.connection_lost.assert_called_with(None)
-            self.assertTrue(f.closed)
-
-    @unittest.mock.patch('os.write')
-    def test_abort(self, m_write):
-        with tempfile.TemporaryFile() as f:
-            fileno = f.fileno()
-            tr = unix_events._UnixWritePipeTransport(
-                self.loop, f, self.protocol)
-
-            tr._buffer = [b'da', b'ta']
-            tr.abort()
-            self.assertFalse(m_write.called)
-            self.loop.remove_writer.assert_called_with(fileno)
-            self.assertFalse(self.loop.remove_reader.called)
-            self.assertEqual([], tr._buffer)
-            self.assertTrue(tr._closing)
-            self.loop.call_soon.assert_called_with(
-                tr._call_connection_lost, None)

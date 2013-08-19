@@ -275,14 +275,14 @@ class _UnixWritePipeTransport(transports.WriteTransport):
         self._loop = loop
         self._pipe = pipe
         self._fileno = pipe.fileno()
+        if not stat.S_ISFIFO(os.fstat(self._fileno).st_mode):
+            raise ValueError("Pipe transport is for pipes only.")
         _set_nonblocking(self._fileno)
         self._protocol = protocol
         self._buffer = []
         self._conn_lost = 0
         self._closing = False  # Set when close() or write_eof() called.
         self._writing = True
-        if not stat.S_ISFIFO(os.fstat(self._fileno).st_mode):
-            raise ValueError("Pipe transport is for pipes only.")
         self._loop.add_reader(self._fileno, self._read_ready)
 
         self._loop.call_soon(self._protocol.connection_made, self)

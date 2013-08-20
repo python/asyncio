@@ -360,6 +360,48 @@ class TaskTests(unittest.TestCase):
         self.assertEqual(r, 42)
         self.assertTrue(0.08 <= t1-t0 <= 0.12)
 
+    def test_wait_for(self):
+        @tasks.coroutine
+        def foo():
+            yield from tasks.sleep(0.2, loop=self.loop)
+            return 'done'
+
+        fut = tasks.Task(foo(), loop=self.loop)
+
+        t0 = time.monotonic()
+        self.assertRaises(
+            futures.TimeoutError,
+            self.loop.run_until_complete,
+            tasks.wait_for(fut, 0.1, loop=self.loop))
+        t1 = time.monotonic()
+        self.assertFalse(fut.done())
+
+        # wait for result
+        res = self.loop.run_until_complete(
+            tasks.wait_for(fut, 0.2, loop=self.loop))
+        t2 = time.monotonic()
+        self.assertEqual(res, 'done')
+
+        self.assertTrue(0.08 <= t1-t0 <= 0.12)
+        self.assertTrue(0.18 <= t2-t0 <= 0.22)
+
+    def test_wait_for_with_global_loop(self):
+        @tasks.coroutine
+        def foo():
+            yield from tasks.sleep(0.2, loop=self.loop)
+            return 'done'
+
+        events.set_event_loop(self.loop)
+        try:
+            fut = tasks.Task(foo(), loop=self.loop)
+            self.assertRaises(
+                futures.TimeoutError,
+                self.loop.run_until_complete, tasks.wait_for(fut, 0.01))
+        finally:
+            events.set_event_loop(None)
+
+        self.assertFalse(fut.done())
+
     def test_wait(self):
         a = tasks.Task(tasks.sleep(0.1, loop=self.loop), loop=self.loop)
         b = tasks.Task(tasks.sleep(0.15, loop=self.loop), loop=self.loop)
@@ -381,7 +423,26 @@ class TaskTests(unittest.TestCase):
         res = self.loop.run_until_complete(tasks.Task(foo(), loop=self.loop))
         t1 = time.monotonic()
         self.assertTrue(t1-t0 <= 0.01)
-        # TODO: Test different return_when values.
+
+    def test_wait_with_global_loop(self):
+        a = tasks.Task(tasks.sleep(0.01, loop=self.loop), loop=self.loop)
+        b = tasks.Task(tasks.sleep(0.015, loop=self.loop), loop=self.loop)
+
+        @tasks.coroutine
+        def foo():
+            done, pending = yield from tasks.wait([b, a])
+            self.assertEqual(done, set([a, b]))
+            self.assertEqual(pending, set())
+            return 42
+
+        events.set_event_loop(self.loop)
+        try:
+            res = self.loop.run_until_complete(
+                tasks.Task(foo(), loop=self.loop))
+        finally:
+            events.set_event_loop(None)
+
+        self.assertEqual(res, 42)
 
     def test_wait_errors(self):
         self.assertRaises(

@@ -2,7 +2,7 @@
 
 __all__ = ['coroutine', 'task', 'Task',
            'FIRST_COMPLETED', 'FIRST_EXCEPTION', 'ALL_COMPLETED',
-           'wait', 'as_completed', 'sleep', 'async',
+           'wait', 'wait_for', 'as_completed', 'sleep', 'async',
            ]
 
 import collections
@@ -209,18 +209,46 @@ def wait(fs, *, loop=None, timeout=None, return_when=ALL_COMPLETED):
 
         done, pending = yield from tulip.wait(fs)
 
-    Note: This does not raise TimeoutError!  Futures that aren't done
+    Note: This does not raise TimeoutError! Futures that aren't done
     when the timeout occurs are returned in the second set.
     """
     if not fs:
         raise ValueError('Set of coroutines/Futures is empty.')
 
-    loop = loop if loop is not None else events.get_event_loop()
+    if loop is None:
+        loop = events.get_event_loop()
+
     fs = set(async(f, loop=loop) for f in fs)
 
     if return_when not in (FIRST_COMPLETED, FIRST_EXCEPTION, ALL_COMPLETED):
         raise ValueError('Invalid return_when value: {}'.format(return_when))
     return (yield from _wait(fs, timeout, return_when, loop))
+
+
+@coroutine
+def wait_for(fut, timeout, *, loop=None):
+    """Wait for the single Future or coroutine to complete.
+
+    Coroutine will be wrapped in Task.
+
+    Returns result of the Future or coroutine. Raises TimeoutError when
+    timeout occurs.
+
+    Usage:
+
+        result = yield from tulip.wait_for(fut, 10.0)
+
+    """
+    if loop is None:
+        loop = events.get_event_loop()
+
+    fut = async(fut, loop=loop)
+
+    done, pending = yield from _wait([fut], timeout, FIRST_COMPLETED, loop)
+    if done:
+        return done.pop().result()
+
+    raise futures.TimeoutError()
 
 
 @coroutine

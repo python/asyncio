@@ -8,6 +8,7 @@ import http.server
 import json
 import logging
 import io
+import unittest.mock
 import os
 import re
 import socket
@@ -23,6 +24,9 @@ except ImportError:  # pragma: no cover
 import tulip
 import tulip.http
 from tulip.http import client
+
+from tulip import base_events
+from tulip import selectors
 
 
 if sys.platform == 'win32':  # pragma: no cover
@@ -300,3 +304,79 @@ class Router:
         # keep-alive
         if response.keep_alive():
             self._srv.keep_alive(True)
+
+
+class TestSelector(selectors._BaseSelector):
+
+    def select(self, timeout):
+        return []
+
+
+class TestLoop(base_events.BaseEventLoop):
+    """Loop for unittests.
+
+    It manages self time directly.
+    If something scheduled to be executed later then
+    on next loop iteration after all ready handlers done
+    generator passed to __init__ is calling.
+
+    Generator should be like this:
+
+        def gen():
+            ...
+            when = yield ...
+            ... = yield time_advance
+
+    Value retuned by yield is absolute time of next scheduled handler.
+    Value passed to yield is time advance to move loop's time forward.
+    """
+
+    def __init__(self, gen=None):
+        super().__init__()
+
+        if gen is None:
+            self._check_on_close = False
+            def gen():
+                yield
+        else:
+            self._check_on_close = True
+
+        self._gen = gen()
+        next(self._gen)
+        self._time = 0
+        self._timers = []
+        self._selector = TestSelector()
+
+    def time(self):
+        return self._time
+
+    def advance_time(self, advance):
+        """Move test time forward."""
+        if advance:
+            self._time += advance
+
+    def close(self):
+        if self._check_on_close:
+            try:
+                self._gen.send(0)
+            except StopIteration:
+                pass
+            else:
+                raise AssertionError("Time generator is not finished")
+
+    def _run_once(self):
+        super()._run_once()
+        for when in self._timers:
+            advance = self._gen.send(when)
+            self.advance_time(advance)
+        self._timers = []
+
+    def call_at(self, when, callback, *args):
+        self._timers.append(when)
+        return super().call_at(when, callback, *args)
+
+    def _process_events(self, event_list):
+        return
+
+    def _write_to_self(self):
+        pass

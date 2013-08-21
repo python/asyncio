@@ -1,7 +1,6 @@
 """Tests for tasks.py."""
 
 import gc
-import time
 import unittest
 import unittest.mock
 
@@ -23,7 +22,7 @@ class Dummy:
 class TaskTests(unittest.TestCase):
 
     def setUp(self):
-        self.loop = events.new_event_loop()
+        self.loop = test_utils.TestLoop()
         events.set_event_loop(None)
 
     def tearDown(self):
@@ -209,15 +208,24 @@ class TaskTests(unittest.TestCase):
         self.assertEqual(self.loop.run_until_complete(t), 1042)
 
     def test_cancel(self):
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(10.0, when)
+            yield 0
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
         @tasks.coroutine
         def task():
-            yield from tasks.sleep(10.0, loop=self.loop)
+            yield from tasks.sleep(10.0, loop=loop)
             return 12
 
-        t = tasks.Task(task(), loop=self.loop)
-        self.loop.call_soon(t.cancel)
+        t = tasks.Task(task(), loop=loop)
+        loop.call_soon(t.cancel)
         self.assertRaises(
-            futures.CancelledError, self.loop.run_until_complete, t)
+            futures.CancelledError, loop.run_until_complete, t)
         self.assertTrue(t.done())
         self.assertFalse(t.cancel())
 
@@ -267,23 +275,46 @@ class TaskTests(unittest.TestCase):
         self.assertTrue(t.cancelled())
 
     def test_future_timeout(self):
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.1, when)
+            when = yield 0
+            self.assertAlmostEqual(10.0, when)
+            yield 0.1
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
         @tasks.coroutine
         def coro():
-            yield from tasks.sleep(10.0, loop=self.loop)
+            yield from tasks.sleep(10.0, loop=loop)
             return 12
 
-        t = tasks.Task(coro(), timeout=0.1, loop=self.loop)
+        t = tasks.Task(coro(), timeout=0.1, loop=loop)
 
         self.assertRaises(
             futures.CancelledError,
-            self.loop.run_until_complete, t)
+            loop.run_until_complete, t)
         self.assertTrue(t.done())
         self.assertFalse(t.cancel())
+        self.assertAlmostEqual(0.1, loop.time())
 
     def test_future_timeout_catch(self):
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.1, when)
+            when = yield 0
+            self.assertAlmostEqual(10.0, when)
+            yield 0.1
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
         @tasks.coroutine
         def coro():
-            yield from tasks.sleep(10.0, loop=self.loop)
+            yield from tasks.sleep(10.0, loop=loop)
             return 12
 
         class Cancelled(Exception):
@@ -292,12 +323,13 @@ class TaskTests(unittest.TestCase):
         @tasks.coroutine
         def coro2():
             try:
-                yield from tasks.Task(coro(), timeout=0.1, loop=self.loop)
+                yield from tasks.Task(coro(), timeout=0.1, loop=loop)
             except futures.CancelledError:
                 raise Cancelled()
 
         self.assertRaises(
-            Cancelled, self.loop.run_until_complete, coro2())
+            Cancelled, loop.run_until_complete, coro2())
+        self.assertAlmostEqual(0.1, loop.time())
 
     def test_cancel_in_coro(self):
         @tasks.coroutine
@@ -312,121 +344,190 @@ class TaskTests(unittest.TestCase):
         self.assertFalse(t.cancel())
 
     def test_stop_while_run_in_complete(self):
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.1, when)
+            when = yield 0.1
+            self.assertAlmostEqual(0.2, when)
+            when = yield 0.1
+            self.assertAlmostEqual(0.3, when)
+            yield 0.1
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
         x = 0
 
         @tasks.coroutine
         def task():
             nonlocal x
             while x < 10:
-                yield from tasks.sleep(0.1, loop=self.loop)
+                yield from tasks.sleep(0.1, loop=loop)
                 x += 1
                 if x == 2:
-                    self.loop.stop()
+                    loop.stop()
 
-        t = tasks.Task(task(), loop=self.loop)
-        t0 = time.monotonic()
+        t = tasks.Task(task(), loop=loop)
         self.assertRaises(
-            RuntimeError, self.loop.run_until_complete, t)
-        t1 = time.monotonic()
+            RuntimeError, loop.run_until_complete, t)
         self.assertFalse(t.done())
-        self.assertTrue(0.18 <= t1-t0 <= 0.22)
         self.assertEqual(x, 2)
+        self.assertAlmostEqual(0.3, loop.time())
 
     def test_timeout(self):
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.1, when)
+            when = yield 0
+            self.assertAlmostEqual(10.0, when)
+            yield 0.1
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
         @tasks.coroutine
         def task():
-            yield from tasks.sleep(10.0, loop=self.loop)
+            yield from tasks.sleep(10.0, loop=loop)
             return 42
 
-        t = tasks.Task(task(), loop=self.loop)
-        t0 = time.monotonic()
+        t = tasks.Task(task(), loop=loop)
         self.assertRaises(
-            futures.TimeoutError, self.loop.run_until_complete, t, 0.1)
-        t1 = time.monotonic()
+            futures.TimeoutError, loop.run_until_complete, t, 0.1)
+        self.assertAlmostEqual(0.1, loop.time())
         self.assertFalse(t.done())
-        self.assertTrue(0.08 <= t1-t0 <= 0.12)
 
     def test_timeout_not(self):
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(10.0, when)
+            when = yield 0
+            self.assertAlmostEqual(0.1, when)
+            yield 0.1
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
         @tasks.coroutine
         def task():
-            yield from tasks.sleep(0.1, loop=self.loop)
+            yield from tasks.sleep(0.1, loop=loop)
             return 42
 
-        t = tasks.Task(task(), loop=self.loop)
-        t0 = time.monotonic()
-        r = self.loop.run_until_complete(t, 10.0)
-        t1 = time.monotonic()
+        t = tasks.Task(task(), loop=loop)
+        r = loop.run_until_complete(t, 10.0)
         self.assertTrue(t.done())
         self.assertEqual(r, 42)
-        self.assertTrue(0.08 <= t1-t0 <= 0.12)
+        self.assertAlmostEqual(0.1, loop.time())
 
     def test_wait_for(self):
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.2, when)
+            when = yield 0
+            self.assertAlmostEqual(0.1, when)
+            when = yield 0.1
+            self.assertAlmostEqual(0.4, when)
+            yield 0.1
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
         @tasks.coroutine
         def foo():
-            yield from tasks.sleep(0.2, loop=self.loop)
+            yield from tasks.sleep(0.2, loop=loop)
             return 'done'
 
-        fut = tasks.Task(foo(), loop=self.loop)
+        fut = tasks.Task(foo(), loop=loop)
 
-        t0 = time.monotonic()
-        self.assertRaises(
-            futures.TimeoutError,
-            self.loop.run_until_complete,
-            tasks.wait_for(fut, 0.1, loop=self.loop))
-        t1 = time.monotonic()
+        with self.assertRaises(futures.TimeoutError):
+            loop.run_until_complete(tasks.wait_for(fut, 0.1, loop=loop))
+
         self.assertFalse(fut.done())
+        self.assertAlmostEqual(0.1, loop.time())
 
+        loop
         # wait for result
-        res = self.loop.run_until_complete(
-            tasks.wait_for(fut, 0.2, loop=self.loop))
-        t2 = time.monotonic()
+        res = loop.run_until_complete(
+            tasks.wait_for(fut, 0.3, loop=loop))
         self.assertEqual(res, 'done')
-
-        self.assertTrue(0.08 <= t1-t0 <= 0.12)
-        self.assertTrue(0.18 <= t2-t0 <= 0.22)
+        self.assertAlmostEqual(0.2, loop.time())
 
     def test_wait_for_with_global_loop(self):
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.2, when)
+            when = yield 0
+            self.assertAlmostEqual(0.01, when)
+            yield 0.01
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
         @tasks.coroutine
         def foo():
-            yield from tasks.sleep(0.2, loop=self.loop)
+            yield from tasks.sleep(0.2, loop=loop)
             return 'done'
 
-        events.set_event_loop(self.loop)
+        events.set_event_loop(loop)
         try:
-            fut = tasks.Task(foo(), loop=self.loop)
-            self.assertRaises(
-                futures.TimeoutError,
-                self.loop.run_until_complete, tasks.wait_for(fut, 0.01))
+            fut = tasks.Task(foo(), loop=loop)
+            with self.assertRaises(futures.TimeoutError):
+                loop.run_until_complete(tasks.wait_for(fut, 0.01))
         finally:
             events.set_event_loop(None)
 
+        self.assertAlmostEqual(0.01, loop.time())
         self.assertFalse(fut.done())
 
     def test_wait(self):
-        a = tasks.Task(tasks.sleep(0.1, loop=self.loop), loop=self.loop)
-        b = tasks.Task(tasks.sleep(0.15, loop=self.loop), loop=self.loop)
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.1, when)
+            when = yield 0
+            self.assertAlmostEqual(0.15, when)
+            yield 0.15
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
+        a = tasks.Task(tasks.sleep(0.1, loop=loop), loop=loop)
+        b = tasks.Task(tasks.sleep(0.15, loop=loop), loop=loop)
 
         @tasks.coroutine
         def foo():
-            done, pending = yield from tasks.wait([b, a], loop=self.loop)
+            done, pending = yield from tasks.wait([b, a], loop=loop)
             self.assertEqual(done, set([a, b]))
             self.assertEqual(pending, set())
             return 42
 
-        t0 = time.monotonic()
-        res = self.loop.run_until_complete(tasks.Task(foo(), loop=self.loop))
-        t1 = time.monotonic()
-        self.assertTrue(t1-t0 >= 0.14)
+        res = loop.run_until_complete(tasks.Task(foo(), loop=loop))
         self.assertEqual(res, 42)
+        self.assertAlmostEqual(0.15, loop.time())
+
         # Doing it again should take no time and exercise a different path.
-        t0 = time.monotonic()
-        res = self.loop.run_until_complete(tasks.Task(foo(), loop=self.loop))
-        t1 = time.monotonic()
-        self.assertTrue(t1-t0 <= 0.01)
+        res = loop.run_until_complete(tasks.Task(foo(), loop=loop))
+        self.assertAlmostEqual(0.15, loop.time())
+        self.assertEqual(res, 42)
 
     def test_wait_with_global_loop(self):
-        a = tasks.Task(tasks.sleep(0.01, loop=self.loop), loop=self.loop)
-        b = tasks.Task(tasks.sleep(0.015, loop=self.loop), loop=self.loop)
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.01, when)
+            when = yield 0
+            self.assertAlmostEqual(0.015, when)
+            yield 0.015
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
+        a = tasks.Task(tasks.sleep(0.01, loop=loop), loop=loop)
+        b = tasks.Task(tasks.sleep(0.015, loop=loop), loop=loop)
 
         @tasks.coroutine
         def foo():
@@ -435,10 +536,10 @@ class TaskTests(unittest.TestCase):
             self.assertEqual(pending, set())
             return 42
 
-        events.set_event_loop(self.loop)
+        events.set_event_loop(loop)
         try:
-            res = self.loop.run_until_complete(
-                tasks.Task(foo(), loop=self.loop))
+            res = loop.run_until_complete(
+                tasks.Task(foo(), loop=loop))
         finally:
             events.set_event_loop(None)
 
@@ -455,19 +556,31 @@ class TaskTests(unittest.TestCase):
                        return_when=-1, loop=self.loop))
 
     def test_wait_first_completed(self):
-        a = tasks.Task(tasks.sleep(10.0, loop=self.loop), loop=self.loop)
-        b = tasks.Task(tasks.sleep(0.1, loop=self.loop), loop=self.loop)
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(10.0, when)
+            when = yield 0
+            self.assertAlmostEqual(0.1, when)
+            yield 0.1
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
+        a = tasks.Task(tasks.sleep(10.0, loop=loop), loop=loop)
+        b = tasks.Task(tasks.sleep(0.1, loop=loop), loop=loop)
         task = tasks.Task(
             tasks.wait([b, a], return_when=tasks.FIRST_COMPLETED,
-                       loop=self.loop),
-            loop=self.loop)
+                       loop=loop),
+            loop=loop)
 
-        done, pending = self.loop.run_until_complete(task)
+        done, pending = loop.run_until_complete(task)
         self.assertEqual({b}, done)
         self.assertEqual({a}, pending)
         self.assertFalse(a.done())
         self.assertTrue(b.done())
         self.assertIsNone(b.result())
+        self.assertAlmostEqual(0.1, loop.time())
 
     def test_wait_really_done(self):
         # there is possibility that some tasks in the pending list
@@ -497,132 +610,215 @@ class TaskTests(unittest.TestCase):
         self.assertIsNone(b.result())
 
     def test_wait_first_exception(self):
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(10.0, when)
+            yield 0
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
         # first_exception, task already has exception
-        a = tasks.Task(tasks.sleep(10.0, loop=self.loop), loop=self.loop)
+        a = tasks.Task(tasks.sleep(10.0, loop=loop), loop=loop)
 
         @tasks.coroutine
         def exc():
             raise ZeroDivisionError('err')
 
-        b = tasks.Task(exc(), loop=self.loop)
+        b = tasks.Task(exc(), loop=loop)
         task = tasks.Task(
             tasks.wait([b, a], return_when=tasks.FIRST_EXCEPTION,
-                       loop=self.loop),
-            loop=self.loop)
+                       loop=loop),
+            loop=loop)
 
-        done, pending = self.loop.run_until_complete(task)
+        done, pending = loop.run_until_complete(task)
         self.assertEqual({b}, done)
         self.assertEqual({a}, pending)
+        self.assertAlmostEqual(0, loop.time())
 
     def test_wait_first_exception_in_wait(self):
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(10.0, when)
+            when = yield 0
+            self.assertAlmostEqual(0.01, when)
+            yield 0.01
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
         # first_exception, exception during waiting
-        a = tasks.Task(tasks.sleep(10.0, loop=self.loop), loop=self.loop)
+        a = tasks.Task(tasks.sleep(10.0, loop=loop), loop=loop)
 
         @tasks.coroutine
         def exc():
-            yield from tasks.sleep(0.01, loop=self.loop)
+            yield from tasks.sleep(0.01, loop=loop)
             raise ZeroDivisionError('err')
 
-        b = tasks.Task(exc(), loop=self.loop)
+        b = tasks.Task(exc(), loop=loop)
         task = tasks.wait([b, a], return_when=tasks.FIRST_EXCEPTION,
-                          loop=self.loop)
+                          loop=loop)
 
-        done, pending = self.loop.run_until_complete(task)
+        done, pending = loop.run_until_complete(task)
         self.assertEqual({b}, done)
         self.assertEqual({a}, pending)
+        self.assertAlmostEqual(0.01, loop.time())
 
     def test_wait_with_exception(self):
-        a = tasks.Task(tasks.sleep(0.1, loop=self.loop), loop=self.loop)
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.1, when)
+            when = yield 0
+            self.assertAlmostEqual(0.15, when)
+            yield 0.15
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
+        a = tasks.Task(tasks.sleep(0.1, loop=loop), loop=loop)
 
         @tasks.coroutine
         def sleeper():
-            yield from tasks.sleep(0.15, loop=self.loop)
+            yield from tasks.sleep(0.15, loop=loop)
             raise ZeroDivisionError('really')
 
-        b = tasks.Task(sleeper(), loop=self.loop)
+        b = tasks.Task(sleeper(), loop=loop)
 
         @tasks.coroutine
         def foo():
-            done, pending = yield from tasks.wait([b, a], loop=self.loop)
+            done, pending = yield from tasks.wait([b, a], loop=loop)
             self.assertEqual(len(done), 2)
             self.assertEqual(pending, set())
             errors = set(f for f in done if f.exception() is not None)
             self.assertEqual(len(errors), 1)
 
-        t0 = time.monotonic()
-        self.loop.run_until_complete(tasks.Task(foo(), loop=self.loop))
-        t1 = time.monotonic()
-        self.assertTrue(t1-t0 >= 0.14)
-        t0 = time.monotonic()
-        self.loop.run_until_complete(tasks.Task(foo(), loop=self.loop))
-        t1 = time.monotonic()
-        self.assertTrue(t1-t0 <= 0.01)
+        loop.run_until_complete(tasks.Task(foo(), loop=loop))
+        self.assertAlmostEqual(0.15, loop.time())
+
+        loop.run_until_complete(tasks.Task(foo(), loop=loop))
+        self.assertAlmostEqual(0.15, loop.time())
 
     def test_wait_with_timeout(self):
-        a = tasks.Task(tasks.sleep(0.1, loop=self.loop), loop=self.loop)
-        b = tasks.Task(tasks.sleep(0.15, loop=self.loop), loop=self.loop)
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.1, when)
+            when = yield 0
+            self.assertAlmostEqual(0.15, when)
+            when = yield 0
+            self.assertAlmostEqual(0.11, when)
+            yield 0.11
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
+        a = tasks.Task(tasks.sleep(0.1, loop=loop), loop=loop)
+        b = tasks.Task(tasks.sleep(0.15, loop=loop), loop=loop)
 
         @tasks.coroutine
         def foo():
             done, pending = yield from tasks.wait([b, a], timeout=0.11,
-                                                  loop=self.loop)
+                                                  loop=loop)
             self.assertEqual(done, set([a]))
             self.assertEqual(pending, set([b]))
 
-        t0 = time.monotonic()
-        self.loop.run_until_complete(tasks.Task(foo(), loop=self.loop))
-        t1 = time.monotonic()
-        self.assertTrue(t1-t0 >= 0.1)
-        self.assertTrue(t1-t0 <= 0.13)
+        loop.run_until_complete(tasks.Task(foo(), loop=loop))
+        self.assertAlmostEqual(0.11, loop.time())
 
     def test_wait_concurrent_complete(self):
-        a = tasks.Task(tasks.sleep(0.1, loop=self.loop), loop=self.loop)
-        b = tasks.Task(tasks.sleep(0.15, loop=self.loop), loop=self.loop)
 
-        done, pending = self.loop.run_until_complete(
-            tasks.wait([b, a], timeout=0.1, loop=self.loop))
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.1, when)
+            when = yield 0
+            self.assertAlmostEqual(0.15, when)
+            when = yield 0
+            self.assertAlmostEqual(0.1, when)
+            yield 0.1
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
+        a = tasks.Task(tasks.sleep(0.1, loop=loop), loop=loop)
+        b = tasks.Task(tasks.sleep(0.15, loop=loop), loop=loop)
+
+        done, pending = loop.run_until_complete(
+            tasks.wait([b, a], timeout=0.1, loop=loop))
 
         self.assertEqual(done, set([a]))
         self.assertEqual(pending, set([b]))
+        self.assertAlmostEqual(0.1, loop.time())
 
     def test_as_completed(self):
+
+        def gen():
+            yield 0
+            yield 0
+            yield 0.01
+            yield 0
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+        completed = set()
+        time_shifted = False
+
         @tasks.coroutine
         def sleeper(dt, x):
-            yield from tasks.sleep(dt, loop=self.loop)
+            nonlocal time_shifted
+            yield from tasks.sleep(dt, loop=loop)
+            completed.add(x)
+            if not time_shifted and 'a' in completed and 'b' in completed:
+                time_shifted = True
+                loop.advance_time(0.14)
             return x
 
-        a = sleeper(0.1, 'a')
-        b = sleeper(0.1, 'b')
+        a = sleeper(0.01, 'a')
+        b = sleeper(0.01, 'b')
         c = sleeper(0.15, 'c')
 
         @tasks.coroutine
         def foo():
             values = []
-            for f in tasks.as_completed([b, c, a], loop=self.loop):
+            for f in tasks.as_completed([b, c, a], loop=loop):
                 values.append((yield from f))
             return values
 
-        t0 = time.monotonic()
-        res = self.loop.run_until_complete(tasks.Task(foo(), loop=self.loop))
-        t1 = time.monotonic()
-        self.assertTrue(t1-t0 >= 0.14)
+        res = loop.run_until_complete(tasks.Task(foo(), loop=loop))
+        self.assertAlmostEqual(0.15, loop.time())
         self.assertTrue('a' in res[:2])
         self.assertTrue('b' in res[:2])
         self.assertEqual(res[2], 'c')
+
         # Doing it again should take no time and exercise a different path.
-        t0 = time.monotonic()
-        res = self.loop.run_until_complete(tasks.Task(foo(), loop=self.loop))
-        t1 = time.monotonic()
-        self.assertTrue(t1-t0 <= 0.01)
+        res = loop.run_until_complete(tasks.Task(foo(), loop=loop))
+        self.assertAlmostEqual(0.15, loop.time())
 
     def test_as_completed_with_timeout(self):
-        a = tasks.sleep(0.1, 'a', loop=self.loop)
-        b = tasks.sleep(0.15, 'b', loop=self.loop)
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.12, when)
+            when = yield 0
+            self.assertAlmostEqual(0.1, when)
+            when = yield 0
+            self.assertAlmostEqual(0.15, when)
+            when = yield 0.1
+            self.assertAlmostEqual(0.12, when)
+            yield 0.02
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
+        a = tasks.sleep(0.1, 'a', loop=loop)
+        b = tasks.sleep(0.15, 'b', loop=loop)
 
         @tasks.coroutine
         def foo():
             values = []
-            for f in tasks.as_completed([a, b], timeout=0.12, loop=self.loop):
+            for f in tasks.as_completed([a, b], timeout=0.12, loop=loop):
                 try:
                     v = yield from f
                     values.append((1, v))
@@ -630,103 +826,148 @@ class TaskTests(unittest.TestCase):
                     values.append((2, exc))
             return values
 
-        t0 = time.monotonic()
-        res = self.loop.run_until_complete(tasks.Task(foo(), loop=self.loop))
-        t1 = time.monotonic()
-        self.assertTrue(t1-t0 >= 0.11)
+        res = loop.run_until_complete(tasks.Task(foo(), loop=loop))
         self.assertEqual(len(res), 2, res)
         self.assertEqual(res[0], (1, 'a'))
         self.assertEqual(res[1][0], 2)
         self.assertTrue(isinstance(res[1][1], futures.TimeoutError))
+        self.assertAlmostEqual(0.12, loop.time())
 
     def test_as_completed_reverse_wait(self):
-        a = tasks.sleep(0.05, 'a', loop=self.loop)
-        b = tasks.sleep(0.10, 'b', loop=self.loop)
+
+        def gen():
+            yield 0
+            yield 0.05
+            yield 0
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+        completed = set()
+        time_shifted = False
+
+        a = tasks.sleep(0.05, 'a', loop=loop)
+        b = tasks.sleep(0.10, 'b', loop=loop)
         fs = {a, b}
-        futs = list(tasks.as_completed(fs, loop=self.loop))
+        futs = list(tasks.as_completed(fs, loop=loop))
         self.assertEqual(len(futs), 2)
-        x = self.loop.run_until_complete(futs[1])
+
+        x = loop.run_until_complete(futs[1])
         self.assertEqual(x, 'a')
-        y = self.loop.run_until_complete(futs[0])
+        self.assertAlmostEqual(0.05, loop.time())
+        loop.advance_time(0.05)
+        y = loop.run_until_complete(futs[0])
         self.assertEqual(y, 'b')
+        self.assertAlmostEqual(0.10, loop.time())
 
     def test_as_completed_concurrent(self):
-        a = tasks.sleep(0.05, 'a', loop=self.loop)
-        b = tasks.sleep(0.05, 'b', loop=self.loop)
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.05, when)
+            when = yield 0
+            self.assertAlmostEqual(0.05, when)
+            yield 0.05
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
+        a = tasks.sleep(0.05, 'a', loop=loop)
+        b = tasks.sleep(0.05, 'b', loop=loop)
         fs = {a, b}
-        futs = list(tasks.as_completed(fs, loop=self.loop))
+        futs = list(tasks.as_completed(fs, loop=loop))
         self.assertEqual(len(futs), 2)
-        waiter = tasks.wait(futs, loop=self.loop)
-        done, pending = self.loop.run_until_complete(waiter)
+        waiter = tasks.wait(futs, loop=loop)
+        done, pending = loop.run_until_complete(waiter)
         self.assertEqual(set(f.result() for f in done), {'a', 'b'})
 
     def test_sleep(self):
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.05, when)
+            when = yield 0.05
+            self.assertAlmostEqual(0.1, when)
+            yield 0.05
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
         @tasks.coroutine
         def sleeper(dt, arg):
-            yield from tasks.sleep(dt/2, loop=self.loop)
-            res = yield from tasks.sleep(dt/2, arg, loop=self.loop)
+            yield from tasks.sleep(dt/2, loop=loop)
+            res = yield from tasks.sleep(dt/2, arg, loop=loop)
             return res
 
-        t = tasks.Task(sleeper(0.1, 'yeah'), loop=self.loop)
-        t0 = time.monotonic()
-        self.loop.run_until_complete(t)
-        t1 = time.monotonic()
-        self.assertTrue(t1-t0 >= 0.09)
+        t = tasks.Task(sleeper(0.1, 'yeah'), loop=loop)
+        loop.run_until_complete(t)
         self.assertTrue(t.done())
         self.assertEqual(t.result(), 'yeah')
+        self.assertAlmostEqual(0.1, loop.time())
 
     def test_sleep_cancel(self):
-        t = tasks.Task(tasks.sleep(10.0, 'yeah', loop=self.loop),
-                       loop=self.loop)
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(10.0, when)
+            yield 0
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
+        t = tasks.Task(tasks.sleep(10.0, 'yeah', loop=loop),
+                       loop=loop)
 
         handle = None
-        orig_call_later = self.loop.call_later
+        orig_call_later = loop.call_later
 
         def call_later(self, delay, callback, *args):
             nonlocal handle
             handle = orig_call_later(self, delay, callback, *args)
             return handle
 
-        self.loop.call_later = call_later
-        test_utils.run_briefly(self.loop)
+        loop.call_later = call_later
+        test_utils.run_briefly(loop)
 
         self.assertFalse(handle._cancelled)
 
         t.cancel()
-        test_utils.run_briefly(self.loop)
+        test_utils.run_briefly(loop)
         self.assertTrue(handle._cancelled)
 
     def test_task_cancel_sleeping_task(self):
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.1, when)
+            when = yield 0
+            self.assertAlmostEqual(5000, when)
+            yield 0.1
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
         sleepfut = None
 
         @tasks.coroutine
         def sleep(dt):
             nonlocal sleepfut
-            sleepfut = tasks.sleep(dt, loop=self.loop)
-            try:
-                time.monotonic()
-                yield from sleepfut
-            finally:
-                time.monotonic()
+            sleepfut = tasks.sleep(dt, loop=loop)
+            yield from sleepfut
 
         @tasks.coroutine
         def doit():
-            sleeper = tasks.Task(sleep(5000), loop=self.loop)
-            self.loop.call_later(0.1, sleeper.cancel)
+            sleeper = tasks.Task(sleep(5000), loop=loop)
+            loop.call_later(0.1, sleeper.cancel)
             try:
-                time.monotonic()
                 yield from sleeper
             except futures.CancelledError:
-                time.monotonic()
                 return 'cancelled'
             else:
                 return 'slept in'
 
-        t0 = time.monotonic()
         doer = doit()
-        self.assertEqual(self.loop.run_until_complete(doer), 'cancelled')
-        t1 = time.monotonic()
-        self.assertTrue(0.09 <= t1-t0 <= 0.13, (t1-t0, sleepfut, doer))
+        self.assertEqual(loop.run_until_complete(doer), 'cancelled')
+        self.assertAlmostEqual(0.1, loop.time())
 
     def test_task_cancel_waiter_future(self):
         fut = futures.Future(loop=self.loop)
@@ -811,9 +1052,18 @@ class TaskTests(unittest.TestCase):
         self.assertIsInstance(task.exception(), BaseException)
 
     def test_baseexception_during_cancel(self):
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(10.0, when)
+            yield 0
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
         @tasks.coroutine
         def sleeper():
-            yield from tasks.sleep(10, loop=self.loop)
+            yield from tasks.sleep(10, loop=loop)
 
         @tasks.coroutine
         def notmutch():
@@ -822,13 +1072,13 @@ class TaskTests(unittest.TestCase):
             except futures.CancelledError:
                 raise BaseException()
 
-        task = tasks.Task(notmutch(), loop=self.loop)
-        test_utils.run_briefly(self.loop)
+        task = tasks.Task(notmutch(), loop=loop)
+        test_utils.run_briefly(loop)
 
         task.cancel()
         self.assertFalse(task.done())
 
-        self.assertRaises(BaseException, test_utils.run_briefly, self.loop)
+        self.assertRaises(BaseException, test_utils.run_briefly, loop)
 
         self.assertTrue(task.done())
         self.assertTrue(task.cancelled())

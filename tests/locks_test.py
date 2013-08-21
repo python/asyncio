@@ -1,6 +1,5 @@
 """Tests for lock.py"""
 
-import time
 import unittest
 import unittest.mock
 
@@ -8,13 +7,13 @@ from tulip import events
 from tulip import futures
 from tulip import locks
 from tulip import tasks
-from tulip.test_utils import run_briefly
+from tulip import test_utils
 
 
 class LockTests(unittest.TestCase):
 
     def setUp(self):
-        self.loop = events.new_event_loop()
+        self.loop = test_utils.TestLoop()
         events.set_event_loop(None)
 
     def tearDown(self):
@@ -89,24 +88,24 @@ class LockTests(unittest.TestCase):
         t1 = tasks.Task(c1(result), loop=self.loop)
         t2 = tasks.Task(c2(result), loop=self.loop)
 
-        run_briefly(self.loop)
+        test_utils.run_briefly(self.loop)
         self.assertEqual([], result)
 
         lock.release()
-        run_briefly(self.loop)
+        test_utils.run_briefly(self.loop)
         self.assertEqual([1], result)
 
-        run_briefly(self.loop)
+        test_utils.run_briefly(self.loop)
         self.assertEqual([1], result)
 
         t3 = tasks.Task(c3(result), loop=self.loop)
 
         lock.release()
-        run_briefly(self.loop)
+        test_utils.run_briefly(self.loop)
         self.assertEqual([1, 2], result)
 
         lock.release()
-        run_briefly(self.loop)
+        test_utils.run_briefly(self.loop)
         self.assertEqual([1, 2, 3], result)
 
         self.assertTrue(t1.done())
@@ -117,33 +116,50 @@ class LockTests(unittest.TestCase):
         self.assertTrue(t3.result())
 
     def test_acquire_timeout(self):
-        lock = locks.Lock(loop=self.loop)
-        self.assertTrue(self.loop.run_until_complete(lock.acquire()))
 
-        t0 = time.monotonic()
-        acquired = self.loop.run_until_complete(lock.acquire(timeout=0.1))
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.1, when)
+            yield 0.1
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+        lock = locks.Lock(loop=loop)
+
+        self.assertTrue(loop.run_until_complete(lock.acquire()))
+
+        acquired = loop.run_until_complete(lock.acquire(timeout=0.1))
         self.assertFalse(acquired)
+        self.assertAlmostEqual(0.1, loop.time())
 
-        total_time = (time.monotonic() - t0)
-        self.assertTrue(0.08 < total_time < 0.12)
-
-        lock = locks.Lock(loop=self.loop)
+        lock = locks.Lock(loop=loop)
         self.loop.run_until_complete(lock.acquire())
 
-        self.loop.call_later(0.01, lock.release)
-        acquired = self.loop.run_until_complete(lock.acquire(10.1))
+        loop.call_soon(lock.release)
+        acquired = loop.run_until_complete(lock.acquire(10.1))
         self.assertTrue(acquired)
+        self.assertAlmostEqual(0.1, loop.time())
 
     def test_acquire_timeout_mixed(self):
-        lock = locks.Lock(loop=self.loop)
-        self.loop.run_until_complete(lock.acquire())
-        tasks.Task(lock.acquire(), loop=self.loop)
-        tasks.Task(lock.acquire(), loop=self.loop)
-        acquire_task = tasks.Task(lock.acquire(0.01), loop=self.loop)
-        tasks.Task(lock.acquire(), loop=self.loop)
 
-        acquired = self.loop.run_until_complete(acquire_task)
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.01, when)
+            yield 0.1
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
+        lock = locks.Lock(loop=loop)
+        loop.run_until_complete(lock.acquire())
+        tasks.Task(lock.acquire(), loop=loop)
+        tasks.Task(lock.acquire(), loop=loop)
+        acquire_task = tasks.Task(lock.acquire(0.01), loop=loop)
+        tasks.Task(lock.acquire(), loop=loop)
+
+        acquired = loop.run_until_complete(acquire_task)
         self.assertFalse(acquired)
+        self.assertAlmostEqual(0.1, loop.time())
 
         self.assertEqual(3, len(lock._waiters))
 
@@ -198,7 +214,7 @@ class LockTests(unittest.TestCase):
 class EventWaiterTests(unittest.TestCase):
 
     def setUp(self):
-        self.loop = events.new_event_loop()
+        self.loop = test_utils.TestLoop()
         events.set_event_loop(None)
 
     def tearDown(self):
@@ -251,13 +267,13 @@ class EventWaiterTests(unittest.TestCase):
         t1 = tasks.Task(c1(result), loop=self.loop)
         t2 = tasks.Task(c2(result), loop=self.loop)
 
-        run_briefly(self.loop)
+        test_utils.run_briefly(self.loop)
         self.assertEqual([], result)
 
         t3 = tasks.Task(c3(result), loop=self.loop)
 
         ev.set()
-        run_briefly(self.loop)
+        test_utils.run_briefly(self.loop)
         self.assertEqual([3, 1, 2], result)
 
         self.assertTrue(t1.done())
@@ -275,33 +291,48 @@ class EventWaiterTests(unittest.TestCase):
         self.assertTrue(res)
 
     def test_wait_timeout(self):
-        ev = locks.EventWaiter(loop=self.loop)
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.1, when)
+            when = yield 0.1
+            self.assertAlmostEqual(0.11, when)
+            when = yield 0
+            self.assertAlmostEqual(10.2, when)
+            yield 0.01
 
-        t0 = time.monotonic()
-        res = self.loop.run_until_complete(ev.wait(0.1))
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
+        ev = locks.EventWaiter(loop=loop)
+
+        res = loop.run_until_complete(ev.wait(0.1))
         self.assertFalse(res)
-        total_time = (time.monotonic() - t0)
-        self.assertTrue(0.08 < total_time < 0.12)
+        self.assertAlmostEqual(0.1, loop.time())
 
-        ev = locks.EventWaiter(loop=self.loop)
-        self.loop.call_later(0.01, ev.set)
-        acquired = self.loop.run_until_complete(ev.wait(10.1))
+        ev = locks.EventWaiter(loop=loop)
+        loop.call_later(0.01, ev.set)
+        acquired = loop.run_until_complete(ev.wait(10.1))
         self.assertTrue(acquired)
+        self.assertAlmostEqual(0.11, loop.time())
 
     def test_wait_timeout_mixed(self):
-        ev = locks.EventWaiter(loop=self.loop)
-        tasks.Task(ev.wait(), loop=self.loop)
-        tasks.Task(ev.wait(), loop=self.loop)
-        acquire_task = tasks.Task(ev.wait(0.1), loop=self.loop)
-        tasks.Task(ev.wait(), loop=self.loop)
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.1, when)
+            yield 0.1
 
-        t0 = time.monotonic()
-        acquired = self.loop.run_until_complete(acquire_task)
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
+        ev = locks.EventWaiter(loop=loop)
+        tasks.Task(ev.wait(), loop=loop)
+        tasks.Task(ev.wait(), loop=loop)
+        acquire_task = tasks.Task(ev.wait(0.1), loop=loop)
+        tasks.Task(ev.wait(), loop=loop)
+
+        acquired = loop.run_until_complete(acquire_task)
         self.assertFalse(acquired)
-
-        total_time = (time.monotonic() - t0)
-        self.assertTrue(0.08 < total_time < 0.12)
-
+        self.assertAlmostEqual(0.1, loop.time())
         self.assertEqual(3, len(ev._waiters))
 
     def test_wait_cancel(self):
@@ -335,7 +366,7 @@ class EventWaiterTests(unittest.TestCase):
             return True
 
         t = tasks.Task(c1(result), loop=self.loop)
-        run_briefly(self.loop)
+        test_utils.run_briefly(self.loop)
         self.assertEqual([], result)
 
         ev.set()
@@ -346,7 +377,7 @@ class EventWaiterTests(unittest.TestCase):
         ev.set()
         self.assertEqual(1, len(ev._waiters))
 
-        run_briefly(self.loop)
+        test_utils.run_briefly(self.loop)
         self.assertEqual([1], result)
         self.assertEqual(0, len(ev._waiters))
 
@@ -357,7 +388,7 @@ class EventWaiterTests(unittest.TestCase):
 class ConditionTests(unittest.TestCase):
 
     def setUp(self):
-        self.loop = events.new_event_loop()
+        self.loop = test_utils.TestLoop()
         events.set_event_loop(None)
 
     def tearDown(self):
@@ -408,33 +439,33 @@ class ConditionTests(unittest.TestCase):
         t2 = tasks.Task(c2(result), loop=self.loop)
         t3 = tasks.Task(c3(result), loop=self.loop)
 
-        run_briefly(self.loop)
+        test_utils.run_briefly(self.loop)
         self.assertEqual([], result)
         self.assertFalse(cond.locked())
 
         self.assertTrue(self.loop.run_until_complete(cond.acquire()))
         cond.notify()
-        run_briefly(self.loop)
+        test_utils.run_briefly(self.loop)
         self.assertEqual([], result)
         self.assertTrue(cond.locked())
 
         cond.release()
-        run_briefly(self.loop)
+        test_utils.run_briefly(self.loop)
         self.assertEqual([1], result)
         self.assertTrue(cond.locked())
 
         cond.notify(2)
-        run_briefly(self.loop)
+        test_utils.run_briefly(self.loop)
         self.assertEqual([1], result)
         self.assertTrue(cond.locked())
 
         cond.release()
-        run_briefly(self.loop)
+        test_utils.run_briefly(self.loop)
         self.assertEqual([1, 2], result)
         self.assertTrue(cond.locked())
 
         cond.release()
-        run_briefly(self.loop)
+        test_utils.run_briefly(self.loop)
         self.assertEqual([1, 2, 3], result)
         self.assertTrue(cond.locked())
 
@@ -446,16 +477,21 @@ class ConditionTests(unittest.TestCase):
         self.assertTrue(t3.result())
 
     def test_wait_timeout(self):
-        cond = locks.Condition(loop=self.loop)
-        self.loop.run_until_complete(cond.acquire())
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.1, when)
+            yield 0.1
 
-        t0 = time.monotonic()
-        wait = self.loop.run_until_complete(cond.wait(0.1))
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
+        cond = locks.Condition(loop=loop)
+        loop.run_until_complete(cond.acquire())
+
+        wait = loop.run_until_complete(cond.wait(0.1))
         self.assertFalse(wait)
         self.assertTrue(cond.locked())
-
-        total_time = (time.monotonic() - t0)
-        self.assertTrue(0.08 < total_time < 0.12)
+        self.assertAlmostEqual(0.1, loop.time())
 
     def test_wait_cancel(self):
         cond = locks.Condition(loop=self.loop)
@@ -494,32 +530,41 @@ class ConditionTests(unittest.TestCase):
 
         t = tasks.Task(c1(result), loop=self.loop)
 
-        run_briefly(self.loop)
+        test_utils.run_briefly(self.loop)
         self.assertEqual([], result)
 
         self.loop.run_until_complete(cond.acquire())
         cond.notify()
         cond.release()
-        run_briefly(self.loop)
+        test_utils.run_briefly(self.loop)
         self.assertEqual([], result)
 
         presult = True
         self.loop.run_until_complete(cond.acquire())
         cond.notify()
         cond.release()
-        run_briefly(self.loop)
+        test_utils.run_briefly(self.loop)
         self.assertEqual([1], result)
 
         self.assertTrue(t.done())
         self.assertTrue(t.result())
 
     def test_wait_for_timeout(self):
-        cond = locks.Condition(loop=self.loop)
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.1, when)
+            when = yield 0
+            self.assertAlmostEqual(0.1, when)
+            yield 0.1
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
+        cond = locks.Condition(loop=loop)
 
         result = []
 
-        predicate = unittest.mock.Mock()
-        predicate.return_value = False
+        predicate = unittest.mock.Mock(return_value=False)
 
         @tasks.coroutine
         def c1(result):
@@ -530,25 +575,22 @@ class ConditionTests(unittest.TestCase):
                 result.append(2)
             cond.release()
 
-        wait_for = tasks.Task(c1(result), loop=self.loop)
+        wait_for = tasks.Task(c1(result), loop=loop)
 
-        t0 = time.monotonic()
-
-        run_briefly(self.loop)
+        test_utils.run_briefly(loop)
         self.assertEqual([], result)
 
-        self.loop.run_until_complete(cond.acquire())
+        loop.run_until_complete(cond.acquire())
         cond.notify()
         cond.release()
-        run_briefly(self.loop)
+        test_utils.run_briefly(loop)
         self.assertEqual([], result)
 
-        self.loop.run_until_complete(wait_for)
+        loop.run_until_complete(wait_for)
         self.assertEqual([2], result)
         self.assertEqual(3, predicate.call_count)
 
-        total_time = (time.monotonic() - t0)
-        self.assertTrue(0.08 < total_time < 0.12)
+        self.assertAlmostEqual(0.1, loop.time())
 
     def test_wait_for_unacquired(self):
         cond = locks.Condition(loop=self.loop)
@@ -594,20 +636,20 @@ class ConditionTests(unittest.TestCase):
         t2 = tasks.Task(c2(result), loop=self.loop)
         t3 = tasks.Task(c3(result), loop=self.loop)
 
-        run_briefly(self.loop)
+        test_utils.run_briefly(self.loop)
         self.assertEqual([], result)
 
         self.loop.run_until_complete(cond.acquire())
         cond.notify(1)
         cond.release()
-        run_briefly(self.loop)
+        test_utils.run_briefly(self.loop)
         self.assertEqual([1], result)
 
         self.loop.run_until_complete(cond.acquire())
         cond.notify(1)
         cond.notify(2048)
         cond.release()
-        run_briefly(self.loop)
+        test_utils.run_briefly(self.loop)
         self.assertEqual([1, 2, 3], result)
 
         self.assertTrue(t1.done())
@@ -641,13 +683,13 @@ class ConditionTests(unittest.TestCase):
         t1 = tasks.Task(c1(result), loop=self.loop)
         t2 = tasks.Task(c2(result), loop=self.loop)
 
-        run_briefly(self.loop)
+        test_utils.run_briefly(self.loop)
         self.assertEqual([], result)
 
         self.loop.run_until_complete(cond.acquire())
         cond.notify_all()
         cond.release()
-        run_briefly(self.loop)
+        test_utils.run_briefly(self.loop)
         self.assertEqual([1, 2], result)
 
         self.assertTrue(t1.done())
@@ -667,7 +709,7 @@ class ConditionTests(unittest.TestCase):
 class SemaphoreTests(unittest.TestCase):
 
     def setUp(self):
-        self.loop = events.new_event_loop()
+        self.loop = test_utils.TestLoop()
         events.set_event_loop(None)
 
     def tearDown(self):
@@ -753,7 +795,7 @@ class SemaphoreTests(unittest.TestCase):
         t2 = tasks.Task(c2(result), loop=self.loop)
         t3 = tasks.Task(c3(result), loop=self.loop)
 
-        run_briefly(self.loop)
+        test_utils.run_briefly(self.loop)
         self.assertEqual([1], result)
         self.assertTrue(sem.locked())
         self.assertEqual(2, len(sem._waiters))
@@ -765,7 +807,7 @@ class SemaphoreTests(unittest.TestCase):
         sem.release()
         self.assertEqual(2, sem._value)
 
-        run_briefly(self.loop)
+        test_utils.run_briefly(self.loop)
         self.assertEqual(0, sem._value)
         self.assertEqual([1, 2, 3], result)
         self.assertTrue(sem.locked())
@@ -781,37 +823,53 @@ class SemaphoreTests(unittest.TestCase):
         self.assertFalse(t4.done())
 
     def test_acquire_timeout(self):
-        sem = locks.Semaphore(loop=self.loop)
-        self.loop.run_until_complete(sem.acquire())
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.1, when)
+            when = yield 0.1
+            self.assertAlmostEqual(0.11, when)
+            when = yield 0
+            self.assertAlmostEqual(10.2, when)
+            yield 0.01
 
-        t0 = time.monotonic()
-        acquired = self.loop.run_until_complete(sem.acquire(0.1))
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
+        sem = locks.Semaphore(loop=loop)
+        loop.run_until_complete(sem.acquire())
+
+        acquired = loop.run_until_complete(sem.acquire(0.1))
         self.assertFalse(acquired)
+        self.assertAlmostEqual(0.1, loop.time())
 
-        total_time = (time.monotonic() - t0)
-        self.assertTrue(0.08 < total_time < 0.12)
+        sem = locks.Semaphore(loop=loop)
+        loop.run_until_complete(sem.acquire())
 
-        sem = locks.Semaphore(loop=self.loop)
-        self.loop.run_until_complete(sem.acquire())
-
-        self.loop.call_later(0.01, sem.release)
-        acquired = self.loop.run_until_complete(sem.acquire(10.1))
+        loop.call_later(0.01, sem.release)
+        acquired = loop.run_until_complete(sem.acquire(10.1))
         self.assertTrue(acquired)
+        self.assertAlmostEqual(0.11, loop.time())
 
     def test_acquire_timeout_mixed(self):
-        sem = locks.Semaphore(loop=self.loop)
-        self.loop.run_until_complete(sem.acquire())
-        tasks.Task(sem.acquire(), loop=self.loop)
-        tasks.Task(sem.acquire(), loop=self.loop)
-        acquire_task = tasks.Task(sem.acquire(0.1), loop=self.loop)
-        tasks.Task(sem.acquire(), loop=self.loop)
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.1, when)
+            yield 0.1
 
-        t0 = time.monotonic()
-        acquired = self.loop.run_until_complete(acquire_task)
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
+        sem = locks.Semaphore(loop=loop)
+        loop.run_until_complete(sem.acquire())
+        tasks.Task(sem.acquire(), loop=loop)
+        tasks.Task(sem.acquire(), loop=loop)
+        acquire_task = tasks.Task(sem.acquire(0.1), loop=loop)
+        tasks.Task(sem.acquire(), loop=loop)
+
+        acquired = loop.run_until_complete(acquire_task)
         self.assertFalse(acquired)
 
-        total_time = (time.monotonic() - t0)
-        self.assertTrue(0.08 < total_time < 0.12)
+        self.assertAlmostEqual(0.1, loop.time())
 
         self.assertEqual(3, len(sem._waiters))
 

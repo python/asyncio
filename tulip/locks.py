@@ -3,7 +3,6 @@
 __all__ = ['Lock', 'EventWaiter', 'Condition', 'Semaphore']
 
 import collections
-import time
 
 from . import events
 from . import futures
@@ -288,9 +287,9 @@ class Condition(Lock):
         while not result:
             if waittime is not None:
                 if endtime is None:
-                    endtime = time.monotonic() + waittime
+                    endtime = self._loop.time() + waittime
                 else:
-                    waittime = endtime - time.monotonic()
+                    waittime = endtime - self._loop.time()
                     if waittime <= 0:
                         break
 

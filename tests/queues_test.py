@@ -8,12 +8,13 @@ from tulip import futures
 from tulip import locks
 from tulip import queues
 from tulip import tasks
+from tulip import test_utils
 
 
 class _QueueTestBase(unittest.TestCase):
 
     def setUp(self):
-        self.loop = events.new_event_loop()
+        self.loop = test_utils.TestLoop()
         events.set_event_loop(None)
 
     def tearDown(self):
@@ -28,35 +29,45 @@ class QueueBasicTests(_QueueTestBase):
         fn is repr or str. expect_id is True if we expect the Queue's id to
         appear in fn(Queue()).
         """
-        q = queues.Queue(loop=self.loop)
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.1, when)
+            when = yield 0.1
+            self.assertAlmostEqual(0.2, when)
+            yield 0.1
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
+        q = queues.Queue(loop=loop)
         self.assertTrue(fn(q).startswith('<Queue'))
         id_is_present = hex(id(q)) in fn(q)
         self.assertEqual(expect_id, id_is_present)
 
         @tasks.coroutine
         def add_getter():
-            q = queues.Queue(loop=self.loop)
+            q = queues.Queue(loop=loop)
             # Start a task that waits to get.
-            tasks.Task(q.get(), loop=self.loop)
+            tasks.Task(q.get(), loop=loop)
             # Let it start waiting.
-            yield from tasks.sleep(0.1, loop=self.loop)
+            yield from tasks.sleep(0.1, loop=loop)
             self.assertTrue('_getters[1]' in fn(q))
 
-        self.loop.run_until_complete(add_getter())
+        loop.run_until_complete(add_getter())
 
         @tasks.coroutine
         def add_putter():
-            q = queues.Queue(maxsize=1, loop=self.loop)
+            q = queues.Queue(maxsize=1, loop=loop)
             q.put_nowait(1)
             # Start a task that waits to put.
-            tasks.Task(q.put(2), loop=self.loop)
+            tasks.Task(q.put(2), loop=loop)
             # Let it start waiting.
-            yield from tasks.sleep(0.1, loop=self.loop)
+            yield from tasks.sleep(0.1, loop=loop)
             self.assertTrue('_putters[1]' in fn(q))
 
-        self.loop.run_until_complete(add_putter())
+        loop.run_until_complete(add_putter())
 
-        q = queues.Queue(loop=self.loop)
+        q = queues.Queue(loop=loop)
         q.put_nowait(1)
         self.assertTrue('_queue=[1]' in fn(q))
 
@@ -107,7 +118,18 @@ class QueueBasicTests(_QueueTestBase):
         self.assertEqual([1, 3, 2], items)
 
     def test_maxsize(self):
-        q = queues.Queue(maxsize=2, loop=self.loop)
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.01, when)
+            when = yield 0.01
+            self.assertAlmostEqual(0.02, when)
+            yield 0.01
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
+        q = queues.Queue(maxsize=2, loop=loop)
         self.assertEqual(2, q.maxsize)
         have_been_put = []
 
@@ -120,15 +142,15 @@ class QueueBasicTests(_QueueTestBase):
 
         @tasks.coroutine
         def test():
-            t = tasks.Task(putter(), loop=self.loop)
-            yield from tasks.sleep(0.01, loop=self.loop)
+            t = tasks.Task(putter(), loop=loop)
+            yield from tasks.sleep(0.01, loop=loop)
 
             # The putter is blocked after putting two items.
             self.assertEqual([0, 1], have_been_put)
             self.assertEqual(0, q.get_nowait())
 
             # Let the putter resume and put last item.
-            yield from tasks.sleep(0.01, loop=self.loop)
+            yield from tasks.sleep(0.01, loop=loop)
             self.assertEqual([0, 1, 2], have_been_put)
             self.assertEqual(1, q.get_nowait())
             self.assertEqual(2, q.get_nowait())
@@ -136,7 +158,8 @@ class QueueBasicTests(_QueueTestBase):
             self.assertTrue(t.done())
             self.assertTrue(t.result())
 
-        self.loop.run_until_complete(test())
+        loop.run_until_complete(test())
+        self.assertAlmostEqual(0.02, loop.time())
 
 
 class QueueGetTests(_QueueTestBase):
@@ -165,8 +188,17 @@ class QueueGetTests(_QueueTestBase):
         self.assertIsNone(waiter.result())
 
     def test_blocking_get_wait(self):
-        q = queues.Queue(loop=self.loop)
-        started = locks.EventWaiter(loop=self.loop)
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.01, when)
+            yield 0.01
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
+        q = queues.Queue(loop=loop)
+        started = locks.EventWaiter(loop=loop)
         finished = False
 
         @tasks.coroutine
@@ -179,16 +211,17 @@ class QueueGetTests(_QueueTestBase):
 
         @tasks.coroutine
         def queue_put():
-            self.loop.call_later(0.01, q.put_nowait, 1)
-            queue_get_task = tasks.Task(queue_get(), loop=self.loop)
+            loop.call_later(0.01, q.put_nowait, 1)
+            queue_get_task = tasks.Task(queue_get(), loop=loop)
             yield from started.wait()
             self.assertFalse(finished)
             res = yield from queue_get_task
             self.assertTrue(finished)
             return res
 
-        res = self.loop.run_until_complete(queue_put())
+        res = loop.run_until_complete(queue_put())
         self.assertEqual(1, res)
+        self.assertAlmostEqual(0.01, loop.time())
 
     def test_nonblocking_get(self):
         q = queues.Queue(loop=self.loop)
@@ -200,7 +233,16 @@ class QueueGetTests(_QueueTestBase):
         self.assertRaises(queues.Empty, q.get_nowait)
 
     def test_get_timeout(self):
-        q = queues.Queue(loop=self.loop)
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.01, when)
+            yield 0.01
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
+        q = queues.Queue(loop=loop)
 
         @tasks.coroutine
         def queue_get():
@@ -211,16 +253,28 @@ class QueueGetTests(_QueueTestBase):
             q.put_nowait(1)
             self.assertEqual(1, (yield from q.get()))
 
-            t = tasks.Task(q.put(2), loop=self.loop)
+            t = tasks.Task(q.put(2), loop=loop)
             self.assertEqual(2, (yield from q.get()))
 
             self.assertTrue(t.done())
             self.assertIsNone(t.result())
 
-        self.loop.run_until_complete(queue_get())
+        loop.run_until_complete(queue_get())
+        self.assertAlmostEqual(0.01, loop.time())
 
     def test_get_timeout_cancelled(self):
-        q = queues.Queue(loop=self.loop)
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.01, when)
+            when = yield 0.01
+            self.assertAlmostEqual(0.06, when)
+            yield 0.05
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
+        q = queues.Queue(loop=loop)
 
         @tasks.coroutine
         def queue_get():
@@ -228,12 +282,13 @@ class QueueGetTests(_QueueTestBase):
 
         @tasks.coroutine
         def test():
-            get_task = tasks.Task(queue_get(), loop=self.loop)
-            yield from tasks.sleep(0.01, loop=self.loop)  # let the task start
+            get_task = tasks.Task(queue_get(), loop=loop)
+            yield from tasks.sleep(0.01, loop=loop)  # let the task start
             q.put_nowait(1)
             return (yield from get_task)
 
-        self.assertEqual(1, self.loop.run_until_complete(test()))
+        self.assertEqual(1, loop.run_until_complete(test()))
+        self.assertAlmostEqual(0.06, loop.time())
 
 
 class QueuePutTests(_QueueTestBase):
@@ -249,8 +304,17 @@ class QueuePutTests(_QueueTestBase):
         self.loop.run_until_complete(queue_put())
 
     def test_blocking_put_wait(self):
-        q = queues.Queue(maxsize=1, loop=self.loop)
-        started = locks.EventWaiter(loop=self.loop)
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.01, when)
+            yield 0.01
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
+        q = queues.Queue(maxsize=1, loop=loop)
+        started = locks.EventWaiter(loop=loop)
         finished = False
 
         @tasks.coroutine
@@ -263,14 +327,15 @@ class QueuePutTests(_QueueTestBase):
 
         @tasks.coroutine
         def queue_get():
-            self.loop.call_later(0.01, q.get_nowait)
-            queue_put_task = tasks.Task(queue_put(), loop=self.loop)
+            loop.call_later(0.01, q.get_nowait)
+            queue_put_task = tasks.Task(queue_put(), loop=loop)
             yield from started.wait()
             self.assertFalse(finished)
             yield from queue_put_task
             self.assertTrue(finished)
 
-        self.loop.run_until_complete(queue_get())
+        loop.run_until_complete(queue_get())
+        self.assertAlmostEqual(0.01, loop.time())
 
     def test_nonblocking_put(self):
         q = queues.Queue(loop=self.loop)
@@ -283,7 +348,18 @@ class QueuePutTests(_QueueTestBase):
         self.assertRaises(queues.Full, q.put_nowait, 2)
 
     def test_put_timeout(self):
-        q = queues.Queue(1, loop=self.loop)
+
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.01, when)
+            when = yield 0.01
+            self.assertAlmostEqual(0.02, when)
+            yield 0.01
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
+        q = queues.Queue(1, loop=loop)
         q.put_nowait(0)
 
         @tasks.coroutine
@@ -294,16 +370,17 @@ class QueuePutTests(_QueueTestBase):
             self.assertEqual(0, q.get_nowait())
 
             # Put works after timeout, with blocking and non-blocking get.
-            get_task = tasks.Task(q.get(), loop=self.loop)
+            get_task = tasks.Task(q.get(), loop=loop)
             # Let the get start waiting.
-            yield from tasks.sleep(0.01, loop=self.loop)
+            yield from tasks.sleep(0.01, loop=loop)
             q.put_nowait(2)
             self.assertEqual(2, (yield from get_task))
 
             q.put_nowait(3)
             self.assertEqual(3, q.get_nowait())
 
-        self.loop.run_until_complete(queue_put())
+        loop.run_until_complete(queue_put())
+        self.assertAlmostEqual(0.02, loop.time())
 
     def test_put_timeout_cancelled(self):
         q = queues.Queue(loop=self.loop)
@@ -394,7 +471,15 @@ class JoinableQueueTests(_QueueTestBase):
         self.loop.run_until_complete(join())
 
     def test_join_timeout(self):
-        q = queues.JoinableQueue(loop=self.loop)
+        def gen():
+            when = yield
+            self.assertAlmostEqual(0.1, when)
+            yield 0.1
+
+        loop = test_utils.TestLoop(gen)
+        self.addCleanup(loop.close)
+
+        q = queues.JoinableQueue(loop=loop)
         q.put_nowait(1)
 
         @tasks.coroutine
@@ -402,7 +487,8 @@ class JoinableQueueTests(_QueueTestBase):
             yield from q.join(0.1)
 
         # Join completes in ~ 0.1 seconds, although no one calls task_done().
-        self.loop.run_until_complete(join())
+        loop.run_until_complete(join())
+        self.assertAlmostEqual(0.1, loop.time())
 
     def test_format(self):
         q = queues.JoinableQueue(loop=self.loop)

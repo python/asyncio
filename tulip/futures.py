@@ -171,6 +171,13 @@ class Future:
                 res += '<{}, {}>'.format(self._state, self._callbacks)
         else:
             res += '<{}>'.format(self._state)
+        dct = {}
+        if self._timeout is not None:
+            dct['timeout'] = self._timeout
+        if self._timeout_handle is not None:
+            dct['when'] = self._timeout_handle._when
+        if dct:
+            res += '{' + ', '.join(k+'='+str(dct[k]) for k in sorted(dct)) + '}'
         return res
 
     def cancel(self):

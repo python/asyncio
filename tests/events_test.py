@@ -264,6 +264,7 @@ class EventLoopTestsMixin:
 
     def test_call_soon_threadsafe(self):
         results = []
+        lock = threading.Lock()
 
         def callback(arg):
             results.append(arg)
@@ -272,16 +273,17 @@ class EventLoopTestsMixin:
 
         def run_in_thread():
             self.loop.call_soon_threadsafe(callback, 'hello')
+            lock.release()
 
+        lock.acquire()
         t = threading.Thread(target=run_in_thread)
-        self.loop.call_later(0.1, callback, 'world')
-        t0 = time.monotonic()
         t.start()
-        self.loop.run_forever()
-        t1 = time.monotonic()
+
+        with lock:
+            self.loop.call_soon(callback, 'world')
+            self.loop.run_forever()
         t.join()
         self.assertEqual(results, ['hello', 'world'])
-        self.assertTrue(t1-t0 >= 0.09)
 
     def test_call_soon_threadsafe_same_thread(self):
         results = []
@@ -291,18 +293,18 @@ class EventLoopTestsMixin:
             if len(results) >= 2:
                 self.loop.stop()
 
-        self.loop.call_later(0.1, callback, 'world')
         self.loop.call_soon_threadsafe(callback, 'hello')
+        self.loop.call_soon(callback, 'world')
         self.loop.run_forever()
         self.assertEqual(results, ['hello', 'world'])
 
     def test_run_in_executor(self):
         def run(arg):
-            time.sleep(0.1)
-            return arg
+            return (arg, threading.get_ident())
         f2 = self.loop.run_in_executor(None, run, 'yo')
-        res = self.loop.run_until_complete(f2)
+        res, thread_id = self.loop.run_until_complete(f2)
         self.assertEqual(res, 'yo')
+        self.assertNotEqual(thread_id, threading.get_ident())
 
     def test_reader_callback(self):
         r, w = test_utils.socketpair()
@@ -322,10 +324,11 @@ class EventLoopTestsMixin:
                 r.close()
 
         self.loop.add_reader(r.fileno(), reader)
-        self.loop.call_later(0.05, w.send, b'abc')
-        self.loop.call_later(0.1, w.send, b'def')
-        self.loop.call_later(0.15, w.close)
-        self.loop.call_later(0.16, self.loop.stop)
+        self.loop.call_soon(w.send, b'abc')
+        test_utils.run_briefly(self.loop)
+        self.loop.call_soon(w.send, b'def')
+        self.loop.call_soon(w.close)
+        self.loop.call_soon(self.loop.stop)
         self.loop.run_forever()
         self.assertEqual(b''.join(bytes_read), b'abcdef')
 
@@ -333,12 +336,13 @@ class EventLoopTestsMixin:
         r, w = test_utils.socketpair()
         w.setblocking(False)
         self.loop.add_writer(w.fileno(), w.send, b'x'*(256*1024))
+        test_utils.run_briefly(self.loop)
 
         def remove_writer():
             self.assertTrue(self.loop.remove_writer(w.fileno()))
 
-        self.loop.call_later(0.1, remove_writer)
-        self.loop.call_later(0.11, self.loop.stop)
+        self.loop.call_soon(remove_writer)
+        self.loop.call_soon(self.loop.stop)
         self.loop.run_forever()
         w.close()
         data = r.recv(256*1024)
@@ -448,11 +452,11 @@ class EventLoopTestsMixin:
         def my_handler():
             nonlocal caught
             caught += 1
+            self.loop.stop()
 
         self.loop.add_signal_handler(signal.SIGALRM, my_handler)
 
-        signal.setitimer(signal.ITIMER_REAL, 0.1, 0)  # Send SIGALRM once.
-        self.loop.call_later(0.15, self.loop.stop)
+        signal.setitimer(signal.ITIMER_REAL, 0.01, 0)  # Send SIGALRM once.
         self.loop.run_forever()
         self.assertEqual(caught, 1)
 
@@ -468,8 +472,8 @@ class EventLoopTestsMixin:
 
         self.loop.add_signal_handler(signal.SIGALRM, my_handler, *some_args)
 
-        signal.setitimer(signal.ITIMER_REAL, 0.1, 0)  # Send SIGALRM once.
-        self.loop.call_later(0.15, self.loop.stop)
+        signal.setitimer(signal.ITIMER_REAL, 0.01, 0)  # Send SIGALRM once.
+        self.loop.call_later(0.015, self.loop.stop)
         self.loop.run_forever()
         self.assertEqual(caught, 1)
 

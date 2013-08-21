@@ -1,7 +1,7 @@
 """Tests for futures.py."""
 
 import concurrent.futures
-import time
+import threading
 import unittest
 import unittest.mock
 
@@ -17,7 +17,7 @@ def _fakefunc(f):
 class FutureTests(unittest.TestCase):
 
     def setUp(self):
-        self.loop = events.new_event_loop()
+        self.loop = test_utils.TestLoop()
         events.set_event_loop(None)
 
     def tearDown(self):
@@ -134,6 +134,15 @@ class FutureTests(unittest.TestCase):
         self.assertIn('<18 more>', r)
         f_many_callbacks.cancel()
 
+        f_pending = futures.Future(loop=self.loop, timeout=10)
+        self.assertEqual('Future<PENDING>{timeout=10, when=10}',
+                         repr(f_pending))
+        f_pending.cancel()
+
+        f_pending = futures.Future(loop=self.loop, timeout=10)
+        f_pending.cancel()
+        self.assertEqual('Future<CANCELLED>{timeout=10}', repr(f_pending))
+
     def test_copy_state(self):
         # Test the internal _copy_state method since it's being directly
         # invoked in other modules.
@@ -218,15 +227,16 @@ class FutureTests(unittest.TestCase):
         self.assertFalse(m_log.error.called)
 
     def test_wrap_future(self):
+
         def run(arg):
-            time.sleep(0.1)
-            return arg
+            return (arg, threading.get_ident())
         ex = concurrent.futures.ThreadPoolExecutor(1)
         f1 = ex.submit(run, 'oi')
         f2 = futures.wrap_future(f1, loop=self.loop)
-        res = self.loop.run_until_complete(f2)
+        res, ident = self.loop.run_until_complete(f2)
         self.assertIsInstance(f2, futures.Future)
         self.assertEqual(res, 'oi')
+        self.assertNotEqual(ident, threading.get_ident())
 
     def test_wrap_future_future(self):
         f1 = futures.Future(loop=self.loop)
@@ -236,8 +246,7 @@ class FutureTests(unittest.TestCase):
     @unittest.mock.patch('tulip.futures.events')
     def test_wrap_future_use_global_loop(self, m_events):
         def run(arg):
-            time.sleep(0.1)
-            return arg
+            return (arg, threading.get_ident())
         ex = concurrent.futures.ThreadPoolExecutor(1)
         f1 = ex.submit(run, 'oi')
         f2 = futures.wrap_future(f1)

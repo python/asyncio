@@ -10,11 +10,13 @@ import tulip.http
 from tulip.http.client import HttpResponse
 from tulip.http.session import Session
 
+from tulip import test_utils
+
 
 class HttpSessionTests(unittest.TestCase):
 
     def setUp(self):
-        self.loop = tulip.new_event_loop()
+        self.loop = test_utils.TestLoop()
         tulip.set_event_loop(self.loop)
 
         self.transport = unittest.mock.Mock()

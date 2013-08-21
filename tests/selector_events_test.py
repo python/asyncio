@@ -989,7 +989,8 @@ class SelectorSslTransportTests(unittest.TestCase):
     def test_on_handshake(self):
         waiter = futures.Future(loop=self.loop)
         tr = _SelectorSslTransport(
-            self.loop, self.sock, self.protocol, self.sslcontext, waiter=waiter)
+            self.loop, self.sock, self.protocol, self.sslcontext,
+            waiter=waiter)
         self.assertTrue(self.sslsock.do_handshake.called)
         self.loop.assert_reader(1, tr._on_ready)
         self.loop.assert_writer(1, tr._on_ready)

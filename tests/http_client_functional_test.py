@@ -65,6 +65,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
 
             self.assertEqual(r.status, 200)
             self.assertEqual(2, httpd['redirects'])
+            r.close()
 
     def test_HTTP_302_REDIRECT_NON_HTTP(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
@@ -85,6 +86,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
             self.assertEqual(r.status, 200)
             self.assertIn('"method": "POST"', content)
             self.assertEqual(2, httpd['redirects'])
+            r.close()
 
     def test_HTTP_302_max_redirects(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
@@ -94,6 +96,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
 
             self.assertEqual(r.status, 302)
             self.assertEqual(2, httpd['redirects'])
+            r.close()
 
     def test_HTTP_200_GET_WITH_PARAMS(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
@@ -105,6 +108,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
 
             self.assertIn('"query": "q=test"', content)
             self.assertEqual(r.status, 200)
+            r.close()
 
     def test_HTTP_200_GET_WITH_MIXED_PARAMS(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
@@ -117,6 +121,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
 
             self.assertIn('"query": "test=true&q=test"', content)
             self.assertEqual(r.status, 200)
+            r.close()
 
     def test_POST_DATA(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
@@ -129,6 +134,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
             content = self.loop.run_until_complete(r.read(True))
             self.assertEqual({'some': ['data']}, content['form'])
             self.assertEqual(r.status, 200)
+            r.close()
 
     def test_POST_DATA_DEFLATE(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
@@ -143,6 +149,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
             self.assertEqual('deflate', content['compression'])
             self.assertEqual({'some': ['data']}, content['form'])
             self.assertEqual(r.status, 200)
+            r.close()
 
     def test_POST_FILES(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
@@ -167,6 +174,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
                 self.assertEqual(
                     f.read(), content['multipart-data'][0]['data'])
                 self.assertEqual(r.status, 200)
+                r.close()
 
     def test_POST_FILES_DEFLATE(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
@@ -192,6 +200,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
                 self.assertEqual(
                     f.read(), content['multipart-data'][0]['data'])
                 self.assertEqual(r.status, 200)
+                r.close()
 
     def test_POST_FILES_STR(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
@@ -213,6 +222,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
                 self.assertEqual(
                     f.read(), content['multipart-data'][0]['data'])
                 self.assertEqual(r.status, 200)
+                r.close()
 
     def test_POST_FILES_LIST(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
@@ -236,6 +246,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
                 self.assertEqual(
                     f.read(), content['multipart-data'][0]['data'])
                 self.assertEqual(r.status, 200)
+                r.close()
 
     def test_POST_FILES_LIST_CT(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
@@ -261,6 +272,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
                 self.assertEqual(
                     'text/plain', content['multipart-data'][0]['content-type'])
                 self.assertEqual(r.status, 200)
+                r.close()
 
     def test_POST_FILES_SINGLE(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
@@ -283,6 +295,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
                 self.assertEqual(
                     f.read(), content['multipart-data'][0]['data'])
                 self.assertEqual(r.status, 200)
+                r.close()
 
     def test_POST_FILES_IO(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
@@ -302,6 +315,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
                  'filename': 'unknown',
                  'name': 'unknown'}, content['multipart-data'][0])
             self.assertEqual(r.status, 200)
+            r.close()
 
     def test_POST_FILES_WITH_DATA(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
@@ -329,6 +343,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
                 self.assertEqual(
                     f.read(), content['multipart-data'][1]['data'])
                 self.assertEqual(r.status, 200)
+                r.close()
 
     def test_encoding(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
@@ -341,6 +356,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
                 client.request('get', httpd.url('encoding', 'gzip'),
                                loop=self.loop))
             self.assertEqual(r.status, 200)
+            r.close()
 
     def test_cookies(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
@@ -355,6 +371,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
 
             content = self.loop.run_until_complete(r.content.read())
             self.assertIn(b'"Cookie": "test1=123; test3=456"', bytes(content))
+            r.close()
 
     def test_set_cookies(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
@@ -364,6 +381,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
 
             self.assertEqual(resp.cookies['c1'].value, 'cookie1')
             self.assertEqual(resp.cookies['c2'].value, 'cookie2')
+            resp.close()
 
     def test_chunked(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:
@@ -373,6 +391,7 @@ class HttpClientFunctionalTests(unittest.TestCase):
             self.assertEqual(r['Transfer-Encoding'], 'chunked')
             content = self.loop.run_until_complete(r.read(True))
             self.assertEqual(content['path'], '/chunked')
+            r.close()
 
     def test_timeout(self):
         with test_utils.run_test_server(self.loop, router=Functional) as httpd:

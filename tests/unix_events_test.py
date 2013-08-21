@@ -15,6 +15,7 @@ except ImportError:
 from tulip import events
 from tulip import futures
 from tulip import protocols
+from tulip import test_utils
 from tulip import unix_events
 
 
@@ -303,10 +304,10 @@ class SelectorEventLoopTests(unittest.TestCase):
 class UnixReadPipeTransportTests(unittest.TestCase):
 
     def setUp(self):
-        self.loop = unittest.mock.Mock(spec_set=events.AbstractEventLoop)
+        self.loop = test_utils.TestLoop()
+        self.protocol = test_utils.make_test_protocol(protocols.Protocol)
         self.pipe = unittest.mock.Mock(spec_set=io.RawIOBase)
         self.pipe.fileno.return_value = 5
-        self.protocol = unittest.mock.Mock(spec_set=protocols.Protocol)
 
         fcntl_patcher = unittest.mock.patch('fcntl.fcntl')
         fcntl_patcher.start()
@@ -315,16 +316,16 @@ class UnixReadPipeTransportTests(unittest.TestCase):
     def test_ctor(self):
         tr = unix_events._UnixReadPipeTransport(
             self.loop, self.pipe, self.protocol)
-        self.loop.add_reader.assert_called_with(5, tr._read_ready)
-        self.loop.call_soon.assert_called_with(
-            self.protocol.connection_made, tr)
+        self.loop.assert_reader(5, tr._read_ready)
+        test_utils.run_briefly(self.loop)
+        self.protocol.connection_made.assert_called_with(tr)
 
     def test_ctor_with_waiter(self):
         fut = futures.Future(loop=self.loop)
         unix_events._UnixReadPipeTransport(
             self.loop, self.pipe, self.protocol, fut)
-        self.loop.call_soon.assert_called_with(fut.set_result, None)
-        fut.cancel()
+        test_utils.run_briefly(self.loop)
+        self.assertIsNone(fut.result())
 
     @unittest.mock.patch('os.read')
     def test__read_ready(self, m_read):
@@ -344,20 +345,20 @@ class UnixReadPipeTransportTests(unittest.TestCase):
         tr._read_ready()
 
         m_read.assert_called_with(5, tr.max_size)
-        self.loop.remove_reader.assert_called_with(5)
-        self.loop.call_soon.assert_has_calls([
-            unittest.mock.call(self.protocol.eof_received),
-            unittest.mock.call(tr._call_connection_lost, None)])
+        self.assertFalse(self.loop.readers)
+        test_utils.run_briefly(self.loop)
+        self.protocol.eof_received.assert_called_with()
+        self.protocol.connection_lost.assert_called_with(None)
 
     @unittest.mock.patch('os.read')
     def test__read_ready_blocked(self, m_read):
         tr = unix_events._UnixReadPipeTransport(
             self.loop, self.pipe, self.protocol)
-        self.loop.reset_mock()
         m_read.side_effect = BlockingIOError
         tr._read_ready()
 
         m_read.assert_called_with(5, tr.max_size)
+        test_utils.run_briefly(self.loop)
         self.assertFalse(self.protocol.data_received.called)
 
     @unittest.mock.patch('tulip.log.tulip_log.exception')
@@ -379,8 +380,10 @@ class UnixReadPipeTransportTests(unittest.TestCase):
         tr = unix_events._UnixReadPipeTransport(
             self.loop, self.pipe, self.protocol)
 
+        m = unittest.mock.Mock()
+        self.loop.add_reader(5, m)
         tr.pause()
-        self.loop.remove_reader.assert_called_with(5)
+        self.assertFalse(self.loop.readers)
 
     @unittest.mock.patch('os.read')
     def test_resume(self, m_read):
@@ -388,7 +391,7 @@ class UnixReadPipeTransportTests(unittest.TestCase):
             self.loop, self.pipe, self.protocol)
 
         tr.resume()
-        self.loop.add_reader.assert_called_with(5, tr._read_ready)
+        self.loop.assert_reader(5, tr._read_ready)
 
     @unittest.mock.patch('os.read')
     def test_close(self, m_read):
@@ -417,8 +420,9 @@ class UnixReadPipeTransportTests(unittest.TestCase):
         err = object()
         tr._close(err)
         self.assertTrue(tr._closing)
-        self.loop.remove_reader.assert_called_with(5)
-        self.loop.call_soon.assert_called_with(tr._call_connection_lost, err)
+        self.assertFalse(self.loop.readers)
+        test_utils.run_briefly(self.loop)
+        self.protocol.connection_lost.assert_called_with(err)
 
     def test__call_connection_lost(self):
         tr = unix_events._UnixReadPipeTransport(
@@ -442,10 +446,10 @@ class UnixReadPipeTransportTests(unittest.TestCase):
 class UnixWritePipeTransportTests(unittest.TestCase):
 
     def setUp(self):
-        self.loop = unittest.mock.Mock(spec_set=events.AbstractEventLoop)
+        self.loop = test_utils.TestLoop()
+        self.protocol = test_utils.make_test_protocol(protocols.BaseProtocol)
         self.pipe = unittest.mock.Mock(spec_set=io.RawIOBase)
         self.pipe.fileno.return_value = 5
-        self.protocol = unittest.mock.Mock(spec_set=protocols.Protocol)
 
         fcntl_patcher = unittest.mock.patch('fcntl.fcntl')
         fcntl_patcher.start()
@@ -461,17 +465,17 @@ class UnixWritePipeTransportTests(unittest.TestCase):
     def test_ctor(self):
         tr = unix_events._UnixWritePipeTransport(
             self.loop, self.pipe, self.protocol)
-        self.loop.add_reader.assert_called_with(5, tr._read_ready)
-        self.loop.call_soon.assert_called_with(
-            self.protocol.connection_made, tr)
+        self.loop.assert_reader(5, tr._read_ready)
+        test_utils.run_briefly(self.loop)
+        self.protocol.connection_made.assert_called_with(tr)
 
     def test_ctor_with_waiter(self):
         fut = futures.Future(loop=self.loop)
         tr = unix_events._UnixWritePipeTransport(
             self.loop, self.pipe, self.protocol, fut)
-        self.loop.call_soon.assert_called_with(fut.set_result, None)
-        self.loop.add_reader.assert_called_with(5, tr._read_ready)
-        fut.cancel()
+        self.loop.assert_reader(5, tr._read_ready)
+        test_utils.run_briefly(self.loop)
+        self.assertEqual(None, fut.result())
 
     def test_can_write_eof(self):
         tr = unix_events._UnixWritePipeTransport(
@@ -486,7 +490,7 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         m_write.return_value = 4
         tr.write(b'data')
         m_write.assert_called_with(5, b'data')
-        self.assertFalse(self.loop.add_writer.called)
+        self.assertFalse(self.loop.writers)
         self.assertEqual([], tr._buffer)
 
     @unittest.mock.patch('os.write')
@@ -496,7 +500,7 @@ class UnixWritePipeTransportTests(unittest.TestCase):
 
         tr.write(b'')
         self.assertFalse(m_write.called)
-        self.assertFalse(self.loop.add_writer.called)
+        self.assertFalse(self.loop.writers)
         self.assertEqual([], tr._buffer)
 
     @unittest.mock.patch('os.write')
@@ -507,7 +511,7 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         m_write.return_value = 2
         tr.write(b'data')
         m_write.assert_called_with(5, b'data')
-        self.loop.add_writer.assert_called_with(5, tr._write_ready)
+        self.loop.assert_writer(5, tr._write_ready)
         self.assertEqual([b'ta'], tr._buffer)
 
     @unittest.mock.patch('os.write')
@@ -515,10 +519,11 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         tr = unix_events._UnixWritePipeTransport(
             self.loop, self.pipe, self.protocol)
 
+        self.loop.add_writer(5, tr._write_ready)
         tr._buffer = [b'previous']
         tr.write(b'data')
         self.assertFalse(m_write.called)
-        self.assertFalse(self.loop.add_writer.called)
+        self.loop.assert_writer(5, tr._write_ready)
         self.assertEqual([b'previous', b'data'], tr._buffer)
 
     @unittest.mock.patch('os.write')
@@ -529,7 +534,7 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         m_write.side_effect = BlockingIOError()
         tr.write(b'data')
         m_write.assert_called_with(5, b'data')
-        self.loop.add_writer.assert_called_with(5, tr._write_ready)
+        self.loop.assert_writer(5, tr._write_ready)
         self.assertEqual([b'data'], tr._buffer)
 
     @unittest.mock.patch('tulip.unix_events.tulip_log')
@@ -543,7 +548,7 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         tr._fatal_error = unittest.mock.Mock()
         tr.write(b'data')
         m_write.assert_called_with(5, b'data')
-        self.assertFalse(self.loop.called)
+        self.assertFalse(self.loop.writers)
         self.assertEqual([], tr._buffer)
         tr._fatal_error.assert_called_with(err)
         self.assertEqual(1, tr._conn_lost)
@@ -561,21 +566,22 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         tr = unix_events._UnixWritePipeTransport(self.loop, self.pipe,
                                                  self.protocol)
         tr._read_ready()
-        self.loop.remove_writer.assert_called_with(5)
-        self.loop.remove_reader.assert_called_with(5)
+        self.assertFalse(self.loop.readers)
+        self.assertFalse(self.loop.writers)
         self.assertTrue(tr._closing)
-        self.loop.call_soon.assert_called_with(tr._call_connection_lost,
-                                               None)
+        test_utils.run_briefly(self.loop)
+        self.protocol.connection_lost.assert_called_with(None)
 
     @unittest.mock.patch('os.write')
     def test__write_ready(self, m_write):
         tr = unix_events._UnixWritePipeTransport(
             self.loop, self.pipe, self.protocol)
+        self.loop.add_writer(5, tr._write_ready)
         tr._buffer = [b'da', b'ta']
         m_write.return_value = 4
         tr._write_ready()
         m_write.assert_called_with(5, b'data')
-        self.loop.remove_writer.assert_called_with(5)
+        self.assertFalse(self.loop.writers)
         self.assertEqual([], tr._buffer)
 
     @unittest.mock.patch('os.write')
@@ -583,11 +589,12 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         tr = unix_events._UnixWritePipeTransport(
             self.loop, self.pipe, self.protocol)
 
+        self.loop.add_writer(5, tr._write_ready)
         tr._buffer = [b'da', b'ta']
         m_write.return_value = 3
         tr._write_ready()
         m_write.assert_called_with(5, b'data')
-        self.assertFalse(self.loop.remove_writer.called)
+        self.loop.assert_writer(5, tr._write_ready)
         self.assertEqual([b'a'], tr._buffer)
 
     @unittest.mock.patch('os.write')
@@ -595,11 +602,12 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         tr = unix_events._UnixWritePipeTransport(
             self.loop, self.pipe, self.protocol)
 
+        self.loop.add_writer(5, tr._write_ready)
         tr._buffer = [b'da', b'ta']
         m_write.side_effect = BlockingIOError()
         tr._write_ready()
         m_write.assert_called_with(5, b'data')
-        self.assertFalse(self.loop.remove_writer.called)
+        self.loop.assert_writer(5, tr._write_ready)
         self.assertEqual([b'data'], tr._buffer)
 
     @unittest.mock.patch('os.write')
@@ -607,11 +615,12 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         tr = unix_events._UnixWritePipeTransport(
             self.loop, self.pipe, self.protocol)
 
+        self.loop.add_writer(5, tr._write_ready)
         tr._buffer = [b'da', b'ta']
         m_write.return_value = 0
         tr._write_ready()
         m_write.assert_called_with(5, b'data')
-        self.assertFalse(self.loop.remove_writer.called)
+        self.loop.assert_writer(5, tr._write_ready)
         self.assertEqual([b'data'], tr._buffer)
 
     @unittest.mock.patch('tulip.log.tulip_log.exception')
@@ -620,31 +629,34 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         tr = unix_events._UnixWritePipeTransport(
             self.loop, self.pipe, self.protocol)
 
+        self.loop.add_writer(5, tr._write_ready)
         tr._buffer = [b'da', b'ta']
         m_write.side_effect = err = OSError()
         tr._write_ready()
         m_write.assert_called_with(5, b'data')
-        self.loop.remove_writer.assert_called_with(5)
-        self.loop.remove_reader.assert_called_with(5)
+        self.assertFalse(self.loop.writers)
+        self.assertFalse(self.loop.readers)
         self.assertEqual([], tr._buffer)
         self.assertTrue(tr._closing)
-        self.loop.call_soon.assert_called_with(
-            tr._call_connection_lost, err)
         m_logexc.assert_called_with('Fatal error for %s', tr)
         self.assertEqual(1, tr._conn_lost)
+        test_utils.run_briefly(self.loop)
+        self.protocol.connection_lost.assert_called_with(err)
+
 
     @unittest.mock.patch('os.write')
     def test__write_ready_closing(self, m_write):
         tr = unix_events._UnixWritePipeTransport(
             self.loop, self.pipe, self.protocol)
 
+        self.loop.add_writer(5, tr._write_ready)
         tr._closing = True
         tr._buffer = [b'da', b'ta']
         m_write.return_value = 4
         tr._write_ready()
         m_write.assert_called_with(5, b'data')
-        self.loop.remove_writer.assert_called_with(5)
-        self.loop.remove_reader.assert_called_with(5)
+        self.assertFalse(self.loop.writers)
+        self.assertFalse(self.loop.readers)
         self.assertEqual([], tr._buffer)
         self.protocol.connection_lost.assert_called_with(None)
         self.pipe.close.assert_called_with()
@@ -654,15 +666,17 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         tr = unix_events._UnixWritePipeTransport(
             self.loop, self.pipe, self.protocol)
 
+        self.loop.add_writer(5, tr._write_ready)
+        self.loop.add_reader(5, tr._read_ready)
         tr._buffer = [b'da', b'ta']
         tr.abort()
         self.assertFalse(m_write.called)
-        self.loop.remove_writer.assert_called_with(5)
-        self.loop.remove_reader.assert_called_with(5)
+        self.assertFalse(self.loop.readers)
+        self.assertFalse(self.loop.writers)
         self.assertEqual([], tr._buffer)
         self.assertTrue(tr._closing)
-        self.loop.call_soon.assert_called_with(
-            tr._call_connection_lost, None)
+        test_utils.run_briefly(self.loop)
+        self.protocol.connection_lost.assert_called_with(None)
 
     def test__call_connection_lost(self):
         tr = unix_events._UnixWritePipeTransport(
@@ -705,9 +719,9 @@ class UnixWritePipeTransportTests(unittest.TestCase):
 
         tr.write_eof()
         self.assertTrue(tr._closing)
-        self.loop.remove_reader.assert_called_with(5)
-        self.loop.call_soon.assert_called_with(
-            tr._call_connection_lost, None)
+        self.assertFalse(self.loop.readers)
+        test_utils.run_briefly(self.loop)
+        self.protocol.connection_lost.assert_called_with(None)
 
     def test_write_eof_pending(self):
         tr = unix_events._UnixWritePipeTransport(
@@ -740,27 +754,29 @@ class UnixWritePipeTransportTests(unittest.TestCase):
     def test_pause_resume_writing_with_nonempty_buffer(self):
         tr = unix_events._UnixWritePipeTransport(
             self.loop, self.pipe, self.protocol)
+        self.loop.add_writer(5, tr._write_ready)
         tr._buffer = [b'da', b'ta']
         tr.pause_writing()
         self.assertFalse(tr._writing)
-        self.loop.remove_writer.assert_called_with(5)
+        self.assertFalse(self.loop.writers)
         self.assertEqual([b'da', b'ta'], tr._buffer)
 
         tr.resume_writing()
         self.assertTrue(tr._writing)
-        self.loop.add_writer.assert_called_with(5, tr._write_ready)
+        self.loop.assert_writer(5, tr._write_ready)
         self.assertEqual([b'da', b'ta'], tr._buffer)
 
     @unittest.mock.patch('os.write')
     def test__write_ready_on_pause(self, m_write):
         tr = unix_events._UnixWritePipeTransport(
             self.loop, self.pipe, self.protocol)
+        self.loop.add_writer(5, tr._write_ready)
         tr._buffer = [b'da', b'ta']
         tr.pause_writing()
-        self.loop.remove_writer.reset_mock()
+
         tr._write_ready()
         self.assertFalse(m_write.called)
-        self.assertFalse(self.loop.remove_writer.called)
+        self.assertFalse(self.loop.writers)
         self.assertEqual([b'da', b'ta'], tr._buffer)
         self.assertFalse(tr._writing)
 
@@ -768,9 +784,10 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         tr = unix_events._UnixWritePipeTransport(
             self.loop, self.pipe, self.protocol)
         tr._buffer = [b'da', b'ta']
+        self.loop.add_writer(5, tr._write_ready)
         tr.discard_output()
         self.assertTrue(tr._writing)
-        self.loop.remove_writer.assert_called_with(5)
+        self.assertFalse(self.loop.writers)
         self.assertEqual([], tr._buffer)
 
     def test_discard_output_without_pending_writes(self):
@@ -778,5 +795,5 @@ class UnixWritePipeTransportTests(unittest.TestCase):
             self.loop, self.pipe, self.protocol)
         tr.discard_output()
         self.assertTrue(tr._writing)
-        self.assertFalse(self.loop.remove_writer.called)
+        self.assertFalse(self.loop.writers)
         self.assertEqual([], tr._buffer)

@@ -291,6 +291,7 @@ class _UnixWritePipeTransport(transports.WriteTransport):
 
     def _read_ready(self):
         # pipe was closed by peer
+
         self._close()
 
     def write(self, data):
@@ -337,6 +338,9 @@ class _UnixWritePipeTransport(transports.WriteTransport):
             self._buffer.append(data)
         except Exception as exc:
             self._conn_lost += 1
+            # Remove writer here, _fatal_error() doesn't it
+            # because _buffer is empty.
+            self._loop.remove_writer(self._fileno)
             self._fatal_error(exc)
         else:
             if n == len(data):
@@ -376,8 +380,9 @@ class _UnixWritePipeTransport(transports.WriteTransport):
 
     def _close(self, exc=None):
         self._closing = True
+        if self._buffer:
+            self._loop.remove_writer(self._fileno)
         self._buffer.clear()
-        self._loop.remove_writer(self._fileno)
         self._loop.remove_reader(self._fileno)
         self._loop.call_soon(self._call_connection_lost, exc)
 

@@ -1,6 +1,7 @@
 """Utilities shared by tests."""
 
 import cgi
+import collections
 import contextlib
 import gc
 import email.parser
@@ -15,6 +16,8 @@ import socket
 import sys
 import threading
 import traceback
+import unittest
+import unittest.mock
 import urllib.parse
 try:
     import ssl
@@ -24,6 +27,8 @@ except ImportError:  # pragma: no cover
 import tulip
 import tulip.http
 from tulip.http import client
+from tulip import base_events
+from tulip import events
 
 from tulip import base_events
 from tulip import selectors
@@ -306,6 +311,16 @@ class Router:
             self._srv.keep_alive(True)
 
 
+def make_test_protocol(base):
+    proto = unittest.mock.Mock(spec_set=base)
+    for name in dir(base):
+        if name.startswith('__') and name.endswith('__'):
+            # skip magic names
+            continue
+        getattr(proto, name).return_value = None
+    return proto
+
+
 class TestSelector(selectors._BaseSelector):
 
     def select(self, timeout):
@@ -347,6 +362,10 @@ class TestLoop(base_events.BaseEventLoop):
         self._timers = []
         self._selector = TestSelector()
 
+        self.readers = {}
+        self.writers = {}
+        self.reset_counters()
+
     def time(self):
         return self._time
 
@@ -363,6 +382,48 @@ class TestLoop(base_events.BaseEventLoop):
                 pass
             else:
                 raise AssertionError("Time generator is not finished")
+
+    def add_reader(self, fd, callback, *args):
+        self.readers[fd] = events.make_handle(callback, args)
+
+    def remove_reader(self, fd):
+        self.remove_reader_count[fd] += 1
+        if fd in self.readers:
+            del self.readers[fd]
+            return True
+        else:
+            return False
+
+    def assert_reader(self, fd, callback, *args):
+        assert fd in self.readers, 'fd {} is not registered'.format(fd)
+        handle = self.readers[fd]
+        assert handle._callback == callback, '{!r} != {!r}'.format(
+            handle._callback, callback)
+        assert handle._args == args, '{!r} != {!r}'.format(
+            handle._args, args)
+
+    def add_writer(self, fd, callback, *args):
+        self.writers[fd] = events.make_handle(callback, args)
+
+    def remove_writer(self, fd):
+        self.remove_writer_count[fd] += 1
+        if fd in self.writers:
+            del self.writers[fd]
+            return True
+        else:
+            return False
+
+    def assert_writer(self, fd, callback, *args):
+        assert fd in self.writers, 'fd {} is not registered'.format(fd)
+        handle = self.writers[fd]
+        assert handle._callback == callback, '{!r} != {!r}'.format(
+            handle._callback, callback)
+        assert handle._args == args, '{!r} != {!r}'.format(
+            handle._args, args)
+
+    def reset_counters(self):
+        self.remove_reader_count = collections.defaultdict(int)
+        self.remove_writer_count = collections.defaultdict(int)
 
     def _run_once(self):
         super()._run_once()

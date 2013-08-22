@@ -249,7 +249,7 @@ class EventLoopTestsMixin:
         self.loop.run_forever()
         t1 = time.monotonic()
         self.assertEqual(results, ['hello world'])
-        self.assertTrue(0.09 <= t1-t0 <= 0.12)
+        self.assertTrue(0.09 <= t1-t0 <= 0.12, t1-t0)
 
     def test_call_soon(self):
         results = []
@@ -347,7 +347,7 @@ class EventLoopTestsMixin:
         w.close()
         data = r.recv(256*1024)
         r.close()
-        self.assertTrue(len(data) >= 200)
+        self.assertGreaterEqual(len(data), 200)
 
     def test_sock_client_ops(self):
         with test_utils.run_test_server(self.loop) as httpd:
@@ -485,7 +485,7 @@ class EventLoopTestsMixin:
             self.assertTrue(isinstance(tr, transports.Transport))
             self.assertTrue(isinstance(pr, protocols.Protocol))
             self.loop.run_until_complete(pr.done)
-            self.assertTrue(pr.nbytes > 0)
+            self.assertGreater(pr.nbytes, 0)
             tr.close()
 
     def test_create_connection_sock(self):
@@ -513,7 +513,7 @@ class EventLoopTestsMixin:
             self.assertTrue(isinstance(tr, transports.Transport))
             self.assertTrue(isinstance(pr, protocols.Protocol))
             self.loop.run_until_complete(pr.done)
-            self.assertTrue(pr.nbytes > 0)
+            self.assertGreater(pr.nbytes, 0)
             tr.close()
 
     @unittest.skipIf(ssl is None, 'No ssl module')
@@ -529,7 +529,7 @@ class EventLoopTestsMixin:
             self.assertTrue(
                 hasattr(tr.get_extra_info('socket'), 'getsockname'))
             self.loop.run_until_complete(pr.done)
-            self.assertTrue(pr.nbytes > 0)
+            self.assertGreater(pr.nbytes, 0)
             tr.close()
 
     def test_create_connection_local_addr(self):
@@ -940,7 +940,7 @@ class EventLoopTestsMixin:
         self.loop.run_forever()
         elapsed = time.monotonic() - start
 
-        self.assertTrue(elapsed < 0.1)
+        self.assertLess(elapsed, 0.1)
         self.assertEqual(t.result(), 'cancelled')
         self.assertRaises(futures.CancelledError, f.result)
         self.assertTrue(ov is None or not ov.pending)
@@ -1306,7 +1306,7 @@ class HandleTests(unittest.TestCase):
         self.assertTrue(r.startswith(
             'Handle('
             '<function HandleTests.test_handle.<locals>.callback'))
-        self.assertTrue(r.endswith('())<cancelled>'))
+        self.assertTrue(r.endswith('())<cancelled>'), r)
 
     def test_make_handle(self):
         def callback(*args):
@@ -1350,7 +1350,7 @@ class TimerTests(unittest.TestCase):
         self.assertTrue(h._cancelled)
 
         r = repr(h)
-        self.assertTrue(r.endswith('())<cancelled>'))
+        self.assertTrue(r.endswith('())<cancelled>'), r)
 
         self.assertRaises(AssertionError,
                           events.TimerHandle, None, callback, args)
@@ -1363,6 +1363,7 @@ class TimerTests(unittest.TestCase):
 
         h1 = events.TimerHandle(when, callback, ())
         h2 = events.TimerHandle(when, callback, ())
+        # TODO: Use assertLess etc.
         self.assertFalse(h1 < h2)
         self.assertFalse(h2 < h1)
         self.assertTrue(h1 <= h2)

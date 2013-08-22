@@ -210,32 +210,35 @@ class EventLoopTestsMixin:
         self.assertRaises(
             RuntimeError, self.loop.run_until_complete, coro2())
 
+    # Note: because of the default Windows timing granularity of
+    # 15.6 msec, we use fairly long sleep times here (~100 msec).
+
     def test_run_until_complete(self):
         t0 = self.loop.time()
-        self.loop.run_until_complete(tasks.sleep(0.010, loop=self.loop))
+        self.loop.run_until_complete(tasks.sleep(0.1, loop=self.loop))
         t1 = self.loop.time()
-        self.assertTrue(0.009 <= t1-t0 <= 0.018, t1-t0)
+        self.assertTrue(0.08 <= t1-t0 <= 0.12, t1-t0)
 
     def test_run_until_complete_stopped(self):
         @tasks.coroutine
         def cb():
             self.loop.stop()
-            yield from tasks.sleep(0.010, loop=self.loop)
+            yield from tasks.sleep(0.1, loop=self.loop)
         task = cb()
         self.assertRaises(RuntimeError,
                           self.loop.run_until_complete, task)
 
     def test_run_until_complete_timeout(self):
         t0 = self.loop.time()
-        task = tasks.async(tasks.sleep(0.020, loop=self.loop), loop=self.loop)
+        task = tasks.async(tasks.sleep(0.2, loop=self.loop), loop=self.loop)
         self.assertRaises(futures.TimeoutError,
                           self.loop.run_until_complete,
-                          task, timeout=0.010)
+                          task, timeout=0.1)
         t1 = self.loop.time()
-        self.assertTrue(0.009 <= t1-t0 <= 0.018, t1-t0)
+        self.assertTrue(0.08 <= t1-t0 <= 0.12, t1-t0)
         self.loop.run_until_complete(task)
         t2 = self.loop.time()
-        self.assertTrue(0.018 <= t2-t0 <= 0.028, t2-t0)
+        self.assertTrue(0.18 <= t2-t0 <= 0.22, t2-t0)
 
     def test_call_later(self):
         results = []

@@ -125,8 +125,8 @@ class PopenTests(unittest.TestCase):
         out = ovout.getresult().rstrip()
         err = overr.getresult().rstrip()
 
-        self.assertTrue(len(out) > 0)
-        self.assertTrue(len(err) > 0)
+        self.assertGreater(len(out), 0)
+        self.assertGreater(len(err), 0)
         # allow for partial reads...
         self.assertTrue(msg.upper().rstrip().startswith(out))
         self.assertTrue(b"stderr".startswith(err))

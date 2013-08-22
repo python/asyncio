@@ -40,7 +40,7 @@ class QueueBasicTests(_QueueTestBase):
         self.addCleanup(loop.close)
 
         q = queues.Queue(loop=loop)
-        self.assertTrue(fn(q).startswith('<Queue'))
+        self.assertTrue(fn(q).startswith('<Queue'), fn(q))
         id_is_present = hex(id(q)) in fn(q)
         self.assertEqual(expect_id, id_is_present)
 

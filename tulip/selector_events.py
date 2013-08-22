@@ -197,11 +197,12 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             return
         try:
             data = sock.recv(n)
-            fut.set_result(data)
         except (BlockingIOError, InterruptedError):
             self.add_reader(fd, self._sock_recv, fut, True, sock, n)
         except Exception as exc:
             fut.set_exception(exc)
+        else:
+            fut.set_result(data)
 
     def sock_sendall(self, sock, data):
         """XXX"""
@@ -267,11 +268,12 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
                 if err != 0:
                     # Jump to the except clause below.
                     raise OSError(err, 'Connect call failed')
-            fut.set_result(None)
         except (BlockingIOError, InterruptedError):
             self.add_writer(fd, self._sock_connect, fut, True, sock, address)
         except Exception as exc:
             fut.set_exception(exc)
+        else:
+            fut.set_result(None)
 
     def sock_accept(self, sock):
         """XXX"""
@@ -288,11 +290,12 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         try:
             conn, address = sock.accept()
             conn.setblocking(False)
-            fut.set_result((conn, address))
         except (BlockingIOError, InterruptedError):
             self.add_reader(fd, self._sock_accept, fut, True, sock)
         except Exception as exc:
             fut.set_exception(exc)
+        else:
+            fut.set_result((conn, address))
 
     def _process_events(self, event_list):
         for fileobj, mask, (reader, writer) in event_list:

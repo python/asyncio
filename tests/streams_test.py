@@ -1,6 +1,7 @@
 """Tests for streams.py."""
 
 import gc
+import ssl
 import unittest
 import unittest.mock
 
@@ -44,6 +45,7 @@ class StreamReaderTests(unittest.TestCase):
 
             writer.close()
 
+    @unittest.skipIf(ssl is None, 'No ssl module')
     def test_open_connection_no_loop_ssl(self):
         with test_utils.run_test_server(self.loop, use_ssl=True) as httpd:
             try:

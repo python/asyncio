@@ -265,6 +265,9 @@ class _UnixReadPipeTransport(transports.ReadTransport):
             self._protocol.connection_lost(exc)
         finally:
             self._pipe.close()
+            self._pipe = None
+            self._protocol = None
+            self._loop = None
 
 
 class _UnixWritePipeTransport(transports.WriteTransport):
@@ -391,6 +394,9 @@ class _UnixWritePipeTransport(transports.WriteTransport):
             self._protocol.connection_lost(exc)
         finally:
             self._pipe.close()
+            self._pipe = None
+            self._protocol = None
+            self._loop = None
 
     def pause_writing(self):
         if self._writing:
@@ -547,4 +553,12 @@ class _UnixSubprocessTransport(transports.SubprocessTransport):
         if all(p is not None and p.disconnected
                for p in self._pipes.values()):
             self._finished = True
-            self._loop.call_soon(self._protocol.connection_lost, None)
+            self._loop.call_soon(self._call_connection_lost, None)
+
+    def _call_connection_lost(self, exc):
+        try:
+            self._protocol.connection_lost(exc)
+        finally:
+            self._proc = None
+            self._protocol = None
+            self._loop = None

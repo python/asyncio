@@ -362,6 +362,8 @@ class _SelectorTransport(transports.Transport):
         finally:
             self._sock.close()
             self._sock = None
+            self._protocol = None
+            self._loop = None
 
 
 class _SelectorSocketTransport(_SelectorTransport):

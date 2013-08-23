@@ -1,7 +1,10 @@
 """Tests for selector_events.py"""
 
 import errno
+import gc
+import pprint
 import socket
+import sys
 import unittest
 import unittest.mock
 try:
@@ -624,12 +627,20 @@ class SelectorTransportTests(unittest.TestCase):
         tr._force_close.assert_called_with(exc)
 
     def test_connection_lost(self):
-        exc = object()
+        exc = OSError()
         tr = _SelectorTransport(self.loop, self.sock, self.protocol, None)
         tr._call_connection_lost(exc)
 
         self.protocol.connection_lost.assert_called_with(exc)
         self.sock.close.assert_called_with()
+        self.assertIsNone(tr._sock)
+
+        self.assertIsNone(tr._protocol)
+        self.assertEqual(2, sys.getrefcount(self.protocol),
+                         pprint.pformat(gc.get_referrers(self.protocol)))
+        self.assertIsNone(tr._loop)
+        self.assertEqual(2, sys.getrefcount(self.loop),
+                         pprint.pformat(gc.get_referrers(self.loop)))
 
 
 class SelectorSocketTransportTests(unittest.TestCase):
@@ -980,7 +991,6 @@ class SelectorSslTransportTests(unittest.TestCase):
         transport = _SelectorSslTransport(
             self.loop, self.sock, self.protocol, self.sslcontext)
         self.sock.reset_mock()
-        self.protocol.reset_mock()
         self.sslsock.reset_mock()
         self.sslcontext.reset_mock()
         self.loop.reset_counters()

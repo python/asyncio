@@ -312,13 +312,13 @@ class Router:
 
 
 def make_test_protocol(base):
-    proto = unittest.mock.Mock(spec_set=base)
+    dct = {}
     for name in dir(base):
         if name.startswith('__') and name.endswith('__'):
             # skip magic names
             continue
-        getattr(proto, name).return_value = None
-    return proto
+        dct[name] = unittest.mock.Mock(return_value=None)
+    return type('TestProtocol', (base,) + base.__bases__, dct)()
 
 
 class TestSelector(selectors._BaseSelector):

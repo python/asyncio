@@ -4,16 +4,13 @@ import gc
 import errno
 import io
 import pprint
+import signal
 import stat
 import sys
 import tempfile
 import unittest
 import unittest.mock
 
-try:
-    import signal
-except ImportError:
-    signal = None
 
 from tulip import events
 from tulip import futures
@@ -37,15 +34,6 @@ class SelectorEventLoopTests(unittest.TestCase):
             TypeError, self.loop._check_signal, '1')
         self.assertRaises(
             ValueError, self.loop._check_signal, signal.NSIG + 1)
-
-        unix_events.signal = None
-
-        def restore_signal():
-            unix_events.signal = signal
-        self.addCleanup(restore_signal)
-
-        self.assertRaises(
-            RuntimeError, self.loop._check_signal, signal.SIGINT)
 
     def test_handle_signal_no_handler(self):
         self.loop._handle_signal(signal.NSIG + 1, ())

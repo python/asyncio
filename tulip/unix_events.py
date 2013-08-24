@@ -5,15 +5,12 @@ import errno
 import fcntl
 import functools
 import os
+import signal
 import socket
 import stat
 import subprocess
 import sys
 
-try:
-    import signal
-except ImportError:  # pragma: no cover
-    signal = None
 
 from . import constants
 from . import events
@@ -46,10 +43,9 @@ class SelectorEventLoop(selector_events.BaseSelectorEventLoop):
         return socket.socketpair()
 
     def close(self):
-        if signal is not None:
-            handler = self._signal_handlers.get(signal.SIGCHLD)
-            if handler is not None:
-                self.remove_signal_handler(signal.SIGCHLD)
+        handler = self._signal_handlers.get(signal.SIGCHLD)
+        if handler is not None:
+            self.remove_signal_handler(signal.SIGCHLD)
         super().close()
 
     def add_signal_handler(self, sig, callback, *args):
@@ -137,9 +133,6 @@ class SelectorEventLoop(selector_events.BaseSelectorEventLoop):
         if not isinstance(sig, int):
             raise TypeError('sig must be an int, not {!r}'.format(sig))
 
-        if signal is None:
-            raise RuntimeError('Signals are not supported')
-
         if not (1 <= sig < signal.NSIG):
             raise ValueError(
                 'sig {} out of range(1, {})'.format(sig, signal.NSIG))
@@ -165,10 +158,8 @@ class SelectorEventLoop(selector_events.BaseSelectorEventLoop):
         return transp
 
     def _reg_sigchld(self):
-        assert signal, "signal support is required"
         if signal.SIGCHLD not in self._signal_handlers:
-            self.add_signal_handler(signal.SIGCHLD,
-                                    self._sig_chld)
+            self.add_signal_handler(signal.SIGCHLD, self._sig_chld)
 
     def _sig_chld(self):
         try:

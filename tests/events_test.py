@@ -1162,7 +1162,7 @@ class EventLoopTestsMixin:
 
         transp.close()
         self.assertEqual(b'OUT:test', proto.data[1])
-        self.assertEqual(b'ERR:test', proto.data[2])
+        self.assertTrue(proto.data[2].startswith(b'ERR:test'), proto.data[2])
         self.assertEqual(0, proto.returncode)
 
     @unittest.skipIf(sys.platform == 'win32',
@@ -1190,7 +1190,8 @@ class EventLoopTestsMixin:
 
         stdin.write(b'test')
         self.loop.run_until_complete(proto.completed)
-        self.assertEqual(b'OUT:testERR:test', proto.data[1])
+        self.assertTrue(proto.data[1].startswith(b'OUT:testERR:test'),
+                        proto.data[1])
         self.assertEqual(b'', proto.data[2])
 
         transp.close()

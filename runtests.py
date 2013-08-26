@@ -48,6 +48,9 @@ ARGS.add_argument(
     '-c', '--catch', action="store_true", default=False,
     dest='catchbreak', help='Catch control-C and display results')
 ARGS.add_argument(
+    '--forever', action="store_true", dest='forever', default=False,
+    help='Run tests forever to catch sporadic errors')
+ARGS.add_argument(
     '-q', action="store_true", dest='quiet', help='quiet')
 ARGS.add_argument(
     '--tests', action="store", dest='testsdir', default='tests',
@@ -163,8 +166,16 @@ def runtests():
         logger.setLevel(logging.DEBUG)
     if catchbreak:
         installHandler()
-    result = unittest.TextTestRunner(verbosity=v, failfast=failfast).run(tests)
-    sys.exit(not result.wasSuccessful())
+    if args.forever:
+        while True:
+            result = unittest.TextTestRunner(verbosity=v,
+                                             failfast=failfast).run(tests)
+            if not result.wasSuccessful():
+                sys.exit(1)
+    else:
+        result = unittest.TextTestRunner(verbosity=v,
+                                         failfast=failfast).run(tests)
+        sys.exit(not result.wasSuccessful())
 
 
 def runcoverage(sdir, args):

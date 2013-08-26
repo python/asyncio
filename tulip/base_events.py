@@ -553,7 +553,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         self._add_callback(handle)
         self._write_to_self()
 
-    def _run_once(self, timeout=None):
+    def _run_once(self):
         """Run one full iteration of the event loop.
 
         This calls all currently ready callbacks, polls for I/O,
@@ -564,6 +564,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         while self._scheduled and self._scheduled[0]._cancelled:
             heapq.heappop(self._scheduled)
 
+        timeout = None
         if self._ready:
             timeout = 0
         elif self._scheduled:

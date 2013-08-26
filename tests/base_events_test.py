@@ -184,25 +184,6 @@ class BaseEventLoopTests(unittest.TestCase):
         self.assertEqual([h2], self.loop._scheduled)
         self.assertTrue(self.loop._process_events.called)
 
-    def test__run_once_timeout(self):
-        h = events.TimerHandle(time.monotonic() + 10.0, lambda: True, ())
-
-        self.loop._process_events = unittest.mock.Mock()
-        self.loop._scheduled.append(h)
-        self.loop._run_once(1.0)
-        self.assertEqual((1.0,), self.loop._selector.select.call_args[0])
-
-    def test__run_once_timeout_with_ready(self):
-        # If event loop has ready callbacks, select timeout is always 0.
-        h = events.TimerHandle(time.monotonic() + 10.0, lambda: True, ())
-
-        self.loop._process_events = unittest.mock.Mock()
-        self.loop._scheduled.append(h)
-        self.loop._ready.append(h)
-        self.loop._run_once(1.0)
-
-        self.assertEqual((0,), self.loop._selector.select.call_args[0])
-
     @unittest.mock.patch('tulip.base_events.time')
     @unittest.mock.patch('tulip.base_events.tulip_log')
     def test__run_once_logging(self, m_logging, m_time):

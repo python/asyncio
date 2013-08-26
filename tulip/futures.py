@@ -177,7 +177,8 @@ class Future:
         if self._timeout_handle is not None:
             dct['when'] = self._timeout_handle._when
         if dct:
-            res += '{' + ', '.join(k+'='+str(dct[k]) for k in sorted(dct)) + '}'
+            res += '{' + ', '.join('{}={}'.format(k, dct[k])
+                                   for k in sorted(dct)) + '}'
         return res
 
     def cancel(self):

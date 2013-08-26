@@ -708,9 +708,21 @@ class EventLoopTestsMixin:
                 super().connection_made(transport)
                 f_proto.set_result(self)
 
-        port = find_unused_port()
-        f = self.loop.start_serving(TestMyProto, host=None, port=port)
-        socks = self.loop.run_until_complete(f)
+        try_count = 0
+        while True:
+            try:
+                port = find_unused_port()
+                f = self.loop.start_serving(TestMyProto, host=None, port=port)
+                socks = self.loop.run_until_complete(f)
+            except OSError as ex:
+                if ex.errno == errno.EADDRINUSE:
+                    try_count += 1
+                    self.assertGreaterEqual(5, try_count)
+                    continue
+                else:
+                    raise
+            else:
+                break
         client = socket.socket()
         client.connect(('127.0.0.1', port))
         client.send(b'xxx')

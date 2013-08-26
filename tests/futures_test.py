@@ -56,7 +56,6 @@ class FutureTests(unittest.TestCase):
     def test_result(self):
         f = futures.Future(loop=self.loop)
         self.assertRaises(futures.InvalidStateError, f.result)
-        self.assertRaises(futures.InvalidTimeoutError, f.result, 10)
 
         f.set_result(42)
         self.assertFalse(f.cancelled())
@@ -71,7 +70,6 @@ class FutureTests(unittest.TestCase):
         exc = RuntimeError()
         f = futures.Future(loop=self.loop)
         self.assertRaises(futures.InvalidStateError, f.exception)
-        self.assertRaises(futures.InvalidTimeoutError, f.exception, 10)
 
         f.set_exception(exc)
         self.assertFalse(f.cancelled())

@@ -226,16 +226,13 @@ class Future:
         """
         return self._state != _PENDING
 
-    def result(self, timeout=0):
+    def result(self):
         """Return the result this future represents.
 
         If the future has been cancelled, raises CancelledError.  If the
         future's result isn't yet available, raises InvalidStateError.  If
         the future is done and has an exception set, this exception is raised.
-        Timeout values other than 0 are not supported.
         """
-        if timeout != 0:
-            raise InvalidTimeoutError
         if self._state == _CANCELLED:
             raise CancelledError
         if self._state != _FINISHED:
@@ -247,16 +244,14 @@ class Future:
             raise self._exception
         return self._result
 
-    def exception(self, timeout=0):
+    def exception(self):
         """Return the exception that was set on this future.
 
         The exception (or None if no exception was set) is returned only if
         the future is done.  If the future has been cancelled, raises
         CancelledError.  If the future isn't done yet, raises
-        InvalidStateError.  Timeout values other than 0 are not supported.
+        InvalidStateError.
         """
-        if timeout != 0:
-            raise InvalidTimeoutError
         if self._state == _CANCELLED:
             raise CancelledError
         if self._state != _FINISHED:

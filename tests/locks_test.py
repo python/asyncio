@@ -163,6 +163,11 @@ class LockTests(unittest.TestCase):
 
         self.assertEqual(3, len(lock._waiters))
 
+        # wakeup to close waiting coroutines
+        for i in range(3):
+            lock.release()
+            test_utils.run_briefly(loop)
+
     def test_acquire_cancel(self):
         lock = locks.Lock(loop=self.loop)
         self.assertTrue(self.loop.run_until_complete(lock.acquire()))
@@ -334,6 +339,10 @@ class EventWaiterTests(unittest.TestCase):
         self.assertFalse(acquired)
         self.assertAlmostEqual(0.1, loop.time())
         self.assertEqual(3, len(ev._waiters))
+
+        # wakeup to close waiting coroutines
+        ev.set()
+        test_utils.run_briefly(loop)
 
     def test_wait_cancel(self):
         ev = locks.EventWaiter(loop=self.loop)
@@ -822,6 +831,9 @@ class SemaphoreTests(unittest.TestCase):
         self.assertTrue(t3.result())
         self.assertFalse(t4.done())
 
+        # cleanup locked semaphore
+        sem.release()
+
     def test_acquire_timeout(self):
         def gen():
             when = yield
@@ -872,6 +884,11 @@ class SemaphoreTests(unittest.TestCase):
         self.assertAlmostEqual(0.1, loop.time())
 
         self.assertEqual(3, len(sem._waiters))
+
+        # wakeup to close waiting coroutines
+        for i in range(3):
+            sem.release()
+        test_utils.run_briefly(loop)
 
     def test_acquire_cancel(self):
         sem = locks.Semaphore(loop=self.loop)

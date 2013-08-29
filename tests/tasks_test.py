@@ -358,12 +358,14 @@ class TaskTests(unittest.TestCase):
         self.addCleanup(loop.close)
 
         x = 0
+        waiters = []
 
         @tasks.coroutine
         def task():
             nonlocal x
             while x < 10:
-                yield from tasks.sleep(0.1, loop=loop)
+                waiters.append(tasks.sleep(0.1, loop=loop))
+                yield from waiters[-1]
                 x += 1
                 if x == 2:
                     loop.stop()
@@ -374,6 +376,10 @@ class TaskTests(unittest.TestCase):
         self.assertFalse(t.done())
         self.assertEqual(x, 2)
         self.assertAlmostEqual(0.3, loop.time())
+
+        # close generators
+        for w in waiters:
+            w.close()
 
     def test_timeout(self):
 
@@ -397,6 +403,11 @@ class TaskTests(unittest.TestCase):
             futures.TimeoutError, loop.run_until_complete, t, 0.1)
         self.assertAlmostEqual(0.1, loop.time())
         self.assertFalse(t.done())
+
+        # move forward to close generator
+        loop.advance_time(10)
+        self.assertEqual(42, loop.run_until_complete(t))
+        self.assertTrue(t.done())
 
     def test_timeout_not(self):
 
@@ -482,6 +493,10 @@ class TaskTests(unittest.TestCase):
 
         self.assertAlmostEqual(0.01, loop.time())
         self.assertFalse(fut.done())
+
+        # move forward to close generator
+        loop.advance_time(10)
+        loop.run_until_complete(fut)
 
     def test_wait(self):
 
@@ -582,6 +597,10 @@ class TaskTests(unittest.TestCase):
         self.assertIsNone(b.result())
         self.assertAlmostEqual(0.1, loop.time())
 
+        # move forward to close generator
+        loop.advance_time(10)
+        loop.run_until_complete(tasks.wait([a, b], loop=loop))
+
     def test_wait_really_done(self):
         # there is possibility that some tasks in the pending list
         # became done but their callbacks haven't all been called yet
@@ -637,6 +656,10 @@ class TaskTests(unittest.TestCase):
         self.assertEqual({a}, pending)
         self.assertAlmostEqual(0, loop.time())
 
+        # move forward to close generator
+        loop.advance_time(10)
+        loop.run_until_complete(tasks.wait([a, b], loop=loop))
+
     def test_wait_first_exception_in_wait(self):
 
         def gen():
@@ -665,6 +688,10 @@ class TaskTests(unittest.TestCase):
         self.assertEqual({b}, done)
         self.assertEqual({a}, pending)
         self.assertAlmostEqual(0.01, loop.time())
+
+        # move forward to close generator
+        loop.advance_time(10)
+        loop.run_until_complete(tasks.wait([a, b], loop=loop))
 
     def test_wait_with_exception(self):
 
@@ -728,6 +755,10 @@ class TaskTests(unittest.TestCase):
         loop.run_until_complete(tasks.Task(foo(), loop=loop))
         self.assertAlmostEqual(0.11, loop.time())
 
+        # move forward to close generator
+        loop.advance_time(10)
+        loop.run_until_complete(tasks.wait([a, b], loop=loop))
+
     def test_wait_concurrent_complete(self):
 
         def gen():
@@ -751,6 +782,10 @@ class TaskTests(unittest.TestCase):
         self.assertEqual(done, set([a]))
         self.assertEqual(pending, set([b]))
         self.assertAlmostEqual(0.1, loop.time())
+
+        # move forward to close generator
+        loop.advance_time(10)
+        loop.run_until_complete(tasks.wait([a, b], loop=loop))
 
     def test_as_completed(self):
 
@@ -832,6 +867,10 @@ class TaskTests(unittest.TestCase):
         self.assertEqual(res[1][0], 2)
         self.assertTrue(isinstance(res[1][1], futures.TimeoutError))
         self.assertAlmostEqual(0.12, loop.time())
+
+        # move forward to close generator
+        loop.advance_time(10)
+        loop.run_until_complete(tasks.wait([a, b], loop=loop))
 
     def test_as_completed_reverse_wait(self):
 

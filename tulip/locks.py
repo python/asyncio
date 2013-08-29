@@ -261,16 +261,21 @@ class Condition(Lock):
         fut = futures.Future(loop=self._loop, timeout=timeout)
 
         self._condition_waiters.append(fut)
+        keep_lock = True
         try:
             yield from fut
         except futures.CancelledError:
             self._condition_waiters.remove(fut)
             return False
+        except GeneratorExit:
+            keep_lock = False  # Prevent yield in finally clause.
+            raise
         else:
             f = self._condition_waiters.popleft()
             assert fut is f
         finally:
-            yield from self.acquire()
+            if keep_lock:
+                yield from self.acquire()
 
         return True
 

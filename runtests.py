@@ -23,6 +23,7 @@ runtests.py with --coverage argument is equivalent of:
 # Originally written by Beech Horn (for NDB).
 
 import argparse
+import gc
 import logging
 import os
 import re
@@ -49,7 +50,10 @@ ARGS.add_argument(
     dest='catchbreak', help='Catch control-C and display results')
 ARGS.add_argument(
     '--forever', action="store_true", dest='forever', default=False,
-    help='Run tests forever to catch sporadic errors')
+    help='run tests forever to catch sporadic errors')
+ARGS.add_argument(
+    '--findleaks', action='store_true', dest='findleaks',
+    help='detect tests that leak memory')
 ARGS.add_argument(
     '-q', action="store_true", dest='quiet', help='quiet')
 ARGS.add_argument(
@@ -133,6 +137,43 @@ def load_tests(testsdir, includes=(), excludes=()):
     return suite
 
 
+class TestResult(unittest.TextTestResult):
+
+    def __init__(self, stream, descriptions, verbosity):
+        super().__init__(stream, descriptions, verbosity)
+        self.leaks = []
+
+    def startTest(self, test):
+        super().startTest(test)
+        gc.collect()
+
+    def addSuccess(self, test):
+        super().addSuccess(test)
+        gc.collect()
+        if gc.garbage:
+            if self.showAll:
+                self.stream.writeln("    Warning: test created {} uncollectable "
+                                    "object(s).".format(len(gc.garbage)))
+            # move the uncollectable objects somewhere so we don't see
+            # them again
+            self.leaks.append((self.getDescription(test), gc.garbage[:]))
+            del gc.garbage[:]
+
+
+class TestRunner(unittest.TextTestRunner):
+    resultclass = TestResult
+
+    def run(self, test):
+        result = super().run(test)
+        if result.leaks:
+            self.stream.writeln("{} tests leaks:".format(len(result.leaks)))
+            for name, leaks in result.leaks:
+                self.stream.writeln(' '*4 + name + ':')
+                for leak in leaks:
+                    self.stream.writeln(' '*8 + repr(leak))
+        return result
+
+
 def runtests():
     args = ARGS.parse_args()
 
@@ -151,6 +192,8 @@ def runtests():
     v = 0 if args.quiet else args.verbose + 1
     failfast = args.failfast
     catchbreak = args.catchbreak
+    findleaks = args.findleaks
+    runner_factory = TestRunner if findleaks else unittest.TextTestRunner
 
     tests = load_tests(args.testsdir, includes, excludes)
     logger = logging.getLogger()
@@ -168,13 +211,13 @@ def runtests():
         installHandler()
     if args.forever:
         while True:
-            result = unittest.TextTestRunner(verbosity=v,
-                                             failfast=failfast).run(tests)
+            result = runner_factory(verbosity=v,
+                                    failfast=failfast).run(tests)
             if not result.wasSuccessful():
                 sys.exit(1)
     else:
-        result = unittest.TextTestRunner(verbosity=v,
-                                         failfast=failfast).run(tests)
+        result = runner_factory(verbosity=v,
+                                failfast=failfast).run(tests)
         sys.exit(not result.wasSuccessful())
 
 

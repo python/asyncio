@@ -1,18 +1,15 @@
-"""Run all unittests.
+"""Run Tulip unittests.
 
 Usage:
-  python3 runtests.py [-v] [-q] [pattern] ...
+  python3 runtests.py [flags] [pattern] ...
 
-Where:
-  -v: verbose
-  -q: quiet
-  pattern: optional regex patterns to match test ids (default all tests)
-
-Note that the test id is the fully qualified name of the test,
+Patterns are matched against the fully qualified name of the test,
 including package, module, class and method,
 e.g. 'tests.events_test.PolicyTests.testPolicy'.
 
-runtests.py with --coverage argument is equivalent of:
+For full help, try --help.
+
+runtests.py --coverage is equivalent of:
 
   $(COVERAGE) run --branch runtests.py -v
   $(COVERAGE) html $(list of files)
@@ -152,8 +149,9 @@ class TestResult(unittest.TextTestResult):
         gc.collect()
         if gc.garbage:
             if self.showAll:
-                self.stream.writeln("    Warning: test created {} uncollectable "
-                                    "object(s).".format(len(gc.garbage)))
+                self.stream.writeln(
+                    "    Warning: test created {} uncollectable "
+                    "object(s).".format(len(gc.garbage)))
             # move the uncollectable objects somewhere so we don't see
             # them again
             self.leaks.append((self.getDescription(test), gc.garbage[:]))

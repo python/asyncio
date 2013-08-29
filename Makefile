@@ -14,7 +14,7 @@ vtest:
 testloop:
 	while sleep 1; do $(PYTHON) runtests.py -v $(VERBOSE) $(FLAGS); done
 
-# See README for coverage installation instructions.
+# See runtests.py for coverage installation instructions.
 cov coverage:
 	$(PYTHON) runtests.py --coverage tulip -v $(VERBOSE) $(FLAGS)
 	echo "open file://`pwd`/htmlcov/index.html"

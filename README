@@ -8,8 +8,8 @@ Copyright/license: Open source, Apache 2.0. Enjoy.
 
 Master Mercurial repo: http://code.google.com/p/tulip/
 
-The old code lives in the subdirectory 'old'; the new code (conforming
-to PEP 3156, under construction) lives in the 'tulip' subdirectory.
+The actual code lives in the 'tulip' subdirectory.
+Tests are in the 'tests' subdirectory.
 
 To run tests:
   - make test

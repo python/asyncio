@@ -52,6 +52,8 @@ class QueueBasicTests(_QueueTestBase):
             # Let it start waiting.
             yield from tasks.sleep(0.1, loop=loop)
             self.assertTrue('_getters[1]' in fn(q))
+            # resume q.get coroutine to finish generator
+            q.put_nowait(0)
 
         loop.run_until_complete(add_getter())
 
@@ -60,10 +62,12 @@ class QueueBasicTests(_QueueTestBase):
             q = queues.Queue(maxsize=1, loop=loop)
             q.put_nowait(1)
             # Start a task that waits to put.
-            tasks.Task(q.put(2), loop=loop)
+            t = tasks.Task(q.put(2), loop=loop)
             # Let it start waiting.
             yield from tasks.sleep(0.1, loop=loop)
             self.assertTrue('_putters[1]' in fn(q))
+            # resume q.put coroutine to finish generator
+            q.get_nowait()
 
         loop.run_until_complete(add_putter())
 
@@ -437,12 +441,13 @@ class JoinableQueueTests(_QueueTestBase):
 
         # Two workers get items from the queue and call task_done after each.
         # Join the queue and assert all items have been processed.
+        running = True
 
         @tasks.coroutine
         def worker():
             nonlocal accumulator
 
-            while True:
+            while running:
                 item = yield from q.get()
                 accumulator += item
                 q.task_done()
@@ -456,6 +461,11 @@ class JoinableQueueTests(_QueueTestBase):
 
         self.loop.run_until_complete(test())
         self.assertEqual(sum(range(100)), accumulator)
+
+        # close running generators
+        running = False
+        for i in range(2):
+            q.put_nowait(0)
 
     def test_join_empty_queue(self):
         q = queues.JoinableQueue(loop=self.loop)

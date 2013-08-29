@@ -189,6 +189,8 @@ class HttpMessageTests(unittest.TestCase):
         self.assertIn(b'CONTENT-TYPE: plain/html', content)
         self.assertTrue(msg.headers_sent)
         self.assertTrue(msg.is_headers_sent())
+        # cleanup
+        msg.writer.close()
 
     def test_send_headers_nomore_add(self):
         msg = protocol.Response(self.transport, 200)
@@ -197,6 +199,8 @@ class HttpMessageTests(unittest.TestCase):
 
         self.assertRaises(AssertionError,
                           msg.add_header, 'content-type', 'plain/html')
+        # cleanup
+        msg.writer.close()
 
     def test_prepare_length(self):
         msg = protocol.Response(self.transport, 200)
@@ -244,6 +248,8 @@ class HttpMessageTests(unittest.TestCase):
 
         msg.write(b'data1')
         self.assertTrue(msg.headers_sent)
+        # cleanup
+        msg.writer.close()
 
     def test_write_payload_eof(self):
         write = self.transport.write = unittest.mock.Mock()

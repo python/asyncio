@@ -1,7 +1,7 @@
 """A Future class similar to the one in PEP 3148."""
 
 __all__ = ['CancelledError', 'TimeoutError',
-           'InvalidStateError', 'InvalidTimeoutError',
+           'InvalidStateError',
            'Future', 'wrap_future',
            ]
 
@@ -28,11 +28,6 @@ STACK_DEBUG = logging.DEBUG - 1  # heavy-duty debugging
 class InvalidStateError(Error):
     """The operation is not allowed in this state."""
     # TODO: Show the future, its state, the method, and the required state.
-
-
-class InvalidTimeoutError(Error):
-    """Called result() or exception() with timeout != 0."""
-    # TODO: Print a nice error message.
 
 
 class _TracebackLogger:
@@ -129,15 +124,13 @@ class Future:
     _state = _PENDING
     _result = None
     _exception = None
-    _timeout = None
-    _timeout_handle = None
     _loop = None
 
     _blocking = False  # proper use of future (yield vs yield from)
 
     _tb_logger = None
 
-    def __init__(self, *, loop=None, timeout=None):
+    def __init__(self, *, loop=None):
         """Initialize the future.
 
         The optional event_loop argument allows to explicitly set the event
@@ -149,10 +142,6 @@ class Future:
         else:
             self._loop = loop
         self._callbacks = []
-
-        if timeout is not None:
-            self._timeout = timeout
-            self._timeout_handle = self._loop.call_later(timeout, self.cancel)
 
     def __repr__(self):
         res = self.__class__.__name__
@@ -171,14 +160,6 @@ class Future:
                 res += '<{}, {}>'.format(self._state, self._callbacks)
         else:
             res += '<{}>'.format(self._state)
-        dct = {}
-        if self._timeout is not None:
-            dct['timeout'] = self._timeout
-        if self._timeout_handle is not None:
-            dct['when'] = self._timeout_handle._when
-        if dct:
-            res += '{' + ', '.join('{}={}'.format(k, dct[k])
-                                   for k in sorted(dct)) + '}'
         return res
 
     def cancel(self):
@@ -200,11 +181,6 @@ class Future:
         The callbacks are scheduled to be called as soon as possible. Also
         clears the callback list.
         """
-        # Cancel timeout handle
-        if self._timeout_handle is not None:
-            self._timeout_handle.cancel()
-            self._timeout_handle = None
-
         callbacks = self._callbacks[:]
         if not callbacks:
             return

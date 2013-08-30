@@ -72,9 +72,9 @@ _marker = object()
 class Task(futures.Future):
     """A coroutine wrapped in a Future."""
 
-    def __init__(self, coro, *, loop=None, timeout=None):
+    def __init__(self, coro, *, loop=None):
         assert inspect.isgenerator(coro)  # Must be a coroutine *object*.
-        super().__init__(loop=loop, timeout=timeout)
+        super().__init__(loop=loop)
         self._coro = coro
         self._fut_waiter = None
         self._must_cancel = False
@@ -227,11 +227,11 @@ def wait(fs, *, loop=None, timeout=None, return_when=ALL_COMPLETED):
 
 @coroutine
 def wait_for(fut, timeout, *, loop=None):
-    """Wait for the single Future or coroutine to complete.
+    """Wait for the single Future or coroutine to complete, with timeout.
 
     Coroutine will be wrapped in Task.
 
-    Returns result of the Future or coroutine. Raises TimeoutError when
+    Returns result of the Future or coroutine.  Raises TimeoutError when
     timeout occurs.
 
     Usage:
@@ -259,7 +259,10 @@ def _wait(fs, timeout, return_when, loop):
     The timeout argument is like for wait().
     """
     assert fs, 'Set of Futures is empty.'
-    waiter = futures.Future(loop=loop, timeout=timeout)
+    waiter = futures.Future(loop=loop)
+    timeout_handle = None
+    if timeout is not None:
+        timeout_handle = loop.call_later(timeout, waiter.cancel)
     counter = len(fs)
 
     def _on_completion(f):
@@ -269,6 +272,8 @@ def _wait(fs, timeout, return_when, loop):
             return_when == FIRST_COMPLETED or
             return_when == FIRST_EXCEPTION and (not f.cancelled() and
                                                 f.exception() is not None)):
+            if timeout_handle is not None:
+                timeout_handle.cancel()
             waiter.cancel()
 
     for f in fs:
@@ -341,19 +346,16 @@ def sleep(delay, result=None, *, loop=None):
         h.cancel()
 
 
-def async(coro_or_future, *, loop=None, timeout=None):
+def async(coro_or_future, *, loop=None):
     """Wrap a coroutine in a future.
 
     If the argument is a Future, it is returned directly.
     """
     if isinstance(coro_or_future, futures.Future):
-        if ((loop is not None and loop is not coro_or_future._loop) or
-            (timeout is not None and timeout != coro_or_future._timeout)):
-            raise ValueError(
-                'loop and timeout arguments must agree with Future')
-
+        if loop is not None and loop is not coro_or_future._loop:
+            raise ValueError('loop argument must agree with Future')
         return coro_or_future
     elif iscoroutine(coro_or_future):
-        return Task(coro_or_future, loop=loop, timeout=timeout)
+        return Task(coro_or_future, loop=loop)
     else:
         raise TypeError('A Future or coroutine is required')

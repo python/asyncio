@@ -116,11 +116,12 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         """Add a reader callback."""
         handle = events.make_handle(callback, args)
         try:
-            mask, (reader, writer) = self._selector.get_info(fd)
+            key = self._selector.get_key(fd)
         except KeyError:
             self._selector.register(fd, selectors.EVENT_READ,
                                     (handle, None))
         else:
+            mask, (reader, writer) = key.events, key.data
             self._selector.modify(fd, mask | selectors.EVENT_READ,
                                   (handle, writer))
             if reader is not None:
@@ -129,10 +130,11 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
     def remove_reader(self, fd):
         """Remove a reader callback."""
         try:
-            mask, (reader, writer) = self._selector.get_info(fd)
+            key = self._selector.get_key(fd)
         except KeyError:
             return False
         else:
+            mask, (reader, writer) = key.events, key.data
             mask &= ~selectors.EVENT_READ
             if not mask:
                 self._selector.unregister(fd)
@@ -149,11 +151,12 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         """Add a writer callback.."""
         handle = events.make_handle(callback, args)
         try:
-            mask, (reader, writer) = self._selector.get_info(fd)
+            key = self._selector.get_key(fd)
         except KeyError:
             self._selector.register(fd, selectors.EVENT_WRITE,
                                     (None, handle))
         else:
+            mask, (reader, writer) = key.events, key.data
             self._selector.modify(fd, mask | selectors.EVENT_WRITE,
                                   (reader, handle))
             if writer is not None:
@@ -162,10 +165,11 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
     def remove_writer(self, fd):
         """Remove a writer callback."""
         try:
-            mask, (reader, writer) = self._selector.get_info(fd)
+            key = self._selector.get_key(fd)
         except KeyError:
             return False
         else:
+            mask, (reader, writer) = key.events, key.data
             # Remove both writer and connector.
             mask &= ~selectors.EVENT_WRITE
             if not mask:
@@ -298,7 +302,8 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             fut.set_result((conn, address))
 
     def _process_events(self, event_list):
-        for fileobj, mask, (reader, writer) in event_list:
+        for key, mask in event_list:
+            fileobj, (reader, writer) = key.fileobj, key.data
             if mask & selectors.EVENT_READ and reader is not None:
                 if reader._cancelled:
                     self.remove_reader(fileobj)

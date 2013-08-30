@@ -396,7 +396,7 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         self.assertIs(err, f.exception())
 
     def test_add_reader(self):
-        self.loop._selector.get_info.side_effect = KeyError
+        self.loop._selector.get_key.side_effect = KeyError
         cb = lambda: True
         self.loop.add_reader(1, cb)
 
@@ -410,8 +410,8 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
     def test_add_reader_existing(self):
         reader = unittest.mock.Mock()
         writer = unittest.mock.Mock()
-        self.loop._selector.get_info.return_value = (
-            selectors.EVENT_WRITE, (reader, writer))
+        self.loop._selector.get_key.return_value = selectors.SelectorKey(
+            1, 1, selectors.EVENT_WRITE, (reader, writer))
         cb = lambda: True
         self.loop.add_reader(1, cb)
 
@@ -426,8 +426,8 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
 
     def test_add_reader_existing_writer(self):
         writer = unittest.mock.Mock()
-        self.loop._selector.get_info.return_value = (
-            selectors.EVENT_WRITE, (None, writer))
+        self.loop._selector.get_key.return_value = selectors.SelectorKey(
+            1, 1, selectors.EVENT_WRITE, (None, writer))
         cb = lambda: True
         self.loop.add_reader(1, cb)
 
@@ -440,8 +440,8 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         self.assertEqual(writer, w)
 
     def test_remove_reader(self):
-        self.loop._selector.get_info.return_value = (
-            selectors.EVENT_READ, (None, None))
+        self.loop._selector.get_key.return_value = selectors.SelectorKey(
+            1, 1, selectors.EVENT_READ, (None, None))
         self.assertFalse(self.loop.remove_reader(1))
 
         self.assertTrue(self.loop._selector.unregister.called)
@@ -449,8 +449,9 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
     def test_remove_reader_read_write(self):
         reader = unittest.mock.Mock()
         writer = unittest.mock.Mock()
-        self.loop._selector.get_info.return_value = (
-            selectors.EVENT_READ | selectors.EVENT_WRITE, (reader, writer))
+        self.loop._selector.get_key.return_value = selectors.SelectorKey(
+            1, 1, selectors.EVENT_READ | selectors.EVENT_WRITE,
+            (reader, writer))
         self.assertTrue(
             self.loop.remove_reader(1))
 
@@ -460,12 +461,12 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
             self.loop._selector.modify.call_args[0])
 
     def test_remove_reader_unknown(self):
-        self.loop._selector.get_info.side_effect = KeyError
+        self.loop._selector.get_key.side_effect = KeyError
         self.assertFalse(
             self.loop.remove_reader(1))
 
     def test_add_writer(self):
-        self.loop._selector.get_info.side_effect = KeyError
+        self.loop._selector.get_key.side_effect = KeyError
         cb = lambda: True
         self.loop.add_writer(1, cb)
 
@@ -479,8 +480,8 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
     def test_add_writer_existing(self):
         reader = unittest.mock.Mock()
         writer = unittest.mock.Mock()
-        self.loop._selector.get_info.return_value = (
-            selectors.EVENT_READ, (reader, writer))
+        self.loop._selector.get_key.return_value = selectors.SelectorKey(
+            1, 1, selectors.EVENT_READ, (reader, writer))
         cb = lambda: True
         self.loop.add_writer(1, cb)
 
@@ -494,8 +495,8 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         self.assertEqual(cb, w._callback)
 
     def test_remove_writer(self):
-        self.loop._selector.get_info.return_value = (
-            selectors.EVENT_WRITE, (None, None))
+        self.loop._selector.get_key.return_value = selectors.SelectorKey(
+            1, 1, selectors.EVENT_WRITE, (None, None))
         self.assertFalse(self.loop.remove_writer(1))
 
         self.assertTrue(self.loop._selector.unregister.called)
@@ -503,8 +504,9 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
     def test_remove_writer_read_write(self):
         reader = unittest.mock.Mock()
         writer = unittest.mock.Mock()
-        self.loop._selector.get_info.return_value = (
-            selectors.EVENT_READ | selectors.EVENT_WRITE, (reader, writer))
+        self.loop._selector.get_key.return_value = selectors.SelectorKey(
+            1, 1, selectors.EVENT_READ | selectors.EVENT_WRITE,
+            (reader, writer))
         self.assertTrue(
             self.loop.remove_writer(1))
 
@@ -514,7 +516,7 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
             self.loop._selector.modify.call_args[0])
 
     def test_remove_writer_unknown(self):
-        self.loop._selector.get_info.side_effect = KeyError
+        self.loop._selector.get_key.side_effect = KeyError
         self.assertFalse(
             self.loop.remove_writer(1))
 
@@ -523,8 +525,10 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         reader._cancelled = False
 
         self.loop._add_callback = unittest.mock.Mock()
-        self.loop._process_events(
-            ((1, selectors.EVENT_READ, (reader, None)),))
+        self.loop._process_events([
+            (selectors.SelectorKey(1, 1, selectors.EVENT_READ, (reader, None)),
+             selectors.EVENT_READ),
+            ])
         self.assertTrue(self.loop._add_callback.called)
         self.loop._add_callback.assert_called_with(reader)
 
@@ -533,8 +537,10 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         reader.cancelled = True
 
         self.loop.remove_reader = unittest.mock.Mock()
-        self.loop._process_events(
-            ((1, selectors.EVENT_READ, (reader, None)),))
+        self.loop._process_events([
+            (selectors.SelectorKey(1, 1, selectors.EVENT_READ, (reader, None)),
+             selectors.EVENT_READ),
+            ])
         self.loop.remove_reader.assert_called_with(1)
 
     def test_process_events_write(self):
@@ -542,8 +548,11 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         writer._cancelled = False
 
         self.loop._add_callback = unittest.mock.Mock()
-        self.loop._process_events(
-            ((1, selectors.EVENT_WRITE, (None, writer)),))
+        self.loop._process_events([
+            (selectors.SelectorKey(1, 1, selectors.EVENT_WRITE,
+                                   (None, writer)),
+             selectors.EVENT_WRITE),
+            ])
         self.loop._add_callback.assert_called_with(writer)
 
     def test_process_events_write_cancelled(self):
@@ -551,8 +560,11 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         writer.cancelled = True
         self.loop.remove_writer = unittest.mock.Mock()
 
-        self.loop._process_events(
-            ((1, selectors.EVENT_WRITE, (None, writer)),))
+        self.loop._process_events([
+            (selectors.SelectorKey(1, 1, selectors.EVENT_WRITE,
+                                   (None, writer)),
+             selectors.EVENT_WRITE),
+            ])
         self.loop.remove_writer.assert_called_with(1)
 
 

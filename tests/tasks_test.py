@@ -398,16 +398,11 @@ class TaskTests(unittest.TestCase):
             yield from tasks.sleep(10.0, loop=loop)
             return 42
 
-        t = tasks.Task(task(), loop=loop)
+        t = tasks.Task(task(), loop=loop, timeout=0.1)
         self.assertRaises(
-            futures.TimeoutError, loop.run_until_complete, t, 0.1)
+            futures.CancelledError, loop.run_until_complete, t)
         self.assertAlmostEqual(0.1, loop.time())
-        self.assertFalse(t.done())
-
-        # move forward to close generator
-        loop.advance_time(10)
-        self.assertEqual(42, loop.run_until_complete(t))
-        self.assertTrue(t.done())
+        self.assertTrue(t.cancelled())
 
     def test_timeout_not(self):
 
@@ -426,8 +421,8 @@ class TaskTests(unittest.TestCase):
             yield from tasks.sleep(0.1, loop=loop)
             return 42
 
-        t = tasks.Task(task(), loop=loop)
-        r = loop.run_until_complete(t, 10.0)
+        t = tasks.Task(task(), loop=loop, timeout=10.0)
+        r = loop.run_until_complete(t)
         self.assertTrue(t.done())
         self.assertEqual(r, 42)
         self.assertAlmostEqual(0.1, loop.time())

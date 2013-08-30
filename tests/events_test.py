@@ -228,18 +228,6 @@ class EventLoopTestsMixin:
         self.assertRaises(RuntimeError,
                           self.loop.run_until_complete, task)
 
-    def test_run_until_complete_timeout(self):
-        t0 = self.loop.time()
-        task = tasks.async(tasks.sleep(0.2, loop=self.loop), loop=self.loop)
-        self.assertRaises(futures.TimeoutError,
-                          self.loop.run_until_complete,
-                          task, timeout=0.1)
-        t1 = self.loop.time()
-        self.assertTrue(0.08 <= t1-t0 <= 0.12, t1-t0)
-        self.loop.run_until_complete(task)
-        t2 = self.loop.time()
-        self.assertTrue(0.18 <= t2-t0 <= 0.22, t2-t0)
-
     def test_call_later(self):
         results = []
 

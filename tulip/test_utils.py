@@ -380,7 +380,7 @@ class TestLoop(base_events.BaseEventLoop):
                 self._gen.send(0)
             except StopIteration:
                 pass
-            else:
+            else:  # pragma: no cover
                 raise AssertionError("Time generator is not finished")
 
     def add_reader(self, fd, callback, *args):

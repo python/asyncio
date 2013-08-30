@@ -19,7 +19,6 @@ class BaseEventLoopTests(unittest.TestCase):
     def setUp(self):
         self.loop = base_events.BaseEventLoop()
         self.loop._selector = unittest.mock.Mock()
-        self.loop._selector.registered_count.return_value = 1
         events.set_event_loop(None)
 
     def test_not_implemented(self):

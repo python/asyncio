@@ -321,7 +321,7 @@ def make_test_protocol(base):
     return type('TestProtocol', (base,) + base.__bases__, dct)()
 
 
-class TestSelector(selectors._BaseSelector):
+class TestSelector(selectors.BaseSelector):
 
     def select(self, timeout):
         return []

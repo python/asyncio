@@ -70,9 +70,6 @@ class IocpProactor:
     def set_loop(self, loop):
         self._loop = loop
 
-    def registered_count(self):
-        return len(self._cache)
-
     def select(self, timeout=None):
         if not self._results:
             self._poll(timeout)

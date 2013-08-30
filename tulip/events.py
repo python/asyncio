@@ -327,7 +327,7 @@ class DefaultEventLoopPolicy(threading.local, AbstractEventLoopPolicy):
         """
         if (self._loop is None and
             not self._set_called and
-            threading.current_thread().name == 'MainThread'):
+            isinstance(threading.current_thread(), threading._MainThread)):
             self._loop = self.new_event_loop()
         assert self._loop is not None, \
                ('There is no current event loop in thread %r.' %

@@ -1534,13 +1534,16 @@ class PolicyTests(unittest.TestCase):
         policy.set_event_loop(None)
         self.assertRaises(AssertionError, policy.get_event_loop)
 
-    @unittest.mock.patch('tulip.events.threading')
-    def test_get_event_loop_thread(self, m_threading):
-        m_t = m_threading.current_thread.return_value = unittest.mock.Mock()
-        m_t.name = 'Thread 1'
+    @unittest.mock.patch('tulip.events.threading.current_thread')
+    def test_get_event_loop_thread(self, m_current_thread):
 
-        policy = events.DefaultEventLoopPolicy()
-        self.assertRaises(AssertionError, policy.get_event_loop)
+        def f():
+            policy = events.DefaultEventLoopPolicy()
+            self.assertRaises(AssertionError, policy.get_event_loop)
+
+        th = threading.Thread(target=f)
+        th.start()
+        th.join()
 
     def test_new_event_loop(self):
         policy = events.DefaultEventLoopPolicy()

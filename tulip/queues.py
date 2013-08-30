@@ -105,14 +105,11 @@ class Queue:
             return self.qsize() == self._maxsize
 
     @coroutine
-    def put(self, item, timeout=None):
+    def put(self, item):
         """Put an item into the queue.
 
-        If you yield from put() and timeout is None (the default), wait until a
-        free slot is available before adding item.
-
-        If a timeout is provided, raise Full if no free slot becomes
-        available before the timeout.
+        If you yield from put(), wait until a free slot is available
+        before adding item.
         """
         self._consume_done_getters(self._getters)
         if self._getters:
@@ -127,7 +124,7 @@ class Queue:
             getter.set_result(self._get())
 
         elif self._maxsize > 0 and self._maxsize == self.qsize():
-            waiter = futures.Future(loop=self._loop, timeout=timeout)
+            waiter = futures.Future(loop=self._loop)
 
             self._putters.append((item, waiter))
             try:
@@ -161,14 +158,10 @@ class Queue:
             self._put(item)
 
     @coroutine
-    def get(self, timeout=None):
+    def get(self):
         """Remove and return an item from the queue.
 
-        If you yield from get() and timeout is None (the default), wait until a
-        item is available.
-
-        If a timeout is provided, raise Empty if no item is available
-        before the timeout.
+        If you yield from get(), wait until a item is available.
         """
         self._consume_done_putters()
         if self._putters:
@@ -187,7 +180,7 @@ class Queue:
         elif self.qsize():
             return self._get()
         else:
-            waiter = futures.Future(loop=self._loop, timeout=timeout)
+            waiter = futures.Future(loop=self._loop)
 
             self._getters.append(waiter)
             try:
@@ -286,7 +279,7 @@ class JoinableQueue(Queue):
             self._finished.set()
 
     @coroutine
-    def join(self, timeout=None):
+    def join(self):
         """Block until all items in the queue have been gotten and processed.
 
         The count of unfinished tasks goes up whenever an item is added to the
@@ -295,4 +288,4 @@ class JoinableQueue(Queue):
         When the count of unfinished tasks drops to zero, join() unblocks.
         """
         if self._unfinished_tasks > 0:
-            yield from self._finished.wait(timeout=timeout)
+            yield from self._finished.wait()

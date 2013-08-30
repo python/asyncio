@@ -274,63 +274,6 @@ class TaskTests(unittest.TestCase):
         self.assertTrue(fut3.cancelled())
         self.assertTrue(t.cancelled())
 
-    def test_future_timeout(self):
-
-        def gen():
-            when = yield
-            self.assertAlmostEqual(0.1, when)
-            when = yield 0
-            self.assertAlmostEqual(10.0, when)
-            yield 0.1
-
-        loop = test_utils.TestLoop(gen)
-        self.addCleanup(loop.close)
-
-        @tasks.coroutine
-        def coro():
-            yield from tasks.sleep(10.0, loop=loop)
-            return 12
-
-        t = tasks.Task(coro(), timeout=0.1, loop=loop)
-
-        self.assertRaises(
-            futures.CancelledError,
-            loop.run_until_complete, t)
-        self.assertTrue(t.done())
-        self.assertFalse(t.cancel())
-        self.assertAlmostEqual(0.1, loop.time())
-
-    def test_future_timeout_catch(self):
-
-        def gen():
-            when = yield
-            self.assertAlmostEqual(0.1, when)
-            when = yield 0
-            self.assertAlmostEqual(10.0, when)
-            yield 0.1
-
-        loop = test_utils.TestLoop(gen)
-        self.addCleanup(loop.close)
-
-        @tasks.coroutine
-        def coro():
-            yield from tasks.sleep(10.0, loop=loop)
-            return 12
-
-        class Cancelled(Exception):
-            pass
-
-        @tasks.coroutine
-        def coro2():
-            try:
-                yield from tasks.Task(coro(), timeout=0.1, loop=loop)
-            except futures.CancelledError:
-                raise Cancelled()
-
-        self.assertRaises(
-            Cancelled, loop.run_until_complete, coro2())
-        self.assertAlmostEqual(0.1, loop.time())
-
     def test_cancel_in_coro(self):
         @tasks.coroutine
         def task():
@@ -380,52 +323,6 @@ class TaskTests(unittest.TestCase):
         # close generators
         for w in waiters:
             w.close()
-
-    def test_timeout(self):
-
-        def gen():
-            when = yield
-            self.assertAlmostEqual(0.1, when)
-            when = yield 0
-            self.assertAlmostEqual(10.0, when)
-            yield 0.1
-
-        loop = test_utils.TestLoop(gen)
-        self.addCleanup(loop.close)
-
-        @tasks.coroutine
-        def task():
-            yield from tasks.sleep(10.0, loop=loop)
-            return 42
-
-        t = tasks.Task(task(), loop=loop, timeout=0.1)
-        self.assertRaises(
-            futures.CancelledError, loop.run_until_complete, t)
-        self.assertAlmostEqual(0.1, loop.time())
-        self.assertTrue(t.cancelled())
-
-    def test_timeout_not(self):
-
-        def gen():
-            when = yield
-            self.assertAlmostEqual(10.0, when)
-            when = yield 0
-            self.assertAlmostEqual(0.1, when)
-            yield 0.1
-
-        loop = test_utils.TestLoop(gen)
-        self.addCleanup(loop.close)
-
-        @tasks.coroutine
-        def task():
-            yield from tasks.sleep(0.1, loop=loop)
-            return 42
-
-        t = tasks.Task(task(), loop=loop, timeout=10.0)
-        r = loop.run_until_complete(t)
-        self.assertTrue(t.done())
-        self.assertEqual(r, 42)
-        self.assertAlmostEqual(0.1, loop.time())
 
     def test_wait_for(self):
 

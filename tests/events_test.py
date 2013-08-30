@@ -939,7 +939,7 @@ class EventLoopTestsMixin:
             return res
 
         start = time.monotonic()
-        t = tasks.Task(main(), timeout=1, loop=self.loop)
+        t = tasks.Task(main(), loop=self.loop)
         self.loop.run_forever()
         elapsed = time.monotonic() - start
 

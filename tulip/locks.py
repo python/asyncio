@@ -73,8 +73,10 @@ class Lock:
 
     def __repr__(self):
         res = super().__repr__()
-        return '<{} [{}]>'.format(
-            res[1:-1], 'locked' if self._locked else 'unlocked')
+        extra = 'locked' if self._locked else 'unlocked'
+        if self._waiters:
+            extra = '{},waiters:{}'.format(extra, len(self._waiters))
+        return '<{} [{}]>'.format(res[1:-1], extra)
 
     def locked(self):
         """Return true if lock is acquired."""
@@ -113,8 +115,11 @@ class Lock:
         """
         if self._locked:
             self._locked = False
-            if self._waiters:
-                self._waiters[0].set_result(True)
+            # Wake up the first waiter who isn't cancelled.
+            for fut in self._waiters:
+                if not fut.cancelled():
+                    fut.set_result(True)
+                    break
         else:
             raise RuntimeError('Lock is not acquired.')
 
@@ -132,6 +137,7 @@ class Lock:
         return self
 
 
+# TODO: Why not call this Event?
 class EventWaiter:
     """A EventWaiter implementation, our equivalent to threading.Event
 
@@ -150,6 +156,7 @@ class EventWaiter:
             self._loop = events.get_event_loop()
 
     def __repr__(self):
+        # TODO: add waiters:N if > 0.
         res = super().__repr__()
         return '<{} [{}]>'.format(res[1:-1], 'set' if self._value else 'unset')
 
@@ -195,6 +202,7 @@ class EventWaiter:
             self._waiters.remove(fut)
 
 
+# TODO: Why is this a Lock subclass?  threading.Condition *has* a lock.
 class Condition(Lock):
     """A Condition implementation.
 
@@ -205,8 +213,9 @@ class Condition(Lock):
 
     def __init__(self, *, loop=None):
         super().__init__(loop=loop)
-
         self._condition_waiters = collections.deque()
+
+    # TODO: Add __repr__() with len(_condition_waiters).
 
     @tasks.coroutine
     def wait(self):
@@ -233,6 +242,7 @@ class Condition(Lock):
                 return True
             finally:
                 self._condition_waiters.remove(fut)
+
         except GeneratorExit:
             keep_lock = False  # Prevent yield in finally clause.
             raise
@@ -321,6 +331,7 @@ class Semaphore:
             self._loop = events.get_event_loop()
 
     def __repr__(self):
+        # TODO: add waiters:N if > 0.
         res = super().__repr__()
         return '<{} [{}]>'.format(
             res[1:-1],
@@ -380,6 +391,8 @@ class Semaphore:
                 break
 
     def __enter__(self):
+        # TODO: This is questionable.  How do we know the user actually
+        # wrote "with (yield from sema)" instead of "with sema"?
         return True
 
     def __exit__(self, *args):

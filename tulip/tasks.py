@@ -66,9 +66,6 @@ def task(func):
     return task_wrapper
 
 
-_marker = object()
-
-
 class Task(futures.Future):
     """A coroutine wrapped in a Future."""
 
@@ -93,36 +90,25 @@ class Task(futures.Future):
         return res
 
     def cancel(self):
-        if self.done() or self._must_cancel:
+        if self.done():
             return False
-        self._must_cancel = True
-        # _step() will call super().cancel() to call the callbacks.
         if self._fut_waiter is not None:
-            return self._fut_waiter.cancel()
-        else:
-            self._loop.call_soon(self._step_maybe)
-            return True
+            if self._fut_waiter.cancel():
+                return True
+        # It must be the case that self._step is already scheduled.
+        self._must_cancel = True
+        return True
 
-    def cancelled(self):
-        return self._must_cancel or super().cancelled()
-
-    def _step_maybe(self):
-        # Helper for cancel().
-        if not self.done():
-            return self._step()
-
-    def _step(self, value=_marker, exc=None):
+    def _step(self, value=None, exc=None):
         assert not self.done(), \
             '_step(): already done: {!r}, {!r}, {!r}'.format(self, value, exc)
-
-        # We'll call either coro.throw(exc) or coro.send(value).
-        # Task cancel has to be delayed if current waiter future is done.
-        if self._must_cancel and exc is None and value is _marker:
-            exc = futures.CancelledError
-
+        if self._must_cancel:
+            assert self._fut_waiter is None
+            exc = futures.CancelledError()
+            value = None
         coro = self._coro
-        value = None if value is _marker else value
         self._fut_waiter = None
+        # Call either coro.throw(exc) or coro.send(value).
         try:
             if exc is not None:
                 result = coro.throw(exc)
@@ -131,53 +117,44 @@ class Task(futures.Future):
             else:
                 result = next(coro)
         except StopIteration as exc:
-            if self._must_cancel:
-                super().cancel()
-            else:
-                self.set_result(exc.value)
+            self.set_result(exc.value)
+        except futures.CancelledError as exc:
+            super().cancel()  # I.e., Future.cancel(self).
         except Exception as exc:
-            if self._must_cancel:
-                super().cancel()
-            else:
-                self.set_exception(exc)
+            self.set_exception(exc)
         except BaseException as exc:
-            if self._must_cancel:
-                super().cancel()
-            else:
-                self.set_exception(exc)
+            self.set_exception(exc)
             raise
         else:
             if isinstance(result, futures.Future):
-                if not result._blocking:
-                    result.set_exception(
-                        RuntimeError(
-                            'yield was used instead of yield from '
-                            'in task {!r} with {!r}'.format(self, result)))
-
-                result._blocking = False
-                result.add_done_callback(self._wakeup)
-                self._fut_waiter = result
-
-                # task cancellation has been delayed.
-                if self._must_cancel:
-                    self._fut_waiter.cancel()
-
-            else:
-                if inspect.isgenerator(result):
+                # Yielded Future must come from Future.__iter__().
+                if result._blocking:
+                    result._blocking = False
+                    result.add_done_callback(self._wakeup)
+                    self._fut_waiter = result
+                else:
                     self._loop.call_soon(
                         self._step, None,
                         RuntimeError(
-                            'yield was used instead of yield from for '
-                            'generator in task {!r} with {}'.format(
-                                self, result)))
-                else:
-                    if result is not None:
-                        self._loop.call_soon(
-                            self._step, None,
-                            RuntimeError(
-                                'Task got bad yield: {!r}'.format(result)))
-                    else:
-                        self._loop.call_soon(self._step_maybe)
+                            'yield was used instead of yield from '
+                            'in task {!r} with {!r}'.format(self, result)))
+            elif result is None:
+                # Bare yield relinquishes control for one event loop iteration.
+                self._loop.call_soon(self._step)
+            elif inspect.isgenerator(result):
+                # Yielding a generator is just wrong.
+                self._loop.call_soon(
+                    self._step, None,
+                    RuntimeError(
+                        'yield was used instead of yield from for '
+                        'generator in task {!r} with {}'.format(
+                            self, result)))
+            else:
+                # Yielding something else is an error.
+                self._loop.call_soon(
+                    self._step, None,
+                    RuntimeError(
+                        'Task got bad yield: {!r}'.format(result)))
         self = None
 
     def _wakeup(self, future):

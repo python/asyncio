@@ -10,10 +10,6 @@ from collections import namedtuple
 import functools
 import select
 import sys
-try:
-    from time import monotonic as time
-except ImportError:
-    from time import time as time
 
 
 # generic events, that must be mapped to implementation-specific ones
@@ -25,7 +21,7 @@ def _fileobj_to_fd(fileobj):
     """Return a file descriptor from a file object.
 
     Parameters:
-    fileobj -- file object
+    fileobj -- file object or file descriptor
 
     Returns:
     corresponding file descriptor
@@ -36,31 +32,11 @@ def _fileobj_to_fd(fileobj):
         try:
             fd = int(fileobj.fileno())
         except (AttributeError, ValueError):
-            raise ValueError("Invalid file object: {!r}".format(fileobj)) from None
+            raise ValueError("Invalid file object: "
+                             "{!r}".format(fileobj)) from None
     if fd < 0:
         raise ValueError("Invalid file descriptor: {}".format(fd))
     return fd
-
-
-def _select_interrupt_wrapper(func):
-    """InterruptedError-safe wrapper for select(), taking the (optional)
-    timeout into account."""
-    @functools.wraps(func)
-    def wrapper(self, timeout=None):
-        if timeout is not None and timeout > 0:
-            deadline = time() + timeout
-        while True:
-            try:
-                return func(self, timeout)
-            except InterruptedError:
-                if timeout is not None:
-                    if timeout > 0:
-                        timeout = deadline - time()
-                    if timeout <= 0:
-                        # timeout expired
-                        return []
-
-    return wrapper
 
 
 SelectorKey = namedtuple('SelectorKey', ['fileobj', 'fd', 'events', 'data'])
@@ -93,7 +69,7 @@ class BaseSelector(metaclass=ABCMeta):
         """Register a file object.
 
         Parameters:
-        fileobj -- file object
+        fileobj -- file object or file descriptor
         events  -- events to monitor (bitwise mask of EVENT_READ|EVENT_WRITE)
         data    -- attached data
 
@@ -117,7 +93,7 @@ class BaseSelector(metaclass=ABCMeta):
         """Unregister a file object.
 
         Parameters:
-        fileobj -- file object
+        fileobj -- file object or file descriptor
 
         Returns:
         SelectorKey instance
@@ -133,7 +109,7 @@ class BaseSelector(metaclass=ABCMeta):
         """Change a registered file object monitored events or attached data.
 
         Parameters:
-        fileobj -- file object
+        fileobj -- file object or file descriptor
         events  -- events to monitor (bitwise mask of EVENT_READ|EVENT_WRITE)
         data    -- attached data
 
@@ -241,13 +217,15 @@ class SelectSelector(BaseSelector):
     else:
         _select = select.select
 
-    @_select_interrupt_wrapper
     def select(self, timeout=None):
         timeout = None if timeout is None else max(timeout, 0)
-        r, w, _ = self._select(self._readers, self._writers, [], timeout)
+        ready = []
+        try:
+            r, w, _ = self._select(self._readers, self._writers, [], timeout)
+        except InterruptedError:
+            return ready
         r = set(r)
         w = set(w)
-        ready = []
         for fd in r | w:
             events = 0
             if fd in r:
@@ -285,11 +263,13 @@ if hasattr(select, 'poll'):
             self._poll.unregister(key.fd)
             return key
 
-        @_select_interrupt_wrapper
         def select(self, timeout=None):
             timeout = None if timeout is None else max(int(1000 * timeout), 0)
             ready = []
-            fd_event_list = self._poll.poll(timeout)
+            try:
+                fd_event_list = self._poll.poll(timeout)
+            except InterruptedError:
+                return ready
             for fd, event in fd_event_list:
                 events = 0
                 if event & ~select.POLLIN:
@@ -330,12 +310,14 @@ if hasattr(select, 'epoll'):
             self._epoll.unregister(key.fd)
             return key
 
-        @_select_interrupt_wrapper
         def select(self, timeout=None):
             timeout = -1 if timeout is None else max(timeout, 0)
             max_ev = len(self._fd_to_key)
             ready = []
-            fd_event_list = self._epoll.poll(timeout, max_ev)
+            try:
+                fd_event_list = self._epoll.poll(timeout, max_ev)
+            except InterruptedError:
+                return ready
             for fd, event in fd_event_list:
                 events = 0
                 if event & ~select.EPOLLIN:
@@ -368,29 +350,35 @@ if hasattr(select, 'kqueue'):
         def register(self, fileobj, events, data=None):
             key = super().register(fileobj, events, data)
             if events & EVENT_READ:
-                kev = select.kevent(key.fd, select.KQ_FILTER_READ, select.KQ_EV_ADD)
+                kev = select.kevent(key.fd, select.KQ_FILTER_READ,
+                                    select.KQ_EV_ADD)
                 self._kqueue.control([kev], 0, 0)
             if events & EVENT_WRITE:
-                kev = select.kevent(key.fd, select.KQ_FILTER_WRITE, select.KQ_EV_ADD)
+                kev = select.kevent(key.fd, select.KQ_FILTER_WRITE,
+                                    select.KQ_EV_ADD)
                 self._kqueue.control([kev], 0, 0)
             return key
 
         def unregister(self, fileobj):
             key = super().unregister(fileobj)
             if key.events & EVENT_READ:
-                kev = select.kevent(key.fd, select.KQ_FILTER_READ, select.KQ_EV_DELETE)
+                kev = select.kevent(key.fd, select.KQ_FILTER_READ,
+                                    select.KQ_EV_DELETE)
                 self._kqueue.control([kev], 0, 0)
             if key.events & EVENT_WRITE:
-                kev = select.kevent(key.fd, select.KQ_FILTER_WRITE, select.KQ_EV_DELETE)
+                kev = select.kevent(key.fd, select.KQ_FILTER_WRITE,
+                                    select.KQ_EV_DELETE)
                 self._kqueue.control([kev], 0, 0)
             return key
 
-        @_select_interrupt_wrapper
         def select(self, timeout=None):
             timeout = None if timeout is None else max(timeout, 0)
             max_ev = len(self._fd_to_key)
             ready = []
-            kev_list = self._kqueue.control(None, max_ev, timeout)
+            try:
+                kev_list = self._kqueue.control(None, max_ev, timeout)
+            except InterruptedError:
+                return ready
             for kev in kev_list:
                 fd = kev.ident
                 flag = kev.filter

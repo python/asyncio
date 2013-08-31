@@ -1,6 +1,6 @@
 """Support for tasks, coroutines and the scheduler."""
 
-__all__ = ['coroutine', 'task', 'Task',
+__all__ = ['coroutine', 'Task',
            'FIRST_COMPLETED', 'FIRST_EXCEPTION', 'ALL_COMPLETED',
            'wait', 'wait_for', 'as_completed', 'sleep', 'async',
            ]
@@ -47,23 +47,6 @@ def iscoroutinefunction(func):
 def iscoroutine(obj):
     """Return True if obj is a coroutine object."""
     return inspect.isgenerator(obj)  # TODO: And what?
-
-
-def task(func):
-    """Decorator for a coroutine to be wrapped in a Task."""
-    if inspect.isgeneratorfunction(func):
-        coro = func
-    else:
-        def coro(*args, **kw):
-            res = func(*args, **kw)
-            if isinstance(res, futures.Future) or inspect.isgenerator(res):
-                res = yield from res
-            return res
-
-    def task_wrapper(*args, **kwds):
-        return Task(coro(*args, **kwds))
-
-    return task_wrapper
 
 
 class Task(futures.Future):

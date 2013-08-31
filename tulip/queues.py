@@ -4,7 +4,6 @@ __all__ = ['Queue', 'PriorityQueue', 'LifoQueue', 'JoinableQueue',
            'Full', 'Empty']
 
 import collections
-import concurrent.futures
 import heapq
 import queue
 
@@ -129,7 +128,7 @@ class Queue:
             self._putters.append((item, waiter))
             try:
                 yield from waiter
-            except concurrent.futures.CancelledError:
+            except futures.CancelledError:
                 raise Full
 
         else:
@@ -185,7 +184,7 @@ class Queue:
             self._getters.append(waiter)
             try:
                 return (yield from waiter)
-            except concurrent.futures.CancelledError:
+            except futures.CancelledError:
                 raise Empty
 
     def get_nowait(self):

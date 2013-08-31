@@ -126,6 +126,67 @@ class LockTests(unittest.TestCase):
             self.loop.run_until_complete, task)
         self.assertFalse(lock._waiters)
 
+    def test_cancel_race(self):
+        # XXX replace assert with self.assertXXX; remove dprint().
+        # Several tasks:
+        # - A acquires the lock
+        # - B is blocked in aqcuire()
+        # - C is blocked in aqcuire()
+        #
+        # Now, concurrently:
+        # - B is cancelled
+        # - A releases the lock
+        #
+        # If B's waiter is marked cancelled but not yet removed from
+        # _waiters, A's release() call will crash when trying to set
+        # B's waiter; instead, it should move on to C's waiter.
+
+        # Setup: A has the lock, b and c are waiting.
+        def dprint(*args): pass  # or 'dprint = print'
+        lock = locks.Lock(loop=self.loop)
+        @tasks.coroutine
+        def lockit(name, blocker):
+            dprint(name, 'acquiring...')
+            yield from lock.acquire()
+            dprint(name, 'acquired')
+            try:
+                if blocker is not None:
+                    dprint(name, 'blocking...')
+                    yield from blocker
+                    dprint(name, 'unlocked')
+            finally:
+                dprint(name, 'releasing...')
+                lock.release()
+                dprint(name, 'released')
+        fa = futures.Future(loop=self.loop)
+        ta = tasks.Task(lockit('A', fa), loop=self.loop)
+        test_utils.run_briefly(self.loop)
+        assert lock.locked()
+        fb = futures.Future(loop=self.loop)
+        tb = tasks.Task(lockit('B', None), loop=self.loop)
+        test_utils.run_briefly(self.loop)
+        assert len(lock._waiters) == 1
+        fc = futures.Future(loop=self.loop)
+        tc = tasks.Task(lockit('C', None), loop=self.loop)
+        test_utils.run_briefly(self.loop)
+        assert len(lock._waiters) == 2
+
+        # Create the race and check.
+        # Without the fix this failed at the last assert.
+        dprint('---create the race---')
+        fa.set_result(None)
+        tb.cancel()
+        assert lock._waiters[0].cancelled()
+        dprint(tb, lock)
+        dprint(fa, lock)
+        assert lock._waiters[0].cancelled()
+        test_utils.run_briefly(self.loop)
+        dprint(lock)
+        assert not lock.locked()
+        assert ta.done()
+        assert tb.cancelled()
+        assert tc.done()
+
     def test_release_not_acquired(self):
         lock = locks.Lock(loop=self.loop)
 

@@ -9,6 +9,6 @@ if os.name == 'nt':
 setup(name='tulip',
       description="reference implementation of PEP 3156",
       url='http://www.python.org/dev/peps/pep-3156/',
-      packages=['tulip'],
+      packages=['tulip', 'tulip.http'],
       ext_modules=extensions
      )

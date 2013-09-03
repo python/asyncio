@@ -132,15 +132,6 @@ class FutureTests(unittest.TestCase):
         self.assertIn('<18 more>', r)
         f_many_callbacks.cancel()
 
-        f_pending = futures.Future(loop=self.loop, timeout=10)
-        self.assertEqual('Future<PENDING>{timeout=10, when=10}',
-                         repr(f_pending))
-        f_pending.cancel()
-
-        f_pending = futures.Future(loop=self.loop, timeout=10)
-        f_pending.cancel()
-        self.assertEqual('Future<CANCELLED>{timeout=10}', repr(f_pending))
-
     def test_copy_state(self):
         # Test the internal _copy_state method since it's being directly
         # invoked in other modules.

@@ -1,4 +1,4 @@
-"""Synchronization primitives"""
+"""Synchronization primitives."""
 
 __all__ = ['Lock', 'EventWaiter', 'Condition', 'Semaphore']
 
@@ -10,29 +10,31 @@ from . import tasks
 
 
 class Lock:
-    """The class implementing primitive lock objects.
+    """Primitive lock objects.
 
-    A primitive lock is a synchronization primitive that is not owned by
-    a particular coroutine when locked. A primitive lock is in one of two
-    states, "locked" or "unlocked".
-    It is created in the unlocked state. It has two basic methods,
-    acquire() and release(). When the state is unlocked, acquire() changes
-    the state to locked and returns immediately. When the state is locked,
-    acquire() blocks until a call to release() in another coroutine changes
-    it to unlocked, then the acquire() call resets it to locked and returns.
-    The release() method should only be called in the locked state; it changes
-    the state to unlocked and returns immediately. If an attempt is made
-    to release an unlocked lock, a RuntimeError will be raised.
+    A primitive lock is a synchronization primitive that is not owned
+    by a particular coroutine when locked.  A primitive lock is in one
+    of two states, 'locked' or 'unlocked'.
 
-    When more than one coroutine is blocked in acquire() waiting for the state
-    to turn to unlocked, only one coroutine proceeds when a release() call
-    resets the state to unlocked; first coroutine which is blocked in acquire()
-    is being processed.
+    It is created in the unlocked state.  It has two basic methods,
+    acquire() and release().  When the state is unlocked, acquire()
+    changes the state to locked and returns immediately.  When the
+    state is locked, acquire() blocks until a call to release() in
+    another coroutine changes it to unlocked, then the acquire() call
+    resets it to locked and returns.  The release() method should only
+    be called in the locked state; it changes the state to unlocked
+    and returns immediately.  If an attempt is made to release an
+    unlocked lock, a RuntimeError will be raised.
 
-    acquire() method is a coroutine and should be called with "yield from"
+    When more than one coroutine is blocked in acquire() waiting for
+    the state to turn to unlocked, only one coroutine proceeds when a
+    release() call resets the state to unlocked; first coroutine which
+    is blocked in acquire() is being processed.
 
-    Locks also support the context manager protocol. (yield from lock) should
-    be used as context manager expression.
+    acquire() is a coroutine and should be called with 'yield from'.
+
+    Locks also support the context manager protocol.  '(yield from lock)'
+    should be used as context manager expression.
 
     Usage:
 
@@ -51,7 +53,7 @@ class Lock:
         with (yield from lock):
              ...
 
-    Lock object could be tested for locking state:
+    Lock objects can be tested for locking state:
 
         if not lock.locked():
            yield from lock
@@ -71,45 +73,34 @@ class Lock:
 
     def __repr__(self):
         res = super().__repr__()
-        return '<{} [{}]>'.format(
-            res[1:-1], 'locked' if self._locked else 'unlocked')
+        extra = 'locked' if self._locked else 'unlocked'
+        if self._waiters:
+            extra = '{},waiters:{}'.format(extra, len(self._waiters))
+        return '<{} [{}]>'.format(res[1:-1], extra)
 
     def locked(self):
         """Return true if lock is acquired."""
         return self._locked
 
     @tasks.coroutine
-    def acquire(self, timeout=None):
+    def acquire(self):
         """Acquire a lock.
 
-        Acquire method blocks until the lock is unlocked, then set it to
-        locked and return True.
-
-        When invoked with the floating-point timeout argument set, blocks for
-        at most the number of seconds specified by timeout and as long as
-        the lock cannot be acquired.
-
-        The return value is True if the lock is acquired successfully,
-        False if not (for example if the timeout expired).
+        This method blocks until the lock is unlocked, then sets it to
+        locked and returns True.
         """
         if not self._waiters and not self._locked:
             self._locked = True
             return True
 
-        fut = futures.Future(loop=self._loop, timeout=timeout)
-
+        fut = futures.Future(loop=self._loop)
         self._waiters.append(fut)
         try:
             yield from fut
-        except futures.CancelledError:
+            self._locked = True
+            return True
+        finally:
             self._waiters.remove(fut)
-            return False
-        else:
-            f = self._waiters.popleft()
-            assert f is fut
-
-        self._locked = True
-        return True
 
     def release(self):
         """Release a lock.
@@ -124,8 +115,11 @@ class Lock:
         """
         if self._locked:
             self._locked = False
-            if self._waiters:
-                self._waiters[0].set_result(True)
+            # Wake up the first waiter who isn't cancelled.
+            for fut in self._waiters:
+                if not fut.cancelled():
+                    fut.set_result(True)
+                    break
         else:
             raise RuntimeError('Lock is not acquired.')
 
@@ -143,6 +137,7 @@ class Lock:
         return self
 
 
+# TODO: Why not call this Event?
 class EventWaiter:
     """A EventWaiter implementation, our equivalent to threading.Event
 
@@ -161,6 +156,7 @@ class EventWaiter:
             self._loop = events.get_event_loop()
 
     def __repr__(self):
+        # TODO: add waiters:N if > 0.
         res = super().__repr__()
         return '<{} [{}]>'.format(res[1:-1], 'set' if self._value else 'unset')
 
@@ -187,41 +183,26 @@ class EventWaiter:
         self._value = False
 
     @tasks.coroutine
-    def wait(self, timeout=None):
-        """Block until the internal flag is true. If the internal flag
-        is true on entry, return immediately. Otherwise, block until another
-        coroutine calls set() to set the flag to true, or until the optional
-        timeout occurs.
+    def wait(self):
+        """Block until the internal flag is true.
 
-        When the timeout argument is present and not None, it should be
-        a floating point number specifying a timeout for the operation in
-        seconds (or fractions thereof).
-
-        This method returns true if and only if the internal flag has been
-        set to true, either before the wait call or after the wait starts,
-        so it will always return True except if a timeout is given and
-        the operation times out.
-
-        wait() method is a coroutine.
+        If the internal flag is true on entry, return True
+        immediately.  Otherwise, block until another coroutine calls
+        set() to set the flag to true, then return True.
         """
         if self._value:
             return True
 
-        fut = futures.Future(loop=self._loop, timeout=timeout)
-
+        fut = futures.Future(loop=self._loop)
         self._waiters.append(fut)
         try:
             yield from fut
-        except futures.CancelledError:
+            return True
+        finally:
             self._waiters.remove(fut)
-            return False
-        else:
-            f = self._waiters.popleft()
-            assert f is fut
-
-        return True
 
 
+# TODO: Why is this a Lock subclass?  threading.Condition *has* a lock.
 class Condition(Lock):
     """A Condition implementation.
 
@@ -232,75 +213,55 @@ class Condition(Lock):
 
     def __init__(self, *, loop=None):
         super().__init__(loop=loop)
-
         self._condition_waiters = collections.deque()
 
+    # TODO: Add __repr__() with len(_condition_waiters).
+
     @tasks.coroutine
-    def wait(self, timeout=None):
-        """Wait until notified or until a timeout occurs. If the calling
-        coroutine has not acquired the lock when this method is called,
-        a RuntimeError is raised.
+    def wait(self):
+        """Wait until notified.
 
-        This method releases the underlying lock, and then blocks until it is
-        awakened by a notify() or notify_all() call for the same condition
-        variable in another coroutine, or until the optional timeout occurs.
-        Once awakened or timed out, it re-acquires the lock and returns.
+        If the calling coroutine has not acquired the lock when this
+        method is called, a RuntimeError is raised.
 
-        When the timeout argument is present and not None, it should be
-        a floating point number specifying a timeout for the operation
-        in seconds (or fractions thereof).
-
-        The return value is True unless a given timeout expired, in which
-        case it is False.
+        This method releases the underlying lock, and then blocks
+        until it is awakened by a notify() or notify_all() call for
+        the same condition variable in another coroutine.  Once
+        awakened, it re-acquires the lock and returns True.
         """
         if not self._locked:
             raise RuntimeError('cannot wait on un-acquired lock')
 
-        self.release()
-
-        fut = futures.Future(loop=self._loop, timeout=timeout)
-
-        self._condition_waiters.append(fut)
         keep_lock = True
+        self.release()
         try:
-            yield from fut
-        except futures.CancelledError:
-            self._condition_waiters.remove(fut)
-            return False
+            fut = futures.Future(loop=self._loop)
+            self._condition_waiters.append(fut)
+            try:
+                yield from fut
+                return True
+            finally:
+                self._condition_waiters.remove(fut)
+
         except GeneratorExit:
             keep_lock = False  # Prevent yield in finally clause.
             raise
-        else:
-            f = self._condition_waiters.popleft()
-            assert fut is f
         finally:
             if keep_lock:
                 yield from self.acquire()
 
-        return True
-
     @tasks.coroutine
-    def wait_for(self, predicate, timeout=None):
-        """Wait until a condition evaluates to True. predicate should be a
-        callable which result will be interpreted as a boolean value. A timeout
-        may be provided giving the maximum time to wait.
+    def wait_for(self, predicate):
+        """Wait until a predicate becomes true.
+
+        The predicate should be a callable which result will be
+        interpreted as a boolean value.  The final predicate value is
+        the return value.
         """
-        endtime = None
-        waittime = timeout
         result = predicate()
-
         while not result:
-            if waittime is not None:
-                if endtime is None:
-                    endtime = self._loop.time() + waittime
-                else:
-                    waittime = endtime - self._loop.time()
-                    if waittime <= 0:
-                        break
-
-            yield from self.wait(waittime)
+            yield from self.wait()
             result = predicate()
-
         return result
 
     def notify(self, n=1):
@@ -370,6 +331,7 @@ class Semaphore:
             self._loop = events.get_event_loop()
 
     def __repr__(self):
+        # TODO: add waiters:N if > 0.
         res = super().__repr__()
         return '<{} [{}]>'.format(
             res[1:-1],
@@ -381,17 +343,14 @@ class Semaphore:
         return self._locked
 
     @tasks.coroutine
-    def acquire(self, timeout=None):
-        """Acquire a semaphore. acquire() method is a coroutine.
+    def acquire(self):
+        """Acquire a semaphore.
 
-        When invoked without arguments: if the internal counter is larger
-        than zero on entry, decrement it by one and return immediately.
-        If it is zero on entry, block, waiting until some other coroutine has
-        called release() to make it larger than zero.
-
-        When invoked with a timeout other than None, it will block for at
-        most timeout seconds. If acquire does not complete successfully in
-        that interval, return false. Return true otherwise.
+        If the internal counter is larger than zero on entry,
+        decrement it by one and return True immediately.  If it is
+        zero on entry, block, waiting until some other coroutine has
+        called release() to make it larger than 0, and then return
+        True.
         """
         if not self._waiters and self._value > 0:
             self._value -= 1
@@ -399,22 +358,17 @@ class Semaphore:
                 self._locked = True
             return True
 
-        fut = futures.Future(loop=self._loop, timeout=timeout)
-
+        fut = futures.Future(loop=self._loop)
         self._waiters.append(fut)
         try:
             yield from fut
-        except futures.CancelledError:
+            self._value -= 1
+            if self._value == 0:
+                self._locked = True
+            return True
+        finally:
             self._waiters.remove(fut)
-            return False
-        else:
-            f = self._waiters.popleft()
-            assert f is fut
 
-        self._value -= 1
-        if self._value == 0:
-            self._locked = True
-        return True
 
     def release(self):
         """Release a semaphore, incrementing the internal counter by one.
@@ -437,6 +391,8 @@ class Semaphore:
                 break
 
     def __enter__(self):
+        # TODO: This is questionable.  How do we know the user actually
+        # wrote "with (yield from sema)" instead of "with sema"?
         return True
 
     def __exit__(self, *args):

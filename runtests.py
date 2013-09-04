@@ -27,7 +27,12 @@ import re
 import sys
 import subprocess
 import unittest
+import textwrap
 import importlib.machinery
+try:
+    import coverage
+except ImportError:
+    coverage = None
 
 from unittest.signals import installHandler
 
@@ -57,8 +62,8 @@ ARGS.add_argument(
     '--tests', action="store", dest='testsdir', default='tests',
     help='tests directory')
 ARGS.add_argument(
-    '--coverage', action="store", dest='coverage', nargs='?', const='',
-    help='enable coverage report and provide python files directory')
+    '--coverage', action="store_true", dest='coverage',
+    help='enable html coverage report')
 ARGS.add_argument(
     'pattern', action="store", nargs="*",
     help='optional regex patterns to match test ids (default all tests)')
@@ -175,6 +180,22 @@ class TestRunner(unittest.TextTestRunner):
 def runtests():
     args = ARGS.parse_args()
 
+    if args.coverage and coverage is None:
+        URL = "bitbucket.org/pypa/setuptools/raw/bootstrap/ez_setup.py"
+        print(textwrap.dedent("""
+            coverage package is not installed.
+
+            To install coverage3 for Python 3, you need:
+              - Setuptools (https://pypi.python.org/pypi/setuptools)
+
+              What worked for me:
+              - download {0}
+                 * curl -O https://{0}
+              - python3 ez_setup.py
+              - python3 -m easy_install coverage
+        """.format(URL)).strip())
+        sys.exit(1)
+
     testsdir = os.path.abspath(args.testsdir)
     if not os.path.isdir(testsdir):
         print("Tests directory is not found: {}\n".format(testsdir))
@@ -193,6 +214,12 @@ def runtests():
     findleaks = args.findleaks
     runner_factory = TestRunner if findleaks else unittest.TextTestRunner
 
+    if args.coverage:
+        cov = coverage.coverage(branch=True,
+                                source=['tulip'],
+                                )
+        cov.start()
+
     tests = load_tests(args.testsdir, includes, excludes)
     logger = logging.getLogger()
     if v == 0:
@@ -207,59 +234,28 @@ def runtests():
         logger.setLevel(logging.DEBUG)
     if catchbreak:
         installHandler()
-    if args.forever:
-        while True:
+    try:
+        if args.forever:
+            while True:
+                result = runner_factory(verbosity=v,
+                                        failfast=failfast).run(tests)
+                if not result.wasSuccessful():
+                    sys.exit(1)
+        else:
             result = runner_factory(verbosity=v,
                                     failfast=failfast).run(tests)
-            if not result.wasSuccessful():
-                sys.exit(1)
-    else:
-        result = runner_factory(verbosity=v,
-                                failfast=failfast).run(tests)
-        sys.exit(not result.wasSuccessful())
-
-
-def runcoverage(sdir, args):
-    """
-    To install coverage3 for Python 3, you need:
-      - Setuptools (https://pypi.python.org/pypi/setuptools)
-
-      What worked for me:
-      - download bitbucket.org/pypa/setuptools/raw/bootstrap/ez_setup.py
-         * curl -O \
-             https://bitbucket.org/pypa/setuptools/raw/bootstrap/ez_setup.py
-      - python3 ez_setup.py
-      - python3 -m easy_install coverage
-    """
-    try:
-        import coverage
-    except ImportError:
-        print("Coverage package is not found.")
-        print(runcoverage.__doc__)
-        return
-
-    sdir = os.path.abspath(sdir)
-    if not os.path.isdir(sdir):
-        print("Python files directory is not found: {}\n".format(sdir))
-        ARGS.print_help()
-        return
-
-    mods = [source for _, source in load_modules(sdir)]
-    coverage = [sys.executable, '-m', 'coverage']
-
-    try:
-        subprocess.check_call(
-            coverage + ['run', '--branch', 'runtests.py'] + args)
-    except:
-        pass
-    else:
-        subprocess.check_call(coverage + ['html'] + mods)
-        subprocess.check_call(coverage + ['report'] + mods)
+            sys.exit(not result.wasSuccessful())
+    finally:
+        if args.coverage:
+            cov.stop()
+            cov.save()
+            cov.html_report(directory='htmlcov')
+            print("\nCoverage report:")
+            cov.report(show_missing=False)
+            here = os.path.dirname(os.path.abspath(__file__))
+            print("open file://{}/htmlcov/index.html for html report".format(
+                here))
 
 
 if __name__ == '__main__':
-    if '--coverage' in sys.argv:
-        cov_args, args = COV_ARGS.parse_known_args()
-        runcoverage(cov_args.coverage, args)
-    else:
-        runtests()
+    runtests()

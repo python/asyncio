@@ -16,7 +16,7 @@ testloop:
 
 # See runtests.py for coverage installation instructions.
 cov coverage:
-	$(PYTHON) runtests.py --coverage tulip -v $(VERBOSE) $(FLAGS)
+	$(PYTHON) runtests.py --coverage -v $(VERBOSE) $(FLAGS)
 
 check:
 	$(PYTHON) check.py

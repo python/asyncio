@@ -264,20 +264,6 @@ class QueueGetTests(_QueueTestBase):
         self.assertEqual(1, loop.run_until_complete(test()))
         self.assertAlmostEqual(0.06, loop.time())
 
-    def test_get_cancelled_race(self):
-        q = queues.Queue(loop=self.loop)
-
-        t1 = tasks.Task(q.get(), loop=self.loop)
-        t2 = tasks.Task(q.get(), loop=self.loop)
-
-        test_utils.run_briefly(self.loop)
-        t1.cancel()
-        test_utils.run_briefly(self.loop)
-        self.assertTrue(t1.done())
-        q.put_nowait('a')
-        test_utils.run_briefly(self.loop)
-        self.assertEqual(t2.result(), 'a')
-
 
 class QueuePutTests(_QueueTestBase):
 
@@ -351,20 +337,6 @@ class QueuePutTests(_QueueTestBase):
         self.assertEqual(1, self.loop.run_until_complete(test()))
         self.assertTrue(t.done())
         self.assertTrue(t.result())
-
-    def test_put_cancelled_race(self):
-        q = queues.Queue(loop=self.loop, maxsize=1)
-
-        t1 = tasks.Task(q.put('a'), loop=self.loop)
-        t2 = tasks.Task(q.put('b'), loop=self.loop)
-        t3 = tasks.Task(q.put('c'), loop=self.loop)
-
-        test_utils.run_briefly(self.loop)
-        t2.cancel()
-        test_utils.run_briefly(self.loop)
-        self.assertTrue(t2.done())
-        self.assertEqual(q.get_nowait(), 'a')
-        self.assertEqual(q.get_nowait(), 'c')
 
 
 class LifoQueueTests(_QueueTestBase):

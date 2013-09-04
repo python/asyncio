@@ -69,10 +69,10 @@ class Queue:
             result += ' _putters[{}]'.format(len(self._putters))
         return result
 
-    def _consume_done_getters(self):
+    def _consume_done_getters(self, waiters):
         # Delete waiters at the head of the get() queue who've timed out.
-        while self._getters and self._getters[0].done():
-            self._getters.popleft()
+        while waiters and waiters[0].done():
+            waiters.popleft()
 
     def _consume_done_putters(self):
         # Delete waiters at the head of the put() queue who've timed out.
@@ -110,7 +110,7 @@ class Queue:
         If you yield from put(), wait until a free slot is available
         before adding item.
         """
-        self._consume_done_getters()
+        self._consume_done_getters(self._getters)
         if self._getters:
             assert not self._queue, (
                 'queue non-empty, why are getters waiting?')
@@ -126,7 +126,11 @@ class Queue:
             waiter = futures.Future(loop=self._loop)
 
             self._putters.append((item, waiter))
-            yield from waiter
+            try:
+                yield from waiter
+            except futures.CancelledError:
+                raise Full
+
         else:
             self._put(item)
 
@@ -135,7 +139,7 @@ class Queue:
 
         If no free slot is immediately available, raise Full.
         """
-        self._consume_done_getters()
+        self._consume_done_getters(self._getters)
         if self._getters:
             assert not self._queue, (
                 'queue non-empty, why are getters waiting?')
@@ -178,7 +182,10 @@ class Queue:
             waiter = futures.Future(loop=self._loop)
 
             self._getters.append(waiter)
-            return (yield from waiter)
+            try:
+                return (yield from waiter)
+            except futures.CancelledError:
+                raise Empty
 
     def get_nowait(self):
         """Remove and return an item from the queue.

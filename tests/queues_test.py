@@ -278,6 +278,14 @@ class QueueGetTests(_QueueTestBase):
         test_utils.run_briefly(self.loop)
         self.assertEqual(t2.result(), 'a')
 
+    def test_get_with_waiting_putters(self):
+        q = queues.Queue(loop=self.loop, maxsize=1)
+        t1 = tasks.Task(q.put('a'), loop=self.loop)
+        t2 = tasks.Task(q.put('b'), loop=self.loop)
+        test_utils.run_briefly(self.loop)
+        self.assertEqual(self.loop.run_until_complete(q.get()), 'a')
+        self.assertEqual(self.loop.run_until_complete(q.get()), 'b')
+
 
 class QueuePutTests(_QueueTestBase):
 
@@ -365,6 +373,13 @@ class QueuePutTests(_QueueTestBase):
         self.assertTrue(t2.done())
         self.assertEqual(q.get_nowait(), 'a')
         self.assertEqual(q.get_nowait(), 'c')
+
+    def test_put_with_waiting_getters(self):
+        q = queues.Queue(loop=self.loop)
+        t = tasks.Task(q.get(), loop=self.loop)
+        test_utils.run_briefly(self.loop)
+        self.loop.run_until_complete(q.put('a'))
+        self.assertEqual(self.loop.run_until_complete(t), 'a')
 
 
 class LifoQueueTests(_QueueTestBase):

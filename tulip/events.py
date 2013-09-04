@@ -48,8 +48,8 @@ class Handle:
         try:
             self._callback(*self._args)
         except Exception:
-            logging.exception('Exception in callback %s %r',
-                              self._callback, self._args)
+            logging.exception('Exception in callback {} {!r}'.format(
+                self._callback, self._args))
 
 
 def make_handle(callback, args):

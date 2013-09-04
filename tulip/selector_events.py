@@ -41,7 +41,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
 
         if selector is None:
             selector = selectors.Selector()
-        logging.debug('Using selector: %s', selector.__class__.__name__)
+        logging.debug('Using selector: {}'.format(selector.__class__.__name__))
         self._selector = selector
         self._make_self_pipe()
 
@@ -396,7 +396,7 @@ class _SelectorSocketTransport(transports.Transport):
 
     def _fatal_error(self, exc):
         # should be called from exception handler only
-        logging.exception('Fatal error for %s', self)
+        logging.exception('Fatal error for {}'.format(self))
         self._close(exc)
 
     def _close(self, exc):
@@ -537,7 +537,7 @@ class _SelectorSslTransport(transports.Transport):
             self._protocol.connection_lost(None)
 
     def _fatal_error(self, exc):
-        logging.exception('Fatal error for %s', self)
+        logging.exception('Fatal error for {}'.format(self))
         self._close(exc)
 
     def _close(self, exc):
@@ -637,7 +637,7 @@ class _SelectorDatagramTransport(transports.DatagramTransport):
             self._call_connection_lost(None)
 
     def _fatal_error(self, exc):
-        logging.exception('Fatal error for %s', self)
+        logging.exception('Fatal error for {}'.format(self))
         self._close(exc)
 
     def _close(self, exc):

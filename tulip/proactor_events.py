@@ -91,7 +91,7 @@ class _ProactorSocketTransport(transports.Transport):
             self._event_loop.call_soon(self._call_connection_lost, None)
 
     def _fatal_error(self, exc):
-        logging.exception('Fatal error for %s', self)
+        logging.exception('Fatal error for {}'.format(self))
         if self._write_fut:
             self._write_fut.cancel()
         if self._read_fut:            # XXX
@@ -111,7 +111,7 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
 
     def __init__(self, proactor):
         super().__init__()
-        logging.debug('Using proactor: %s', proactor.__class__.__name__)
+        logging.debug('Using proactor: {}'.format(proactor.__class__.__name__))
         self._proactor = proactor
         self._selector = proactor   # convenient alias
         self._make_self_pipe()

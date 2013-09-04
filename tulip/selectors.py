@@ -196,7 +196,7 @@ class _BaseSelector:
         try:
             return self._fd_to_key[fd]
         except KeyError:
-            logging.warn('No key found for fd %r', fd)
+            logging.warning('No key found for fd {!r}'.format(fd))
             return None
 
 

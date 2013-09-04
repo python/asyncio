@@ -522,7 +522,8 @@ class BaseEventLoop(events.AbstractEventLoop):
             level = logging.INFO
         else:
             level = logging.DEBUG
-        logging.log(level, 'poll%s took %.3f seconds', argstr, t1-t0)
+        logging.log(
+            level, 'poll{} took {:.3f} seconds'.format(argstr, t1 - t0))
         self._process_events(event_list)
 
         # Handle 'later' callbacks that are ready.

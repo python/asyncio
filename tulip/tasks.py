@@ -26,7 +26,7 @@ def coroutine(func):
         coro = func
     else:
         logging.warning(
-            'Coroutine function %s is not a generator.', func.__name__)
+            'Coroutine function {} is not a generator.'.format(func.__name__))
 
         @functools.wraps(func)
         def coro(*args, **kw):
@@ -102,7 +102,8 @@ class Task(futures.Future):
 
     def _step(self, value=None, exc=None):
         if self.done():
-            logging.warn('_step(): already done: %r, %r, %r', self, value, exc)
+            logging.warning('_step(): already done: {!r}, {!r}, {!r}'.format(
+                self, value, exc))
             return
         # We'll call either coro.throw(exc) or coro.send(value).
         if self._must_cancel:
@@ -163,7 +164,7 @@ class Task(futures.Future):
                                 self, result)))
                 else:
                     if result is not None:
-                        logging.warn('_step(): bad yield: %r', result)
+                        logging.warning('_step(): bad yield: {!r}', result)
 
                     self._event_loop.call_soon(self._step)
 

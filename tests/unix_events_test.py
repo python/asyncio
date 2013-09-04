@@ -242,7 +242,7 @@ class UnixReadPipeTransportTests(unittest.TestCase):
 
         m_read.assert_called_with(5, tr.max_size)
         tr._close.assert_called_with(err)
-        m_logexc.assert_called_with('Fatal error for %s', tr)
+        m_logexc.assert_called_with('Fatal error for {}'.format(tr))
 
     @unittest.mock.patch('os.read')
     @unittest.mock.patch('fcntl.fcntl')
@@ -484,7 +484,7 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         self.assertEqual([], tr._buffer)
         self.assertTrue(tr._closing)
         self.protocol.connection_lost.assert_called_with(err)
-        m_logexc.assert_called_with('Fatal error for %s', tr)
+        m_logexc.assert_called_with('Fatal error for {}'.format(tr))
 
     @unittest.mock.patch('os.write')
     @unittest.mock.patch('fcntl.fcntl')

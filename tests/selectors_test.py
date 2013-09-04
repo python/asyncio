@@ -60,15 +60,20 @@ class BaseSelectorTests(unittest.TestCase):
         s.register(fobj, selectors.EVENT_READ)
         s.unregister(fobj)
         self.assertFalse(s._fd_to_key)
-        self.assertFalse(s._fileobj_to_key)
 
     def test_unregister_unknown(self):
+        fobj = unittest.mock.Mock()
+        fobj.fileno.return_value = 10
+
         s = FakeSelector()
-        self.assertRaises(KeyError, s.unregister, unittest.mock.Mock())
+        self.assertRaises(KeyError, s.unregister, fobj)
 
     def test_modify_unknown(self):
+        fobj = unittest.mock.Mock()
+        fobj.fileno.return_value = 10
+
         s = FakeSelector()
-        self.assertRaises(KeyError, s.modify, unittest.mock.Mock(), 1)
+        self.assertRaises(KeyError, s.modify, fobj, 1)
 
     def test_modify(self):
         fobj = unittest.mock.Mock()
@@ -119,7 +124,6 @@ class BaseSelectorTests(unittest.TestCase):
 
         s.close()
         self.assertFalse(s._fd_to_key)
-        self.assertFalse(s._fileobj_to_key)
 
     def test_context_manager(self):
         s = FakeSelector()
@@ -128,7 +132,6 @@ class BaseSelectorTests(unittest.TestCase):
             sel.register(1, selectors.EVENT_READ)
 
         self.assertFalse(s._fd_to_key)
-        self.assertFalse(s._fileobj_to_key)
 
     def test_key_from_fd(self):
         s = FakeSelector()

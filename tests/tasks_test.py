@@ -173,9 +173,10 @@ class TaskTests(unittest.TestCase):
 
         t = tasks.Task(task(), loop=loop)
         loop.call_soon(t.cancel)
-        self.assertRaises(
-            futures.CancelledError, loop.run_until_complete, t)
+        with self.assertRaises(futures.CancelledError):
+            loop.run_until_complete(t)
         self.assertTrue(t.done())
+        self.assertTrue(t.cancelled())
         self.assertFalse(t.cancel())
 
     def test_cancel_yield(self):
@@ -191,6 +192,7 @@ class TaskTests(unittest.TestCase):
         self.assertRaises(
             futures.CancelledError, self.loop.run_until_complete, t)
         self.assertTrue(t.done())
+        self.assertTrue(t.cancelled())
         self.assertFalse(t.cancel())
 
 ##     def test_cancel_done_future(self):

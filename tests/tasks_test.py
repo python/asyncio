@@ -945,7 +945,7 @@ class TaskTests(unittest.TestCase):
         def sleeper():
             yield from tasks.sleep(10, loop=loop)
 
-        base_exc = BaseException() 
+        base_exc = BaseException()
 
         @tasks.coroutine
         def notmutch():

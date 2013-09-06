@@ -253,8 +253,8 @@ def runtests():
             print("\nCoverage report:")
             cov.report(show_missing=False)
             here = os.path.dirname(os.path.abspath(__file__))
-            print("open file://{}/htmlcov/index.html for html report".format(
-                here))
+            print("\nFor html report:")
+            print("open file://{}/htmlcov/index.html".format(here))
 
 
 if __name__ == '__main__':

@@ -212,6 +212,27 @@ class TaskTests(unittest.TestCase):
         self.assertTrue(f.cancelled())
         self.assertTrue(t.cancelled())
 
+    def test_cancel_both_task_and_inner_future(self):
+        f = futures.Future(loop=self.loop)
+
+        @tasks.coroutine
+        def task():
+            yield from f
+            return 12
+
+        t = tasks.Task(task(), loop=self.loop)
+        test_utils.run_briefly(self.loop)
+
+        f.cancel()
+        t.cancel()
+
+        with self.assertRaises(futures.CancelledError):
+            self.loop.run_until_complete(t)
+
+        self.assertTrue(t.done())
+        self.assertTrue(f.cancelled())
+        self.assertTrue(t.cancelled())
+
 ##     def test_cancel_done_future(self):
 ##         fut1 = futures.Future(loop=self.loop)
 ##         fut2 = futures.Future(loop=self.loop)

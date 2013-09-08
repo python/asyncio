@@ -77,11 +77,10 @@ class Task(futures.Future):
         if self.done():
             return False
         if self._fut_waiter is not None:
-            # XXX: What to do if self._fut_waiter.cancel() returns False?
-            # If that's anready cancelled future everything is ok.
-            # What are other possible scenarios?
-            waiter, self._fut_waiter = self._fut_waiter, None
-            if waiter.cancel():
+            if self._fut_waiter.cancel():
+                # Leave self._fut_waiter; it may be a Task that
+                # catches and ignores the cancellation so we may have
+                # to cancel it again later.
                 return True
         # It must be the case that self._step is already scheduled.
         self._must_cancel = True
@@ -90,10 +89,8 @@ class Task(futures.Future):
     def _step(self, value=None, exc=None):
         assert not self.done(), \
             '_step(): already done: {!r}, {!r}, {!r}'.format(self, value, exc)
-        if self._must_cancel:
-            assert self._fut_waiter is None
+        if self._must_cancel and not isinstance(exc, futures.CancelledError):
             exc = futures.CancelledError()
-            value = None
         coro = self._coro
         self._fut_waiter = None
         # Call either coro.throw(exc) or coro.send(value).
@@ -149,6 +146,7 @@ class Task(futures.Future):
         try:
             value = future.result()
         except Exception as exc:
+            # This may also be a cancellation.
             self._step(None, exc)
         else:
             self._step(value, None)

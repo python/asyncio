@@ -303,7 +303,7 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
         self.loop.close()
 
     @unittest.mock.patch('tulip.base_events.socket')
-    def test_create_connection_mutiple_errors(self, m_socket):
+    def test_create_connection_multiple_errors(self, m_socket):
 
         class MyProto(protocols.Protocol):
             pass
@@ -329,11 +329,11 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
 
         self.loop.getaddrinfo = getaddrinfo_task
 
-        task = tasks.Task(
-            self.loop.create_connection(MyProto, 'example.com', 80))
-        yield from tasks.wait(task)
-        exc = task.exception()
-        self.assertEqual("Multiple exceptions: err1, err2", str(exc))
+        coro = self.loop.create_connection(MyProto, 'example.com', 80)
+        with self.assertRaises(OSError) as cm:
+            self.loop.run_until_complete(coro)
+
+        self.assertEqual(str(cm.exception), 'Multiple exceptions: err1, err2')
 
     def test_create_connection_host_port_sock(self):
         coro = self.loop.create_connection(
@@ -393,7 +393,7 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
             self.loop.run_until_complete(coro)
 
     @unittest.mock.patch('tulip.base_events.socket')
-    def test_create_connection_mutiple_errors_local_addr(self, m_socket):
+    def test_create_connection_multiple_errors_local_addr(self, m_socket):
 
         def bind(addr):
             if addr[0] == '0.0.0.1':
@@ -421,7 +421,7 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
         with self.assertRaises(OSError) as cm:
             self.loop.run_until_complete(coro)
 
-        self.assertTrue(str(cm.exception), 'Multiple exceptions: ')
+        self.assertTrue(str(cm.exception).startswith('Multiple exceptions: '))
         self.assertTrue(m_socket.socket.return_value.close.called)
 
     def test_create_connection_no_local_addr(self):

@@ -78,8 +78,8 @@ class HttpMessageTests(unittest.TestCase):
         msg = protocol.Response(self.transport, 200)
         self.assertIsNone(msg.length)
 
-        msg.add_headers(('content-length', '200'))
-        self.assertEqual(200, msg.length)
+        msg.add_headers(('content-length', '42'))
+        self.assertEqual(42, msg.length)
 
     def test_add_headers_upgrade(self):
         msg = protocol.Response(self.transport, 200)
@@ -204,14 +204,14 @@ class HttpMessageTests(unittest.TestCase):
 
     def test_prepare_length(self):
         msg = protocol.Response(self.transport, 200)
-        length = msg._write_length_payload = unittest.mock.Mock()
-        length.return_value = iter([1, 2, 3])
+        w_l_p = msg._write_length_payload = unittest.mock.Mock()
+        w_l_p.return_value = iter([1, 2, 3])
 
-        msg.add_headers(('content-length', '200'))
+        msg.add_headers(('content-length', '42'))
         msg.send_headers()
 
-        self.assertTrue(length.called)
-        self.assertTrue((200,), length.call_args[0])
+        self.assertTrue(w_l_p.called)
+        self.assertEqual((42,), w_l_p.call_args[0])
 
     def test_prepare_chunked_force(self):
         msg = protocol.Response(self.transport, 200)
@@ -220,7 +220,7 @@ class HttpMessageTests(unittest.TestCase):
         chunked = msg._write_chunked_payload = unittest.mock.Mock()
         chunked.return_value = iter([1, 2, 3])
 
-        msg.add_headers(('content-length', '200'))
+        msg.add_headers(('content-length', '42'))
         msg.send_headers()
         self.assertTrue(chunked.called)
 

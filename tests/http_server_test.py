@@ -226,7 +226,7 @@ class HttpServerProtocolTests(unittest.TestCase):
 
         self.loop.run_until_complete(srv._request_handler)
         self.assertTrue(srv.handle_error.called)
-        self.assertTrue(400, srv.handle_error.call_args[0][0])
+        self.assertEqual(400, srv.handle_error.call_args[0][0])
         self.assertTrue(transport.close.called)
 
     def test_handle_500(self):
@@ -244,7 +244,7 @@ class HttpServerProtocolTests(unittest.TestCase):
         self.loop.run_until_complete(srv._request_handler)
 
         self.assertTrue(srv.handle_error.called)
-        self.assertTrue(500, srv.handle_error.call_args[0][0])
+        self.assertEqual(500, srv.handle_error.call_args[0][0])
 
     def test_handle_error_no_handle_task(self):
         transport = unittest.mock.Mock()

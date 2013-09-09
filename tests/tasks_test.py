@@ -3,6 +3,7 @@
 import gc
 import unittest
 import unittest.mock
+from unittest.mock import Mock
 
 from tulip import events
 from tulip import futures
@@ -1194,6 +1195,185 @@ class TaskTests(unittest.TestCase):
         res = self.loop.run_until_complete(t1)
         self.assertEqual(res, 'test')
         self.assertIsNone(t2.result())
+
+
+class GatherTestsBase:
+
+    def setUp(self):
+        self.one_loop = test_utils.TestLoop()
+        self.other_loop = test_utils.TestLoop()
+
+    def tearDown(self):
+        self.one_loop.close()
+        self.other_loop.close()
+
+    def _run_loop(self, loop):
+        while loop._ready:
+            test_utils.run_briefly(loop)
+
+    def _check_success(self, **kwargs):
+        a, b, c = [futures.Future(loop=self.one_loop) for i in range(3)]
+        fut = tasks.gather(*self.wrap_futures(a, b, c), **kwargs)
+        cb = Mock()
+        fut.add_done_callback(cb)
+        b.set_result(1)
+        a.set_result(2)
+        self._run_loop(self.one_loop)
+        self.assertEqual(cb.called, False)
+        self.assertFalse(fut.done())
+        c.set_result(3)
+        self._run_loop(self.one_loop)
+        cb.assert_called_once_with(fut)
+        self.assertEqual(fut.result(), [2, 1, 3])
+
+    def test_success(self):
+        self._check_success()
+        self._check_success(return_exceptions=False)
+
+    def test_result_exception_success(self):
+        self._check_success(return_exceptions=True)
+
+    def test_one_exception(self):
+        a, b, c, d, e = [futures.Future(loop=self.one_loop) for i in range(5)]
+        fut = tasks.gather(*self.wrap_futures(a, b, c, d, e))
+        cb = Mock()
+        fut.add_done_callback(cb)
+        exc = ZeroDivisionError()
+        a.set_result(1)
+        b.set_exception(exc)
+        self._run_loop(self.one_loop)
+        self.assertTrue(fut.done())
+        cb.assert_called_once_with(fut)
+        self.assertIs(fut.exception(), exc)
+        # Does nothing
+        c.set_result(3)
+        d.cancel()
+        e.set_exception(RuntimeError())
+
+    def test_return_exceptions(self):
+        a, b, c, d = [futures.Future(loop=self.one_loop) for i in range(4)]
+        fut = tasks.gather(*self.wrap_futures(a, b, c, d),
+                           return_exceptions=True)
+        cb = Mock()
+        fut.add_done_callback(cb)
+        exc = ZeroDivisionError()
+        exc2 = RuntimeError()
+        b.set_result(1)
+        c.set_exception(exc)
+        a.set_result(3)
+        self._run_loop(self.one_loop)
+        self.assertFalse(fut.done())
+        d.set_exception(exc2)
+        self._run_loop(self.one_loop)
+        self.assertTrue(fut.done())
+        cb.assert_called_once_with(fut)
+        self.assertEqual(fut.result(), [3, 1, exc, exc2])
+
+
+class FutureGatherTests(GatherTestsBase, unittest.TestCase):
+
+    def wrap_futures(self, *futures):
+        return futures
+
+    def _check_empty_sequence(self, seq_or_iter):
+        events.set_event_loop(self.one_loop)
+        self.addCleanup(events.set_event_loop, None)
+        fut = tasks.gather(*seq_or_iter)
+        self.assertIsInstance(fut, futures.Future)
+        self.assertIs(fut._loop, self.one_loop)
+        self._run_loop(self.one_loop)
+        self.assertTrue(fut.done())
+        self.assertEqual(fut.result(), [])
+        fut = tasks.gather(*seq_or_iter, loop=self.other_loop)
+        self.assertIs(fut._loop, self.other_loop)
+
+    def test_constructor_empty_sequence(self):
+        self._check_empty_sequence([])
+        self._check_empty_sequence(())
+        self._check_empty_sequence(set())
+        self._check_empty_sequence(iter(""))
+
+    def test_constructor_heterogenous_futures(self):
+        fut1 = futures.Future(loop=self.one_loop)
+        fut2 = futures.Future(loop=self.other_loop)
+        with self.assertRaises(ValueError):
+            tasks.gather(fut1, fut2)
+        with self.assertRaises(ValueError):
+            tasks.gather(fut1, loop=self.other_loop)
+
+    def test_constructor_homogenous_futures(self):
+        children = [futures.Future(loop=self.other_loop) for i in range(3)]
+        fut = tasks.gather(*children)
+        self.assertIs(fut._loop, self.other_loop)
+        self._run_loop(self.other_loop)
+        self.assertFalse(fut.done())
+        fut = tasks.gather(*children, loop=self.other_loop)
+        self.assertIs(fut._loop, self.other_loop)
+        self._run_loop(self.other_loop)
+        self.assertFalse(fut.done())
+
+    def test_one_cancellation(self):
+        a, b, c, d, e = [futures.Future(loop=self.one_loop) for i in range(5)]
+        fut = tasks.gather(a, b, c, d, e)
+        cb = Mock()
+        fut.add_done_callback(cb)
+        a.set_result(1)
+        b.cancel()
+        self._run_loop(self.one_loop)
+        self.assertTrue(fut.done())
+        cb.assert_called_once_with(fut)
+        self.assertTrue(fut.cancelled())
+        # Does nothing
+        c.set_result(3)
+        d.cancel()
+        e.set_exception(RuntimeError())
+
+    def test_result_exception_one_cancellation(self):
+        a, b, c, d, e, f = [futures.Future(loop=self.one_loop)
+                            for i in range(6)]
+        fut = tasks.gather(a, b, c, d, e, f, return_exceptions=True)
+        cb = Mock()
+        fut.add_done_callback(cb)
+        a.set_result(1)
+        b.set_exception(ZeroDivisionError())
+        c.cancel()
+        self._run_loop(self.one_loop)
+        self.assertTrue(fut.done())
+        cb.assert_called_once_with(fut)
+        self.assertTrue(fut.cancelled())
+        # Does nothing
+        d.set_result(3)
+        e.cancel()
+        f.set_exception(RuntimeError())
+
+
+class CoroutineGatherTests(GatherTestsBase, unittest.TestCase):
+
+    def setUp(self):
+        super().setUp()
+        events.set_event_loop(self.one_loop)
+
+    def tearDown(self):
+        events.set_event_loop(None)
+        super().tearDown()
+
+    def wrap_futures(self, *futures):
+        coros = []
+        for fut in futures:
+            def coro(fut=fut):
+                return (yield from fut)
+            coros.append(coro())
+        return coros
+
+    def test_constructor_loop_selection(self):
+        @tasks.coroutine
+        def coro():
+            yield from []
+            return 'abc'
+        fut = tasks.gather(coro(), coro())
+        self.assertIs(fut._loop, self.one_loop)
+        fut = tasks.gather(coro(), coro(), loop=self.other_loop)
+        self.assertIs(fut._loop, self.other_loop)
 
 
 if __name__ == '__main__':

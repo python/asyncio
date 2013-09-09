@@ -53,6 +53,16 @@ def iscoroutine(obj):
 class Task(futures.Future):
     """A coroutine wrapped in a Future."""
 
+    # An important invariant maintained while a Task not done:
+    #
+    # - Either _fut_waiter is None, and _step() is scheduled;
+    # - or _fut_waiter is some Future, and _step() is *not* scheduled.
+    #
+    # The only transition from the latter to the former is through
+    # _wakeup().  When _fut_waiter is not None, one of its callbacks
+    # must be _wakeup().
+    
+
     def __init__(self, coro, *, loop=None):
         assert inspect.isgenerator(coro)  # Must be a coroutine *object*.
         super().__init__(loop=loop)

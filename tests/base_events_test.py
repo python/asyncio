@@ -584,6 +584,7 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
     @unittest.mock.patch('tulip.selector_events.tulip_log')
     def test_accept_connection_exception(self, m_log):
         sock = unittest.mock.Mock()
+        sock.fileno.return_value = 10
         sock.accept.side_effect = OSError()
 
         self.loop._accept_connection(MyProto, sock)

@@ -169,9 +169,9 @@ class AbstractEventLoop:
     def start_serving(self, protocol_factory, host=None, port=None, *,
                       family=socket.AF_UNSPEC, flags=socket.AI_PASSIVE,
                       sock=None, backlog=100, ssl=None, reuse_address=None):
-        """Creates a TCP server bound to host and port and return a
-        Task whose result will be a list of socket objects which will
-        later be handled by protocol_factory.
+        """A coroutine which creates a TCP server bound to host and
+        port and whose result will be a list of socket objects which
+        will later be handled by protocol_factory.
 
         If host is an empty string or None all interfaces are assumed
         and a list of multiple sockets will be returned (most likely

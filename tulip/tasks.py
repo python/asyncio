@@ -61,7 +61,6 @@ class Task(futures.Future):
     # The only transition from the latter to the former is through
     # _wakeup().  When _fut_waiter is not None, one of its callbacks
     # must be _wakeup().
-    
 
     def __init__(self, coro, *, loop=None):
         assert inspect.isgenerator(coro)  # Must be a coroutine *object*.

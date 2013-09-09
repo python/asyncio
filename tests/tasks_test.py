@@ -1108,6 +1108,94 @@ class TaskTests(unittest.TestCase):
         self.assertEqual(res, 'test')
         self.assertIsNone(t2.result())
 
+    # Some thorough tests for cancellation propagation through
+    # coroutines, tasks and wait().
+
+    def test_yield_future_passes_cancel(self):
+        # Cancelling outer() cancels inner() cancels waiter.
+        proof = 0
+        waiter = futures.Future(loop=self.loop)
+
+        @tasks.coroutine
+        def inner():
+            nonlocal proof
+            try:
+                yield from waiter
+            except futures.CancelledError:
+                proof += 1
+                raise
+            else:
+                self.fail('got past sleep() in inner()')
+
+        @tasks.coroutine
+        def outer():
+            nonlocal proof
+            try:
+                yield from inner()
+            except futures.CancelledError:
+                proof += 100  # Expect this path.
+            else:
+                proof += 10
+
+        f = tasks.async(outer(), loop=self.loop)
+        test_utils.run_briefly(self.loop)
+        f.cancel()
+        self.loop.run_until_complete(f)
+        self.assertEqual(proof, 101)
+        self.assertTrue(waiter.cancelled())
+
+    def test_yield_wait_shields_cancel(self):
+        # Cancelling outer() makes wait() return early, leaves inner()
+        # running.
+        proof = 0
+        waiter = futures.Future(loop=self.loop)
+
+        @tasks.coroutine
+        def inner():
+            nonlocal proof
+            yield from waiter
+            proof += 1
+
+        @tasks.coroutine
+        def outer():
+            nonlocal proof
+            d, p = yield from tasks.wait([inner()], loop=self.loop)
+            proof += 100
+
+        f = tasks.async(outer(), loop=self.loop)
+        test_utils.run_briefly(self.loop)
+        f.cancel()
+        self.loop.run_until_complete(f)
+        waiter.set_result(None)
+        test_utils.run_briefly(self.loop)
+        self.assertEqual(proof, 101)
+
+    def test_yield_gather_blocks_cancel(self):
+        # Cancelling outer() cancels gather() but not inner().
+        proof = 0
+        waiter = futures.Future(loop=self.loop)
+
+        @tasks.coroutine
+        def inner():
+            nonlocal proof
+            yield from waiter
+            proof += 1
+
+        @tasks.coroutine
+        def outer():
+            nonlocal proof
+            yield from tasks.gather(inner(), loop=self.loop)
+            proof += 100
+
+        f = tasks.async(outer(), loop=self.loop)
+        test_utils.run_briefly(self.loop)
+        f.cancel()
+        with self.assertRaises(futures.CancelledError):
+            self.loop.run_until_complete(f)
+        waiter.set_result(None)
+        test_utils.run_briefly(self.loop)
+        self.assertEqual(proof, 1)
+
 
 class GatherTestsBase:
 

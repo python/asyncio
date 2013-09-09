@@ -151,8 +151,8 @@ class MySubprocessProtocol(protocols.SubprocessProtocol):
         self.disconnects = {fd: futures.Future(loop=loop) for fd in range(3)}
         self.data = {1: b'', 2: b''}
         self.returncode = None
-        self.got_data = {1: locks.EventWaiter(loop=loop),
-                         2: locks.EventWaiter(loop=loop)}
+        self.got_data = {1: locks.Event(loop=loop),
+                         2: locks.Event(loop=loop)}
 
     def connection_made(self, transport):
         self.transport = transport

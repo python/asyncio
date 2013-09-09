@@ -211,7 +211,7 @@ class LockTests(unittest.TestCase):
                 '"yield from" should be used as context manager expression')
 
 
-class EventWaiterTests(unittest.TestCase):
+class EventTests(unittest.TestCase):
 
     def setUp(self):
         self.loop = test_utils.TestLoop()
@@ -222,29 +222,29 @@ class EventWaiterTests(unittest.TestCase):
 
     def test_ctor_loop(self):
         loop = unittest.mock.Mock()
-        ev = locks.EventWaiter(loop=loop)
+        ev = locks.Event(loop=loop)
         self.assertIs(ev._loop, loop)
 
-        ev = locks.EventWaiter(loop=self.loop)
+        ev = locks.Event(loop=self.loop)
         self.assertIs(ev._loop, self.loop)
 
     def test_ctor_noloop(self):
         try:
             events.set_event_loop(self.loop)
-            ev = locks.EventWaiter()
+            ev = locks.Event()
             self.assertIs(ev._loop, self.loop)
         finally:
             events.set_event_loop(None)
 
     def test_repr(self):
-        ev = locks.EventWaiter(loop=self.loop)
+        ev = locks.Event(loop=self.loop)
         self.assertTrue(repr(ev).endswith('[unset]>'))
 
         ev.set()
         self.assertTrue(repr(ev).endswith('[set]>'))
 
     def test_wait(self):
-        ev = locks.EventWaiter(loop=self.loop)
+        ev = locks.Event(loop=self.loop)
         self.assertFalse(ev.is_set())
 
         result = []
@@ -284,14 +284,14 @@ class EventWaiterTests(unittest.TestCase):
         self.assertIsNone(t3.result())
 
     def test_wait_on_set(self):
-        ev = locks.EventWaiter(loop=self.loop)
+        ev = locks.Event(loop=self.loop)
         ev.set()
 
         res = self.loop.run_until_complete(ev.wait())
         self.assertTrue(res)
 
     def test_wait_cancel(self):
-        ev = locks.EventWaiter(loop=self.loop)
+        ev = locks.Event(loop=self.loop)
 
         wait = tasks.Task(ev.wait(), loop=self.loop)
         self.loop.call_soon(wait.cancel)
@@ -301,7 +301,7 @@ class EventWaiterTests(unittest.TestCase):
         self.assertFalse(ev._waiters)
 
     def test_clear(self):
-        ev = locks.EventWaiter(loop=self.loop)
+        ev = locks.Event(loop=self.loop)
         self.assertFalse(ev.is_set())
 
         ev.set()
@@ -311,7 +311,7 @@ class EventWaiterTests(unittest.TestCase):
         self.assertFalse(ev.is_set())
 
     def test_clear_with_waiters(self):
-        ev = locks.EventWaiter(loop=self.loop)
+        ev = locks.Event(loop=self.loop)
         result = []
 
         @tasks.coroutine

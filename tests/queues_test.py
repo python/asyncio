@@ -202,7 +202,7 @@ class QueueGetTests(_QueueTestBase):
         self.addCleanup(loop.close)
 
         q = queues.Queue(loop=loop)
-        started = locks.EventWaiter(loop=loop)
+        started = locks.Event(loop=loop)
         finished = False
 
         @tasks.coroutine
@@ -310,7 +310,7 @@ class QueuePutTests(_QueueTestBase):
         self.addCleanup(loop.close)
 
         q = queues.Queue(maxsize=1, loop=loop)
-        started = locks.EventWaiter(loop=loop)
+        started = locks.Event(loop=loop)
         finished = False
 
         @tasks.coroutine

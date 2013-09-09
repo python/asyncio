@@ -1,6 +1,6 @@
 """Synchronization primitives."""
 
-__all__ = ['Lock', 'EventWaiter', 'Condition', 'Semaphore']
+__all__ = ['Lock', 'Event', 'Condition', 'Semaphore']
 
 import collections
 
@@ -117,7 +117,7 @@ class Lock:
             self._locked = False
             # Wake up the first waiter who isn't cancelled.
             for fut in self._waiters:
-                if not fut.cancelled():
+                if not fut.done():
                     fut.set_result(True)
                     break
         else:
@@ -137,9 +137,8 @@ class Lock:
         return self
 
 
-# TODO: Why not call this Event?
-class EventWaiter:
-    """A EventWaiter implementation, our equivalent to threading.Event
+class Event:
+    """An Event implementation, our equivalent to threading.Event.
 
     Class implementing event objects. An event manages a flag that can be set
     to true with the set() method and reset to false with the clear() method.

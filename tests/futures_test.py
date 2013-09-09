@@ -251,14 +251,17 @@ class FutureTests(unittest.TestCase):
         self.assertIs(m_events.get_event_loop.return_value, f2._loop)
 
 
-# A fake event loop for tests. All it does is implement a call_soon method
-# that immediately invokes the given function.
-class _FakeEventLoop:
-    def call_soon(self, fn, *args):
-        fn(*args)
-
-
 class FutureDoneCallbackTests(unittest.TestCase):
+
+    def setUp(self):
+        self.loop = test_utils.TestLoop()
+        events.set_event_loop(None)
+
+    def tearDown(self):
+        self.loop.close()
+
+    def run_briefly(self):
+        test_utils.run_briefly(self.loop)
 
     def _make_callback(self, bag, thing):
         # Create a callback function that appends thing to bag.
@@ -267,7 +270,7 @@ class FutureDoneCallbackTests(unittest.TestCase):
         return bag_appender
 
     def _new_future(self):
-        return futures.Future(loop=_FakeEventLoop())
+        return futures.Future(loop=self.loop)
 
     def test_callbacks_invoked_on_set_result(self):
         bag = []
@@ -277,6 +280,9 @@ class FutureDoneCallbackTests(unittest.TestCase):
 
         self.assertEqual(bag, [])
         f.set_result('foo')
+
+        self.run_briefly()
+
         self.assertEqual(bag, [42, 17])
         self.assertEqual(f.result(), 'foo')
 
@@ -288,6 +294,9 @@ class FutureDoneCallbackTests(unittest.TestCase):
         self.assertEqual(bag, [])
         exc = RuntimeError()
         f.set_exception(exc)
+
+        self.run_briefly()
+
         self.assertEqual(bag, [100])
         self.assertEqual(f.exception(), exc)
 
@@ -318,6 +327,9 @@ class FutureDoneCallbackTests(unittest.TestCase):
 
         self.assertEqual(bag, [])
         f.set_result('foo')
+
+        self.run_briefly()
+
         self.assertEqual(bag, [2])
         self.assertEqual(f.result(), 'foo')
 

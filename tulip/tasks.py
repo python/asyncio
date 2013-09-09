@@ -3,6 +3,7 @@
 __all__ = ['coroutine', 'task', 'Task',
            'FIRST_COMPLETED', 'FIRST_EXCEPTION', 'ALL_COMPLETED',
            'wait', 'wait_for', 'as_completed', 'sleep', 'async',
+           'gather',
            ]
 
 import collections
@@ -357,3 +358,58 @@ def async(coro_or_future, *, loop=None, timeout=None):
         return Task(coro_or_future, loop=loop, timeout=timeout)
     else:
         raise TypeError('A Future or coroutine is required')
+
+
+def gather(*coros_or_futures, loop=None, return_exceptions=False):
+    """Return a future aggregating results from the given coroutines
+    or futures.
+
+    All futures must share the same event loop.  If all the tasks
+    are done successfully, the returned future's result is the list of
+    results (in the order of the original sequence, not necessarily the
+    order of results arrival).  If one of the tasks is cancelled, the
+    returned future is immediately cancelled too.  If *result_exception*
+    is True, exceptions in the tasks are treated the same as successful
+    results, and gathered in the result list; otherwise, the first raised
+    exception will be immediately propagated to the returned future.
+    """
+    children = [async(fut, loop=loop) for fut in coros_or_futures]
+    n = len(children)
+    if n == 0:
+        outer = futures.Future(loop=loop)
+        outer.set_result([])
+        return outer
+    if loop is None:
+        loop = children[0]._loop
+    for fut in children:
+        if fut._loop is not loop:
+            raise ValueError("futures are tied to different event loops")
+    outer = futures.Future(loop=loop)
+    nfinished = 0
+    results = [None] * n
+
+    def _done_callback(i, fut):
+        nonlocal nfinished
+        if outer._state != futures._PENDING:
+            if fut._exception is not None:
+                # Be sure to mark the result retrieved
+                fut.exception()
+            return
+        if fut._state == futures._CANCELLED:
+            outer.cancel()
+            return
+        elif fut._exception is not None:
+            if not return_exceptions:
+                outer.set_exception(fut.exception())
+                return
+            res = fut.exception()
+        else:
+            res = fut._result
+        results[i] = res
+        nfinished += 1
+        if nfinished == n:
+            outer.set_result(results)
+
+    for i, fut in enumerate(children):
+        fut.add_done_callback(functools.partial(_done_callback, i))
+    return outer

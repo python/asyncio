@@ -31,7 +31,7 @@ def _fileobj_to_fd(fileobj):
     else:
         try:
             fd = int(fileobj.fileno())
-        except (AttributeError, ValueError):
+        except (AttributeError, TypeError, ValueError):
             raise ValueError("Invalid file object: "
                              "{!r}".format(fileobj)) from None
     if fd < 0:
@@ -62,8 +62,6 @@ class BaseSelector(metaclass=ABCMeta):
     def __init__(self):
         # this maps file descriptors to keys
         self._fd_to_key = {}
-        # this maps file objects to keys - for fast (un)registering
-        self._fileobj_to_key = {}
 
     def register(self, fileobj, events, data=None):
         """Register a file object.
@@ -77,7 +75,7 @@ class BaseSelector(metaclass=ABCMeta):
         SelectorKey instance
         """
         if (not events) or (events & ~(EVENT_READ | EVENT_WRITE)):
-            raise ValueError("Invalid events: {}".format(events))
+            raise ValueError("Invalid events: {!r}".format(events))
 
         key = SelectorKey(fileobj, _fileobj_to_fd(fileobj), events, data)
 
@@ -86,7 +84,6 @@ class BaseSelector(metaclass=ABCMeta):
                            "registered".format(fileobj, key.fd))
 
         self._fd_to_key[key.fd] = key
-        self._fileobj_to_key[fileobj] = key
         return key
 
     def unregister(self, fileobj):
@@ -99,8 +96,7 @@ class BaseSelector(metaclass=ABCMeta):
         SelectorKey instance
         """
         try:
-            key = self._fileobj_to_key.pop(fileobj)
-            del self._fd_to_key[key.fd]
+            key = self._fd_to_key.pop(_fileobj_to_fd(fileobj))
         except KeyError:
             raise KeyError("{!r} is not registered".format(fileobj)) from None
         return key
@@ -118,7 +114,7 @@ class BaseSelector(metaclass=ABCMeta):
         """
         # TODO: Subclasses can probably optimize this even further.
         try:
-            key = self._fileobj_to_key[fileobj]
+            key = self._fd_to_key[_fileobj_to_fd(fileobj)]
         except KeyError:
             raise KeyError("{!r} is not registered".format(fileobj)) from None
         if events != key.events or data != key.data:
@@ -154,7 +150,6 @@ class BaseSelector(metaclass=ABCMeta):
         This must be called to make sure that any underlying resource is freed.
         """
         self._fd_to_key.clear()
-        self._fileobj_to_key.clear()
 
     def get_key(self, fileobj):
         """Return the key associated to a registered file object.
@@ -163,9 +158,9 @@ class BaseSelector(metaclass=ABCMeta):
         SelectorKey for this file object
         """
         try:
-            return self._fileobj_to_key[fileobj]
+            return self._fd_to_key[_fileobj_to_fd(fileobj)]
         except KeyError:
-            raise KeyError("{} is not registered".format(fileobj)) from None
+            raise KeyError("{!r} is not registered".format(fileobj)) from None
 
     def __enter__(self):
         return self

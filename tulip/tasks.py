@@ -89,8 +89,10 @@ class Task(futures.Future):
     def _step(self, value=None, exc=None):
         assert not self.done(), \
             '_step(): already done: {!r}, {!r}, {!r}'.format(self, value, exc)
-        if self._must_cancel and not isinstance(exc, futures.CancelledError):
-            exc = futures.CancelledError()
+        if self._must_cancel:
+            if not isinstance(exc, futures.CancelledError):
+                exc = futures.CancelledError()
+            self._must_cancel = False
         coro = self._coro
         self._fut_waiter = None
         # Call either coro.throw(exc) or coro.send(value).
@@ -117,6 +119,9 @@ class Task(futures.Future):
                     result._blocking = False
                     result.add_done_callback(self._wakeup)
                     self._fut_waiter = result
+                    if self._must_cancel:
+                        if self._fut_waiter.cancel():
+                            self._must_cancel = False
                 else:
                     self._loop.call_soon(
                         self._step, None,

@@ -233,47 +233,79 @@ class TaskTests(unittest.TestCase):
         self.assertTrue(f.cancelled())
         self.assertTrue(t.cancelled())
 
-##     def test_cancel_done_future(self):
-##         fut1 = futures.Future(loop=self.loop)
-##         fut2 = futures.Future(loop=self.loop)
-##         fut3 = futures.Future(loop=self.loop)
+    def test_cancel_task_catching(self):
+        fut1 = futures.Future(loop=self.loop)
+        fut2 = futures.Future(loop=self.loop)
 
-##         @tasks.coroutine
-##         def task():
-##             yield from fut1
-##             try:
-##                 yield from fut2
-##             except futures.CancelledError:
-##                 pass
-##             yield from fut3
+        @tasks.coroutine
+        def task():
+            yield from fut1
+            try:
+                yield from fut2
+            except futures.CancelledError:
+                return 42
 
-##         t = tasks.Task(task(), loop=self.loop)
-##         test_utils.run_briefly(self.loop)
-##         fut1.set_result(None)
-##         t.cancel()
-##         test_utils.run_once(self.loop)  # process fut1 result, delay cancel
-##         self.assertFalse(t.done())
-##         test_utils.run_once(self.loop)  # cancel fut2, but coro still alive
-##         self.assertFalse(t.done())
-##         test_utils.run_briefly(self.loop)  # cancel fut3
-##         self.assertTrue(t.done())
+        t = tasks.Task(task(), loop=self.loop)
+        test_utils.run_briefly(self.loop)
+        self.assertIs(t._fut_waiter, fut1)  # White-box test.
+        fut1.set_result(None)
+        test_utils.run_briefly(self.loop)
+        self.assertIs(t._fut_waiter, fut2)  # White-box test.
+        t.cancel()
+        self.assertTrue(fut2.cancelled())
+        res = self.loop.run_until_complete(t)
+        self.assertEqual(res, 42)
+        self.assertFalse(t.cancelled())
 
-##         self.assertEqual(fut1.result(), None)
-##         self.assertTrue(fut2.cancelled())
-##         self.assertTrue(fut3.cancelled())
-##         self.assertTrue(t.cancelled())
+    def test_cancel_task_ignoring(self):
+        fut1 = futures.Future(loop=self.loop)
+        fut2 = futures.Future(loop=self.loop)
+        fut3 = futures.Future(loop=self.loop)
 
-##     def test_cancel_in_coro(self):
-##         @tasks.coroutine
-##         def task():
-##             t.cancel()
-##             return 12
+        @tasks.coroutine
+        def task():
+            yield from fut1
+            try:
+                yield from fut2
+            except futures.CancelledError:
+                pass
+            res = yield from fut3
+            return res
 
-##         t = tasks.Task(task(), loop=self.loop)
-##         self.assertRaises(
-##             futures.CancelledError, self.loop.run_until_complete, t)
-##         self.assertTrue(t.done())
-##         self.assertFalse(t.cancel())
+        t = tasks.Task(task(), loop=self.loop)
+        test_utils.run_briefly(self.loop)
+        self.assertIs(t._fut_waiter, fut1)  # White-box test.
+        fut1.set_result(None)
+        test_utils.run_briefly(self.loop)
+        self.assertIs(t._fut_waiter, fut2)  # White-box test.
+        t.cancel()
+        self.assertTrue(fut2.cancelled())
+        test_utils.run_briefly(self.loop)
+        self.assertIs(t._fut_waiter, fut3)  # White-box test.
+        fut3.set_result(42)
+        res = self.loop.run_until_complete(t)
+        self.assertEqual(res, 42)
+        self.assertFalse(fut3.cancelled())
+        self.assertFalse(t.cancelled())
+
+    def test_cancel_current_task(self):
+        loop = events.new_event_loop()
+        self.addCleanup(loop.close)
+
+        @tasks.coroutine
+        def task():
+            t.cancel()
+            self.assertTrue(t._must_cancel)  # White-box test.
+            # The sleep should be cancelled immediately.
+            yield from tasks.sleep(100, loop=loop)
+            return 12
+
+        t = tasks.Task(task(), loop=loop)
+        self.assertRaises(
+            futures.CancelledError, loop.run_until_complete, t)
+        self.assertTrue(t.done())
+        self.assertFalse(t._must_cancel)  # White-box test.
+        self.assertFalse(t.cancel())
 
     def test_stop_while_run_in_complete(self):
 

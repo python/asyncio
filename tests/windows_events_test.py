@@ -5,6 +5,7 @@ import tulip
 from tulip import windows_events
 from tulip import protocols
 from tulip import streams
+from tulip import test_utils
 
 
 def connect_read_pipe(loop, file):
@@ -45,18 +46,17 @@ class ProactorTests(unittest.TestCase):
         f = tulip.async(reader.readline(), loop=self.loop)
 
         trans.write(b'msg1\n')
-        self.loop.run_until_complete(f, timeout=0.01)
+        self.loop.run_until_complete(f)
         self.assertEqual(f.result(), b'msg1\n')
         f = tulip.async(reader.readline(), loop=self.loop)
 
         trans.pause_writing()
         trans.write(b'msg2\n')
-        with self.assertRaises(tulip.TimeoutError):
-            self.loop.run_until_complete(f, timeout=0.01)
+        test_utils.run_briefly(self.loop)
         self.assertEqual(trans._buffer, [b'msg2\n'])
 
         trans.resume_writing()
-        self.loop.run_until_complete(f, timeout=0.1)
+        self.loop.run_until_complete(f)
         self.assertEqual(f.result(), b'msg2\n')
         f = tulip.async(reader.readline(), loop=self.loop)
 
@@ -69,7 +69,7 @@ class ProactorTests(unittest.TestCase):
         trans.write(b'msg4\n')
         self.assertEqual(trans._buffer, [b'msg4\n'])
         trans.resume_writing()
-        self.loop.run_until_complete(f, timeout=0.01)
+        self.loop.run_until_complete(f)
         self.assertEqual(f.result(), b'msg4\n')
 
     def test_close(self):
@@ -77,5 +77,5 @@ class ProactorTests(unittest.TestCase):
         trans = self.loop._make_socket_transport(a, protocols.Protocol())
         f = tulip.async(self.loop.sock_recv(b, 100))
         trans.close()
-        self.loop.run_until_complete(f, timeout=1)
+        self.loop.run_until_complete(f)
         self.assertEqual(f.result(), b'')

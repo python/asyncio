@@ -112,8 +112,8 @@ class BaseEventLoop(events.AbstractEventLoop):
         finally:
             self._running = False
 
-    def run_until_complete(self, future, timeout=None):
-        """Run until the Future is done, or until a timeout.
+    def run_until_complete(self, future):
+        """Run until the Future is done.
 
         If the argument is a coroutine, it is wrapped in a Task.
 
@@ -121,31 +121,12 @@ class BaseEventLoop(events.AbstractEventLoop):
         with the same coroutine twice -- it would wrap it in two
         different Tasks and that can't be good.
 
-        Return the Future's result, or raise its exception.  If the
-        timeout is reached or stop() is called, raise TimeoutError.
+        Return the Future's result, or raise its exception.
         """
         future = tasks.async(future, loop=self)
         future.add_done_callback(_raise_stop_error)
-        handle_called = False
-
-        if timeout is None:
-            self.run_forever()
-        else:
-
-            def stop_loop():
-                nonlocal handle_called
-                handle_called = True
-                raise _StopError
-
-            handle = self.call_later(timeout, stop_loop)
-            self.run_forever()
-            handle.cancel()
-
+        self.run_forever()
         future.remove_done_callback(_raise_stop_error)
-
-        if handle_called:
-            raise futures.TimeoutError
-
         if not future.done():
             raise RuntimeError('Event loop stopped before Future completed.')
 

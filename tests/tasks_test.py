@@ -45,57 +45,6 @@ class TaskTests(unittest.TestCase):
         self.assertIs(t._loop, loop)
         loop.close()
 
-    def test_task_decorator(self):
-        @tasks.task
-        def notmuch():
-            yield from []
-            return 'ko'
-
-        try:
-            events.set_event_loop(self.loop)
-            t = notmuch()
-        finally:
-            events.set_event_loop(None)
-
-        self.assertIsInstance(t, tasks.Task)
-        self.loop.run_until_complete(t)
-        self.assertTrue(t.done())
-        self.assertEqual(t.result(), 'ko')
-
-    def test_task_decorator_func(self):
-        @tasks.task
-        def notmuch():
-            return 'ko'
-
-        try:
-            events.set_event_loop(self.loop)
-            t = notmuch()
-        finally:
-            events.set_event_loop(None)
-
-        self.assertIsInstance(t, tasks.Task)
-        self.loop.run_until_complete(t)
-        self.assertTrue(t.done())
-        self.assertEqual(t.result(), 'ko')
-
-    def test_task_decorator_fut(self):
-        @tasks.task
-        def notmuch():
-            fut = futures.Future(loop=self.loop)
-            fut.set_result('ko')
-            return fut
-
-        try:
-            events.set_event_loop(self.loop)
-            t = notmuch()
-        finally:
-            events.set_event_loop(None)
-
-        self.assertIsInstance(t, tasks.Task)
-        self.loop.run_until_complete(t)
-        self.assertTrue(t.done())
-        self.assertEqual(t.result(), 'ko')
-
     def test_async_coroutine(self):
         @tasks.coroutine
         def notmuch():
@@ -225,9 +174,10 @@ class TaskTests(unittest.TestCase):
 
         t = tasks.Task(task(), loop=loop)
         loop.call_soon(t.cancel)
-        self.assertRaises(
-            futures.CancelledError, loop.run_until_complete, t)
+        with self.assertRaises(futures.CancelledError):
+            loop.run_until_complete(t)
         self.assertTrue(t.done())
+        self.assertTrue(t.cancelled())
         self.assertFalse(t.cancel())
 
     def test_cancel_yield(self):
@@ -243,9 +193,71 @@ class TaskTests(unittest.TestCase):
         self.assertRaises(
             futures.CancelledError, self.loop.run_until_complete, t)
         self.assertTrue(t.done())
+        self.assertTrue(t.cancelled())
         self.assertFalse(t.cancel())
 
-    def test_cancel_done_future(self):
+    def test_cancel_inner_future(self):
+        f = futures.Future(loop=self.loop)
+
+        @tasks.coroutine
+        def task():
+            yield from f
+            return 12
+
+        t = tasks.Task(task(), loop=self.loop)
+        test_utils.run_briefly(self.loop)  # start task
+        f.cancel()
+        with self.assertRaises(futures.CancelledError):
+            self.loop.run_until_complete(t)
+        self.assertTrue(f.cancelled())
+        self.assertTrue(t.cancelled())
+
+    def test_cancel_both_task_and_inner_future(self):
+        f = futures.Future(loop=self.loop)
+
+        @tasks.coroutine
+        def task():
+            yield from f
+            return 12
+
+        t = tasks.Task(task(), loop=self.loop)
+        test_utils.run_briefly(self.loop)
+
+        f.cancel()
+        t.cancel()
+
+        with self.assertRaises(futures.CancelledError):
+            self.loop.run_until_complete(t)
+
+        self.assertTrue(t.done())
+        self.assertTrue(f.cancelled())
+        self.assertTrue(t.cancelled())
+
+    def test_cancel_task_catching(self):
+        fut1 = futures.Future(loop=self.loop)
+        fut2 = futures.Future(loop=self.loop)
+
+        @tasks.coroutine
+        def task():
+            yield from fut1
+            try:
+                yield from fut2
+            except futures.CancelledError:
+                return 42
+
+        t = tasks.Task(task(), loop=self.loop)
+        test_utils.run_briefly(self.loop)
+        self.assertIs(t._fut_waiter, fut1)  # White-box test.
+        fut1.set_result(None)
+        test_utils.run_briefly(self.loop)
+        self.assertIs(t._fut_waiter, fut2)  # White-box test.
+        t.cancel()
+        self.assertTrue(fut2.cancelled())
+        res = self.loop.run_until_complete(t)
+        self.assertEqual(res, 42)
+        self.assertFalse(t.cancelled())
+
+    def test_cancel_task_ignoring(self):
         fut1 = futures.Future(loop=self.loop)
         fut2 = futures.Future(loop=self.loop)
         fut3 = futures.Future(loop=self.loop)
@@ -257,91 +269,42 @@ class TaskTests(unittest.TestCase):
                 yield from fut2
             except futures.CancelledError:
                 pass
-            yield from fut3
+            res = yield from fut3
+            return res
 
         t = tasks.Task(task(), loop=self.loop)
         test_utils.run_briefly(self.loop)
+        self.assertIs(t._fut_waiter, fut1)  # White-box test.
         fut1.set_result(None)
+        test_utils.run_briefly(self.loop)
+        self.assertIs(t._fut_waiter, fut2)  # White-box test.
         t.cancel()
-        test_utils.run_once(self.loop)  # process fut1 result, delay cancel
-        self.assertFalse(t.done())
-        test_utils.run_once(self.loop)  # cancel fut2, but coro still alive
-        self.assertFalse(t.done())
-        test_utils.run_briefly(self.loop)  # cancel fut3
-        self.assertTrue(t.done())
-
-        self.assertEqual(fut1.result(), None)
         self.assertTrue(fut2.cancelled())
-        self.assertTrue(fut3.cancelled())
-        self.assertTrue(t.cancelled())
+        test_utils.run_briefly(self.loop)
+        self.assertIs(t._fut_waiter, fut3)  # White-box test.
+        fut3.set_result(42)
+        res = self.loop.run_until_complete(t)
+        self.assertEqual(res, 42)
+        self.assertFalse(fut3.cancelled())
+        self.assertFalse(t.cancelled())
 
-    def test_future_timeout(self):
-
-        def gen():
-            when = yield
-            self.assertAlmostEqual(0.1, when)
-            when = yield 0
-            self.assertAlmostEqual(10.0, when)
-            yield 0.1
-
-        loop = test_utils.TestLoop(gen)
+    def test_cancel_current_task(self):
+        loop = events.new_event_loop()
         self.addCleanup(loop.close)
 
-        @tasks.coroutine
-        def coro():
-            yield from tasks.sleep(10.0, loop=loop)
-            return 12
-
-        t = tasks.Task(coro(), timeout=0.1, loop=loop)
-
-        self.assertRaises(
-            futures.CancelledError,
-            loop.run_until_complete, t)
-        self.assertTrue(t.done())
-        self.assertFalse(t.cancel())
-        self.assertAlmostEqual(0.1, loop.time())
-
-    def test_future_timeout_catch(self):
-
-        def gen():
-            when = yield
-            self.assertAlmostEqual(0.1, when)
-            when = yield 0
-            self.assertAlmostEqual(10.0, when)
-            yield 0.1
-
-        loop = test_utils.TestLoop(gen)
-        self.addCleanup(loop.close)
-
-        @tasks.coroutine
-        def coro():
-            yield from tasks.sleep(10.0, loop=loop)
-            return 12
-
-        class Cancelled(Exception):
-            pass
-
-        @tasks.coroutine
-        def coro2():
-            try:
-                yield from tasks.Task(coro(), timeout=0.1, loop=loop)
-            except futures.CancelledError:
-                raise Cancelled()
-
-        self.assertRaises(
-            Cancelled, loop.run_until_complete, coro2())
-        self.assertAlmostEqual(0.1, loop.time())
-
-    def test_cancel_in_coro(self):
         @tasks.coroutine
         def task():
             t.cancel()
+            self.assertTrue(t._must_cancel)  # White-box test.
+            # The sleep should be cancelled immediately.
+            yield from tasks.sleep(100, loop=loop)
             return 12
 
-        t = tasks.Task(task(), loop=self.loop)
+        t = tasks.Task(task(), loop=loop)
         self.assertRaises(
-            futures.CancelledError, self.loop.run_until_complete, t)
+            futures.CancelledError, loop.run_until_complete, t)
         self.assertTrue(t.done())
+        self.assertFalse(t._must_cancel)  # White-box test.
         self.assertFalse(t.cancel())
 
     def test_stop_while_run_in_complete(self):
@@ -381,57 +344,6 @@ class TaskTests(unittest.TestCase):
         # close generators
         for w in waiters:
             w.close()
-
-    def test_timeout(self):
-
-        def gen():
-            when = yield
-            self.assertAlmostEqual(0.1, when)
-            when = yield 0
-            self.assertAlmostEqual(10.0, when)
-            yield 0.1
-
-        loop = test_utils.TestLoop(gen)
-        self.addCleanup(loop.close)
-
-        @tasks.coroutine
-        def task():
-            yield from tasks.sleep(10.0, loop=loop)
-            return 42
-
-        t = tasks.Task(task(), loop=loop)
-        self.assertRaises(
-            futures.TimeoutError, loop.run_until_complete, t, 0.1)
-        self.assertAlmostEqual(0.1, loop.time())
-        self.assertFalse(t.done())
-
-        # move forward to close generator
-        loop.advance_time(10)
-        self.assertEqual(42, loop.run_until_complete(t))
-        self.assertTrue(t.done())
-
-    def test_timeout_not(self):
-
-        def gen():
-            when = yield
-            self.assertAlmostEqual(10.0, when)
-            when = yield 0
-            self.assertAlmostEqual(0.1, when)
-            yield 0.1
-
-        loop = test_utils.TestLoop(gen)
-        self.addCleanup(loop.close)
-
-        @tasks.coroutine
-        def task():
-            yield from tasks.sleep(0.1, loop=loop)
-            return 42
-
-        t = tasks.Task(task(), loop=loop)
-        r = loop.run_until_complete(t, 10.0)
-        self.assertTrue(t.done())
-        self.assertEqual(r, 42)
-        self.assertAlmostEqual(0.1, loop.time())
 
     def test_wait_for(self):
 
@@ -1014,16 +926,14 @@ class TaskTests(unittest.TestCase):
 
         @tasks.coroutine
         def coro():
-            try:
-                yield from fut
-            except futures.CancelledError:
-                pass
+            yield from fut
 
         task = tasks.Task(coro(), loop=self.loop)
         test_utils.run_briefly(self.loop)
         self.assertIs(task._fut_waiter, fut)
 
         task.cancel()
+        test_utils.run_briefly(self.loop)
         self.assertRaises(
             futures.CancelledError, self.loop.run_until_complete, task)
         self.assertIsNone(task._fut_waiter)
@@ -1105,12 +1015,14 @@ class TaskTests(unittest.TestCase):
         def sleeper():
             yield from tasks.sleep(10, loop=loop)
 
+        base_exc = BaseException()
+
         @tasks.coroutine
         def notmutch():
             try:
                 yield from sleeper()
             except futures.CancelledError:
-                raise BaseException()
+                raise base_exc
 
         task = tasks.Task(notmutch(), loop=loop)
         test_utils.run_briefly(loop)
@@ -1121,7 +1033,8 @@ class TaskTests(unittest.TestCase):
         self.assertRaises(BaseException, test_utils.run_briefly, loop)
 
         self.assertTrue(task.done())
-        self.assertTrue(task.cancelled())
+        self.assertFalse(task.cancelled())
+        self.assertIs(task.exception(), base_exc)
 
     def test_iscoroutinefunction(self):
         def fn():
@@ -1149,8 +1062,7 @@ class TaskTests(unittest.TestCase):
         with self.assertRaises(RuntimeError) as cm:
             self.loop.run_until_complete(task)
 
-        self.assertTrue(fut.done())
-        self.assertIs(fut.exception(), cm.exception)
+        self.assertFalse(fut.done())
 
     def test_yield_vs_yield_from_generator(self):
         @tasks.coroutine

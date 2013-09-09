@@ -109,14 +109,10 @@ class AbstractEventLoop:
         """Run the event loop until stop() is called."""
         raise NotImplementedError
 
-    def run_until_complete(self, future, timeout=None):
+    def run_until_complete(self, future):
         """Run the event loop until a Future is done.
 
         Return the Future's result, or raise its exception.
-
-        If timeout is not None, run it for at most that long;
-        if the Future is still not done, raise TimeoutError
-        (but don't cancel the Future).
         """
         raise NotImplementedError
 

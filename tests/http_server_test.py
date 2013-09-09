@@ -69,6 +69,7 @@ class HttpServerProtocolTests(unittest.TestCase):
 
         handle = srv._request_handler
         srv.connection_lost(None)
+        test_utils.run_briefly(self.loop)
 
         self.assertIsNone(srv._request_handler)
         self.assertTrue(handle.cancelled())

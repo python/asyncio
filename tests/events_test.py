@@ -151,8 +151,8 @@ class MySubprocessProtocol(protocols.SubprocessProtocol):
         self.disconnects = {fd: futures.Future(loop=loop) for fd in range(3)}
         self.data = {1: b'', 2: b''}
         self.returncode = None
-        self.got_data = {1: locks.EventWaiter(loop=loop),
-                         2: locks.EventWaiter(loop=loop)}
+        self.got_data = {1: locks.Event(loop=loop),
+                         2: locks.Event(loop=loop)}
 
     def connection_made(self, transport):
         self.transport = transport
@@ -227,18 +227,6 @@ class EventLoopTestsMixin:
         task = cb()
         self.assertRaises(RuntimeError,
                           self.loop.run_until_complete, task)
-
-    def test_run_until_complete_timeout(self):
-        t0 = self.loop.time()
-        task = tasks.async(tasks.sleep(0.2, loop=self.loop), loop=self.loop)
-        self.assertRaises(futures.TimeoutError,
-                          self.loop.run_until_complete,
-                          task, timeout=0.1)
-        t1 = self.loop.time()
-        self.assertTrue(0.08 <= t1-t0 <= 0.12, t1-t0)
-        self.loop.run_until_complete(task)
-        t2 = self.loop.time()
-        self.assertTrue(0.18 <= t2-t0 <= 0.22, t2-t0)
 
     def test_call_later(self):
         results = []
@@ -951,7 +939,7 @@ class EventLoopTestsMixin:
             return res
 
         start = time.monotonic()
-        t = tasks.Task(main(), timeout=1, loop=self.loop)
+        t = tasks.Task(main(), loop=self.loop)
         self.loop.run_forever()
         elapsed = time.monotonic() - start
 
@@ -986,7 +974,7 @@ class EventLoopTestsMixin:
 
         stdin = transp.get_pipe_transport(0)
         stdin.write(b'Python The Winner')
-        self.loop.run_until_complete(proto.got_data[1].wait(1))
+        self.loop.run_until_complete(proto.got_data[1].wait())
         transp.close()
         self.loop.run_until_complete(proto.completed)
         self.assertEqual(-signal.SIGTERM, proto.returncode)
@@ -1015,12 +1003,12 @@ class EventLoopTestsMixin:
         try:
             stdin = transp.get_pipe_transport(0)
             stdin.write(b'Python ')
-            self.loop.run_until_complete(proto.got_data[1].wait(1))
+            self.loop.run_until_complete(proto.got_data[1].wait())
             proto.got_data[1].clear()
             self.assertEqual(b'Python ', proto.data[1])
 
             stdin.write(b'The Winner')
-            self.loop.run_until_complete(proto.got_data[1].wait(1))
+            self.loop.run_until_complete(proto.got_data[1].wait())
             self.assertEqual(b'Python The Winner', proto.data[1])
         finally:
             transp.close()
@@ -1219,13 +1207,13 @@ class EventLoopTestsMixin:
         stdin = transp.get_pipe_transport(0)
         stdout = transp.get_pipe_transport(1)
         stdin.write(b'test')
-        self.loop.run_until_complete(proto.got_data[1].wait(1))
+        self.loop.run_until_complete(proto.got_data[1].wait())
         self.assertEqual(b'OUT:test', proto.data[1])
 
         stdout.close()
         self.loop.run_until_complete(proto.disconnects[1])
         stdin.write(b'xxx')
-        self.loop.run_until_complete(proto.got_data[2].wait(1))
+        self.loop.run_until_complete(proto.got_data[2].wait())
         self.assertEqual(b'ERR:BrokenPipeError', proto.data[2])
 
         transp.close()

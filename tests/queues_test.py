@@ -202,7 +202,7 @@ class QueueGetTests(_QueueTestBase):
         self.addCleanup(loop.close)
 
         q = queues.Queue(loop=loop)
-        started = locks.EventWaiter(loop=loop)
+        started = locks.Event(loop=loop)
         finished = False
 
         @tasks.coroutine
@@ -236,37 +236,7 @@ class QueueGetTests(_QueueTestBase):
         q = queues.Queue(loop=self.loop)
         self.assertRaises(queues.Empty, q.get_nowait)
 
-    def test_get_timeout(self):
-
-        def gen():
-            when = yield
-            self.assertAlmostEqual(0.01, when)
-            yield 0.01
-
-        loop = test_utils.TestLoop(gen)
-        self.addCleanup(loop.close)
-
-        q = queues.Queue(loop=loop)
-
-        @tasks.coroutine
-        def queue_get():
-            with self.assertRaises(queues.Empty):
-                return (yield from q.get(timeout=0.01))
-
-            # Get works after timeout, with blocking and non-blocking put.
-            q.put_nowait(1)
-            self.assertEqual(1, (yield from q.get()))
-
-            t = tasks.Task(q.put(2), loop=loop)
-            self.assertEqual(2, (yield from q.get()))
-
-            self.assertTrue(t.done())
-            self.assertIsNone(t.result())
-
-        loop.run_until_complete(queue_get())
-        self.assertAlmostEqual(0.01, loop.time())
-
-    def test_get_timeout_cancelled(self):
+    def test_get_cancelled(self):
 
         def gen():
             when = yield
@@ -282,7 +252,7 @@ class QueueGetTests(_QueueTestBase):
 
         @tasks.coroutine
         def queue_get():
-            return (yield from q.get(timeout=0.05))
+            return (yield from tasks.wait_for(q.get(), 0.05, loop=loop))
 
         @tasks.coroutine
         def test():
@@ -293,6 +263,28 @@ class QueueGetTests(_QueueTestBase):
 
         self.assertEqual(1, loop.run_until_complete(test()))
         self.assertAlmostEqual(0.06, loop.time())
+
+    def test_get_cancelled_race(self):
+        q = queues.Queue(loop=self.loop)
+
+        t1 = tasks.Task(q.get(), loop=self.loop)
+        t2 = tasks.Task(q.get(), loop=self.loop)
+
+        test_utils.run_briefly(self.loop)
+        t1.cancel()
+        test_utils.run_briefly(self.loop)
+        self.assertTrue(t1.done())
+        q.put_nowait('a')
+        test_utils.run_briefly(self.loop)
+        self.assertEqual(t2.result(), 'a')
+
+    def test_get_with_waiting_putters(self):
+        q = queues.Queue(loop=self.loop, maxsize=1)
+        t1 = tasks.Task(q.put('a'), loop=self.loop)
+        t2 = tasks.Task(q.put('b'), loop=self.loop)
+        test_utils.run_briefly(self.loop)
+        self.assertEqual(self.loop.run_until_complete(q.get()), 'a')
+        self.assertEqual(self.loop.run_until_complete(q.get()), 'b')
 
 
 class QueuePutTests(_QueueTestBase):
@@ -318,7 +310,7 @@ class QueuePutTests(_QueueTestBase):
         self.addCleanup(loop.close)
 
         q = queues.Queue(maxsize=1, loop=loop)
-        started = locks.EventWaiter(loop=loop)
+        started = locks.Event(loop=loop)
         finished = False
 
         @tasks.coroutine
@@ -351,47 +343,12 @@ class QueuePutTests(_QueueTestBase):
         q.put_nowait(1)
         self.assertRaises(queues.Full, q.put_nowait, 2)
 
-    def test_put_timeout(self):
-
-        def gen():
-            when = yield
-            self.assertAlmostEqual(0.01, when)
-            when = yield 0.01
-            self.assertAlmostEqual(0.02, when)
-            yield 0.01
-
-        loop = test_utils.TestLoop(gen)
-        self.addCleanup(loop.close)
-
-        q = queues.Queue(1, loop=loop)
-        q.put_nowait(0)
-
-        @tasks.coroutine
-        def queue_put():
-            with self.assertRaises(queues.Full):
-                return (yield from q.put(1, timeout=0.01))
-
-            self.assertEqual(0, q.get_nowait())
-
-            # Put works after timeout, with blocking and non-blocking get.
-            get_task = tasks.Task(q.get(), loop=loop)
-            # Let the get start waiting.
-            yield from tasks.sleep(0.01, loop=loop)
-            q.put_nowait(2)
-            self.assertEqual(2, (yield from get_task))
-
-            q.put_nowait(3)
-            self.assertEqual(3, q.get_nowait())
-
-        loop.run_until_complete(queue_put())
-        self.assertAlmostEqual(0.02, loop.time())
-
-    def test_put_timeout_cancelled(self):
+    def test_put_cancelled(self):
         q = queues.Queue(loop=self.loop)
 
         @tasks.coroutine
         def queue_put():
-            yield from q.put(1, timeout=0.01)
+            yield from q.put(1)
             return True
 
         @tasks.coroutine
@@ -402,6 +359,27 @@ class QueuePutTests(_QueueTestBase):
         self.assertEqual(1, self.loop.run_until_complete(test()))
         self.assertTrue(t.done())
         self.assertTrue(t.result())
+
+    def test_put_cancelled_race(self):
+        q = queues.Queue(loop=self.loop, maxsize=1)
+
+        t1 = tasks.Task(q.put('a'), loop=self.loop)
+        t2 = tasks.Task(q.put('b'), loop=self.loop)
+        t3 = tasks.Task(q.put('c'), loop=self.loop)
+
+        test_utils.run_briefly(self.loop)
+        t2.cancel()
+        test_utils.run_briefly(self.loop)
+        self.assertTrue(t2.done())
+        self.assertEqual(q.get_nowait(), 'a')
+        self.assertEqual(q.get_nowait(), 'c')
+
+    def test_put_with_waiting_getters(self):
+        q = queues.Queue(loop=self.loop)
+        t = tasks.Task(q.get(), loop=self.loop)
+        test_utils.run_briefly(self.loop)
+        self.loop.run_until_complete(q.put('a'))
+        self.assertEqual(self.loop.run_until_complete(t), 'a')
 
 
 class LifoQueueTests(_QueueTestBase):
@@ -479,26 +457,6 @@ class JoinableQueueTests(_QueueTestBase):
             yield from q.join()
 
         self.loop.run_until_complete(join())
-
-    def test_join_timeout(self):
-        def gen():
-            when = yield
-            self.assertAlmostEqual(0.1, when)
-            yield 0.1
-
-        loop = test_utils.TestLoop(gen)
-        self.addCleanup(loop.close)
-
-        q = queues.JoinableQueue(loop=loop)
-        q.put_nowait(1)
-
-        @tasks.coroutine
-        def join():
-            yield from q.join(0.1)
-
-        # Join completes in ~ 0.1 seconds, although no one calls task_done().
-        loop.run_until_complete(join())
-        self.assertAlmostEqual(0.1, loop.time())
 
     def test_format(self):
         q = queues.JoinableQueue(loop=self.loop)

@@ -95,10 +95,17 @@ def request(method, url, *,
             conn = session.start(req, loop)
 
         # connection timeout
+        t = tulip.Task(conn, loop=loop)
+        th = None
+        if timeout is not None:
+            th = loop.call_later(timeout, t.cancel)
         try:
-            resp = yield from tulip.Task(conn, timeout=timeout, loop=loop)
+            resp = yield from t
         except tulip.CancelledError:
             raise tulip.TimeoutError from None
+        finally:
+            if th is not None:
+                th.cancel()
 
         # redirects
         if resp.status in (301, 302) and allow_redirects:

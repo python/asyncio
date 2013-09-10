@@ -318,6 +318,7 @@ class EventLoopTestsMixin:
         self.loop.call_soon(w.send, b'abc')
         test_utils.run_briefly(self.loop)
         self.loop.call_soon(w.send, b'def')
+        test_utils.run_briefly(self.loop)
         self.loop.call_soon(w.close)
         self.loop.call_soon(self.loop.stop)
         self.loop.run_forever()

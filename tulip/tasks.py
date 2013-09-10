@@ -230,10 +230,9 @@ def wait_for(fut, timeout, *, loop=None):
 
 @coroutine
 def _wait(fs, timeout, return_when, loop):
-    """Internal helper for wait(return_when=FIRST_COMPLETED).
+    """Internal helper for wait() and _wait_for().
 
-    The fs argument must be a set of Futures.
-    The timeout argument is like for wait().
+    The fs argument must be a collection of Futures.
     """
     assert fs, 'Set of Futures is empty.'
     waiter = futures.Future(loop=loop)

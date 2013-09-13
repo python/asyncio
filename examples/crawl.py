@@ -24,9 +24,9 @@ class Crawler:
         # session stores cookies between requests and uses connection pool
         self.session = tulip.http.Session()
 
-    @tulip.task
+    @tulip.coroutine
     def run(self):
-        self.addurls([(self.rooturl, '')])  # Set initial work.
+        tulip.Task(self.addurls([(self.rooturl, '')]))  # Set initial work.
         yield from tulip.sleep(1)
         while self.busy:
             yield from tulip.sleep(1)
@@ -34,7 +34,7 @@ class Crawler:
         self.session.close()
         self.loop.stop()
 
-    @tulip.task
+    @tulip.coroutine
     def addurls(self, urls):
         for url, parenturl in urls:
             url = urllib.parse.urljoin(parenturl, url)
@@ -45,12 +45,12 @@ class Crawler:
                     url not in self.todo):
                 self.todo.add(url)
                 yield from self.sem.acquire()
-                task = self.process(url)
+                task = tulip.Task(self.process(url))
                 task.add_done_callback(lambda t: self.sem.release())
                 task.add_done_callback(self.tasks.remove)
                 self.tasks.add(task)
 
-    @tulip.task
+    @tulip.coroutine
     def process(self, url):
         print('processing:', url)
 
@@ -66,7 +66,7 @@ class Crawler:
             if resp.status == 200 and resp.get_content_type() == 'text/html':
                 data = (yield from resp.read()).decode('utf-8', 'replace')
                 urls = re.findall(r'(?i)href=["\']?([^\s"\'<>]+)', data)
-                self.addurls([(u, url) for u in urls])
+                tulip.Task(self.addurls([(u, url) for u in urls]))
 
             resp.close()
             self.done[url] = True
@@ -80,7 +80,7 @@ def main():
     loop = tulip.get_event_loop()
 
     c = Crawler(sys.argv[1], loop)
-    c.run()
+    tulip.Task(c.run())
 
     try:
         loop.add_signal_handler(signal.SIGINT, loop.stop)

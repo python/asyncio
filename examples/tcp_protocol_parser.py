@@ -70,7 +70,7 @@ class EchoServer(tulip.Protocol):
         print('Connection made')
         self.transport = transport
         self.stream = tulip.StreamBuffer()
-        self.dispatch()
+        tulip.Task(self.dispatch())
 
     def data_received(self, data):
         self.stream.feed_data(data)
@@ -81,15 +81,17 @@ class EchoServer(tulip.Protocol):
     def connection_lost(self, exc):
         print('Connection lost')
 
-    @tulip.task
+    @tulip.coroutine
     def dispatch(self):
         reader = self.stream.set_parser(my_protocol_parser())
         writer = MyProtocolWriter(self.transport)
 
         while True:
-            msg = yield from reader.read()
-            if msg is None:
-                break  # client has been disconnected
+            try:
+                msg = yield from reader.read()
+            except tulip.EofStream:
+                # client has been disconnected
+                break
 
             print('Message received: {}'.format(msg))
 
@@ -102,7 +104,7 @@ class EchoServer(tulip.Protocol):
                 break
 
 
-@tulip.task
+@tulip.coroutine
 def start_client(loop, host, port):
     transport, stream = yield from loop.create_connection(
         tulip.StreamProtocol, host, port)
@@ -113,7 +115,11 @@ def start_client(loop, host, port):
     message = 'This is the message. It will be echoed.'
 
     while True:
-        msg = yield from reader.read()
+        try:
+            msg = yield from reader.read()
+        except tulip.EofStream:
+            print('Server has been disconnected.')
+            break
 
         print('Message received: {}'.format(msg))
         if msg.tp == MSG_PONG:

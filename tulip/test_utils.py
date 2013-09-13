@@ -98,10 +98,11 @@ def run_test_server(loop, *, host='127.0.0.1', port=0,
 
             if router is not None:
                 body = bytearray()
-                chunk = yield from payload.read()
-                while chunk:
-                    body.extend(chunk)
-                    chunk = yield from payload.read()
+                try:
+                    while True:
+                        body.extend((yield from payload.read()))
+                except tulip.EofStream:
+                    pass
 
                 rob = router(
                     self, properties,

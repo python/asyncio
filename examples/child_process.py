@@ -52,7 +52,7 @@ def connect_read_pipe(file):
 # Example
 #
 
-@tulip.task
+@tulip.coroutine
 def main(loop):
     # program which prints evaluation of each expression from stdin
     code = r'''if 1:

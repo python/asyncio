@@ -59,8 +59,10 @@ class HttpServer(tulip.http.ServerHttpProtocol):
 
             # chat dispatcher
             while True:
-                msg = yield from databuffer.read()
-                if msg is None:  # client droped connection
+                try:
+                    msg = yield from databuffer.read()
+                except tulip.EofStream:
+                    # client droped connection
                     break
 
                 if msg.tp == websocket.MSG_PING:
@@ -126,12 +128,12 @@ class ChildProcess:
         loop.add_signal_handler(signal.SIGINT, stop)
 
         # heartbeat
-        self.heartbeat()
+        tulip.Task(self.heartbeat())
 
         tulip.get_event_loop().run_forever()
         os._exit(0)
 
-    @tulip.task
+    @tulip.coroutine
     def start_server(self, writer):
         socks = yield from self.loop.start_serving(
             lambda: HttpServer(
@@ -141,7 +143,7 @@ class ChildProcess:
         print('Starting srv worker process {} on {}'.format(
             os.getpid(), socks[0].getsockname()))
 
-    @tulip.task
+    @tulip.coroutine
     def heartbeat(self):
         # setup pipes
         read_transport, read_proto = yield from self.loop.connect_read_pipe(
@@ -152,15 +154,17 @@ class ChildProcess:
         reader = read_proto.set_parser(websocket.WebSocketParser())
         writer = websocket.WebSocketWriter(write_transport)
 
-        self.start_server(writer)
+        tulip.Task(self.start_server(writer))
 
         while True:
-            msg = yield from reader.read()
-            if msg is None:
+            try:
+                msg = yield from reader.read()
+            except tulip.EofStream:
                 print('Superviser is dead, {} stopping...'.format(os.getpid()))
                 self.loop.stop()
                 break
-            elif msg.tp == websocket.MSG_PING:
+
+            if msg.tp == websocket.MSG_PING:
                 writer.pong()
             elif msg.tp == websocket.MSG_CLOSE:
                 break
@@ -196,7 +200,7 @@ class Worker:
             # parent
             os.close(up_read)
             os.close(down_write)
-            self.connect(pid, up_write, down_read)
+            tulip.async(self.connect(pid, up_write, down_read))
         else:
             # child
             os.close(up_write)
@@ -209,7 +213,7 @@ class Worker:
             process = ChildProcess(up_read, down_write, args, sock)
             process.start()
 
-    @tulip.task
+    @tulip.coroutine
     def heartbeat(self, writer):
         while True:
             yield from tulip.sleep(15)
@@ -223,18 +227,19 @@ class Worker:
                 self.start()
                 return
 
-    @tulip.task
+    @tulip.coroutine
     def chat(self, reader):
         while True:
-            msg = yield from reader.read()
-            if msg is None:
+            try:
+                msg = yield from reader.read()
+            except tulip.EofStream:
                 print('Restart unresponsive worker process: {}'.format(
                     self.pid))
                 self.kill()
                 self.start()
                 return
 
-            elif msg.tp == websocket.MSG_PONG:
+            if msg.tp == websocket.MSG_PONG:
                 self.ping = time.monotonic()
 
             elif msg.tp == websocket.MSG_TEXT:  # broadcast to all workers
@@ -242,7 +247,7 @@ class Worker:
                     if self.pid != worker.pid:
                         worker.writer.send(msg.data)
 
-    @tulip.task
+    @tulip.coroutine
     def connect(self, pid, up_write, down_read):
         # setup pipes
         read_transport, proto = yield from self.loop.connect_read_pipe(
@@ -260,8 +265,8 @@ class Worker:
         self.writer = writer
         self.rtransport = read_transport
         self.wtransport = write_transport
-        self.chat_task = self.chat(reader)
-        self.heartbeat_task = self.heartbeat(writer)
+        self.chat_task = tulip.async(self.chat(reader))
+        self.heartbeat_task = tulip.async(self.heartbeat(writer))
 
     def kill(self):
         self._started = False

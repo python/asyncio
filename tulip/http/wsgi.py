@@ -145,10 +145,11 @@ class WSGIServerHttpProtocol(server.ServerHttpProtocol):
 
         if self.readpayload:
             wsgiinput = io.BytesIO()
-            chunk = yield from payload.read()
-            while chunk:
-                wsgiinput.write(chunk)
-                chunk = yield from payload.read()
+            try:
+                while True:
+                    wsgiinput.write((yield from payload.read()))
+            except tulip.EofStream:
+                pass
             wsgiinput.seek(0)
             payload = wsgiinput
 

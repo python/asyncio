@@ -355,8 +355,8 @@ class DataBufferTests(unittest.TestCase):
             buffer.feed_eof()
         self.loop.call_soon(cb)
 
-        data = self.loop.run_until_complete(read_task)
-        self.assertIsNone(data)
+        self.assertRaises(
+            parsers.EofStream, self.loop.run_until_complete, read_task)
 
     def test_read_until_eof(self):
         item = object()
@@ -367,8 +367,8 @@ class DataBufferTests(unittest.TestCase):
         data = self.loop.run_until_complete(buffer.read())
         self.assertIs(data, item)
 
-        data = self.loop.run_until_complete(buffer.read())
-        self.assertIsNone(data)
+        self.assertRaises(
+            parsers.EofStream, self.loop.run_until_complete, buffer.read())
 
     def test_read_exception(self):
         buffer = parsers.DataBuffer(loop=self.loop)
@@ -428,7 +428,14 @@ class StreamProtocolTests(unittest.TestCase):
         self.assertIs(proto.exception(), exc)
 
 
-class ParserBuffer(unittest.TestCase):
+class ParserBufferTests(unittest.TestCase):
+
+    def setUp(self):
+        self.loop = events.new_event_loop()
+        events.set_event_loop(None)
+
+    def tearDown(self):
+        self.loop.close()
 
     def _make_one(self):
         return parsers.ParserBuffer()

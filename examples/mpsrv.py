@@ -42,7 +42,7 @@ class HttpServer(tulip.http.ServerHttpProtocol):
                 isdir = os.path.isdir(path)
 
         if not path:
-            raise tulip.http.HttpStatusException(404)
+            raise tulip.http.HttpErrorException(404)
 
         headers = email.message.Message()
         for hdr, val in message.headers:
@@ -50,7 +50,7 @@ class HttpServer(tulip.http.ServerHttpProtocol):
 
         if isdir and not path.endswith('/'):
             path = path + '/'
-            raise tulip.http.HttpStatusException(
+            raise tulip.http.HttpErrorException(
                 302, headers=(('URI', path), ('Location', path)))
 
         response = tulip.http.Response(self.transport, 200)
@@ -129,12 +129,12 @@ class ChildProcess:
             os.getpid(), x.getsockname()))
 
         # heartbeat
-        self.heartbeat()
+        tulip.Task(self.heartbeat())
 
         tulip.get_event_loop().run_forever()
         os._exit(0)
 
-    @tulip.task
+    @tulip.coroutine
     def heartbeat(self):
         # setup pipes
         read_transport, read_proto = yield from self.loop.connect_read_pipe(
@@ -146,12 +146,14 @@ class ChildProcess:
         writer = websocket.WebSocketWriter(write_transport)
 
         while True:
-            msg = yield from reader.read()
-            if msg is None:
+            try:
+                msg = yield from reader.read()
+            except tulip.EofStream:
                 print('Superviser is dead, {} stopping...'.format(os.getpid()))
                 self.loop.stop()
                 break
-            elif msg.tp == websocket.MSG_PING:
+
+            if msg.tp == websocket.MSG_PING:
                 writer.pong()
             elif msg.tp == websocket.MSG_CLOSE:
                 break
@@ -196,7 +198,7 @@ class Worker:
             process = ChildProcess(up_read, down_write, args, sock)
             process.start()
 
-    @tulip.task
+    @tulip.coroutine
     def heartbeat(self, writer):
         while True:
             yield from tulip.sleep(15)
@@ -210,20 +212,22 @@ class Worker:
                 self.start()
                 return
 
-    @tulip.task
+    @tulip.coroutine
     def chat(self, reader):
         while True:
-            msg = yield from reader.read()
-            if msg is None:
+            try:
+                msg = yield from reader.read()
+            except tulip.EofStream:
                 print('Restart unresponsive worker process: {}'.format(
                     self.pid))
                 self.kill()
                 self.start()
                 return
-            elif msg.tp == websocket.MSG_PONG:
+
+            if msg.tp == websocket.MSG_PONG:
                 self.ping = time.monotonic()
 
-    @tulip.task
+    @tulip.coroutine
     def connect(self, pid, up_write, down_read):
         # setup pipes
         read_transport, proto = yield from self.loop.connect_read_pipe(
@@ -240,8 +244,8 @@ class Worker:
         self.ping = time.monotonic()
         self.rtransport = read_transport
         self.wtransport = write_transport
-        self.chat_task = self.chat(reader)
-        self.heartbeat_task = self.heartbeat(writer)
+        self.chat_task = tulip.Task(self.chat(reader))
+        self.heartbeat_task = tulip.Task(self.heartbeat(writer))
 
     def kill(self):
         self._started = False

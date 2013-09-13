@@ -59,10 +59,13 @@ def start_client(loop, url):
     @tulip.coroutine
     def dispatch():
         while True:
-            msg = yield from stream.read()
-            if msg is None:
+            try:
+                msg = yield from stream.read()
+            except tulip.EofStream:
+                # server disconnected
                 break
-            elif msg.tp == websocket.MSG_PING:
+
+            if msg.tp == websocket.MSG_PING:
                 writer.pong()
             elif msg.tp == websocket.MSG_TEXT:
                 print(msg.data.strip())

@@ -226,6 +226,15 @@ class HttpRequestTests(unittest.TestCase):
             req = HttpRequest(meth, 'http://python.org/', data={'life': '42'})
             self.assertEqual('/?life=42', req.path)
 
+    def test_bytes_data(self):
+        for meth in HttpRequest.POST_METHODS:
+            req = HttpRequest(meth, 'http://python.org/', data=b'binary data')
+            req.send(self.transport)
+            self.assertEqual('/', req.path)
+            self.assertEqual((b'binary data',), req.body)
+            self.assertEqual('application/octet-stream',
+                             req.headers['content-type'])
+
     @unittest.mock.patch('tulip.http.client.tulip')
     def test_content_encoding(self, m_tulip):
         req = HttpRequest('get', 'http://python.org/', compress='deflate')

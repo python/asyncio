@@ -254,7 +254,7 @@ class DataBuffer:
         if self._buffer:
             return self._buffer.popleft()
         else:
-            return None
+            raise EofStream
 
 
 class ParserBuffer(bytearray):

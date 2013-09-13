@@ -368,7 +368,6 @@ class Semaphore:
         finally:
             self._waiters.remove(fut)
 
-
     def release(self):
         """Release a semaphore, incrementing the internal counter by one.
         When it was zero on entry and another coroutine is waiting for it to

@@ -38,7 +38,7 @@ class HttpServer(tulip.http.ServerHttpProtocol):
                 isdir = os.path.isdir(path)
 
         if not path:
-            raise tulip.http.HttpStatusException(404)
+            raise tulip.http.HttpErrorException(404)
 
         headers = email.message.Message()
         for hdr, val in message.headers:
@@ -47,7 +47,7 @@ class HttpServer(tulip.http.ServerHttpProtocol):
 
         if isdir and not path.endswith('/'):
             path = path + '/'
-            raise tulip.http.HttpStatusException(
+            raise tulip.http.HttpErrorException(
                 302, headers=(('URI', path), ('Location', path)))
 
         response = tulip.http.Response(self.transport, 200)

@@ -76,7 +76,7 @@ def request(method, url, *,
       >> resp
       <HttpResponse(python.org/) [200]>
 
-      >> data = yield from resp.content.read()
+      >> data = yield from resp.read()
 
     """
     redirects = 0
@@ -299,13 +299,20 @@ class HttpRequest:
             data = list(data.items())
 
         if data and not files:
-            if not isinstance(data, str):
-                data = urllib.parse.urlencode(data, doseq=True)
+            if isinstance(data, (bytes, bytearray)):
+                self.body = data
+                if 'content-type' not in self.headers:
+                    self.headers['content-type'] = (
+                        'application/octet-stream')
+            else:
+                if not isinstance(data, str):
+                    data = urllib.parse.urlencode(data, doseq=True)
 
-            self.body = data.encode(encoding)
-            if 'content-type' not in self.headers:
-                self.headers['content-type'] = (
-                    'application/x-www-form-urlencoded')
+                self.body = data.encode(encoding)
+                if 'content-type' not in self.headers:
+                    self.headers['content-type'] = (
+                        'application/x-www-form-urlencoded')
+
             if 'content-length' not in self.headers and not chunked:
                 self.headers['content-length'] = str(len(self.body))
 
@@ -486,12 +493,14 @@ class HttpResponse(http.client.HTTPMessage):
         if self._content is None:
             buf = []
             total = 0
-            chunk = yield from self.content.read()
-            while chunk:
-                size = len(chunk)
-                buf.append((chunk, size))
-                total += size
-                chunk = yield from self.content.read()
+            try:
+                while True:
+                    chunk = yield from self.content.read()
+                    size = len(chunk)
+                    buf.append((chunk, size))
+                    total += size
+            except tulip.EofStream:
+                pass
 
             self._content = bytearray(total)
 

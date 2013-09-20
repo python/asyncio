@@ -62,7 +62,7 @@ class QueueBasicTests(_QueueTestBase):
             q = queues.Queue(maxsize=1, loop=loop)
             q.put_nowait(1)
             # Start a task that waits to put.
-            t = tasks.Task(q.put(2), loop=loop)
+            tasks.Task(q.put(2), loop=loop)
             # Let it start waiting.
             yield from tasks.sleep(0.1, loop=loop)
             self.assertTrue('_putters[1]' in fn(q))
@@ -280,8 +280,8 @@ class QueueGetTests(_QueueTestBase):
 
     def test_get_with_waiting_putters(self):
         q = queues.Queue(loop=self.loop, maxsize=1)
-        t1 = tasks.Task(q.put('a'), loop=self.loop)
-        t2 = tasks.Task(q.put('b'), loop=self.loop)
+        tasks.Task(q.put('a'), loop=self.loop)
+        tasks.Task(q.put('b'), loop=self.loop)
         test_utils.run_briefly(self.loop)
         self.assertEqual(self.loop.run_until_complete(q.get()), 'a')
         self.assertEqual(self.loop.run_until_complete(q.get()), 'b')
@@ -363,14 +363,14 @@ class QueuePutTests(_QueueTestBase):
     def test_put_cancelled_race(self):
         q = queues.Queue(loop=self.loop, maxsize=1)
 
-        t1 = tasks.Task(q.put('a'), loop=self.loop)
-        t2 = tasks.Task(q.put('b'), loop=self.loop)
-        t3 = tasks.Task(q.put('c'), loop=self.loop)
+        tasks.Task(q.put('a'), loop=self.loop)
+        tasks.Task(q.put('c'), loop=self.loop)
+        t = tasks.Task(q.put('b'), loop=self.loop)
 
         test_utils.run_briefly(self.loop)
-        t2.cancel()
+        t.cancel()
         test_utils.run_briefly(self.loop)
-        self.assertTrue(t2.done())
+        self.assertTrue(t.done())
         self.assertEqual(q.get_nowait(), 'a')
         self.assertEqual(q.get_nowait(), 'c')
 

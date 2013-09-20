@@ -3,7 +3,6 @@
 import unittest
 import unittest.mock
 
-from tulip import futures
 from tulip import transports
 
 

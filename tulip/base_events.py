@@ -430,8 +430,8 @@ class BaseEventLoop(events.AbstractEventLoop):
                         sock.bind(sa)
                     except OSError as err:
                         raise OSError(err.errno, 'error while attempting '
-                                           'to bind on address %r: %s'
-                                           % (sa, err.strerror.lower()))
+                                      'to bind on address %r: %s'
+                                      % (sa, err.strerror.lower()))
                 completed = True
             finally:
                 if not completed:

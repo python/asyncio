@@ -25,7 +25,6 @@ import logging
 import os
 import re
 import sys
-import subprocess
 import unittest
 import textwrap
 import importlib.machinery

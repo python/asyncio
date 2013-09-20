@@ -15,7 +15,6 @@ except ImportError:
 from tulip import futures
 from tulip import selectors
 from tulip import test_utils
-from tulip.events import AbstractEventLoop
 from tulip.protocols import DatagramProtocol, Protocol
 from tulip.selector_events import BaseSelectorEventLoop
 from tulip.selector_events import _SelectorTransport
@@ -525,10 +524,10 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         reader._cancelled = False
 
         self.loop._add_callback = unittest.mock.Mock()
-        self.loop._process_events([
-            (selectors.SelectorKey(1, 1, selectors.EVENT_READ, (reader, None)),
-             selectors.EVENT_READ),
-            ])
+        self.loop._process_events(
+            [(selectors.SelectorKey(
+                1, 1, selectors.EVENT_READ, (reader, None)),
+              selectors.EVENT_READ)])
         self.assertTrue(self.loop._add_callback.called)
         self.loop._add_callback.assert_called_with(reader)
 
@@ -537,10 +536,10 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         reader.cancelled = True
 
         self.loop.remove_reader = unittest.mock.Mock()
-        self.loop._process_events([
-            (selectors.SelectorKey(1, 1, selectors.EVENT_READ, (reader, None)),
-             selectors.EVENT_READ),
-            ])
+        self.loop._process_events(
+            [(selectors.SelectorKey(
+                1, 1, selectors.EVENT_READ, (reader, None)),
+             selectors.EVENT_READ)])
         self.loop.remove_reader.assert_called_with(1)
 
     def test_process_events_write(self):
@@ -548,11 +547,10 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         writer._cancelled = False
 
         self.loop._add_callback = unittest.mock.Mock()
-        self.loop._process_events([
-            (selectors.SelectorKey(1, 1, selectors.EVENT_WRITE,
-                                   (None, writer)),
-             selectors.EVENT_WRITE),
-            ])
+        self.loop._process_events(
+            [(selectors.SelectorKey(1, 1, selectors.EVENT_WRITE,
+                                    (None, writer)),
+              selectors.EVENT_WRITE)])
         self.loop._add_callback.assert_called_with(writer)
 
     def test_process_events_write_cancelled(self):
@@ -560,11 +558,10 @@ class BaseSelectorEventLoopTests(unittest.TestCase):
         writer.cancelled = True
         self.loop.remove_writer = unittest.mock.Mock()
 
-        self.loop._process_events([
-            (selectors.SelectorKey(1, 1, selectors.EVENT_WRITE,
-                                   (None, writer)),
-             selectors.EVENT_WRITE),
-            ])
+        self.loop._process_events(
+            [(selectors.SelectorKey(1, 1, selectors.EVENT_WRITE,
+                                    (None, writer)),
+              selectors.EVENT_WRITE)])
         self.loop.remove_writer.assert_called_with(1)
 
 

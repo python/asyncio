@@ -794,8 +794,6 @@ class TaskTests(unittest.TestCase):
 
         loop = test_utils.TestLoop(gen)
         self.addCleanup(loop.close)
-        completed = set()
-        time_shifted = False
 
         a = tasks.sleep(0.05, 'a', loop=loop)
         b = tasks.sleep(0.10, 'b', loop=loop)
@@ -1059,7 +1057,7 @@ class TaskTests(unittest.TestCase):
             yield fut
 
         task = wait_for_future()
-        with self.assertRaises(RuntimeError) as cm:
+        with self.assertRaises(RuntimeError):
             self.loop.run_until_complete(task)
 
         self.assertFalse(fut.done())

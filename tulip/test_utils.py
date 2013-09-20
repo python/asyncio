@@ -351,9 +351,9 @@ class TestLoop(base_events.BaseEventLoop):
         super().__init__()
 
         if gen is None:
-            self._check_on_close = False
             def gen():
                 yield
+            self._check_on_close = False
         else:
             self._check_on_close = True
 

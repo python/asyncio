@@ -24,7 +24,7 @@ __all__ = ['socketpair', 'pipe', 'Popen', 'PIPE', 'PipeHandle']
 
 BUFSIZE = 8192
 PIPE = subprocess.PIPE
-_mmap_counter=itertools.count()
+_mmap_counter = itertools.count()
 
 #
 # Replacement for socket.socketpair()

@@ -932,6 +932,18 @@ class SelectorSocketTransportTests(unittest.TestCase):
         transport._write_ready()
         transport._fatal_error.assert_called_with(err)
 
+    @unittest.mock.patch('tulip.selector_events.tulip_log')
+    def test_write_ready_exception_and_close(self, m_log):
+        self.sock.send.side_effect = OSError()
+        remove_writer = self.loop.remove_writer = unittest.mock.Mock()
+
+        transport = _SelectorSocketTransport(
+            self.loop, self.sock, self.protocol)
+        transport.close()
+        transport._buffer.append(b'data')
+        transport._write_ready()
+        remove_writer.assert_called_with(self.sock_fd)
+
     def test_pause_writing(self):
         transport = _SelectorSocketTransport(
             self.loop, self.sock, self.protocol)

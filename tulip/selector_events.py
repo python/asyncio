@@ -352,13 +352,16 @@ class _SelectorTransport(transports.Transport):
         self._force_close(exc)
 
     def _force_close(self, exc):
+        if self._buffer:
+            self._buffer.clear()
+            self._loop.remove_writer(self._sock_fd)
+
         if self._closing:
             return
+
         self._closing = True
         self._conn_lost += 1
-        self._loop.remove_writer(self._sock_fd)
         self._loop.remove_reader(self._sock_fd)
-        self._buffer.clear()
         self._loop.call_soon(self._call_connection_lost, exc)
 
     def _call_connection_lost(self, exc):
@@ -441,6 +444,7 @@ class _SelectorSocketTransport(_SelectorTransport):
         except (BlockingIOError, InterruptedError):
             self._buffer.append(data)
         except Exception as exc:
+            self._loop.remove_writer(self._sock_fd)
             self._fatal_error(exc)
         else:
             if n == len(data):
@@ -555,6 +559,7 @@ class _SelectorSslTransport(_SelectorTransport):
                     ssl.SSLWantReadError, ssl.SSLWantWriteError):
                 n = 0
             except Exception as exc:
+                self._loop.remove_writer(self._sock_fd)
                 self._fatal_error(exc)
                 return
 

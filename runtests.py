@@ -112,30 +112,46 @@ def load_modules(basedir, suffix='.py'):
     return mods
 
 
-def load_tests(testsdir, includes=(), excludes=()):
-    mods = [mod for mod, _ in load_modules(testsdir)]
+class TestsFinder:
 
-    loader = unittest.TestLoader()
-    suite = unittest.TestSuite()
+    def __init__(self, testsdir, includes=(), excludes=()):
+        self._testsdir = testsdir
+        self._includes = includes
+        self._excludes = excludes
+        self.find_available_tests()
 
-    for mod in mods:
-        for name in set(dir(mod)):
-            if name.endswith('Tests'):
-                test_module = getattr(mod, name)
-                tests = loader.loadTestsFromTestCase(test_module)
-                if includes:
-                    tests = [test
-                             for test in tests
-                             if any(re.search(pat, test.id())
-                                    for pat in includes)]
-                if excludes:
-                    tests = [test
-                             for test in tests
-                             if not any(re.search(pat, test.id())
-                                        for pat in excludes)]
-                suite.addTests(tests)
+    def find_available_tests(self):
+        """
+        Find available test classes without instantiating them.
+        """
+        self._test_factories = []
+        mods = [mod for mod, _ in load_modules(self._testsdir)]
+        for mod in mods:
+            for name in set(dir(mod)):
+                if name.endswith('Tests'):
+                    self._test_factories.append(getattr(mod, name))
 
-    return suite
+    def load_tests(self):
+        """
+        Load test cases from the available test classes and apply
+        optional include / exclude filters.
+        """
+        loader = unittest.TestLoader()
+        suite = unittest.TestSuite()
+        for test_factory in self._test_factories:
+            tests = loader.loadTestsFromTestCase(test_factory)
+            if self._includes:
+                tests = [test
+                         for test in tests
+                         if any(re.search(pat, test.id())
+                                for pat in self._includes)]
+            if self._excludes:
+                tests = [test
+                         for test in tests
+                         if not any(re.search(pat, test.id())
+                                    for pat in self._excludes)]
+            suite.addTests(tests)
+        return suite
 
 
 class TestResult(unittest.TextTestResult):
@@ -219,7 +235,7 @@ def runtests():
                                 )
         cov.start()
 
-    tests = load_tests(args.testsdir, includes, excludes)
+    finder = TestsFinder(args.testsdir, includes, excludes)
     logger = logging.getLogger()
     if v == 0:
         logger.setLevel(logging.CRITICAL)
@@ -236,11 +252,13 @@ def runtests():
     try:
         if args.forever:
             while True:
+                tests = finder.load_tests()
                 result = runner_factory(verbosity=v,
                                         failfast=failfast).run(tests)
                 if not result.wasSuccessful():
                     sys.exit(1)
         else:
+            tests = finder.load_tests()
             result = runner_factory(verbosity=v,
                                     failfast=failfast).run(tests)
             sys.exit(not result.wasSuccessful())

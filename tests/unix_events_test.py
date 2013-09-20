@@ -7,7 +7,6 @@ import pprint
 import signal
 import stat
 import sys
-import tempfile
 import unittest
 import unittest.mock
 
@@ -647,7 +646,6 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         self.assertEqual(1, tr._conn_lost)
         test_utils.run_briefly(self.loop)
         self.protocol.connection_lost.assert_called_with(err)
-
 
     @unittest.mock.patch('os.write')
     def test__write_ready_closing(self, m_write):

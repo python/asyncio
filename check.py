@@ -1,6 +1,8 @@
 """Search for lines >= 80 chars or with trailing whitespace."""
 
-import sys, os
+import os
+import sys
+
 
 def main():
     args = sys.argv[1:] or os.curdir
@@ -15,12 +17,14 @@ def main():
         else:
             process(arg)
 
+
 def isascii(x):
     try:
         x.encode('ascii')
         return True
     except UnicodeError:
         return False
+
 
 def process(fn):
     try:

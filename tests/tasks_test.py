@@ -1168,8 +1168,38 @@ class TaskTests(unittest.TestCase):
         test_utils.run_briefly(self.loop)
         self.assertEqual(proof, 101)
 
-    def test_yield_gather_blocks_cancel(self):
-        # Cancelling outer() cancels gather() but not inner().
+    def test_shield_result(self):
+        inner = futures.Future(loop=self.loop)
+        outer = tasks.shield(inner)
+        inner.set_result(42)
+        res = self.loop.run_until_complete(outer)
+        self.assertEqual(res, 42)
+
+    def test_shield_exception(self):
+        inner = futures.Future(loop=self.loop)
+        outer = tasks.shield(inner)
+        test_utils.run_briefly(self.loop)
+        exc = RuntimeError('expected')
+        inner.set_exception(exc)
+        test_utils.run_briefly(self.loop)
+        self.assertIs(outer.exception(), exc)
+
+    def test_shield_cancel(self):
+        inner = futures.Future(loop=self.loop)
+        outer = tasks.shield(inner)
+        test_utils.run_briefly(self.loop)
+        inner.cancel()
+        test_utils.run_briefly(self.loop)
+        self.assertTrue(outer.cancelled())
+
+    def test_shield_shortcut(self):
+        fut = futures.Future(loop=self.loop)
+        fut.set_result(42)
+        res = self.loop.run_until_complete(tasks.shield(fut))
+        self.assertEqual(res, 42)
+
+    def test_shield_effect(self):
+        # Cancelling outer() does not affect inner().
         proof = 0
         waiter = futures.Future(loop=self.loop)
 
@@ -1182,7 +1212,7 @@ class TaskTests(unittest.TestCase):
         @tasks.coroutine
         def outer():
             nonlocal proof
-            yield from tasks.gather(inner(), loop=self.loop)
+            yield from tasks.shield(inner(), loop=self.loop)
             proof += 100
 
         f = tasks.async(outer(), loop=self.loop)
@@ -1193,6 +1223,38 @@ class TaskTests(unittest.TestCase):
         waiter.set_result(None)
         test_utils.run_briefly(self.loop)
         self.assertEqual(proof, 1)
+
+    def test_shield_gather(self):
+        child1 = futures.Future(loop=self.loop)
+        child2 = futures.Future(loop=self.loop)
+        parent = tasks.gather(child1, child2, loop=self.loop)
+        outer = tasks.shield(parent, loop=self.loop)
+        test_utils.run_briefly(self.loop)
+        outer.cancel()
+        test_utils.run_briefly(self.loop)
+        self.assertTrue(outer.cancelled())
+        child1.set_result(1)
+        child2.set_result(2)
+        test_utils.run_briefly(self.loop)
+        self.assertEqual(parent.result(), [1, 2])
+
+    def test_gather_shield(self):
+        child1 = futures.Future(loop=self.loop)
+        child2 = futures.Future(loop=self.loop)
+        inner1 = tasks.shield(child1, loop=self.loop)
+        inner2 = tasks.shield(child2, loop=self.loop)
+        parent = tasks.gather(inner1, inner2, loop=self.loop)
+        test_utils.run_briefly(self.loop)
+        parent.cancel()
+        # This should cancel inner1 and inner2 but bot child1 and child2.
+        test_utils.run_briefly(self.loop)
+        self.assertIsInstance(parent.exception(), futures.CancelledError)
+        self.assertTrue(inner1.cancelled())
+        self.assertTrue(inner2.cancelled())
+        child1.set_result(1)
+        child2.set_result(2)
+        test_utils.run_briefly(self.loop)
+
 
 
 class GatherTestsBase:
@@ -1320,7 +1382,8 @@ class FutureGatherTests(GatherTestsBase, unittest.TestCase):
         self._run_loop(self.one_loop)
         self.assertTrue(fut.done())
         cb.assert_called_once_with(fut)
-        self.assertTrue(fut.cancelled())
+        self.assertFalse(fut.cancelled())
+        self.assertIsInstance(fut.exception(), futures.CancelledError)
         # Does nothing
         c.set_result(3)
         d.cancel()
@@ -1333,16 +1396,21 @@ class FutureGatherTests(GatherTestsBase, unittest.TestCase):
         cb = Mock()
         fut.add_done_callback(cb)
         a.set_result(1)
-        b.set_exception(ZeroDivisionError())
+        zde = ZeroDivisionError()
+        b.set_exception(zde)
         c.cancel()
         self._run_loop(self.one_loop)
-        self.assertTrue(fut.done())
-        cb.assert_called_once_with(fut)
-        self.assertTrue(fut.cancelled())
-        # Does nothing
+        self.assertFalse(fut.done())
         d.set_result(3)
         e.cancel()
-        f.set_exception(RuntimeError())
+        rte = RuntimeError()
+        f.set_exception(rte)
+        res = self.one_loop.run_until_complete(fut)
+        self.assertIsInstance(res[2], futures.CancelledError)
+        self.assertIsInstance(res[4], futures.CancelledError)
+        res[2] = res[4] = None
+        self.assertEqual(res, [1, zde, None, 3, None, rte])
+        cb.assert_called_once_with(fut)
 
 
 class CoroutineGatherTests(GatherTestsBase, unittest.TestCase):
@@ -1366,12 +1434,68 @@ class CoroutineGatherTests(GatherTestsBase, unittest.TestCase):
     def test_constructor_loop_selection(self):
         @tasks.coroutine
         def coro():
-            yield from []
             return 'abc'
         fut = tasks.gather(coro(), coro())
         self.assertIs(fut._loop, self.one_loop)
         fut = tasks.gather(coro(), coro(), loop=self.other_loop)
         self.assertIs(fut._loop, self.other_loop)
+
+    def test_cancellation_broadcast(self):
+        # Cancelling outer() cancels all children.
+        proof = 0
+        waiter = futures.Future(loop=self.one_loop)
+
+        @tasks.coroutine
+        def inner():
+            nonlocal proof
+            yield from waiter
+            proof += 1
+
+        child1 = tasks.async(inner(), loop=self.one_loop)
+        child2 = tasks.async(inner(), loop=self.one_loop)
+        gatherer = None
+
+        @tasks.coroutine
+        def outer():
+            nonlocal proof, gatherer
+            gatherer = tasks.gather(child1, child2, loop=self.one_loop)
+            yield from gatherer
+            proof += 100
+
+        f = tasks.async(outer(), loop=self.one_loop)
+        test_utils.run_briefly(self.one_loop)
+        self.assertTrue(f.cancel())
+        with self.assertRaises(futures.CancelledError):
+            self.one_loop.run_until_complete(f)
+        self.assertFalse(gatherer.cancel())
+        self.assertTrue(waiter.cancelled())
+        self.assertTrue(child1.cancelled())
+        self.assertTrue(child2.cancelled())
+        test_utils.run_briefly(self.one_loop)
+        self.assertEqual(proof, 0)
+
+    def test_exception_marking(self):
+        # Test for the first line marked "Mark exception retrieved."
+
+        @tasks.coroutine
+        def inner(f):
+            yield from f
+            raise RuntimeError('should not be ignored')
+
+        a = futures.Future(loop=self.one_loop)
+        b = futures.Future(loop=self.one_loop)
+
+        @tasks.coroutine
+        def outer():
+            yield from tasks.gather(inner(a), inner(b), loop=self.one_loop)
+
+        f = tasks.async(outer(), loop=self.one_loop)
+        test_utils.run_briefly(self.one_loop)
+        a.set_result(None)
+        test_utils.run_briefly(self.one_loop)
+        b.set_result(None)
+        test_utils.run_briefly(self.one_loop)
+        self.assertIsInstance(f.exception(), RuntimeError)
 
 
 if __name__ == '__main__':

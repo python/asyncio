@@ -337,18 +337,45 @@ def async(coro_or_future, *, loop=None):
         raise TypeError('A Future or coroutine is required')
 
 
+class _GatheringFuture(futures.Future):
+    """Helper for gather().
+
+    This overrides cancel() to cancel all the children and act more
+    like Task.cancel(), which doesn't immediately mark itself as
+    cancelled.
+    """
+
+    def __init__(self, children, *, loop=None):
+        super().__init__(loop=loop)
+        self._children = children
+
+    def cancel(self):
+        if self.done():
+            return False
+        for child in self._children:
+            child.cancel()
+        return True
+
+
 def gather(*coros_or_futures, loop=None, return_exceptions=False):
     """Return a future aggregating results from the given coroutines
     or futures.
 
-    All futures must share the same event loop.  If all the tasks
-    are done successfully, the returned future's result is the list of
-    results (in the order of the original sequence, not necessarily the
-    order of results arrival).  If one of the tasks is cancelled, the
-    returned future is immediately cancelled too.  If *result_exception*
-    is True, exceptions in the tasks are treated the same as successful
-    results, and gathered in the result list; otherwise, the first raised
-    exception will be immediately propagated to the returned future.
+    All futures must share the same event loop.  If all the tasks are
+    done successfully, the returned future's result is the list of
+    results (in the order of the original sequence, not necessarily
+    the order of results arrival).  If *result_exception* is True,
+    exceptions in the tasks are treated the same as successful
+    results, and gathered in the result list; otherwise, the first
+    raised exception will be immediately propagated to the returned
+    future.
+
+    Cancellation: if the outer Future is cancelled, all children (that
+    have not completed yet) are also cancelled.  If any child is
+    cancelled, this is treated as if it raised CancelledError --
+    the outer Future is *not* cancelled in this case.  (This is to
+    prevent the cancellation of one child to cause other children to
+    be cancelled.)
     """
     children = [async(fut, loop=loop) for fut in coros_or_futures]
     n = len(children)
@@ -361,7 +388,7 @@ def gather(*coros_or_futures, loop=None, return_exceptions=False):
     for fut in children:
         if fut._loop is not loop:
             raise ValueError("futures are tied to different event loops")
-    outer = futures.Future(loop=loop)
+    outer = _GatheringFuture(children, loop=loop)
     nfinished = 0
     results = [None] * n
 
@@ -369,17 +396,19 @@ def gather(*coros_or_futures, loop=None, return_exceptions=False):
         nonlocal nfinished
         if outer._state != futures._PENDING:
             if fut._exception is not None:
-                # Be sure to mark the result retrieved
+                # Mark exception retrieved.
                 fut.exception()
             return
         if fut._state == futures._CANCELLED:
-            outer.cancel()
-            return
-        elif fut._exception is not None:
+            res = futures.CancelledError()
             if not return_exceptions:
-                outer.set_exception(fut.exception())
+                outer.set_exception(res)
                 return
-            res = fut.exception()
+        elif fut._exception is not None:
+            res = fut.exception()  # Mark exception retrieved.
+            if not return_exceptions:
+                outer.set_exception(res)
+                return
         else:
             res = fut._result
         results[i] = res
@@ -389,4 +418,55 @@ def gather(*coros_or_futures, loop=None, return_exceptions=False):
 
     for i, fut in enumerate(children):
         fut.add_done_callback(functools.partial(_done_callback, i))
+    return outer
+
+
+def shield(arg, *, loop=None):
+    """Wait for a future, shielding it from cancellation.
+
+    The statement
+
+        res = yield from shield(something())
+
+    is exactly equivalent to the statement
+
+        res = yield from something()
+
+    *except* that if the coroutine containing it is cancelled, the
+    task running in something() is not cancelled.  From the POV of
+    something(), the cancellation did not happen.  But its caller is
+    still cancelled, so the yield-from expression still raises
+    CancelledError.  Note: If something() is cancelled by other means
+    this will still cancel shield().
+
+    If you want to completely ignore cancellation (not recommended)
+    you can combine shield() with a try/except clause, as follows:
+
+        try:
+            res = yield from shield(something())
+        except CancelledError:
+            res = None
+    """
+    inner = async(arg, loop=loop)
+    if inner.done():
+        # Shortcut.
+        return inner
+    loop = inner._loop
+    outer = futures.Future(loop=loop)
+
+    def _done_callback(inner):
+        if outer.cancelled():
+            # Mark inner's result as retrieved.
+            inner.cancelled() or inner.exception()
+            return
+        if inner.cancelled():
+            outer.cancel()
+        else:
+            exc = inner.exception()
+            if exc is not None:
+                outer.set_exception(exc)
+            else:
+                outer.set_result(inner.result())
+
+    inner.add_done_callback(_done_callback)
     return outer

@@ -338,6 +338,22 @@ class StreamReaderTests(unittest.TestCase):
 
         self.assertRaises(ValueError, t1.result)
 
+    def test_exception_cancel(self):
+        stream = streams.StreamReader(loop=self.loop)
+
+        @tasks.coroutine
+        def read_a_line():
+            yield from stream.readline()
+
+        t = tasks.Task(read_a_line(), loop=self.loop)
+        test_utils.run_briefly(self.loop)
+        t.cancel()
+        test_utils.run_briefly(self.loop)
+        # The following line fails if set_exception() isn't careful.
+        stream.set_exception(RuntimeError('message'))
+        test_utils.run_briefly(self.loop)
+        self.assertIs(stream.waiter, None)
+
 
 if __name__ == '__main__':
     unittest.main()

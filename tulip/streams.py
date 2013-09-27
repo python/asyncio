@@ -89,14 +89,15 @@ class StreamReader:
         waiter = self.waiter
         if waiter is not None:
             self.waiter = None
-            waiter.set_exception(exc)
+            if not waiter.cancelled():
+                waiter.set_exception(exc)
 
     def feed_eof(self):
         self.eof = True
         waiter = self.waiter
         if waiter is not None:
             self.waiter = None
-            if not waiter.done():
+            if not waiter.cancelled():
                 waiter.set_result(True)
 
     def feed_data(self, data):
@@ -109,7 +110,7 @@ class StreamReader:
         waiter = self.waiter
         if waiter is not None:
             self.waiter = None
-            if not waiter.done():
+            if not waiter.cancelled():
                 waiter.set_result(False)
 
     @tasks.coroutine

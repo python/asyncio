@@ -377,6 +377,7 @@ class _SelectorSocketTransport(_SelectorTransport):
 
     def __init__(self, loop, sock, protocol, waiter=None, extra=None):
         super().__init__(loop, sock, protocol, extra)
+        self._eof = False
 
         self._loop.add_reader(self._sock_fd, self._read_ready)
         self._loop.call_soon(self._protocol.connection_made, self)
@@ -402,7 +403,8 @@ class _SelectorSocketTransport(_SelectorTransport):
                     self.close()
 
     def write(self, data):
-        assert isinstance(data, bytes), repr(data)
+        assert isinstance(data, bytes), repr(data)[:100]
+        assert not self._eof, 'Cannot call write() after write_eof()'
         if not data:
             return
 
@@ -447,11 +449,23 @@ class _SelectorSocketTransport(_SelectorTransport):
                 self._loop.remove_writer(self._sock_fd)
                 if self._closing:
                     self._call_connection_lost(None)
+                elif self._eof:
+                    self._sock.shutdown(socket.SHUT_WR)
                 return
             elif n:
                 data = data[n:]
 
             self._buffer.append(data)  # Try again later.
+
+    def write_eof(self):
+        if self._eof:
+            return
+        self._eof = True
+        if not self._buffer:
+            self._sock.shutdown(socket.SHUT_WR)
+
+    def can_write_eof(self):
+        return True
 
 
 class _SelectorSslTransport(_SelectorTransport):
@@ -563,14 +577,18 @@ class _SelectorSslTransport(_SelectorTransport):
         self._buffer.append(data)
         # We could optimize, but the callback can do this for now.
 
+    def write_eof(self):
+        raise RuntimeError('SSL transport does not support write_eof().')
+
+    def can_write_eof(self):
+        return False
+
     def close(self):
         if self._closing:
             return
         self._closing = True
         self._conn_lost += 1
         self._loop.remove_reader(self._sock_fd)
-
-    # TODO: write_eof(), can_write_eof().
 
 
 class _SelectorDatagramTransport(_SelectorTransport):

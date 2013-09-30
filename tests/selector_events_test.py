@@ -1030,6 +1030,17 @@ class SelectorSslTransportTests(unittest.TestCase):
         self.assertTrue(transport._waiter.done())
         self.assertIs(exc, transport._waiter.exception())
 
+    def test_pause_resume(self):
+        tr = self._make_one()
+        self.assertFalse(tr._paused)
+        self.loop.assert_reader(1, tr._on_ready)
+        tr.pause()
+        self.assertTrue(tr._paused)
+        self.assertFalse(1 in self.loop.readers)
+        tr.resume()
+        self.assertFalse(tr._paused)
+        self.loop.assert_reader(1, tr._on_ready)
+
     def test_write_no_data(self):
         transport = self._make_one()
         transport._buffer.append(b'data')

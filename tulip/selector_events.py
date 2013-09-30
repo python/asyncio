@@ -500,6 +500,7 @@ class _SelectorSslTransport(_SelectorTransport):
         self._waiter = waiter
         self._rawsock = rawsock
         self._sslcontext = sslcontext
+        self._paused = False
 
         self._on_handshake()
 
@@ -530,6 +531,25 @@ class _SelectorSslTransport(_SelectorTransport):
         if self._waiter is not None:
             self._loop.call_soon(self._waiter.set_result, None)
 
+    def pause(self):
+        # XXX This is a bit icky, given the comment at the top of
+        # _on_ready().  Is it possible to evoke a deadlock?  I don't
+        # know, although it doesn't look like it; write() will still
+        # accept more data for the buffer and eventually the app will
+        # call resume() again, and things will flow again.
+
+        assert not self._closing, 'Cannot pause() when closing'
+        assert not self._paused, 'Already paused'
+        self._paused = True
+        self._loop.remove_reader(self._sock_fd)
+
+    def resume(self):
+        assert self._paused, 'Not paused'
+        self._paused = False
+        if self._closing:
+            return
+        self._loop.add_reader(self._sock_fd, self._on_ready)
+
     def _on_ready(self):
         # Because of renegotiations (?), there's no difference between
         # readable and writable.  We just try both.  XXX This may be
@@ -537,7 +557,7 @@ class _SelectorSslTransport(_SelectorTransport):
         # should do next.
 
         # First try reading.
-        if not self._closing:
+        if not self._closing and not self._paused:
             try:
                 data = self._sock.recv(8192)
             except (BlockingIOError, InterruptedError,

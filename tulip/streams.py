@@ -54,6 +54,9 @@ class StreamReaderProtocol(protocols.Protocol):
     def __init__(self, stream_reader):
         self.stream_reader = stream_reader
 
+    def connection_made(self, transport):
+        self.stream_reader.set_transport(transport)
+
     def connection_lost(self, exc):
         if exc is None:
             self.stream_reader.feed_eof()
@@ -70,7 +73,9 @@ class StreamReaderProtocol(protocols.Protocol):
 class StreamReader:
 
     def __init__(self, limit=_DEFAULT_LIMIT, loop=None):
-        self.limit = limit  # Max line length.  (Security feature.)
+        # The line length limit is  a security feature;
+        # it also doubles as half the buffer limit.
+        self.limit = limit
         if loop is None:
             loop = events.get_event_loop()
         self.loop = loop
@@ -79,6 +84,8 @@ class StreamReader:
         self.eof = False  # Whether we're done.
         self.waiter = None  # A future.
         self._exception = None
+        self._transport = None
+        self._paused = False
 
     def exception(self):
         return self._exception
@@ -91,6 +98,15 @@ class StreamReader:
             self.waiter = None
             if not waiter.cancelled():
                 waiter.set_exception(exc)
+
+    def set_transport(self, transport):
+        assert self._transport is None, 'Transport already set'
+        self._transport = transport
+
+    def _maybe_resume_transport(self):
+        if self._paused and self.byte_count <= self.limit:
+            self._paused = False
+            self._transport.resume()
 
     def feed_eof(self):
         self.eof = True
@@ -112,6 +128,19 @@ class StreamReader:
             self.waiter = None
             if not waiter.cancelled():
                 waiter.set_result(False)
+
+        if (self._transport is not None and
+            not self._paused and
+            self.byte_count > 2*self.limit):
+            try:
+                self._transport.pause()
+            except NotImplementedError:
+                # The transport can't be paused.
+                # We'll just have to buffer all data.
+                # Forget the transport so we don't keep trying.
+                self._transport = None
+            else:
+                self._paused = True
 
     @tasks.coroutine
     def readline(self):
@@ -140,6 +169,7 @@ class StreamReader:
 
                 if parts_size > self.limit:
                     self.byte_count -= parts_size
+                    self._maybe_resume_transport()
                     raise ValueError('Line is too long')
 
             if self.eof:
@@ -148,10 +178,14 @@ class StreamReader:
             if not_enough:
                 assert self.waiter is None
                 self.waiter = futures.Future(loop=self.loop)
-                yield from self.waiter
+                try:
+                    yield from self.waiter
+                finally:
+                    self.waiter = None
 
         line = b''.join(parts)
         self.byte_count -= parts_size
+        self._maybe_resume_transport()
 
         return line
 
@@ -167,17 +201,24 @@ class StreamReader:
             while not self.eof:
                 assert not self.waiter
                 self.waiter = futures.Future(loop=self.loop)
-                yield from self.waiter
+                try:
+                    yield from self.waiter
+                finally:
+                    self.waiter = None
         else:
             if not self.byte_count and not self.eof:
                 assert not self.waiter
                 self.waiter = futures.Future(loop=self.loop)
-                yield from self.waiter
+                try:
+                    yield from self.waiter
+                finally:
+                    self.waiter = None
 
         if n < 0 or self.byte_count <= n:
             data = b''.join(self.buffer)
             self.buffer.clear()
             self.byte_count = 0
+            self._maybe_resume_transport()
             return data
 
         parts = []
@@ -193,6 +234,7 @@ class StreamReader:
             parts.append(data)
             parts_bytes += data_bytes
             self.byte_count -= data_bytes
+            self._maybe_resume_transport()
 
         return b''.join(parts)
 
@@ -207,6 +249,9 @@ class StreamReader:
         while self.byte_count < n and not self.eof:
             assert not self.waiter
             self.waiter = futures.Future(loop=self.loop)
-            yield from self.waiter
+            try:
+                yield from self.waiter
+            finally:
+                self.waiter = None
 
         return (yield from self.read(n))

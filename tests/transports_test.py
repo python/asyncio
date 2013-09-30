@@ -37,9 +37,6 @@ class TransportTests(unittest.TestCase):
         self.assertRaises(NotImplementedError, transport.resume)
         self.assertRaises(NotImplementedError, transport.close)
         self.assertRaises(NotImplementedError, transport.abort)
-        self.assertRaises(NotImplementedError, transport.pause_writing)
-        self.assertRaises(NotImplementedError, transport.resume_writing)
-        self.assertRaises(NotImplementedError, transport.discard_output)
 
     def test_dgram_not_implemented(self):
         transport = transports.DatagramTransport()

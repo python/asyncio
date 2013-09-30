@@ -39,39 +39,6 @@ class ProactorTests(unittest.TestCase):
         self.loop.close()
         self.loop = None
 
-    def test_pause_resume_discard(self):
-        a, b = self.loop._socketpair()
-        trans = self.loop._make_write_pipe_transport(a, protocols.Protocol())
-        reader = connect_read_pipe(self.loop, b)
-        f = tulip.async(reader.readline(), loop=self.loop)
-
-        trans.write(b'msg1\n')
-        self.loop.run_until_complete(f)
-        self.assertEqual(f.result(), b'msg1\n')
-        f = tulip.async(reader.readline(), loop=self.loop)
-
-        trans.pause_writing()
-        trans.write(b'msg2\n')
-        test_utils.run_briefly(self.loop)
-        self.assertEqual(trans._buffer, [b'msg2\n'])
-
-        trans.resume_writing()
-        self.loop.run_until_complete(f)
-        self.assertEqual(f.result(), b'msg2\n')
-        f = tulip.async(reader.readline(), loop=self.loop)
-
-        trans.pause_writing()
-        trans.write(b'msg3\n')
-        self.assertEqual(trans._buffer, [b'msg3\n'])
-        trans.discard_output()
-        self.assertEqual(trans._buffer, [])
-
-        trans.write(b'msg4\n')
-        self.assertEqual(trans._buffer, [b'msg4\n'])
-        trans.resume_writing()
-        self.loop.run_until_complete(f)
-        self.assertEqual(f.result(), b'msg4\n')
-
     def test_close(self):
         a, b = self.loop._socketpair()
         trans = self.loop._make_socket_transport(a, protocols.Protocol())

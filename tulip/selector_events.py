@@ -378,11 +378,25 @@ class _SelectorSocketTransport(_SelectorTransport):
     def __init__(self, loop, sock, protocol, waiter=None, extra=None):
         super().__init__(loop, sock, protocol, extra)
         self._eof = False
+        self._paused = False
 
         self._loop.add_reader(self._sock_fd, self._read_ready)
         self._loop.call_soon(self._protocol.connection_made, self)
         if waiter is not None:
             self._loop.call_soon(waiter.set_result, None)
+
+    def pause(self):
+        assert not self._closing, 'Cannot pause() when closing'
+        assert not self._paused, 'Already paused'
+        self._paused = True
+        self._loop.remove_reader(self._sock_fd)
+
+    def resume(self):
+        assert self._paused, 'Not paused'
+        self._paused = False
+        if self._closing:
+            return
+        self._loop.add_reader(self._sock_fd, self._read_ready)
 
     def _read_ready(self):
         try:

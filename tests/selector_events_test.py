@@ -675,6 +675,18 @@ class SelectorSocketTransportTests(unittest.TestCase):
         test_utils.run_briefly(self.loop)
         self.assertIsNone(fut.result())
 
+    def test_pause_resume(self):
+        tr = _SelectorSocketTransport(
+            self.loop, self.sock, self.protocol)
+        self.assertFalse(tr._paused)
+        self.loop.assert_reader(7, tr._read_ready)
+        tr.pause()
+        self.assertTrue(tr._paused)
+        self.assertFalse(7 in self.loop.readers)
+        tr.resume()
+        self.assertFalse(tr._paused)
+        self.loop.assert_reader(7, tr._read_ready)
+
     def test_read_ready(self):
         transport = _SelectorSocketTransport(
             self.loop, self.sock, self.protocol)

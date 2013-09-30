@@ -276,7 +276,6 @@ class _UnixWritePipeTransport(transports.WriteTransport):
         self._buffer = []
         self._conn_lost = 0
         self._closing = False  # Set when close() or write_eof() called.
-        self._writing = True
         self._loop.add_reader(self._fileno, self._read_ready)
 
         self._loop.call_soon(self._protocol.connection_made, self)
@@ -300,7 +299,7 @@ class _UnixWritePipeTransport(transports.WriteTransport):
             self._conn_lost += 1
             return
 
-        if not self._buffer and self._writing:
+        if not self._buffer:
             # Attempt to send it right away first.
             try:
                 n = os.write(self._fileno, data)
@@ -319,9 +318,6 @@ class _UnixWritePipeTransport(transports.WriteTransport):
         self._buffer.append(data)
 
     def _write_ready(self):
-        if not self._writing:
-            return
-
         data = b''.join(self._buffer)
         assert data, 'Data should not be empty'
 
@@ -388,23 +384,6 @@ class _UnixWritePipeTransport(transports.WriteTransport):
             self._pipe = None
             self._protocol = None
             self._loop = None
-
-    def pause_writing(self):
-        if self._writing:
-            if self._buffer:
-                self._loop.remove_writer(self._fileno)
-            self._writing = False
-
-    def resume_writing(self):
-        if not self._writing:
-            if self._buffer:
-                self._loop.add_writer(self._fileno, self._write_ready)
-            self._writing = True
-
-    def discard_output(self):
-        if self._buffer:
-            self._loop.remove_writer(self._fileno)
-            self._buffer.clear()
 
 
 class _UnixWriteSubprocessPipeProto(protocols.BaseProtocol):

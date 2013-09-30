@@ -25,7 +25,6 @@ class _ProactorBasePipeTransport(transports.BaseTransport):
         self._buffer = []
         self._read_fut = None
         self._write_fut = None
-        self._writing_disabled = False
         self._conn_lost = 0
         self._closing = False  # Set when close() called.
         self._loop.call_soon(self._protocol.connection_made, self)
@@ -140,7 +139,7 @@ class _ProactorWritePipeTransport(_ProactorBasePipeTransport,
             self._conn_lost += 1
             return
         self._buffer.append(data)
-        if self._write_fut is None and not self._writing_disabled:
+        if self._write_fut is None:
             self._loop_writing()
 
     def _loop_writing(self, f=None):
@@ -155,9 +154,8 @@ class _ProactorWritePipeTransport(_ProactorBasePipeTransport,
                 if self._closing:
                     self._loop.call_soon(self._call_connection_lost, None)
                 return
-            if not self._writing_disabled:
-                self._write_fut = self._loop._proactor.send(self._sock, data)
-                self._write_fut.add_done_callback(self._loop_writing)
+            self._write_fut = self._loop._proactor.send(self._sock, data)
+            self._write_fut.add_done_callback(self._loop_writing)
         except OSError as exc:
             self._fatal_error(exc)
 
@@ -165,18 +163,6 @@ class _ProactorWritePipeTransport(_ProactorBasePipeTransport,
 
     def abort(self):
         self._force_close(None)
-
-    def pause_writing(self):
-        self._writing_disabled = True
-
-    def resume_writing(self):
-        self._writing_disabled = False
-        if self._buffer and self._write_fut is None:
-            self._loop_writing()
-
-    def discard_output(self):
-        if self._buffer:
-            self._buffer = []
 
 
 class _ProactorSocketTransport(_ProactorReadPipeTransport,

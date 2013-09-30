@@ -331,7 +331,6 @@ class _SelectorTransport(transports.Transport):
         self._protocol = protocol
         self._buffer = []
         self._conn_lost = 0
-        self._writing = True
         self._closing = False  # Set when close() called.
 
     def abort(self):
@@ -413,7 +412,7 @@ class _SelectorSocketTransport(_SelectorTransport):
             self._conn_lost += 1
             return
 
-        if not self._buffer and self._writing:
+        if not self._buffer:
             # Attempt to send it right away first.
             try:
                 n = self._sock.send(data)
@@ -432,9 +431,6 @@ class _SelectorSocketTransport(_SelectorTransport):
         self._buffer.append(data)
 
     def _write_ready(self):
-        if not self._writing:
-            return  # transmission off
-
         data = b''.join(self._buffer)
         assert data, 'Data should not be empty'
 
@@ -456,23 +452,6 @@ class _SelectorSocketTransport(_SelectorTransport):
                 data = data[n:]
 
             self._buffer.append(data)  # Try again later.
-
-    def pause_writing(self):
-        if self._writing:
-            if self._buffer:
-                self._loop.remove_writer(self._sock_fd)
-            self._writing = False
-
-    def resume_writing(self):
-        if not self._writing:
-            if self._buffer:
-                self._loop.add_writer(self._sock_fd, self._write_ready)
-            self._writing = True
-
-    def discard_output(self):
-        if self._buffer:
-            self._loop.remove_writer(self._sock_fd)
-            self._buffer.clear()
 
 
 class _SelectorSslTransport(_SelectorTransport):

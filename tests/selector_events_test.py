@@ -666,7 +666,6 @@ class SelectorSocketTransportTests(unittest.TestCase):
         self.loop.assert_reader(7, tr._read_ready)
         test_utils.run_briefly(self.loop)
         self.protocol.connection_made.assert_called_with(tr)
-        self.assertTrue(tr._writing)
 
     def test_ctor_with_waiter(self):
         fut = futures.Future(loop=self.loop)
@@ -764,14 +763,6 @@ class SelectorSocketTransportTests(unittest.TestCase):
         self.assertFalse(self.sock.send.called)
         self.assertEqual([b'data1', b'data2'], transport._buffer)
 
-    def test_write_paused(self):
-        transport = _SelectorSocketTransport(
-            self.loop, self.sock, self.protocol)
-        transport._writing = False
-        transport.write(b'data')
-        self.assertFalse(self.sock.send.called)
-        self.assertEqual(transport._buffer, [b'data'])
-
     def test_write_partial(self):
         data = b'data'
         self.sock.send.return_value = 2
@@ -854,15 +845,6 @@ class SelectorSocketTransportTests(unittest.TestCase):
         self.assertEqual(self.sock.send.call_args[0], (data,))
         self.assertFalse(self.loop.writers)
 
-    def test_write_ready_paused(self):
-        transport = _SelectorSocketTransport(
-            self.loop, self.sock, self.protocol)
-        transport._writing = False
-        transport._buffer.append(b'data')
-        transport._write_ready()
-        self.assertFalse(self.sock.send.called)
-        self.assertEqual(transport._buffer, [b'data'])
-
     def test_write_ready_closing(self):
         data = b'data'
         self.sock.send.return_value = len(data)
@@ -940,59 +922,6 @@ class SelectorSocketTransportTests(unittest.TestCase):
         transport._buffer.append(b'data')
         transport._write_ready()
         remove_writer.assert_called_with(self.sock_fd)
-
-    def test_pause_writing(self):
-        transport = _SelectorSocketTransport(
-            self.loop, self.sock, self.protocol)
-        transport._buffer.append(b'data')
-        self.loop.add_writer(self.sock_fd, transport._write_ready)
-        transport.pause_writing()
-        self.assertFalse(transport._writing)
-        self.assertFalse(self.loop.writers)
-        self.assertEqual(1, self.loop.remove_writer_count[self.sock_fd])
-
-        transport.pause_writing()
-        self.assertEqual(1, self.loop.remove_writer_count[self.sock_fd])
-
-    def test_pause_writing_no_buffer(self):
-        transport = _SelectorSocketTransport(
-            self.loop, self.sock, self.protocol)
-        transport.pause_writing()
-        self.assertFalse(transport._writing)
-        self.assertEqual(0, self.loop.remove_writer_count[7])
-
-    def test_resume_writing(self):
-        transport = _SelectorSocketTransport(
-            self.loop, self.sock, self.protocol)
-        transport._buffer.append(b'data')
-        transport.resume_writing()
-        self.assertFalse(self.loop.writers)
-
-        transport._writing = False
-        transport.resume_writing()
-        self.assertTrue(transport._writing)
-        self.loop.assert_writer(self.sock_fd, transport._write_ready)
-
-    def test_resume_writing_no_buffer(self):
-        transport = _SelectorSocketTransport(
-            self.loop, self.sock, self.protocol)
-        transport._writing = False
-        transport.resume_writing()
-        self.assertTrue(transport._writing)
-        self.assertFalse(self.loop.writers)
-
-    def test_discard_output(self):
-        transport = _SelectorSocketTransport(
-            self.loop, self.sock, self.protocol)
-        transport.discard_output()
-        self.assertEqual(0, self.loop.remove_writer_count[self.sock_fd])
-
-        transport._buffer.append(b'data')
-        self.loop.add_writer(self.sock_fd, transport._write_ready)
-        transport.discard_output()
-        self.assertEqual(transport._buffer, [])
-        self.assertEqual(1, self.loop.remove_writer_count[self.sock_fd])
-        self.assertFalse(self.loop.writers)
 
 
 @unittest.skipIf(ssl is None, 'No ssl module')

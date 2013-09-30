@@ -923,6 +923,31 @@ class SelectorSocketTransportTests(unittest.TestCase):
         transport._write_ready()
         remove_writer.assert_called_with(self.sock_fd)
 
+    def test_write_eof(self):
+        tr = _SelectorSocketTransport(
+            self.loop, self.sock, self.protocol)
+        self.assertTrue(tr.can_write_eof())
+        tr.write_eof()
+        self.sock.shutdown.assert_called_with(socket.SHUT_WR)
+        tr.write_eof()
+        self.assertEqual(self.sock.shutdown.call_count, 1)
+        tr.close()
+
+    def test_write_eof_buffer(self):
+        tr = _SelectorSocketTransport(
+            self.loop, self.sock, self.protocol)
+        self.sock.send.side_effect = BlockingIOError
+        tr.write(b'data')
+        tr.write_eof()
+        self.assertEqual(tr._buffer, [b'data'])
+        self.assertTrue(tr._eof)
+        self.assertFalse(self.sock.shutdown.called)
+        self.sock.send.side_effect = lambda _: 4
+        tr._write_ready()
+        self.sock.send.assert_called_with(b'data')
+        self.sock.shutdown.assert_called_with(socket.SHUT_WR)
+        tr.close()
+
 
 @unittest.skipIf(ssl is None, 'No ssl module')
 class SelectorSslTransportTests(unittest.TestCase):
@@ -1155,6 +1180,11 @@ class SelectorSslTransportTests(unittest.TestCase):
         transport._on_ready()
         transport._fatal_error.assert_called_with(err)
         self.assertEqual([], transport._buffer)
+
+    def test_write_eof(self):
+        tr = self._make_one()
+        self.assertFalse(tr.can_write_eof())
+        self.assertRaises(RuntimeError, tr.write_eof)
 
     def test_close(self):
         tr = self._make_one()

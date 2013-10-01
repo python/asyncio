@@ -1207,7 +1207,7 @@ class SelectorSslTransportTests(unittest.TestCase):
     def test_write_eof(self):
         tr = self._make_one()
         self.assertFalse(tr.can_write_eof())
-        self.assertRaises(RuntimeError, tr.write_eof)
+        self.assertRaises(NotImplementedError, tr.write_eof)
 
     def test_close(self):
         tr = self._make_one()

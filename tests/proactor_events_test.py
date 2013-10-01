@@ -7,6 +7,7 @@ import unittest.mock
 import tulip
 from tulip.proactor_events import BaseProactorEventLoop
 from tulip.proactor_events import _ProactorSocketTransport
+from tulip.proactor_events import _ProactorWritePipeTransport
 from tulip import test_utils
 
 
@@ -248,6 +249,61 @@ class ProactorSocketTransportTests(unittest.TestCase):
         tr._call_connection_lost(None)
         self.assertTrue(self.protocol.connection_lost.called)
         self.assertTrue(self.sock.close.called)
+
+    def test_write_eof(self):
+        tr = _ProactorSocketTransport(
+            self.loop, self.sock, self.protocol)
+        self.assertTrue(tr.can_write_eof())
+        tr.write_eof()
+        self.sock.shutdown.assert_called_with(socket.SHUT_WR)
+        tr.write_eof()
+        self.assertEqual(self.sock.shutdown.call_count, 1)
+        tr.close()
+
+    def test_write_eof_buffer(self):
+        tr = _ProactorSocketTransport(
+            self.loop, self.sock, self.protocol)
+        self.sock.send.side_effect = BlockingIOError
+        tr.write(b'data')
+        tr.write_eof()
+        self.assertTrue(tr._eof_written)
+        self.assertFalse(self.sock.shutdown.called)
+        tr._loop._proactor.send.assert_called_with(self.sock, b'data')
+        tr._write_fut.add_done_callback.assert_called_with(
+            tr._loop_writing)
+        tr._write_fut = f = tulip.Future(loop=self.loop)
+        f.set_result(4)
+        tr._loop_writing(f)
+        self.sock.shutdown.assert_called_with(socket.SHUT_WR)
+        tr.close()
+
+    def test_write_eof_write_pipe(self):
+        tr = _ProactorWritePipeTransport(
+            self.loop, self.sock, self.protocol)
+        self.assertTrue(tr.can_write_eof())
+        tr.write_eof()
+        self.assertTrue(tr._closing)
+        self.loop._run_once()
+        self.assertTrue(self.sock.close.called)
+        tr.close()
+
+    def test_write_eof_buffer_write_pipe(self):
+        tr = _ProactorWritePipeTransport(
+            self.loop, self.sock, self.protocol)
+        self.sock.send.side_effect = BlockingIOError
+        tr.write(b'data')
+        tr.write_eof()
+        self.assertTrue(tr._closing)
+        self.assertFalse(self.sock.shutdown.called)
+        tr._loop._proactor.send.assert_called_with(self.sock, b'data')
+        tr._write_fut.add_done_callback.assert_called_with(
+            tr._loop_writing)
+        tr._write_fut = f = tulip.Future(loop=self.loop)
+        f.set_result(4)
+        tr._loop_writing(f)
+        self.loop._run_once()
+        self.assertTrue(self.sock.close.called)
+        tr.close()
 
 
 class BaseProactorEventLoopTests(unittest.TestCase):

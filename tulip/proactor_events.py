@@ -27,6 +27,7 @@ class _ProactorBasePipeTransport(transports.BaseTransport):
         self._write_fut = None
         self._conn_lost = 0
         self._closing = False  # Set when close() called.
+        self._eof_written = False
         self._loop.call_soon(self._protocol.connection_made, self)
         if waiter is not None:
             self._loop.call_soon(waiter.set_result, None)
@@ -130,6 +131,9 @@ class _ProactorWritePipeTransport(_ProactorBasePipeTransport,
 
     def write(self, data):
         assert isinstance(data, bytes), repr(data)
+        if self._closing or self._eof_written:
+            raise IOError('close() or write_eof() already called')
+
         if not data:
             return
 
@@ -153,13 +157,19 @@ class _ProactorWritePipeTransport(_ProactorBasePipeTransport,
             if not data:
                 if self._closing:
                     self._loop.call_soon(self._call_connection_lost, None)
+                if self._eof_written:
+                    self._sock.shutdown(socket.SHUT_WR)
                 return
             self._write_fut = self._loop._proactor.send(self._sock, data)
             self._write_fut.add_done_callback(self._loop_writing)
         except OSError as exc:
             self._fatal_error(exc)
 
-    # TODO: write_eof(), can_write_eof().
+    def can_write_eof(self):
+        return True
+
+    def write_eof(self):
+        self.close()
 
     def abort(self):
         self._force_close(None)
@@ -172,6 +182,16 @@ class _ProactorSocketTransport(_ProactorReadPipeTransport,
 
     def _set_extra(self, sock):
         self._extra['socket'] = sock
+
+    def can_write_eof(self):
+        return True
+
+    def write_eof(self):
+        if self._closing or self._eof_written:
+            return
+        self._eof_written = True
+        if self._write_fut is None:
+            self._sock.shutdown(socket.SHUT_WR)
 
 
 class BaseProactorEventLoop(base_events.BaseEventLoop):

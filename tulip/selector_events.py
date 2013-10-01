@@ -611,9 +611,6 @@ class _SelectorSslTransport(_SelectorTransport):
         self._buffer.append(data)
         # We could optimize, but the callback can do this for now.
 
-    def write_eof(self):
-        raise RuntimeError('SSL transport does not support write_eof().')
-
     def can_write_eof(self):
         return False
 

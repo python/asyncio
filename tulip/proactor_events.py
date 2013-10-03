@@ -28,7 +28,6 @@ class _ProactorBasePipeTransport(transports.BaseTransport):
         self._conn_lost = 0
         self._closing = False  # Set when close() called.
         self._eof_written = False
-        self._paused = False
         self._loop.call_soon(self._protocol.connection_made, self)
         if waiter is not None:
             self._loop.call_soon(waiter.set_result, None)
@@ -82,9 +81,25 @@ class _ProactorReadPipeTransport(_ProactorBasePipeTransport,
 
     def __init__(self, loop, sock, protocol, waiter=None, extra=None):
         super().__init__(loop, sock, protocol, waiter, extra)
+        self._read_fut = None
+        self._paused = False
         self._loop.call_soon(self._loop_reading)
 
+    def pause(self):
+        assert not self._closing, 'Cannot pause() when closing'
+        assert not self._paused, 'Already paused'
+        self._paused = True
+
+    def resume(self):
+        assert self._paused, 'Not paused'
+        self._paused = False
+        if self._closing:
+            return
+        self._loop.call_soon(self._loop_reading, self._read_fut)
+
     def _loop_reading(self, fut=None):
+        if self._paused:
+            return
         data = None
 
         try:
@@ -130,21 +145,6 @@ class _ProactorWritePipeTransport(_ProactorBasePipeTransport,
                                   transports.WriteTransport):
     """Transport for write pipes."""
 
-    def pause(self):
-        assert not self._closing, 'Cannot pause() when closing'
-        assert not self._paused, 'Already paused'
-        # We don't try to cancel an existing overlapped write.  Instead
-        # we prevent new overlapped writes until resume() is called.
-        self._paused = True
-
-    def resume(self):
-        assert self._paused, 'Not paused'
-        self._paused = False
-        if self._closing:
-            return
-        if self._buffer and self._write_fut is None:
-            self._loop_writing()
-
     def write(self, data):
         assert isinstance(data, bytes), repr(data)
         if self._closing or self._eof_written:
@@ -159,7 +159,7 @@ class _ProactorWritePipeTransport(_ProactorBasePipeTransport,
             self._conn_lost += 1
             return
         self._buffer.append(data)
-        if self._write_fut is None and not self._paused:
+        if self._write_fut is None:
             self._loop_writing()
 
     def _loop_writing(self, f=None):
@@ -176,11 +176,8 @@ class _ProactorWritePipeTransport(_ProactorBasePipeTransport,
                 if self._eof_written:
                     self._sock.shutdown(socket.SHUT_WR)
                 return
-            if not self._paused:
-                self._write_fut = self._loop._proactor.send(self._sock, data)
-                self._write_fut.add_done_callback(self._loop_writing)
-            else:
-                self._buffer.append(data)
+            self._write_fut = self._loop._proactor.send(self._sock, data)
+            self._write_fut.add_done_callback(self._loop_writing)
         except OSError as exc:
             self._fatal_error(exc)
 

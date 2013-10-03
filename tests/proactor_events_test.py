@@ -263,7 +263,7 @@ class ProactorSocketTransportTests(unittest.TestCase):
     def test_write_eof_buffer(self):
         tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
         f = tulip.Future(loop=self.loop)
-        tr._loop._proactor.send.side_effect = f
+        tr._loop._proactor.send.return_value = f
         tr.write(b'data')
         tr.write_eof()
         self.assertTrue(tr._eof_written)
@@ -287,7 +287,7 @@ class ProactorSocketTransportTests(unittest.TestCase):
     def test_write_eof_buffer_write_pipe(self):
         tr = _ProactorWritePipeTransport(self.loop, self.sock, self.protocol)
         f = tulip.Future(loop=self.loop)
-        tr._loop._proactor.send.side_effect = f
+        tr._loop._proactor.send.return_value = f
         tr.write(b'data')
         tr.write_eof()
         self.assertTrue(tr._closing)
@@ -302,29 +302,29 @@ class ProactorSocketTransportTests(unittest.TestCase):
     def test_pause_resume(self):
         tr = _ProactorSocketTransport(
             self.loop, self.sock, self.protocol)
-        f = tulip.Future(loop=self.loop)
-        tr._loop._proactor.send.side_effect = f
+        futures = []
+        for msg in [b'data1', b'data2', b'data3', b'data4', b'']:
+            f = tulip.Future(loop=self.loop)
+            f.set_result(msg)
+            futures.append(f)
+        self.loop._proactor.recv.side_effect = futures
+        self.loop._run_once()
         self.assertFalse(tr._paused)
-        tr.write(b'data1')
-        tr._loop._proactor.send.assert_called_with(self.sock, b'data1')
-        self.assertEqual(tr._buffer, [])
-        tr.write(b'data2')
-        self.assertEqual(tr._buffer, [b'data2'])
+        self.loop._run_once()
+        self.protocol.data_received.assert_called_with(b'data1')
+        self.loop._run_once()
+        self.protocol.data_received.assert_called_with(b'data2')
         tr.pause()
-        tr.write(b'data3')
-        self.assertEqual(tr._buffer, [b'data2', b'data3'])
-        f.set_result(5)
-        self.loop._run_once()
-        self.assertEqual(tr._buffer, [b'data2data3'])
-        self.loop._run_once()
-        self.assertEqual(tr._buffer, [b'data2data3'])
-        f = tulip.Future(loop=self.loop)
-        tr._loop._proactor.send.side_effect = f
+        self.assertTrue(tr._paused)
+        for i in range(10):
+            self.loop._run_once()
+        self.protocol.data_received.assert_called_with(b'data2')
         tr.resume()
-        tr._loop._proactor.send.assert_called_with(self.sock, b'data2data3')
-        self.assertEqual(tr._buffer, [])
-        tr.write(b'data4')
-        self.assertEqual(tr._buffer, [b'data4'])
+        self.assertFalse(tr._paused)
+        self.loop._run_once()
+        self.protocol.data_received.assert_called_with(b'data3')
+        self.loop._run_once()
+        self.protocol.data_received.assert_called_with(b'data4')
         tr.close()
 
 

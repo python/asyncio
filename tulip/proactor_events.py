@@ -191,6 +191,18 @@ class _ProactorWritePipeTransport(_ProactorBasePipeTransport,
         self._force_close(None)
 
 
+class _ProactorDuplexPipeTransport(_ProactorReadPipeTransport,
+                                   _ProactorWritePipeTransport,
+                                   transports.Transport):
+    """Transport for duplex pipes."""
+
+    def can_write_eof(self):
+        return False
+
+    def write_eof(self):
+        raise NotImplementedError
+
+
 class _ProactorSocketTransport(_ProactorReadPipeTransport,
                                _ProactorWritePipeTransport,
                                transports.Transport):
@@ -222,6 +234,10 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
 
     def _make_socket_transport(self, sock, protocol, waiter=None, extra=None):
         return _ProactorSocketTransport(self, sock, protocol, waiter, extra)
+
+    def _make_duplex_pipe_transport(self, sock, protocol, waiter=None,
+                                    extra=None):
+        return _ProactorDuplexPipeTransport(self, sock, protocol, waiter, extra)
 
     def _make_read_pipe_transport(self, sock, protocol, waiter=None,
                                   extra=None):
@@ -294,8 +310,9 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
                         conn, protocol, extra={'addr': addr})
                 f = self._proactor.accept(sock)
             except OSError:
-                sock.close()
-                tulip_log.exception('Accept failed')
+                if sock.fileno() != -1:
+                    tulip_log.exception('Accept failed')
+                    sock.close()
             except futures.CancelledError:
                 sock.close()
             else:

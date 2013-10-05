@@ -8,6 +8,7 @@ import tulip
 from tulip.proactor_events import BaseProactorEventLoop
 from tulip.proactor_events import _ProactorSocketTransport
 from tulip.proactor_events import _ProactorWritePipeTransport
+from tulip.proactor_events import _ProactorDuplexPipeTransport
 from tulip import test_utils
 
 
@@ -297,6 +298,14 @@ class ProactorSocketTransportTests(unittest.TestCase):
         self.loop._run_once()
         self.loop._run_once()
         self.assertTrue(self.sock.close.called)
+        tr.close()
+
+    def test_write_eof_duplex_pipe(self):
+        tr = _ProactorDuplexPipeTransport(
+            self.loop, self.sock, self.protocol)
+        self.assertFalse(tr.can_write_eof())
+        with self.assertRaises(NotImplementedError):
+            tr.write_eof()
         tr.close()
 
     def test_pause_resume(self):

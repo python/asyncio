@@ -4,7 +4,6 @@ import functools
 import gc
 import io
 import os
-import re
 import signal
 import socket
 try:
@@ -342,7 +341,7 @@ class EventLoopTestsMixin:
         self.assertGreaterEqual(len(data), 200)
 
     def test_sock_client_ops(self):
-        with test_utils.run_test_server(self.loop) as httpd:
+        with test_utils.run_test_server() as httpd:
             sock = socket.socket()
             sock.setblocking(False)
             self.loop.run_until_complete(
@@ -356,7 +355,7 @@ class EventLoopTestsMixin:
                 self.loop.sock_recv(sock, 1024))
             sock.close()
 
-        self.assertTrue(re.match(rb'HTTP/1.0 200 OK', data), data)
+        self.assertTrue(data.startswith(b'HTTP/1.0 200 OK'))
 
     def test_sock_client_fail(self):
         # Make sure that we will get an unused port
@@ -470,7 +469,7 @@ class EventLoopTestsMixin:
         self.assertEqual(caught, 1)
 
     def test_create_connection(self):
-        with test_utils.run_test_server(self.loop) as httpd:
+        with test_utils.run_test_server() as httpd:
             f = self.loop.create_connection(
                 lambda: MyProto(loop=self.loop), *httpd.address)
             tr, pr = self.loop.run_until_complete(f)
@@ -481,7 +480,7 @@ class EventLoopTestsMixin:
             tr.close()
 
     def test_create_connection_sock(self):
-        with test_utils.run_test_server(self.loop) as httpd:
+        with test_utils.run_test_server() as httpd:
             sock = None
             infos = self.loop.run_until_complete(
                 self.loop.getaddrinfo(
@@ -510,8 +509,7 @@ class EventLoopTestsMixin:
 
     @unittest.skipIf(ssl is None, 'No ssl module')
     def test_create_ssl_connection(self):
-        with test_utils.run_test_server(
-                self.loop, use_ssl=True) as httpd:
+        with test_utils.run_test_server(use_ssl=True) as httpd:
             f = self.loop.create_connection(
                 lambda: MyProto(loop=self.loop), *httpd.address, ssl=True)
             tr, pr = self.loop.run_until_complete(f)
@@ -525,7 +523,7 @@ class EventLoopTestsMixin:
             tr.close()
 
     def test_create_connection_local_addr(self):
-        with test_utils.run_test_server(self.loop) as httpd:
+        with test_utils.run_test_server() as httpd:
             port = find_unused_port()
             f = self.loop.create_connection(
                 lambda: MyProto(loop=self.loop),
@@ -536,7 +534,7 @@ class EventLoopTestsMixin:
             tr.close()
 
     def test_create_connection_local_addr_in_use(self):
-        with test_utils.run_test_server(self.loop) as httpd:
+        with test_utils.run_test_server() as httpd:
             f = self.loop.create_connection(
                 lambda: MyProto(loop=self.loop),
                 *httpd.address, local_addr=httpd.address)

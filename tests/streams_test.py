@@ -32,7 +32,7 @@ class StreamReaderTests(unittest.TestCase):
         self.assertIs(stream.loop, m_events.get_event_loop.return_value)
 
     def test_open_connection(self):
-        with test_utils.run_test_server(self.loop) as httpd:
+        with test_utils.run_test_server() as httpd:
             f = streams.open_connection(*httpd.address, loop=self.loop)
             reader, writer = self.loop.run_until_complete(f)
             writer.write(b'GET / HTTP/1.0\r\n\r\n')
@@ -47,7 +47,7 @@ class StreamReaderTests(unittest.TestCase):
 
     @unittest.skipIf(ssl is None, 'No ssl module')
     def test_open_connection_no_loop_ssl(self):
-        with test_utils.run_test_server(self.loop, use_ssl=True) as httpd:
+        with test_utils.run_test_server(use_ssl=True) as httpd:
             try:
                 events.set_event_loop(self.loop)
                 f = streams.open_connection(*httpd.address, ssl=True)
@@ -62,7 +62,7 @@ class StreamReaderTests(unittest.TestCase):
             writer.close()
 
     def test_open_connection_error(self):
-        with test_utils.run_test_server(self.loop) as httpd:
+        with test_utils.run_test_server() as httpd:
             f = streams.open_connection(*httpd.address, loop=self.loop)
             reader, writer = self.loop.run_until_complete(f)
             writer._protocol.connection_lost(ZeroDivisionError())
@@ -71,6 +71,7 @@ class StreamReaderTests(unittest.TestCase):
                 self.loop.run_until_complete(f)
 
             writer.close()
+            test_utils.run_briefly(self.loop)
 
     def test_feed_empty_data(self):
         stream = streams.StreamReader(loop=self.loop)

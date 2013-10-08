@@ -10,6 +10,10 @@ import collections
 import concurrent.futures
 import functools
 import inspect
+import linecache
+import sys
+import traceback
+import weakref
 
 from . import events
 from . import futures
@@ -62,6 +66,54 @@ class Task(futures.Future):
     # _wakeup().  When _fut_waiter is not None, one of its callbacks
     # must be _wakeup().
 
+    # Weak set containing all tasks alive.
+    _all_tasks = weakref.WeakSet()
+
+    @classmethod
+    def all_tasks(cls):
+        """Return a set of all tasks in existence."""
+        return set(cls._all_tasks)
+
+    @classmethod
+    def all_pending_tasks(cls):
+        """Return a set of all tasks in existence that aren't done yet."""
+        return {t for t in cls._all_tasks if not t.done()}
+
+    @classmethod
+    def all_done_tasks(cls):
+        """Return a set of all tasks in existence that are done.
+
+        This is the union of all_successful_tasks() and all_failed_tasks().
+        """
+        return {t for t in cls._all_tasks if t.done()}
+
+    @classmethod
+    def all_successful_tasks(cls):
+        """Return a set of all tasks in existence that have a valid result."""
+        return {t for t in cls._all_tasks
+                  if t.done() and not t.cancelled() and t.exception() is None}
+
+    @classmethod
+    def all_failed_tasks(cls):
+        """Return a set of all tasks in existence that have failed.
+
+        This is the union of all_excepted_tasks() and all_cancelled_tasks().
+        """
+        return {t for t in cls._all_tasks
+                  if t.done() and (t.cancelled() or t.exception())}
+
+    @classmethod
+    def all_excepted_tasks(cls):
+        """Return a set of all tasks in existence that have an exception."""
+        return {t for t in cls._all_tasks
+                  if t.done() and not t.cancelled() and
+                  t.exception() is not None}
+
+    @classmethod
+    def all_cancelled_tasks(cls):
+        """Return a set of all tasks in existence that were cancelled."""
+        return {t for t in cls._all_tasks if t.cancelled()}
+
     def __init__(self, coro, *, loop=None):
         assert inspect.isgenerator(coro)  # Must be a coroutine *object*.
         super().__init__(loop=loop)
@@ -69,6 +121,7 @@ class Task(futures.Future):
         self._fut_waiter = None
         self._must_cancel = False
         self._loop.call_soon(self._step)
+        self.__class__._all_tasks.add(self)
 
     def __repr__(self):
         res = super().__repr__()
@@ -81,6 +134,83 @@ class Task(futures.Future):
             i = len(res)
         res = res[:i] + '(<{}>)'.format(self._coro.__name__) + res[i:]
         return res
+
+    def get_stack(self, *, limit=None):
+        """Return the list of stack frames for this task's coroutine.
+
+        If the coroutine is active, this returns the stack where it is
+        suspended.  If the coroutine has completed successfully or was
+        cancelled, this returns an empty list.  If the coroutine was
+        terminated by an exception, this returns the list of traceback
+        frames.
+
+        The frames are always ordered from oldest to newest.
+
+        The optional limit gives the maximum nummber of frames to
+        return; by default all available frames are returned.  Its
+        meaning differs depending on whether a stack or a traceback is
+        returned: the newest frames of a stack are returned, but the
+        oldest frames of a traceback are returned.  (This matches the
+        behavior of the traceback module.)
+
+        For reasons beyond our control, only one stack frame is
+        returned for a suspended coroutine.
+        """
+        frames = []
+        f = self._coro.gi_frame
+        if f is not None:
+            while f is not None:
+                if limit is not None:
+                    if limit <= 0:
+                        break
+                    limit -= 1
+                frames.append(f)
+                f = f.f_back
+            frames.reverse()
+        elif self._exception is not None:
+            tb = self._exception.__traceback__
+            while tb is not None:
+                if limit is not None:
+                    if limit <= 0:
+                        break
+                    limit -= 1
+                frames.append(tb.tb_frame)
+                tb = tb.tb_next
+        return frames
+
+    def print_stack(self, *, limit=None, file=None):
+        """Print the stack or traceback for this task's coroutine.
+
+        This produces output similar to that of the traceback module,
+        for the frames retrieved by get_stack().  The limit argument
+        is passed to get_stack().  The file argument is an I/O stream
+        to which the output goes; by default it goes to sys.stderr.
+        """
+        extracted_list = []
+        checked = set()
+        for f in self.get_stack(limit=limit):
+            lineno = f.f_lineno
+            co = f.f_code
+            filename = co.co_filename
+            name = co.co_name
+            if filename not in checked:
+                checked.add(filename)
+                linecache.checkcache(filename)
+            line = linecache.getline(filename, lineno, f.f_globals)
+            extracted_list.append((filename, lineno, name, line))
+        exc = self._exception
+        if not extracted_list:
+            print('No stack for %r' % self, file=file)
+        elif exc is not None:
+            print('Traceback for %r (most recent call last):' % self,
+                  file=file)
+        else:
+            print('Stack for %r (most recent call last):' % self,
+                  file=file)
+        traceback.print_list(extracted_list, file=file)
+        if exc is not None:
+            for line in traceback.format_exception_only(exc.__class__, exc):
+                print(line, file=file, end='')
 
     def cancel(self):
         if self.done():

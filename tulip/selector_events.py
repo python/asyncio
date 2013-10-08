@@ -329,7 +329,7 @@ class _SelectorTransport(transports.Transport):
         self._sock = sock
         self._sock_fd = sock.fileno()
         self._protocol = protocol
-        self._buffer = []
+        self._buffer = collections.deque()
         self._conn_lost = 0
         self._closing = False  # Set when close() called.
 
@@ -579,7 +579,7 @@ class _SelectorSslTransport(_SelectorTransport):
         # Now try writing, if there's anything to write.
         if self._buffer:
             data = b''.join(self._buffer)
-            self._buffer = []
+            self._buffer.clear()
             try:
                 n = self._sock.send(data)
             except (BlockingIOError, InterruptedError,
@@ -630,7 +630,6 @@ class _SelectorDatagramTransport(_SelectorTransport):
         super().__init__(loop, sock, protocol, extra)
 
         self._address = address
-        self._buffer = collections.deque()
         self._loop.add_reader(self._sock_fd, self._read_ready)
         self._loop.call_soon(self._protocol.connection_made, self)
 

@@ -1,5 +1,6 @@
 """Tests for selector_events.py"""
 
+import collections
 import errno
 import gc
 import pprint
@@ -610,13 +611,13 @@ class SelectorTransportTests(unittest.TestCase):
 
     def test_force_close(self):
         tr = _SelectorTransport(self.loop, self.sock, self.protocol, None)
-        tr._buffer = [b'1']
+        tr._buffer.append(b'1')
         self.loop.add_reader(7, unittest.mock.sentinel)
         self.loop.add_writer(7, unittest.mock.sentinel)
         tr._force_close(None)
 
         self.assertTrue(tr._closing)
-        self.assertEqual(tr._buffer, [])
+        self.assertEqual(tr._buffer, collections.deque())
         self.assertFalse(self.loop.readers)
         self.assertFalse(self.loop.writers)
 
@@ -765,7 +766,7 @@ class SelectorSocketTransportTests(unittest.TestCase):
         transport._buffer.append(b'data')
         transport.write(b'')
         self.assertFalse(self.sock.send.called)
-        self.assertEqual([b'data'], transport._buffer)
+        self.assertEqual(collections.deque([b'data']), transport._buffer)
 
     def test_write_buffer(self):
         transport = _SelectorSocketTransport(
@@ -773,7 +774,7 @@ class SelectorSocketTransportTests(unittest.TestCase):
         transport._buffer.append(b'data1')
         transport.write(b'data2')
         self.assertFalse(self.sock.send.called)
-        self.assertEqual([b'data1', b'data2'], transport._buffer)
+        self.assertEqual(collections.deque([b'data1', b'data2']), transport._buffer)
 
     def test_write_partial(self):
         data = b'data'
@@ -784,7 +785,7 @@ class SelectorSocketTransportTests(unittest.TestCase):
         transport.write(data)
 
         self.loop.assert_writer(7, transport._write_ready)
-        self.assertEqual([b'ta'], transport._buffer)
+        self.assertEqual(collections.deque([b'ta']), transport._buffer)
 
     def test_write_partial_none(self):
         data = b'data'
@@ -796,7 +797,7 @@ class SelectorSocketTransportTests(unittest.TestCase):
         transport.write(data)
 
         self.loop.assert_writer(7, transport._write_ready)
-        self.assertEqual([b'data'], transport._buffer)
+        self.assertEqual(collections.deque([b'data']), transport._buffer)
 
     def test_write_tryagain(self):
         self.sock.send.side_effect = BlockingIOError
@@ -807,7 +808,7 @@ class SelectorSocketTransportTests(unittest.TestCase):
         transport.write(data)
 
         self.loop.assert_writer(7, transport._write_ready)
-        self.assertEqual([b'data'], transport._buffer)
+        self.assertEqual(collections.deque([b'data']), transport._buffer)
 
     @unittest.mock.patch('tulip.selector_events.tulip_log')
     def test_write_exception(self, m_log):
@@ -887,7 +888,7 @@ class SelectorSocketTransportTests(unittest.TestCase):
         self.loop.add_writer(7, transport._write_ready)
         transport._write_ready()
         self.loop.assert_writer(7, transport._write_ready)
-        self.assertEqual([b'ta'], transport._buffer)
+        self.assertEqual(collections.deque([b'ta']), transport._buffer)
 
     def test_write_ready_partial_none(self):
         data = b'data'
@@ -899,19 +900,19 @@ class SelectorSocketTransportTests(unittest.TestCase):
         self.loop.add_writer(7, transport._write_ready)
         transport._write_ready()
         self.loop.assert_writer(7, transport._write_ready)
-        self.assertEqual([b'data'], transport._buffer)
+        self.assertEqual(collections.deque([b'data']), transport._buffer)
 
     def test_write_ready_tryagain(self):
         self.sock.send.side_effect = BlockingIOError
 
         transport = _SelectorSocketTransport(
             self.loop, self.sock, self.protocol)
-        transport._buffer = [b'data1', b'data2']
+        transport._buffer = collections.deque([b'data1', b'data2'])
         self.loop.add_writer(7, transport._write_ready)
         transport._write_ready()
 
         self.loop.assert_writer(7, transport._write_ready)
-        self.assertEqual([b'data1data2'], transport._buffer)
+        self.assertEqual(collections.deque([b'data1data2']), transport._buffer)
 
     def test_write_ready_exception(self):
         err = self.sock.send.side_effect = OSError()
@@ -951,7 +952,7 @@ class SelectorSocketTransportTests(unittest.TestCase):
         self.sock.send.side_effect = BlockingIOError
         tr.write(b'data')
         tr.write_eof()
-        self.assertEqual(tr._buffer, [b'data'])
+        self.assertEqual(tr._buffer, collections.deque([b'data']))
         self.assertTrue(tr._eof)
         self.assertFalse(self.sock.shutdown.called)
         self.sock.send.side_effect = lambda _: 4
@@ -1045,7 +1046,7 @@ class SelectorSslTransportTests(unittest.TestCase):
         transport = self._make_one()
         transport._buffer.append(b'data')
         transport.write(b'')
-        self.assertEqual([b'data'], transport._buffer)
+        self.assertEqual(collections.deque([b'data']), transport._buffer)
 
     def test_write_str(self):
         transport = self._make_one()
@@ -1063,7 +1064,7 @@ class SelectorSslTransportTests(unittest.TestCase):
         transport = self._make_one()
         transport._conn_lost = 1
         transport.write(b'data')
-        self.assertEqual(transport._buffer, [])
+        self.assertEqual(transport._buffer, collections.deque())
         transport.write(b'data')
         transport.write(b'data')
         transport.write(b'data')
@@ -1122,34 +1123,34 @@ class SelectorSslTransportTests(unittest.TestCase):
         self.sslsock.recv.side_effect = ssl.SSLWantReadError
         self.sslsock.send.return_value = 4
         transport = self._make_one()
-        transport._buffer = [b'data']
+        transport._buffer = collections.deque([b'data'])
         transport._on_ready()
-        self.assertEqual([], transport._buffer)
+        self.assertEqual(collections.deque(), transport._buffer)
         self.assertTrue(self.sslsock.send.called)
 
     def test_on_ready_send_none(self):
         self.sslsock.recv.side_effect = ssl.SSLWantReadError
         self.sslsock.send.return_value = 0
         transport = self._make_one()
-        transport._buffer = [b'data1', b'data2']
+        transport._buffer = collections.deque([b'data1', b'data2'])
         transport._on_ready()
         self.assertTrue(self.sslsock.send.called)
-        self.assertEqual([b'data1data2'], transport._buffer)
+        self.assertEqual(collections.deque([b'data1data2']), transport._buffer)
 
     def test_on_ready_send_partial(self):
         self.sslsock.recv.side_effect = ssl.SSLWantReadError
         self.sslsock.send.return_value = 2
         transport = self._make_one()
-        transport._buffer = [b'data1', b'data2']
+        transport._buffer = collections.deque([b'data1', b'data2'])
         transport._on_ready()
         self.assertTrue(self.sslsock.send.called)
-        self.assertEqual([b'ta1data2'], transport._buffer)
+        self.assertEqual(collections.deque([b'ta1data2']), transport._buffer)
 
     def test_on_ready_send_closing_partial(self):
         self.sslsock.recv.side_effect = ssl.SSLWantReadError
         self.sslsock.send.return_value = 2
         transport = self._make_one()
-        transport._buffer = [b'data1', b'data2']
+        transport._buffer = collections.deque([b'data1', b'data2'])
         transport._on_ready()
         self.assertTrue(self.sslsock.send.called)
         self.assertFalse(self.sslsock.close.called)
@@ -1159,7 +1160,7 @@ class SelectorSslTransportTests(unittest.TestCase):
         self.sslsock.send.return_value = 4
         transport = self._make_one()
         transport.close()
-        transport._buffer = [b'data']
+        transport._buffer = collections.deque([b'data'])
         transport._on_ready()
         self.assertFalse(self.loop.writers)
         self.protocol.connection_lost.assert_called_with(None)
@@ -1169,7 +1170,7 @@ class SelectorSslTransportTests(unittest.TestCase):
         self.sslsock.send.return_value = 4
         transport = self._make_one()
         transport.close()
-        transport._buffer = []
+        transport._buffer = collections.deque()
         transport._on_ready()
         self.assertFalse(self.loop.writers)
         self.protocol.connection_lost.assert_called_with(None)
@@ -1178,31 +1179,31 @@ class SelectorSslTransportTests(unittest.TestCase):
         self.sslsock.recv.side_effect = ssl.SSLWantReadError
 
         transport = self._make_one()
-        transport._buffer = [b'data']
+        transport._buffer = collections.deque([b'data'])
 
         self.sslsock.send.side_effect = ssl.SSLWantReadError
         transport._on_ready()
         self.assertTrue(self.sslsock.send.called)
-        self.assertEqual([b'data'], transport._buffer)
+        self.assertEqual(collections.deque([b'data']), transport._buffer)
 
         self.sslsock.send.side_effect = ssl.SSLWantWriteError
         transport._on_ready()
-        self.assertEqual([b'data'], transport._buffer)
+        self.assertEqual(collections.deque([b'data']), transport._buffer)
 
         self.sslsock.send.side_effect = BlockingIOError()
         transport._on_ready()
-        self.assertEqual([b'data'], transport._buffer)
+        self.assertEqual(collections.deque([b'data']), transport._buffer)
 
     def test_on_ready_send_exc(self):
         self.sslsock.recv.side_effect = ssl.SSLWantReadError
         err = self.sslsock.send.side_effect = OSError()
 
         transport = self._make_one()
-        transport._buffer = [b'data']
+        transport._buffer = collections.deque([b'data'])
         transport._fatal_error = unittest.mock.Mock()
         transport._on_ready()
         transport._fatal_error.assert_called_with(err)
-        self.assertEqual([], transport._buffer)
+        self.assertEqual(collections.deque(), transport._buffer)
 
     def test_write_eof(self):
         tr = self._make_one()

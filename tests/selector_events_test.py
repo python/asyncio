@@ -774,7 +774,8 @@ class SelectorSocketTransportTests(unittest.TestCase):
         transport._buffer.append(b'data1')
         transport.write(b'data2')
         self.assertFalse(self.sock.send.called)
-        self.assertEqual(collections.deque([b'data1', b'data2']), transport._buffer)
+        self.assertEqual(collections.deque([b'data1', b'data2']),
+                         transport._buffer)
 
     def test_write_partial(self):
         data = b'data'

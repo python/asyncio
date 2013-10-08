@@ -237,7 +237,8 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
 
     def _make_duplex_pipe_transport(self, sock, protocol, waiter=None,
                                     extra=None):
-        return _ProactorDuplexPipeTransport(self, sock, protocol, waiter, extra)
+        return _ProactorDuplexPipeTransport(self,
+                                            sock, protocol, waiter, extra)
 
     def _make_read_pipe_transport(self, sock, protocol, waiter=None,
                                   extra=None):

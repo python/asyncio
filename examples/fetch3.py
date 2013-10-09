@@ -141,7 +141,7 @@ class Response:
                 nbytes = int(value)
                 break
         if nbytes is None:
-            if self.get_header('transfer-encoding').lower() == 'chunked':
+            if self.get_header('transfer-encoding', '').lower() == 'chunked':
                 blocks = []
                 while True:
                     size_header = yield from self.reader.readline()
@@ -158,7 +158,7 @@ class Response:
                     assert crlf == b'\r\n'
                 body = b''.join(blocks)
             else:
-                body = self.reader.read()
+                body = yield from self.reader.read()
         else:
             body = yield from self.reader.readexactly(nbytes)
         return body

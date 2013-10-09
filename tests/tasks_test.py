@@ -1142,7 +1142,7 @@ class TaskTests(unittest.TestCase):
         self.assertEqual(proof, 101)
         self.assertTrue(waiter.cancelled())
 
-    def test_yield_wait_shields_cancel(self):
+    def test_yield_wait_does_not_shield_cancel(self):
         # Cancelling outer() makes wait() return early, leaves inner()
         # running.
         proof = 0
@@ -1163,10 +1163,11 @@ class TaskTests(unittest.TestCase):
         f = tasks.async(outer(), loop=self.loop)
         test_utils.run_briefly(self.loop)
         f.cancel()
-        self.loop.run_until_complete(f)
+        self.assertRaises(
+            futures.CancelledError, self.loop.run_until_complete, f)
         waiter.set_result(None)
         test_utils.run_briefly(self.loop)
-        self.assertEqual(proof, 101)
+        self.assertEqual(proof, 1)
 
     def test_shield_result(self):
         inner = futures.Future(loop=self.loop)
@@ -1254,7 +1255,6 @@ class TaskTests(unittest.TestCase):
         child1.set_result(1)
         child2.set_result(2)
         test_utils.run_briefly(self.loop)
-
 
 
 class GatherTestsBase:

@@ -19,6 +19,7 @@ class Request:
         self.scheme = self.parts.scheme
         assert self.scheme in ('http', 'https'), repr(url)
         self.ssl = self.parts.scheme == 'https'
+        self.netloc = self.parts.netloc
         self.hostname = self.parts.hostname
         self.port = self.parts.port or (443 if self.ssl else 80)
         self.path = (self.parts.path or '/')
@@ -27,18 +28,23 @@ class Request:
             self.full_path = '%s?%s' % (self.path, self.query)
         else:
             self.full_path = self.path
-        self.http_version = 'HTTP/1.0'
+        self.http_version = 'HTTP/1.1'
         self.method = 'GET'
         self.headers = []
+        self.reader = None
+        self.writer = None
 
     @coroutine
     def connect(self):
         if self.verbose:
             print('* Connecting to %s:%s using %s' %
-                  (self.hostname, self.port, 'ssl' if self.ssl else 'tcp'))
+                  (self.hostname, self.port, 'ssl' if self.ssl else 'tcp'),
+                  file=sys.stderr)
         self.reader, self.writer = yield from open_connection(self.hostname, self.port, ssl=self.ssl)
         if self.verbose:
-            print('* Connected to %s' % (self.writer.get_extra_info('socket').getpeername(),))
+            print('* Connected to %s' %
+                  (self.writer.get_extra_info('socket').getpeername(),),
+                  file=sys.stderr)
 
     def putline(self, line):
         self.writer.write(line.encode('latin-1') + b'\r\n')
@@ -48,8 +54,12 @@ class Request:
         request = '%s %s %s' % (self.method, self.full_path, self.http_version)
         if self.verbose: print('>', request, file=sys.stderr)
         self.putline(request)
+        if 'host' not in {key.lower() for key, _ in self.headers}:
+            self.headers.insert(0, ('Host', self.netloc))
         for key, value in self.headers:
-            self.putline('%s: %s' % (key, value))
+            line = '%s: %s' % (key, value)
+            if self.verbose: print('>', line, file=sys.stderr)
+            self.putline(line)
         self.putline('')
 
     @coroutine
@@ -93,7 +103,15 @@ class Response:
 
     @coroutine
     def read(self):
-        body = yield from self.reader.read()
+        nbytes = None
+        for key, value in self.headers:
+            if key.lower() == 'content-length':
+                nbytes = int(value)
+                break
+        if nbytes is None:
+            body = yield from self.reader.read()
+        else:
+            body = yield from self.reader.readexactly(nbytes)
         return body
 
 
@@ -110,7 +128,7 @@ def fetch(url, verbose=True):
 def main():
     loop = get_event_loop()
     body = loop.run_until_complete(fetch(sys.argv[1], '-v' in sys.argv))
-    print(body.decode('latin-1'), end='')
+    sys.stdout.buffer.write(body)
 
 
 if __name__ == '__main__':

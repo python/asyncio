@@ -49,27 +49,6 @@ class ReadTransport(BaseTransport):
 class WriteTransport(BaseTransport):
     """ABC for write-only transports."""
 
-    def set_buffer_limits(self, high, low=None):
-        """Set the high- and low-water limits for flow control.
-
-        These two values control when to call the protocol's
-        pause_writing() and resume_writing() methods.  If specified,
-        the low-water limit must be less than or equal to the
-        high-water limit.  Neither value can be negative.
-
-        The initial defaults are implementation-specific.  If only the
-        high-water limit is given, the low-water limit defaults to a
-        implementation-specific value less than or equal to the
-        high-water limit.  Setting high to zero forces low to zero as
-        well, and causes pause_writing() to be called whenever the
-        buffer becomes non-empty.  Setting low to zero causes
-        resume_writing() to be called only once the buffer is empty.
-        Use of zero for either limit is generally sub-optimal as it
-        reduces opportunities for doing I/O and computation
-        concurrently.
-        """
-        raise NotImplementedError
-
     def write(self, data):
         """Write some data bytes to the transport.
 

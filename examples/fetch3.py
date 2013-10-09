@@ -120,7 +120,7 @@ class Response:
     def get_redirect_url(self, default=None):
         if self.status not in (300, 301, 302, 303, 307):
             return default
-        return self.get_header('Location') or self.get_header('URI') or default
+        return self.get_header('Location', default)
 
     def get_header(self, key, default=None):
         key = key.lower()

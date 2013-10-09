@@ -11,7 +11,6 @@ import concurrent.futures
 import functools
 import inspect
 import linecache
-import sys
 import traceback
 import weakref
 
@@ -358,6 +357,11 @@ def wait_for(fut, timeout, *, loop=None):
     raise futures.TimeoutError()
 
 
+def _waiter_timeout(waiter):
+    if not waiter.done():
+        waiter.set_result(False)
+
+
 @coroutine
 def _wait(fs, timeout, return_when, loop):
     """Internal helper for wait() and _wait_for().
@@ -368,7 +372,7 @@ def _wait(fs, timeout, return_when, loop):
     waiter = futures.Future(loop=loop)
     timeout_handle = None
     if timeout is not None:
-        timeout_handle = loop.call_later(timeout, waiter.cancel)
+        timeout_handle = loop.call_later(timeout, _waiter_timeout, waiter)
     counter = len(fs)
 
     def _on_completion(f):
@@ -380,14 +384,18 @@ def _wait(fs, timeout, return_when, loop):
                                                 f.exception() is not None)):
             if timeout_handle is not None:
                 timeout_handle.cancel()
-            waiter.cancel()
+            if not waiter.done():
+                waiter.set_result(False)
 
     for f in fs:
         f.add_done_callback(_on_completion)
+
     try:
         yield from waiter
-    except futures.CancelledError:
-        pass
+    finally:
+        if timeout_handle is not None:
+            timeout_handle.cancel()
+
     done, pending = set(), set()
     for f in fs:
         f.remove_done_callback(_on_completion)

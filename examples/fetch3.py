@@ -1,6 +1,7 @@
 """Fetch one URL and write its content to stdout.
 
-This version adds a primitive connection pool and redirect following.
+This version adds a primitive connection pool, redirect following and
+chunked transfer-encoding.
 """
 
 import sys
@@ -51,21 +52,20 @@ class Request:
         self.reader = None
         self.writer = None
 
+    def vprint(self, *args):
+        if self.verbose:
+            print(*args, file=sys.stderr)
+
     @coroutine
     def connect(self, pool):
-        if self.verbose:
-            print('* Connecting to %s:%s using %s' %
-                  (self.hostname, self.port, 'ssl' if self.ssl else 'tcp'),
-                  file=sys.stderr)
+        self.vprint('* Connecting to %s:%s using %s' %
+                    (self.hostname, self.port, 'ssl' if self.ssl else 'tcp'))
         self.reader, self.writer = yield from pool.open_connection(self.hostname, self.port, ssl=self.ssl)
-        if self.verbose:
-            print('* Connected to %s' %
-                  (self.writer.get_extra_info('socket').getpeername(),),
-                  file=sys.stderr)
+        self.vprint('* Connected to %s' %
+                    (self.writer.get_extra_info('socket').getpeername(),))
 
     def putline(self, line):
-        if self.verbose:
-            print('>', line, file=sys.stderr)
+        self.vprint('>', line)
         self.writer.write(line.encode('latin-1') + b'\r\n')
 
     @coroutine
@@ -96,10 +96,14 @@ class Response:
         self.reason = None  # 'Ok'
         self.headers = []  # [('Content-Type', 'text/html')]
 
+    def vprint(self, *args):
+        if self.verbose:
+            print(*args, file=sys.stderr)
+
     @coroutine
     def getline(self):
         line = (yield from self.reader.readline()).decode('latin-1').rstrip()
-        if self.verbose: print('<', line, file=sys.stderr)
+        self.vprint('<', line)
         return line
 
     @coroutine
@@ -137,7 +141,24 @@ class Response:
                 nbytes = int(value)
                 break
         if nbytes is None:
-            body = yield from self.reader.read()
+            if self.get_header('transfer-encoding').lower() == 'chunked':
+                blocks = []
+                while True:
+                    size_header = yield from self.reader.readline()
+                    if not size_header:
+                        break
+                    parts = size_header.split(b';')
+                    size = int(parts[0], 16)
+                    if not size:
+                        break
+                    block = yield from self.reader.readexactly(size)
+                    assert len(block) == size, (len(block), size)
+                    blocks.append(block)
+                    crlf = yield from self.reader.readline()
+                    assert crlf == b'\r\n'
+                body = b''.join(blocks)
+            else:
+                body = self.reader.read()
         else:
             body = yield from self.reader.readexactly(nbytes)
         return body

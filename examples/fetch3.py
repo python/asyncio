@@ -14,17 +14,31 @@ from tulip import *
 class ConnectionPool:
     # TODO: Locking?  Close idle connections?
 
-    def __init__(self):
+    def __init__(self, verbose=False):
+        self.verbose = verbose
         self.connections = {}  # {(host, port, ssl): (reader, writer)}
 
     @coroutine
     def open_connection(self, host, port, ssl):
         port = port or (443 if ssl else 80)
-        key = (host, port, ssl)
-        if key in self.connections:
-            return self.connections[key]
+        ipaddrs = yield from get_event_loop().getaddrinfo(host, port)
+        if self.verbose:
+            print('* %s resolves to %s' %
+                  (host, ', '.join(ip[4][0] for ip in ipaddrs)),
+                  file=sys.stderr)
+        for _, _, _, _, (h, p, *_) in ipaddrs:
+            key = h, p, ssl
+            conn = self.connections.get(key)
+            if conn:
+                if self.verbose:
+                    print('* Reusing pooled connection', key, file=sys.stderr)
+                return conn
         reader, writer = yield from open_connection(host, port, ssl=ssl)
+        host, port, *_ = writer.get_extra_info('socket').getpeername()
+        key = host, port, ssl
         self.connections[key] = reader, writer
+        if self.verbose:
+            print('* New connection', key, file=sys.stderr)
         return reader, writer
 
 
@@ -166,7 +180,7 @@ class Response:
 
 @coroutine
 def fetch(url, verbose=True, max_redirect=10):
-    pool = ConnectionPool()
+    pool = ConnectionPool(verbose)
     for _ in range(max_redirect):
         request = Request(url, verbose)
         yield from request.connect(pool)

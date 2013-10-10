@@ -17,7 +17,11 @@ class Client(Protocol):
         self.lost = False
         self.loop = get_event_loop()
         self.waiter = Future()
-        self.write_some_data()
+        if '--stop' in sys.argv[1:]:
+            self.tr.write(b'stop')
+            self.tr.close()
+        else:
+            self.write_some_data()
 
     def write_some_data(self):
         if self.lost:

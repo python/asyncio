@@ -50,6 +50,7 @@ class Server(events.AbstractServer):
     def __init__(self, loop, sockets):
         self.loop = loop
         self.sockets = sockets
+        self.waiters = []
 
     def close(self):
         sockets = self.sockets
@@ -57,6 +58,19 @@ class Server(events.AbstractServer):
             self.sockets = None
             for sock in sockets:
                 self.loop._stop_serving(sock)
+            waiters = self.waiters
+            self.waiters = None
+            for waiter in waiters:
+                if not waiter.done():
+                    waiter.set_result(waiter)
+
+    @tasks.coroutine
+    def wait_closed(self):
+        if self.sockets is None or self.waiters is None:
+            return
+        waiter = futures.Future(loop=self.loop)
+        self.waiters.append(waiter)
+        yield from waiter
 
 
 class BaseEventLoop(events.AbstractEventLoop):

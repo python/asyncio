@@ -69,49 +69,14 @@ class Task(futures.Future):
     _all_tasks = weakref.WeakSet()
 
     @classmethod
-    def all_tasks(cls):
-        """Return a set of all tasks in existence."""
-        return set(cls._all_tasks)
+    def all_tasks(cls, loop=None):
+        """Return a set of all tasks for an event loop.
 
-    @classmethod
-    def all_pending_tasks(cls):
-        """Return a set of all tasks in existence that aren't done yet."""
-        return {t for t in cls._all_tasks if not t.done()}
-
-    @classmethod
-    def all_done_tasks(cls):
-        """Return a set of all tasks in existence that are done.
-
-        This is the union of all_successful_tasks() and all_failed_tasks().
+        By default all tasks for the current event loop are returned.
         """
-        return {t for t in cls._all_tasks if t.done()}
-
-    @classmethod
-    def all_successful_tasks(cls):
-        """Return a set of all tasks in existence that have a valid result."""
-        return {t for t in cls._all_tasks
-                  if t.done() and not t.cancelled() and t.exception() is None}
-
-    @classmethod
-    def all_failed_tasks(cls):
-        """Return a set of all tasks in existence that have failed.
-
-        This is the union of all_excepted_tasks() and all_cancelled_tasks().
-        """
-        return {t for t in cls._all_tasks
-                  if t.done() and (t.cancelled() or t.exception())}
-
-    @classmethod
-    def all_excepted_tasks(cls):
-        """Return a set of all tasks in existence that have an exception."""
-        return {t for t in cls._all_tasks
-                  if t.done() and not t.cancelled() and
-                  t.exception() is not None}
-
-    @classmethod
-    def all_cancelled_tasks(cls):
-        """Return a set of all tasks in existence that were cancelled."""
-        return {t for t in cls._all_tasks if t.cancelled()}
+        if loop is None:
+            loop = events.get_event_loop()
+        return {t for t in cls._all_tasks if t._loop is loop}
 
     def __init__(self, coro, *, loop=None):
         assert inspect.isgenerator(coro)  # Must be a coroutine *object*.

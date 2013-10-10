@@ -20,10 +20,12 @@ class Client(Protocol):
         self.write_some_data()
 
     def write_some_data(self):
+        if self.lost:
+            dprint('lost already')
+            return
         dprint('writing', len(self.data), 'bytes')
         self.tr.write(self.data)
-        if not self.lost:
-            self.loop.call_soon(self.write_some_data)
+        self.loop.call_soon(self.write_some_data)
 
     def connection_lost(self, exc):
         dprint('lost connection', repr(exc))

@@ -32,8 +32,9 @@ class Response:
             if not header_line:
                 break
             if self.verbose: print('<', header_line, file=sys.stderr)
+            # TODO: Continuation lines.
             key, value = header_line.split(':', 1)
-            self.headers.append((key, value.strip()))  # TODO: Continuation lines.
+            self.headers.append((key, value.strip()))
         if self.verbose: print(file=sys.stderr)
 
 

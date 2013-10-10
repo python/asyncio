@@ -74,24 +74,29 @@ class Request:
     def connect(self, pool):
         self.vprint('* Connecting to %s:%s using %s' %
                     (self.hostname, self.port, 'ssl' if self.ssl else 'tcp'))
-        self.reader, self.writer = yield from pool.open_connection(self.hostname, self.port, ssl=self.ssl)
+        self.reader, self.writer = \
+                     yield from pool.open_connection(self.hostname,
+                                                     self.port,
+                                                     ssl=self.ssl)
         self.vprint('* Connected to %s' %
                     (self.writer.get_extra_info('socket').getpeername(),))
 
+    @coroutine
     def putline(self, line):
         self.vprint('>', line)
         self.writer.write(line.encode('latin-1') + b'\r\n')
+        yield from self.writer.drain()
 
     @coroutine
     def send_request(self):
         request = '%s %s %s' % (self.method, self.full_path, self.http_version)
-        self.putline(request)
+        yield from self.putline(request)
         if 'host' not in {key.lower() for key, _ in self.headers}:
             self.headers.insert(0, ('Host', self.netloc))
         for key, value in self.headers:
             line = '%s: %s' % (key, value)
-            self.putline(line)
-        self.putline('')
+            yield from self.putline(line)
+        yield from self.putline('')
 
     @coroutine
     def get_response(self):
@@ -132,8 +137,9 @@ class Response:
             header_line = yield from self.getline()
             if not header_line:
                 break
+            # TODO: Continuation lines.
             key, value = header_line.split(':', 1)
-            self.headers.append((key, value.strip()))  # TODO: Continuation lines.
+            self.headers.append((key, value.strip()))
 
     def get_redirect_url(self, default=None):
         if self.status not in (300, 301, 302, 303, 307):

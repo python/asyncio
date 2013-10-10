@@ -40,7 +40,9 @@ class Request:
             print('* Connecting to %s:%s using %s' %
                   (self.hostname, self.port, 'ssl' if self.ssl else 'tcp'),
                   file=sys.stderr)
-        self.reader, self.writer = yield from open_connection(self.hostname, self.port, ssl=self.ssl)
+        self.reader, self.writer = yield from open_connection(self.hostname,
+                                                              self.port,
+                                                              ssl=self.ssl)
         if self.verbose:
             print('* Connected to %s' %
                   (self.writer.get_extra_info('socket').getpeername(),),
@@ -97,8 +99,9 @@ class Response:
             if not header_line:
                 break
             if self.verbose: print('<', header_line, file=sys.stderr)
+            # TODO: Continuation lines.
             key, value = header_line.split(':', 1)
-            self.headers.append((key, value.strip()))  # TODO: Continuation lines.
+            self.headers.append((key, value.strip()))
         if self.verbose: print(file=sys.stderr)
 
     @coroutine

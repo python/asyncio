@@ -436,7 +436,7 @@ class _SelectorSocketTransport(_SelectorTransport):
                 n = self._sock.send(data)
             except (BlockingIOError, InterruptedError):
                 n = 0
-            except BrokenPipeError as exc:
+            except (BrokenPipeError, ConnectionResetError) as exc:
                 self._force_close(exc)
                 return
             except OSError as exc:
@@ -460,7 +460,7 @@ class _SelectorSocketTransport(_SelectorTransport):
             n = self._sock.send(data)
         except (BlockingIOError, InterruptedError):
             self._buffer.append(data)
-        except BrokenPipeError as exc:
+        except (BrokenPipeError, ConnectionResetError) as exc:
             self._force_close(exc)
         except Exception as exc:
             self._loop.remove_writer(self._sock_fd)
@@ -592,7 +592,7 @@ class _SelectorSslTransport(_SelectorTransport):
             except (BlockingIOError, InterruptedError,
                     ssl.SSLWantReadError, ssl.SSLWantWriteError):
                 n = 0
-            except BrokenPipeError as exc:
+            except (BrokenPipeError, ConnectionResetError) as exc:
                 self._loop.remove_writer(self._sock_fd)
                 self._force_close(exc)
                 return

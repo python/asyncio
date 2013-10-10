@@ -30,7 +30,7 @@ from . import tasks
 from .log import tulip_log
 
 
-__all__ = ['BaseEventLoop']
+__all__ = ['BaseEventLoop', 'Server']
 
 
 # Argument for default thread pool executor creation.
@@ -43,6 +43,20 @@ class _StopError(BaseException):
 
 def _raise_stop_error(*args):
     raise _StopError
+
+
+class Server(events.AbstractServer):
+
+    def __init__(self, loop, sockets):
+        self.loop = loop
+        self.sockets = sockets
+
+    def close(self):
+        sockets = self.sockets
+        if sockets is not None:
+            self.sockets = None
+            for sock in sockets:
+                self.loop._stop_serving(sock)
 
 
 class BaseEventLoop(events.AbstractEventLoop):
@@ -383,7 +397,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         return transport, protocol
 
     @tasks.coroutine
-    def start_serving(self, protocol_factory, host=None, port=None,
+    def create_server(self, protocol_factory, host=None, port=None,
                       *,
                       family=socket.AF_UNSPEC,
                       flags=socket.AI_PASSIVE,
@@ -447,7 +461,7 @@ class BaseEventLoop(events.AbstractEventLoop):
             sock.listen(backlog)
             sock.setblocking(False)
             self._start_serving(protocol_factory, sock, ssl)
-        return sockets
+        return Server(self, sockets)
 
     @tasks.coroutine
     def connect_read_pipe(self, protocol_factory, pipe):

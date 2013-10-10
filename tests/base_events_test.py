@@ -443,7 +443,7 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
         self.assertRaises(
             OSError, self.loop.run_until_complete, coro)
 
-    def test_start_serving_empty_host(self):
+    def test_create_server_empty_host(self):
         # if host is empty string use None instead
         host = object()
 
@@ -457,28 +457,28 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
             return tasks.Task(getaddrinfo(*args, **kwds), loop=self.loop)
 
         self.loop.getaddrinfo = getaddrinfo_task
-        fut = self.loop.start_serving(MyProto, '', 0)
+        fut = self.loop.create_server(MyProto, '', 0)
         self.assertRaises(OSError, self.loop.run_until_complete, fut)
         self.assertIsNone(host)
 
-    def test_start_serving_host_port_sock(self):
-        fut = self.loop.start_serving(
+    def test_create_server_host_port_sock(self):
+        fut = self.loop.create_server(
             MyProto, '0.0.0.0', 0, sock=object())
         self.assertRaises(ValueError, self.loop.run_until_complete, fut)
 
-    def test_start_serving_no_host_port_sock(self):
-        fut = self.loop.start_serving(MyProto)
+    def test_create_server_no_host_port_sock(self):
+        fut = self.loop.create_server(MyProto)
         self.assertRaises(ValueError, self.loop.run_until_complete, fut)
 
-    def test_start_serving_no_getaddrinfo(self):
+    def test_create_server_no_getaddrinfo(self):
         getaddrinfo = self.loop.getaddrinfo = unittest.mock.Mock()
         getaddrinfo.return_value = []
 
-        f = self.loop.start_serving(MyProto, '0.0.0.0', 0)
+        f = self.loop.create_server(MyProto, '0.0.0.0', 0)
         self.assertRaises(OSError, self.loop.run_until_complete, f)
 
     @unittest.mock.patch('tulip.base_events.socket')
-    def test_start_serving_cant_bind(self, m_socket):
+    def test_create_server_cant_bind(self, m_socket):
 
         class Err(OSError):
             strerror = 'error'
@@ -488,7 +488,7 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
         m_sock = m_socket.socket.return_value = unittest.mock.Mock()
         m_sock.bind.side_effect = Err
 
-        fut = self.loop.start_serving(MyProto, '0.0.0.0', 0)
+        fut = self.loop.create_server(MyProto, '0.0.0.0', 0)
         self.assertRaises(OSError, self.loop.run_until_complete, fut)
         self.assertTrue(m_sock.close.called)
 

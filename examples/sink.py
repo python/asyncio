@@ -26,13 +26,13 @@ class Server(Protocol):
 
 @coroutine
 def start(loop):
-    ss = yield from loop.start_serving(Server, 'localhost', 1111)
-    return ss
+    svr = yield from loop.create_server(Server, 'localhost', 1111)
+    return svr
 
 def main():
     loop = get_event_loop()
-    ss = loop.run_until_complete(start(loop))
-    dprint('serving', [s.getsockname() for s in ss])
+    svr = loop.run_until_complete(start(loop))
+    dprint('serving', [s.getsockname() for s in svr.sockets])
     loop.run_forever()
 
 if __name__ == '__main__':

@@ -322,6 +322,8 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
 
 class _SelectorTransport(transports.Transport):
 
+    max_size = 256 * 1024  # Buffer size passed to recv().
+
     def __init__(self, loop, sock, protocol, extra):
         super().__init__(extra)
         self._extra['socket'] = sock
@@ -400,7 +402,7 @@ class _SelectorSocketTransport(_SelectorTransport):
 
     def _read_ready(self):
         try:
-            data = self._sock.recv(16*1024)
+            data = self._sock.recv(self.max_size)
         except (BlockingIOError, InterruptedError):
             pass
         except ConnectionResetError as exc:
@@ -434,6 +436,9 @@ class _SelectorSocketTransport(_SelectorTransport):
                 n = self._sock.send(data)
             except (BlockingIOError, InterruptedError):
                 n = 0
+            except BrokenPipeError as exc:
+                self._force_close(exc)
+                return
             except OSError as exc:
                 self._fatal_error(exc)
                 return
@@ -455,6 +460,8 @@ class _SelectorSocketTransport(_SelectorTransport):
             n = self._sock.send(data)
         except (BlockingIOError, InterruptedError):
             self._buffer.append(data)
+        except BrokenPipeError as exc:
+            self._force_close(exc)
         except Exception as exc:
             self._loop.remove_writer(self._sock_fd)
             self._fatal_error(exc)
@@ -559,7 +566,7 @@ class _SelectorSslTransport(_SelectorTransport):
         # First try reading.
         if not self._closing and not self._paused:
             try:
-                data = self._sock.recv(8192)
+                data = self._sock.recv(self.max_size)
             except (BlockingIOError, InterruptedError,
                     ssl.SSLWantReadError, ssl.SSLWantWriteError):
                 pass
@@ -585,6 +592,10 @@ class _SelectorSslTransport(_SelectorTransport):
             except (BlockingIOError, InterruptedError,
                     ssl.SSLWantReadError, ssl.SSLWantWriteError):
                 n = 0
+            except BrokenPipeError as exc:
+                self._loop.remove_writer(self._sock_fd)
+                self._force_close(exc)
+                return
             except Exception as exc:
                 self._loop.remove_writer(self._sock_fd)
                 self._fatal_error(exc)
@@ -623,8 +634,6 @@ class _SelectorSslTransport(_SelectorTransport):
 
 
 class _SelectorDatagramTransport(_SelectorTransport):
-
-    max_size = 256 * 1024  # max bytes we read in one eventloop iteration
 
     def __init__(self, loop, sock, protocol, address=None, extra=None):
         super().__init__(loop, sock, protocol, extra)

@@ -12,7 +12,8 @@ class Client(Protocol):
     data = b'x'*16*1024
 
     def connection_made(self, tr):
-        dprint('connecting to', tr.get_extra_info('addr'))
+        dprint('connecting to', tr.get_extra_info('socket').getpeername())
+        dprint('my socket is', tr.get_extra_info('socket').getsockname())
         self.tr = tr
         self.lost = False
         self.loop = get_event_loop()
@@ -38,7 +39,7 @@ class Client(Protocol):
 
 @coroutine
 def start(loop):
-    tr, pr = yield from loop.create_connection(Client, 'localhost', 1111)
+    tr, pr = yield from loop.create_connection(Client, '127.0.0.1', 1111)
     dprint('tr =', tr)
     dprint('pr =', pr)
     res = yield from pr.waiter

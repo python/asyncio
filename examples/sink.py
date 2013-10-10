@@ -12,13 +12,14 @@ def dprint(*args):
 class Service(Protocol):
 
     def connection_made(self, tr):
-        dprint('connection from', tr.get_extra_info('addr'))
+        dprint('connection from', tr.get_extra_info('socket').getpeername())
+        dprint('my socket is', tr.get_extra_info('socket').getsockname())
         self.tr = tr
         self.total = 0
 
     def data_received(self, data):
         if data == b'stop':
-            # Magic data that closes the service.
+            dprint('stopping server')
             server.close()
             self.tr.close()
             return

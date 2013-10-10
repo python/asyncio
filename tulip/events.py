@@ -108,6 +108,10 @@ class AbstractServer:
         """Stop serving.  This leaves existing connections open."""
         return NotImplemented
 
+    def wait_closed(self):
+        """Coroutine to wait until service is closed."""
+        return NotImplemented
+
 
 class AbstractEventLoop:
     """Abstract event loop."""

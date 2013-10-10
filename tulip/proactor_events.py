@@ -323,6 +323,6 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
     def _process_events(self, event_list):
         pass    # XXX hard work currently done in poll
 
-    def stop_serving(self, sock):
-        self._proactor.stop_serving(sock)
+    def _stop_serving(self, sock):
+        self._proactor._stop_serving(sock)
         sock.close()

@@ -433,7 +433,7 @@ class BaseProactorEventLoopTests(unittest.TestCase):
         self.loop._process_events([])
 
     @unittest.mock.patch('tulip.proactor_events.tulip_log')
-    def test_start_serving(self, m_log):
+    def test_create_server(self, m_log):
         pf = unittest.mock.Mock()
         call_soon = self.loop.call_soon = unittest.mock.Mock()
 
@@ -460,7 +460,7 @@ class BaseProactorEventLoopTests(unittest.TestCase):
         self.assertTrue(self.sock.close.called)
         self.assertTrue(m_log.exception.called)
 
-    def test_start_serving_cancel(self):
+    def test_create_server_cancel(self):
         pf = unittest.mock.Mock()
         call_soon = self.loop.call_soon = unittest.mock.Mock()
 
@@ -475,6 +475,6 @@ class BaseProactorEventLoopTests(unittest.TestCase):
 
     def test_stop_serving(self):
         sock = unittest.mock.Mock()
-        self.loop.stop_serving(sock)
+        self.loop._stop_serving(sock)
         self.assertTrue(sock.close.called)
-        self.proactor.stop_serving.assert_called_with(sock)
+        self.proactor._stop_serving.assert_called_with(sock)

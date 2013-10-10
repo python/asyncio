@@ -145,7 +145,7 @@ class ProactorEventLoop(proactor_events.BaseProactorEventLoop):
         self.call_soon(loop)
         return [server]
 
-    def stop_serving(self, server):
+    def _stop_serving(self, server):
         server.close()
 
 
@@ -329,9 +329,9 @@ class IocpProactor:
                     self._results.append(f)
             ms = 0
 
-    def stop_serving(self, obj):
+    def _stop_serving(self, obj):
         # obj is a socket or pipe handle.  It will be closed in
-        # BaseProactorEventLoop.stop_serving() which will make any
+        # BaseProactorEventLoop._stop_serving() which will make any
         # pending operations fail quickly.
         self._stopped_serving.add(obj)
 

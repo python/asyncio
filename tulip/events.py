@@ -5,7 +5,8 @@ Beyond the PEP:
 """
 
 __all__ = ['AbstractEventLoopPolicy', 'DefaultEventLoopPolicy',
-           'AbstractEventLoop', 'TimerHandle', 'Handle', 'make_handle',
+           'AbstractEventLoop', 'AbstractServer',
+           'Handle', 'TimerHandle',
            'get_event_loop_policy', 'set_event_loop_policy',
            'get_event_loop', 'set_event_loop', 'new_event_loop',
            ]
@@ -100,6 +101,14 @@ class TimerHandle(Handle):
         return NotImplemented if equal is NotImplemented else not equal
 
 
+class AbstractServer:
+    """Abstract server returned by create_service()."""
+
+    def close(self):
+        """Stop serving.  This leaves existing connections open."""
+        return NotImplemented
+
+
 class AbstractEventLoop:
     """Abstract event loop."""
 
@@ -166,12 +175,13 @@ class AbstractEventLoop:
                           local_addr=None):
         raise NotImplementedError
 
-    def start_serving(self, protocol_factory, host=None, port=None, *,
+    def create_server(self, protocol_factory, host=None, port=None, *,
                       family=socket.AF_UNSPEC, flags=socket.AI_PASSIVE,
                       sock=None, backlog=100, ssl=None, reuse_address=None):
-        """A coroutine which creates a TCP server bound to host and
-        port and whose result will be a list of socket objects which
-        will later be handled by protocol_factory.
+        """A coroutine which creates a TCP server bound to host and port.
+
+        The return value is a Server object which can be used to stop
+        the service.
 
         If host is an empty string or None all interfaces are assumed
         and a list of multiple sockets will be returned (most likely
@@ -197,10 +207,6 @@ class AbstractEventLoop:
         expire. If not specified will automatically be set to True on
         UNIX.
         """
-        raise NotImplementedError
-
-    def stop_serving(self, sock):
-        """Stop listening for incoming connections. Close socket."""
         raise NotImplementedError
 
     def create_datagram_endpoint(self, protocol_factory,

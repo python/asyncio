@@ -36,13 +36,13 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         self._make_self_pipe()
 
     def _make_socket_transport(self, sock, protocol, waiter=None, *,
-                               extra=None):
-        return _SelectorSocketTransport(self, sock, protocol, waiter, extra)
+                               extra=None, server=None):
+        return _SelectorSocketTransport(self, sock, protocol, waiter, extra, server)
 
     def _make_ssl_transport(self, rawsock, protocol, sslcontext, waiter, *,
-                            server_side=False, extra=None):
+                            server_side=False, extra=None, server=None):
         return _SelectorSslTransport(
-            self, rawsock, protocol, sslcontext, waiter, server_side, extra)
+            self, rawsock, protocol, sslcontext, waiter, server_side, extra, server)
 
     def _make_datagram_transport(self, sock, protocol,
                                  address=None, extra=None):
@@ -85,11 +85,11 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         except (BlockingIOError, InterruptedError):
             pass
 
-    def _start_serving(self, protocol_factory, sock, ssl=None):
+    def _start_serving(self, protocol_factory, sock, ssl=None, server=None):
         self.add_reader(sock.fileno(), self._accept_connection,
-                        protocol_factory, sock, ssl)
+                        protocol_factory, sock, ssl, server)
 
-    def _accept_connection(self, protocol_factory, sock, ssl=None):
+    def _accept_connection(self, protocol_factory, sock, ssl=None, server=None):
         try:
             conn, addr = sock.accept()
             conn.setblocking(False)
@@ -106,10 +106,10 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             if ssl:
                 self._make_ssl_transport(
                     conn, protocol_factory(), ssl, None,
-                    server_side=True, extra={'addr': addr})
+                    server_side=True, extra={'addr': addr}, server=server)
             else:
                 self._make_socket_transport(
-                    conn, protocol_factory(), extra={'addr': addr})
+                    conn, protocol_factory(), extra={'addr': addr}, server=server)
         # It's now up to the protocol to handle the connection.
 
     def add_reader(self, fd, callback, *args):
@@ -324,16 +324,19 @@ class _SelectorTransport(transports.Transport):
 
     max_size = 256 * 1024  # Buffer size passed to recv().
 
-    def __init__(self, loop, sock, protocol, extra):
+    def __init__(self, loop, sock, protocol, extra, server=None):
         super().__init__(extra)
         self._extra['socket'] = sock
         self._loop = loop
         self._sock = sock
         self._sock_fd = sock.fileno()
         self._protocol = protocol
+        self._server = server
         self._buffer = collections.deque()
         self._conn_lost = 0
         self._closing = False  # Set when close() called.
+        if server is not None:
+            server.attach(self)
 
     def abort(self):
         self._force_close(None)
@@ -373,12 +376,16 @@ class _SelectorTransport(transports.Transport):
             self._sock = None
             self._protocol = None
             self._loop = None
+            server = self._server
+            if server is not None:
+                server.detach(self)
+                self._server = None
 
 
 class _SelectorSocketTransport(_SelectorTransport):
 
-    def __init__(self, loop, sock, protocol, waiter=None, extra=None):
-        super().__init__(loop, sock, protocol, extra)
+    def __init__(self, loop, sock, protocol, waiter=None, extra=None, server=None):
+        super().__init__(loop, sock, protocol, extra, server)
         self._eof = False
         self._paused = False
 
@@ -492,7 +499,7 @@ class _SelectorSocketTransport(_SelectorTransport):
 class _SelectorSslTransport(_SelectorTransport):
 
     def __init__(self, loop, rawsock, protocol, sslcontext, waiter=None,
-                 server_side=False, extra=None):
+                 server_side=False, extra=None, server=None):
         if server_side:
             assert isinstance(
                 sslcontext, ssl.SSLContext), 'Must pass an SSLContext'
@@ -502,7 +509,7 @@ class _SelectorSslTransport(_SelectorTransport):
         sslsock = sslcontext.wrap_socket(rawsock, server_side=server_side,
                                          do_handshake_on_connect=False)
 
-        super().__init__(loop, sslsock, protocol, extra)
+        super().__init__(loop, sslsock, protocol, extra, server)
 
         self._waiter = waiter
         self._rawsock = rawsock

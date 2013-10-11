@@ -50,7 +50,18 @@ class Server(events.AbstractServer):
     def __init__(self, loop, sockets):
         self.loop = loop
         self.sockets = sockets
+        self.active_count = 0
         self.waiters = []
+
+    def attach(self, transport):
+        assert self.sockets is not None
+        self.active_count += 1
+
+    def detach(self, transport):
+        assert self.active_count > 0
+        self.active_count -= 1
+        if self.active_count == 0 and self.sockets is None:
+            self._wakeup()
 
     def close(self):
         sockets = self.sockets
@@ -58,11 +69,15 @@ class Server(events.AbstractServer):
             self.sockets = None
             for sock in sockets:
                 self.loop._stop_serving(sock)
-            waiters = self.waiters
-            self.waiters = None
-            for waiter in waiters:
-                if not waiter.done():
-                    waiter.set_result(waiter)
+            if self.active_count == 0:
+                self._wakeup()
+
+    def _wakeup(self):
+        waiters = self.waiters
+        self.waiters = None
+        for waiter in waiters:
+            if not waiter.done():
+                waiter.set_result(waiter)
 
     @tasks.coroutine
     def wait_closed(self):
@@ -83,12 +98,12 @@ class BaseEventLoop(events.AbstractEventLoop):
         self._running = False
 
     def _make_socket_transport(self, sock, protocol, waiter=None, *,
-                               extra=None):
+                               extra=None, server=None):
         """Create socket transport."""
         raise NotImplementedError
 
     def _make_ssl_transport(self, rawsock, protocol, sslcontext, waiter, *,
-                            server_side=False, extra=None):
+                            server_side=False, extra=None, server=None):
         """Create SSL transport."""
         raise NotImplementedError
 
@@ -471,11 +486,12 @@ class BaseEventLoop(events.AbstractEventLoop):
                     'host and port was not specified and no sock specified')
             sockets = [sock]
 
+        server = Server(self, sockets)
         for sock in sockets:
             sock.listen(backlog)
             sock.setblocking(False)
-            self._start_serving(protocol_factory, sock, ssl)
-        return Server(self, sockets)
+            self._start_serving(protocol_factory, sock, ssl, server)
+        return server
 
     @tasks.coroutine
     def connect_read_pipe(self, protocol_factory, pipe):

@@ -419,7 +419,7 @@ class _SelectorSocketTransport(_SelectorTransport):
                     self.close()
 
     def write(self, data):
-        assert isinstance(data, bytes), repr(data)[:100]
+        assert isinstance(data, bytes), repr(type(data))
         assert not self._eof, 'Cannot call write() after write_eof()'
         if not data:
             return
@@ -442,11 +442,11 @@ class _SelectorSocketTransport(_SelectorTransport):
             except OSError as exc:
                 self._fatal_error(exc)
                 return
-
-            if n == len(data):
-                return
-            elif n:
+            else:
                 data = data[n:]
+                if not data:
+                    return
+            # Start async I/O.
             self._loop.add_writer(self._sock_fd, self._write_ready)
 
         self._buffer.append(data)
@@ -461,20 +461,20 @@ class _SelectorSocketTransport(_SelectorTransport):
         except (BlockingIOError, InterruptedError):
             self._buffer.append(data)
         except (BrokenPipeError, ConnectionResetError) as exc:
+            self._loop.remove_writer(self._sock_fd)
             self._force_close(exc)
         except Exception as exc:
             self._loop.remove_writer(self._sock_fd)
             self._fatal_error(exc)
         else:
-            if n == len(data):
+            data = data[n:]
+            if not data:
                 self._loop.remove_writer(self._sock_fd)
                 if self._closing:
                     self._call_connection_lost(None)
                 elif self._eof:
                     self._sock.shutdown(socket.SHUT_WR)
                 return
-            elif n:
-                data = data[n:]
 
             self._buffer.append(data)  # Try again later.
 
@@ -609,7 +609,7 @@ class _SelectorSslTransport(_SelectorTransport):
             self._call_connection_lost(None)
 
     def write(self, data):
-        assert isinstance(data, bytes), repr(data)
+        assert isinstance(data, bytes), repr(type(data))
         if not data:
             return
 
@@ -653,7 +653,7 @@ class _SelectorDatagramTransport(_SelectorTransport):
             self._protocol.datagram_received(data, addr)
 
     def sendto(self, data, addr=None):
-        assert isinstance(data, bytes), repr(data)
+        assert isinstance(data, bytes), repr(type(data))
         if not data:
             return
 

@@ -5,7 +5,7 @@ import sys
 from tulip import *
 
 def dprint(*args):
-        print('source:', *args, file=sys.stderr)
+    print('source:', *args, file=sys.stderr)
 
 class Client(Protocol):
 
@@ -46,8 +46,13 @@ def start(loop):
     return res
 
 def main():
+    if '--iocp' in sys.argv:
+        from tulip.windows_events import ProactorEventLoop
+        loop = ProactorEventLoop()
+        set_event_loop(loop)
     loop = get_event_loop()
     loop.run_until_complete(start(loop))
+    loop.close()
 
 if __name__ == '__main__':
     main()

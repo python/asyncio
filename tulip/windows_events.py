@@ -179,7 +179,13 @@ class IocpProactor:
         else:
             ov.ReadFile(conn.fileno(), nbytes)
         def finish(trans, key, ov):
-            return ov.getresult()
+            try:
+                return ov.getresult()
+            except OSError as exc:
+                if exc.winerror == _overlapped.ERROR_NETNAME_DELETED:
+                    raise ConnectionResetError(*exc.args)
+                else:
+                    raise
         return self._register(ov, conn, finish)
 
     def send(self, conn, buf, flags=0):
@@ -190,7 +196,13 @@ class IocpProactor:
         else:
             ov.WriteFile(conn.fileno(), buf)
         def finish(trans, key, ov):
-            return ov.getresult()
+            try:
+                return ov.getresult()
+            except OSError as exc:
+                if exc.winerror == _overlapped.ERROR_NETNAME_DELETED:
+                    raise ConnectionResetError(*exc.args)
+                else:
+                    raise
         return self._register(ov, conn, finish)
 
     def accept(self, listener):

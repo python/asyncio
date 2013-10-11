@@ -38,11 +38,16 @@ def start(loop):
     return svr
 
 def main():
+    if '--iocp' in sys.argv:
+        from tulip.windows_events import ProactorEventLoop
+        loop = ProactorEventLoop()
+        set_event_loop(loop)
     loop = get_event_loop()
     global server
     server = loop.run_until_complete(start(loop))
     dprint('serving', [s.getsockname() for s in server.sockets])
     loop.run_until_complete(server.wait_closed())
+    loop.close()
 
 if __name__ == '__main__':
     main()

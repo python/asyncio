@@ -34,7 +34,7 @@ class ConnectionPool:
                     print('* Reusing pooled connection', key, file=sys.stderr)
                 return conn
         reader, writer = yield from open_connection(host, port, ssl=ssl)
-        host, port, *_ = writer.get_extra_info('socket').getpeername()
+        host, port, *_ = writer.get_extra_info('getpeername')
         key = host, port, ssl
         self.connections[key] = reader, writer
         if self.verbose:
@@ -79,7 +79,7 @@ class Request:
                                                      self.port,
                                                      ssl=self.ssl)
         self.vprint('* Connected to %s' %
-                    (self.writer.get_extra_info('socket').getpeername(),))
+                    (self.writer.get_extra_info('getpeername'),))
 
     @coroutine
     def putline(self, line):

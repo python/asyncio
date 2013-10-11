@@ -397,7 +397,6 @@ class BaseEventLoop(events.AbstractEventLoop):
         for ((family, proto),
              (local_address, remote_address)) in addr_pairs_info:
             sock = None
-            l_addr = None
             r_addr = None
             try:
                 sock = socket.socket(
@@ -407,7 +406,6 @@ class BaseEventLoop(events.AbstractEventLoop):
 
                 if local_addr:
                     sock.bind(local_address)
-                    l_addr = sock.getsockname()
                 if remote_addr:
                     yield from self.sock_connect(sock, remote_address)
                     r_addr = remote_address
@@ -421,8 +419,7 @@ class BaseEventLoop(events.AbstractEventLoop):
             raise exceptions[0]
 
         protocol = protocol_factory()
-        transport = self._make_datagram_transport(
-            sock, protocol, r_addr, extra={'addr': l_addr})
+        transport = self._make_datagram_transport(sock, protocol, r_addr)
         return transport, protocol
 
     @tasks.coroutine
@@ -497,8 +494,7 @@ class BaseEventLoop(events.AbstractEventLoop):
     def connect_read_pipe(self, protocol_factory, pipe):
         protocol = protocol_factory()
         waiter = futures.Future(loop=self)
-        transport = self._make_read_pipe_transport(pipe, protocol, waiter,
-                                                   extra={})
+        transport = self._make_read_pipe_transport(pipe, protocol, waiter)
         yield from waiter
         return transport, protocol
 
@@ -506,8 +502,7 @@ class BaseEventLoop(events.AbstractEventLoop):
     def connect_write_pipe(self, protocol_factory, pipe):
         protocol = protocol_factory()
         waiter = futures.Future(loop=self)
-        transport = self._make_write_pipe_transport(pipe, protocol, waiter,
-                                                    extra={})
+        transport = self._make_write_pipe_transport(pipe, protocol, waiter)
         yield from waiter
         return transport, protocol
 
@@ -521,8 +516,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         assert isinstance(cmd, str), cmd
         protocol = protocol_factory()
         transport = yield from self._make_subprocess_transport(
-            protocol, cmd, True, stdin, stdout, stderr, bufsize,
-            extra={}, **kwargs)
+            protocol, cmd, True, stdin, stdout, stderr, bufsize, **kwargs)
         return transport, protocol
 
     @tasks.coroutine
@@ -534,8 +528,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         assert not shell, "shell must be False"
         protocol = protocol_factory()
         transport = yield from self._make_subprocess_transport(
-            protocol, args, False, stdin, stdout, stderr, bufsize,
-            extra={}, **kwargs)
+            protocol, args, False, stdin, stdout, stderr, bufsize, **kwargs)
         return transport, protocol
 
     def _add_callback(self, handle):

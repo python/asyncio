@@ -37,12 +37,14 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
 
     def _make_socket_transport(self, sock, protocol, waiter=None, *,
                                extra=None, server=None):
-        return _SelectorSocketTransport(self, sock, protocol, waiter, extra, server)
+        return _SelectorSocketTransport(self, sock, protocol, waiter,
+                                        extra, server)
 
     def _make_ssl_transport(self, rawsock, protocol, sslcontext, waiter, *,
                             server_side=False, extra=None, server=None):
         return _SelectorSslTransport(
-            self, rawsock, protocol, sslcontext, waiter, server_side, extra, server)
+            self, rawsock, protocol, sslcontext, waiter, server_side,
+            extra, server)
 
     def _make_datagram_transport(self, sock, protocol,
                                  address=None, extra=None):
@@ -89,7 +91,8 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         self.add_reader(sock.fileno(), self._accept_connection,
                         protocol_factory, sock, ssl, server)
 
-    def _accept_connection(self, protocol_factory, sock, ssl=None, server=None):
+    def _accept_connection(self, protocol_factory, sock, ssl=None,
+                           server=None):
         try:
             conn, addr = sock.accept()
             conn.setblocking(False)
@@ -106,10 +109,11 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             if ssl:
                 self._make_ssl_transport(
                     conn, protocol_factory(), ssl, None,
-                    server_side=True, extra={'addr': addr}, server=server)
+                    server_side=True, extra={'peername': addr}, server=server)
             else:
                 self._make_socket_transport(
-                    conn, protocol_factory(), extra={'addr': addr}, server=server)
+                    conn, protocol_factory(), extra={'peername': addr},
+                    server=server)
         # It's now up to the protocol to handle the connection.
 
     def add_reader(self, fd, callback, *args):
@@ -327,6 +331,12 @@ class _SelectorTransport(transports.Transport):
     def __init__(self, loop, sock, protocol, extra, server=None):
         super().__init__(extra)
         self._extra['socket'] = sock
+        self._extra['sockname'] = sock.getsockname()
+        if 'peername' not in self._extra:
+            try:
+                self._extra['peername'] = sock.getpeername()
+            except socket.error:
+                self._extra['peername'] = None
         self._loop = loop
         self._sock = sock
         self._sock_fd = sock.fileno()
@@ -384,7 +394,8 @@ class _SelectorTransport(transports.Transport):
 
 class _SelectorSocketTransport(_SelectorTransport):
 
-    def __init__(self, loop, sock, protocol, waiter=None, extra=None, server=None):
+    def __init__(self, loop, sock, protocol, waiter=None,
+                 extra=None, server=None):
         super().__init__(loop, sock, protocol, extra, server)
         self._eof = False
         self._paused = False

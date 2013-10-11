@@ -16,7 +16,8 @@ from .log import tulip_log
 class _ProactorBasePipeTransport(transports.BaseTransport):
     """Base class for pipe and socket transports."""
 
-    def __init__(self, loop, sock, protocol, waiter=None, extra=None, server=None):
+    def __init__(self, loop, sock, protocol, waiter=None,
+                 extra=None, server=None):
         super().__init__(extra)
         self._set_extra(sock)
         self._loop = loop
@@ -86,7 +87,8 @@ class _ProactorReadPipeTransport(_ProactorBasePipeTransport,
                                  transports.ReadTransport):
     """Transport for read pipes."""
 
-    def __init__(self, loop, sock, protocol, waiter=None, extra=None, server=None):
+    def __init__(self, loop, sock, protocol, waiter=None,
+                 extra=None, server=None):
         super().__init__(loop, sock, protocol, waiter, extra, server)
         self._read_fut = None
         self._paused = False
@@ -220,6 +222,9 @@ class _ProactorSocketTransport(_ProactorReadPipeTransport,
 
     def _set_extra(self, sock):
         self._extra['socket'] = sock
+        self._extra['sockname'] = sock.getsockname()
+        if 'peername' not in self._extra:
+            self._extra['peername'] = sock.getpeername()
 
     def can_write_eof(self):
         return True
@@ -242,8 +247,10 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
         proactor.set_loop(self)
         self._make_self_pipe()
 
-    def _make_socket_transport(self, sock, protocol, waiter=None, extra=None, server=None):
-        return _ProactorSocketTransport(self, sock, protocol, waiter, extra, server)
+    def _make_socket_transport(self, sock, protocol, waiter=None,
+                               extra=None, server=None):
+        return _ProactorSocketTransport(self, sock, protocol, waiter,
+                                        extra, server)
 
     def _make_duplex_pipe_transport(self, sock, protocol, waiter=None,
                                     extra=None):
@@ -318,7 +325,8 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
                     conn, addr = f.result()
                     protocol = protocol_factory()
                     self._make_socket_transport(
-                        conn, protocol, extra={'addr': addr}, server=server)
+                        conn, protocol,
+                        extra={'peername': addr}, server=server)
                 f = self._proactor.accept(sock)
             except OSError:
                 if sock.fileno() != -1:

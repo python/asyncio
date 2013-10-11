@@ -12,8 +12,8 @@ class Client(Protocol):
     data = b'x'*16*1024
 
     def connection_made(self, tr):
-        dprint('connecting to', tr.get_extra_info('getpeername'))
-        dprint('my socket is', tr.get_extra_info('getsockname'))
+        dprint('connecting to', tr.get_extra_info('peername'))
+        dprint('my socket is', tr.get_extra_info('sockname'))
         self.tr = tr
         self.lost = False
         self.loop = get_event_loop()

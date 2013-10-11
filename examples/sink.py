@@ -34,8 +34,10 @@ class Service(Protocol):
 
 @coroutine
 def start(loop):
-    svr = yield from loop.create_server(Service, 'localhost', 1111)
-    return svr
+    global server
+    server = yield from loop.create_server(Service, 'localhost', 1111)
+    dprint('serving', [s.getsockname() for s in server.sockets])
+    yield from server.wait_closed()
 
 def main():
     if '--iocp' in sys.argv:
@@ -43,10 +45,7 @@ def main():
         loop = ProactorEventLoop()
         set_event_loop(loop)
     loop = get_event_loop()
-    global server
-    server = loop.run_until_complete(start(loop))
-    dprint('serving', [s.getsockname() for s in server.sockets])
-    loop.run_until_complete(server.wait_closed())
+    loop.run_until_complete(start(loop))
     loop.close()
 
 if __name__ == '__main__':

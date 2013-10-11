@@ -104,7 +104,8 @@ class _ProactorReadPipeTransport(_ProactorBasePipeTransport,
 
         try:
             if fut is not None:
-                assert fut is self._read_fut
+                assert self._read_fut is fut or (self._read_fut is None and
+                                                 self._closing)
                 self._read_fut = None
                 data = fut.result()  # deliver data later in "finally" clause
 
@@ -147,8 +148,8 @@ class _ProactorWritePipeTransport(_ProactorBasePipeTransport,
 
     def write(self, data):
         assert isinstance(data, bytes), repr(data)
-        if self._closing or self._eof_written:
-            raise IOError('close() or write_eof() already called')
+        if self._eof_written:
+            raise IOError('write_eof() already called')
 
         if not data:
             return
@@ -178,6 +179,8 @@ class _ProactorWritePipeTransport(_ProactorBasePipeTransport,
                 return
             self._write_fut = self._loop._proactor.send(self._sock, data)
             self._write_fut.add_done_callback(self._loop_writing)
+        except ConnectionResetError as exc:
+            self._force_close(exc)
         except OSError as exc:
             self._fatal_error(exc)
 

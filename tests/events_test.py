@@ -516,8 +516,7 @@ class EventLoopTestsMixin:
             self.assertTrue(isinstance(tr, transports.Transport))
             self.assertTrue(isinstance(pr, protocols.Protocol))
             self.assertTrue('ssl' in tr.__class__.__name__.lower())
-            self.assertTrue(
-                hasattr(tr.get_extra_info('socket'), 'getsockname'))
+            self.assertIsNotNone(tr.get_extra_info('sockname'))
             self.loop.run_until_complete(pr.done)
             self.assertGreater(pr.nbytes, 0)
             tr.close()
@@ -529,7 +528,7 @@ class EventLoopTestsMixin:
                 lambda: MyProto(loop=self.loop),
                 *httpd.address, local_addr=(httpd.address[0], port))
             tr, pr = self.loop.run_until_complete(f)
-            expected = pr.transport.get_extra_info('socket').getsockname()[1]
+            expected = pr.transport.get_extra_info('sockname')[1]
             self.assertEqual(port, expected)
             tr.close()
 
@@ -569,11 +568,9 @@ class EventLoopTestsMixin:
         self.assertEqual(3, proto.nbytes)
 
         # extra info is available
-        self.assertIsNotNone(proto.transport.get_extra_info('socket'))
-        conn = proto.transport.get_extra_info('socket')
-        self.assertTrue(hasattr(conn, 'getsockname'))
-        self.assertEqual(
-            '127.0.0.1', proto.transport.get_extra_info('addr')[0])
+        self.assertIsNotNone(proto.transport.get_extra_info('sockname'))
+        self.assertEqual('127.0.0.1',
+                         proto.transport.get_extra_info('peername')[0])
 
         # close connection
         proto.transport.close()
@@ -628,11 +625,9 @@ class EventLoopTestsMixin:
         self.assertEqual(3, proto.nbytes)
 
         # extra info is available
-        self.assertIsNotNone(proto.transport.get_extra_info('socket'))
-        conn = proto.transport.get_extra_info('socket')
-        self.assertTrue(hasattr(conn, 'getsockname'))
-        self.assertEqual(
-            '127.0.0.1', proto.transport.get_extra_info('addr')[0])
+        self.assertIsNotNone(proto.transport.get_extra_info('sockname'))
+        self.assertEqual('127.0.0.1',
+                         proto.transport.get_extra_info('peername')[0])
 
         # close connection
         proto.transport.close()
@@ -759,7 +754,7 @@ class EventLoopTestsMixin:
         coro = self.loop.create_datagram_endpoint(
             TestMyDatagramProto, local_addr=('127.0.0.1', 0))
         s_transport, server = self.loop.run_until_complete(coro)
-        host, port = s_transport.get_extra_info('addr')
+        host, port = s_transport.get_extra_info('sockname')
 
         coro = self.loop.create_datagram_endpoint(
             lambda: MyDatagramProto(loop=self.loop),
@@ -776,9 +771,7 @@ class EventLoopTestsMixin:
         self.assertEqual(8, client.nbytes)
 
         # extra info is available
-        self.assertIsNotNone(transport.get_extra_info('socket'))
-        conn = transport.get_extra_info('socket')
-        self.assertTrue(hasattr(conn, 'getsockname'))
+        self.assertIsNotNone(transport.get_extra_info('sockname'))
 
         # close connection
         transport.close()

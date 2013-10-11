@@ -12,8 +12,8 @@ def dprint(*args):
 class Service(Protocol):
 
     def connection_made(self, tr):
-        dprint('connection from', tr.get_extra_info('socket').getpeername())
-        dprint('my socket is', tr.get_extra_info('socket').getsockname())
+        dprint('connection from', tr.get_extra_info('peername'))
+        dprint('my socket is', tr.get_extra_info('sockname'))
         self.tr = tr
         self.total = 0
 

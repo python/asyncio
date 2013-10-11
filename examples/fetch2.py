@@ -45,7 +45,7 @@ class Request:
                                                               ssl=self.ssl)
         if self.verbose:
             print('* Connected to %s' %
-                  (self.writer.get_extra_info('socket').getpeername(),),
+                  (self.writer.get_extra_info('getpeername'),),
                   file=sys.stderr)
 
     def putline(self, line):

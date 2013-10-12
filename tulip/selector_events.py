@@ -41,10 +41,11 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
                                         extra, server)
 
     def _make_ssl_transport(self, rawsock, protocol, sslcontext, waiter, *,
-                            server_side=False, extra=None, server=None):
+                            server_side=False, server_hostname=None,
+                            extra=None, server=None):
         return _SelectorSslTransport(
-            self, rawsock, protocol, sslcontext, waiter, server_side,
-            extra, server)
+            self, rawsock, protocol, sslcontext, waiter,
+            server_side, server_hostname, extra, server)
 
     def _make_datagram_transport(self, sock, protocol,
                                  address=None, extra=None):
@@ -510,15 +511,21 @@ class _SelectorSocketTransport(_SelectorTransport):
 class _SelectorSslTransport(_SelectorTransport):
 
     def __init__(self, loop, rawsock, protocol, sslcontext, waiter=None,
-                 server_side=False, extra=None, server=None):
+                 server_side=False, server_hostname=None,
+                 extra=None, server=None):
         if server_side:
             assert isinstance(
                 sslcontext, ssl.SSLContext), 'Must pass an SSLContext'
         else:
             # Client-side may pass ssl=True to use a default context.
             sslcontext = sslcontext or ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-        sslsock = sslcontext.wrap_socket(rawsock, server_side=server_side,
-                                         do_handshake_on_connect=False)
+        wrap_kwargs = {
+            'server_side': server_side,
+            'do_handshake_on_connect': False,
+        }
+        if server_hostname is not None and not server_side and ssl.HAS_SNI:
+            wrap_kwargs['server_hostname'] = server_hostname
+        sslsock = sslcontext.wrap_socket(rawsock, **wrap_kwargs)
 
         super().__init__(loop, sslsock, protocol, extra, server)
 

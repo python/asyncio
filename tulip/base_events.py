@@ -103,7 +103,8 @@ class BaseEventLoop(events.AbstractEventLoop):
         raise NotImplementedError
 
     def _make_ssl_transport(self, rawsock, protocol, sslcontext, waiter, *,
-                            server_side=False, extra=None, server=None):
+                            server_side=False, server_hostname=None,
+                            extra=None, server=None):
         """Create SSL transport."""
         raise NotImplementedError
 
@@ -347,7 +348,8 @@ class BaseEventLoop(events.AbstractEventLoop):
         if ssl:
             sslcontext = None if isinstance(ssl, bool) else ssl
             transport = self._make_ssl_transport(
-                sock, protocol, sslcontext, waiter, server_side=False)
+                sock, protocol, sslcontext, waiter,
+                server_side=False, server_hostname=host)
         else:
             transport = self._make_socket_transport(sock, protocol, waiter)
 

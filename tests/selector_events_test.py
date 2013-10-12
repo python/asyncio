@@ -1223,6 +1223,15 @@ class SelectorSslTransportTests(unittest.TestCase):
         self.assertEqual(tr._conn_lost, 1)
         self.assertEqual(1, self.loop.remove_reader_count[1])
 
+    @unittest.skipIf(ssl is None or not ssl.HAS_SNI, 'No SNI support')
+    def test_server_hostname(self):
+        _SelectorSslTransport(
+            self.loop, self.sock, self.protocol, self.sslcontext,
+            server_hostname='localhost')
+        self.sslcontext.wrap_socket.assert_called_with(
+            self.sock, do_handshake_on_connect=False, server_side=False,
+            server_hostname='localhost')
+
 
 class SelectorDatagramTransportTests(unittest.TestCase):
 

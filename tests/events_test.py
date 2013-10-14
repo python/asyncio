@@ -763,9 +763,15 @@ class EventLoopTestsMixin:
 
         self.assertEqual('INITIALIZED', client.state)
         transport.sendto(b'xxx')
-        test_utils.run_briefly(self.loop)
+        for _ in range(1000):
+            if server.nbytes:
+                break
+            test_utils.run_briefly(self.loop)
         self.assertEqual(3, server.nbytes)
-        test_utils.run_briefly(self.loop)
+        for _ in range(1000):
+            if client.nbytes:
+                break
+            test_utils.run_briefly(self.loop)
 
         # received
         self.assertEqual(8, client.nbytes)

@@ -2,6 +2,13 @@
 
 import sys
 
+# The selectors module is in the stdlib in Python 3.4 but not in 3.3.
+# Do this first, so the other submodules can use "from . import selectors".
+try:
+    import selectors  # Will also be exported.
+except ImportError:
+    from . import selectors
+
 # This relies on each of the submodules having an __all__ variable.
 from .futures import *
 from .events import *

@@ -17,7 +17,7 @@ from . import events
 from . import futures
 from . import selectors
 from . import transports
-from .log import tulip_log
+from .log import asyncio_log
 
 
 class BaseSelectorEventLoop(base_events.BaseEventLoop):
@@ -31,7 +31,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
 
         if selector is None:
             selector = selectors.DefaultSelector()
-        tulip_log.debug('Using selector: %s', selector.__class__.__name__)
+        asyncio_log.debug('Using selector: %s', selector.__class__.__name__)
         self._selector = selector
         self._make_self_pipe()
 
@@ -105,7 +105,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             sock.close()
             # There's nowhere to send the error, so just log it.
             # TODO: Someone will want an error handler for this.
-            tulip_log.exception('Accept failed')
+            asyncio_log.exception('Accept failed')
         else:
             if ssl:
                 self._make_ssl_transport(
@@ -363,7 +363,7 @@ class _SelectorTransport(transports.Transport):
 
     def _fatal_error(self, exc):
         # should be called from exception handler only
-        tulip_log.exception('Fatal error for %s', self)
+        asyncio_log.exception('Fatal error for %s', self)
         self._force_close(exc)
 
     def _force_close(self, exc):
@@ -445,7 +445,7 @@ class _SelectorSocketTransport(_SelectorTransport):
 
         if self._conn_lost:
             if self._conn_lost >= constants.LOG_THRESHOLD_FOR_CONNLOST_WRITES:
-                tulip_log.warning('socket.send() raised exception.')
+                asyncio_log.warning('socket.send() raised exception.')
             self._conn_lost += 1
             return
 
@@ -640,7 +640,7 @@ class _SelectorSslTransport(_SelectorTransport):
 
         if self._conn_lost:
             if self._conn_lost >= constants.LOG_THRESHOLD_FOR_CONNLOST_WRITES:
-                tulip_log.warning('socket.send() raised exception.')
+                asyncio_log.warning('socket.send() raised exception.')
             self._conn_lost += 1
             return
 
@@ -687,7 +687,7 @@ class _SelectorDatagramTransport(_SelectorTransport):
 
         if self._conn_lost and self._address:
             if self._conn_lost >= constants.LOG_THRESHOLD_FOR_CONNLOST_WRITES:
-                tulip_log.warning('socket.send() raised exception.')
+                asyncio_log.warning('socket.send() raised exception.')
             self._conn_lost += 1
             return
 

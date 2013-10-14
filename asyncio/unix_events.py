@@ -18,7 +18,7 @@ from . import protocols
 from . import selector_events
 from . import tasks
 from . import transports
-from .log import tulip_log
+from .log import asyncio_log
 
 
 __all__ = ['SelectorEventLoop']
@@ -75,7 +75,7 @@ class SelectorEventLoop(selector_events.BaseSelectorEventLoop):
                 try:
                     signal.set_wakeup_fd(-1)
                 except ValueError as nexc:
-                    tulip_log.info('set_wakeup_fd(-1) failed: %s', nexc)
+                    asyncio_log.info('set_wakeup_fd(-1) failed: %s', nexc)
 
             if exc.errno == errno.EINVAL:
                 raise RuntimeError('sig {} cannot be caught'.format(sig))
@@ -120,7 +120,7 @@ class SelectorEventLoop(selector_events.BaseSelectorEventLoop):
             try:
                 signal.set_wakeup_fd(-1)
             except ValueError as exc:
-                tulip_log.info('set_wakeup_fd(-1) failed: %s', exc)
+                asyncio_log.info('set_wakeup_fd(-1) failed: %s', exc)
 
         return True
 
@@ -184,7 +184,7 @@ class SelectorEventLoop(selector_events.BaseSelectorEventLoop):
                 if transp is not None:
                     transp._process_exited(returncode)
         except Exception:
-            tulip_log.exception('Unknown exception in SIGCHLD handler')
+            asyncio_log.exception('Unknown exception in SIGCHLD handler')
 
     def _subprocess_closed(self, transport):
         pid = transport.get_pid()
@@ -243,7 +243,7 @@ class _UnixReadPipeTransport(transports.ReadTransport):
 
     def _fatal_error(self, exc):
         # should be called by exception handler only
-        tulip_log.exception('Fatal error for %s', self)
+        asyncio_log.exception('Fatal error for %s', self)
         self._close(exc)
 
     def _close(self, exc):
@@ -295,7 +295,7 @@ class _UnixWritePipeTransport(transports.WriteTransport):
 
         if self._conn_lost:
             if self._conn_lost >= constants.LOG_THRESHOLD_FOR_CONNLOST_WRITES:
-                tulip_log.warning('os.write(pipe, data) raised exception.')
+                asyncio_log.warning('os.write(pipe, data) raised exception.')
             self._conn_lost += 1
             return
 
@@ -365,7 +365,7 @@ class _UnixWritePipeTransport(transports.WriteTransport):
 
     def _fatal_error(self, exc):
         # should be called by exception handler only
-        tulip_log.exception('Fatal error for %s', self)
+        asyncio_log.exception('Fatal error for %s', self)
         self._close(exc)
 
     def _close(self, exc=None):

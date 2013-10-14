@@ -1,4 +1,4 @@
-"""Tulip 2.0, tracking PEP 3156."""
+"""The asyncio package, tracking PEP 3156."""
 
 import sys
 

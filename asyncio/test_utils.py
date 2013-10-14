@@ -15,10 +15,10 @@ try:
 except ImportError:  # pragma: no cover
     ssl = None
 
-import tulip
-from tulip import base_events
-from tulip import events
-from tulip import selectors
+from . import tasks
+from . import base_events
+from . import events
+from . import selectors
 
 
 if sys.platform == 'win32':  # pragma: no cover
@@ -28,10 +28,10 @@ else:
 
 
 def run_briefly(loop):
-    @tulip.coroutine
+    @tasks.coroutine
     def once():
         pass
-    t = tulip.Task(once(), loop=loop)
+    t = tasks.Task(once(), loop=loop)
     loop.run_until_complete(t)
 
 

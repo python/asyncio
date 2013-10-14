@@ -13,15 +13,15 @@ try:
 except ImportError:
     ssl = None
 
-from tulip import futures
-from tulip import selectors
-from tulip import test_utils
-from tulip.protocols import DatagramProtocol, Protocol
-from tulip.selector_events import BaseSelectorEventLoop
-from tulip.selector_events import _SelectorTransport
-from tulip.selector_events import _SelectorSslTransport
-from tulip.selector_events import _SelectorSocketTransport
-from tulip.selector_events import _SelectorDatagramTransport
+from asyncio import futures
+from asyncio import selectors
+from asyncio import test_utils
+from asyncio.protocols import DatagramProtocol, Protocol
+from asyncio.selector_events import BaseSelectorEventLoop
+from asyncio.selector_events import _SelectorTransport
+from asyncio.selector_events import _SelectorSslTransport
+from asyncio.selector_events import _SelectorSocketTransport
+from asyncio.selector_events import _SelectorDatagramTransport
 
 
 class TestBaseSelectorEventLoop(BaseSelectorEventLoop):
@@ -626,7 +626,7 @@ class SelectorTransportTests(unittest.TestCase):
         self.assertFalse(self.loop.readers)
         self.assertEqual(1, self.loop.remove_reader_count[7])
 
-    @unittest.mock.patch('tulip.log.tulip_log.exception')
+    @unittest.mock.patch('asyncio.log.asyncio_log.exception')
     def test_fatal_error(self, m_exc):
         exc = OSError()
         tr = _SelectorTransport(self.loop, self.sock, self.protocol, None)
@@ -811,7 +811,7 @@ class SelectorSocketTransportTests(unittest.TestCase):
         self.loop.assert_writer(7, transport._write_ready)
         self.assertEqual(collections.deque([b'data']), transport._buffer)
 
-    @unittest.mock.patch('tulip.selector_events.tulip_log')
+    @unittest.mock.patch('asyncio.selector_events.asyncio_log')
     def test_write_exception(self, m_log):
         err = self.sock.send.side_effect = OSError()
 
@@ -925,7 +925,7 @@ class SelectorSocketTransportTests(unittest.TestCase):
         transport._write_ready()
         transport._fatal_error.assert_called_with(err)
 
-    @unittest.mock.patch('tulip.selector_events.tulip_log')
+    @unittest.mock.patch('asyncio.selector_events.asyncio_log')
     def test_write_ready_exception_and_close(self, m_log):
         self.sock.send.side_effect = OSError()
         remove_writer = self.loop.remove_writer = unittest.mock.Mock()
@@ -1060,7 +1060,7 @@ class SelectorSslTransportTests(unittest.TestCase):
         transport.write(b'data')
         self.assertEqual(transport._conn_lost, 2)
 
-    @unittest.mock.patch('tulip.selector_events.tulip_log')
+    @unittest.mock.patch('asyncio.selector_events.asyncio_log')
     def test_write_exception(self, m_log):
         transport = self._make_one()
         transport._conn_lost = 1
@@ -1313,7 +1313,7 @@ class SelectorDatagramTransportTests(unittest.TestCase):
         self.assertEqual(
             [(b'data', ('0.0.0.0', 12345))], list(transport._buffer))
 
-    @unittest.mock.patch('tulip.selector_events.tulip_log')
+    @unittest.mock.patch('asyncio.selector_events.asyncio_log')
     def test_sendto_exception(self, m_log):
         data = b'data'
         err = self.sock.sendto.side_effect = OSError()
@@ -1463,7 +1463,7 @@ class SelectorDatagramTransportTests(unittest.TestCase):
 
         self.assertTrue(transport._fatal_error.called)
 
-    @unittest.mock.patch('tulip.log.tulip_log.exception')
+    @unittest.mock.patch('asyncio.log.asyncio_log.exception')
     def test_fatal_error_connected(self, m_exc):
         transport = _SelectorDatagramTransport(
             self.loop, self.sock, self.protocol, ('0.0.0.0', 1))

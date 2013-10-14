@@ -20,14 +20,14 @@ import unittest.mock
 from test.support import find_unused_port
 
 
-from tulip import futures
-from tulip import events
-from tulip import transports
-from tulip import protocols
-from tulip import selector_events
-from tulip import tasks
-from tulip import test_utils
-from tulip import locks
+from asyncio import futures
+from asyncio import events
+from asyncio import transports
+from asyncio import protocols
+from asyncio import selector_events
+from asyncio import tasks
+from asyncio import test_utils
+from asyncio import locks
 
 
 class MyProto(protocols.Protocol):
@@ -1221,7 +1221,7 @@ class EventLoopTestsMixin:
 
 
 if sys.platform == 'win32':
-    from tulip import windows_events
+    from asyncio import windows_events
 
     class SelectEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
 
@@ -1255,8 +1255,8 @@ if sys.platform == 'win32':
             raise unittest.SkipTest(
                 "IocpEventLoop does not have create_datagram_endpoint()")
 else:
-    from tulip import selectors
-    from tulip import unix_events
+    from asyncio import selectors
+    from asyncio import unix_events
 
     if hasattr(selectors, 'KqueueSelector'):
         class KqueueEventLoopTests(EventLoopTestsMixin, unittest.TestCase):
@@ -1318,7 +1318,7 @@ class HandleTests(unittest.TestCase):
         self.assertRaises(
             AssertionError, events.make_handle, h1, ())
 
-    @unittest.mock.patch('tulip.events.tulip_log')
+    @unittest.mock.patch('asyncio.events.asyncio_log')
     def test_callback_with_exception(self, log):
         def callback():
             raise ValueError()
@@ -1519,7 +1519,7 @@ class PolicyTests(unittest.TestCase):
         policy.set_event_loop(None)
         self.assertRaises(AssertionError, policy.get_event_loop)
 
-    @unittest.mock.patch('tulip.events.threading.current_thread')
+    @unittest.mock.patch('asyncio.events.threading.current_thread')
     def test_get_event_loop_thread(self, m_current_thread):
 
         def f():

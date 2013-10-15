@@ -708,6 +708,18 @@ class SelectorSocketTransportTests(unittest.TestCase):
         self.protocol.eof_received.assert_called_with()
         transport.close.assert_called_with()
 
+    def test_read_ready_eof_keep_open(self):
+        transport = _SelectorSocketTransport(
+            self.loop, self.sock, self.protocol)
+        transport.close = unittest.mock.Mock()
+
+        self.sock.recv.return_value = b''
+        self.protocol.eof_received.return_value = True
+        transport._read_ready()
+
+        self.protocol.eof_received.assert_called_with()
+        self.assertFalse(transport.close.called)
+
     @unittest.mock.patch('logging.exception')
     def test_read_ready_tryagain(self, m_exc):
         self.sock.recv.side_effect = BlockingIOError

@@ -432,9 +432,8 @@ class _SelectorSocketTransport(_SelectorTransport):
             if data:
                 self._protocol.data_received(data)
             else:
-                try:
-                    self._protocol.eof_received()
-                finally:
+                keep_open = self._protocol.eof_received()
+                if not keep_open:
                     self.close()
 
     def write(self, data):

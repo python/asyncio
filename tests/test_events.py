@@ -110,7 +110,6 @@ class MyReadPipeProto(protocols.Protocol):
     def eof_received(self):
         assert self.state == ['INITIAL', 'CONNECTED'], self.state
         self.state.append('EOF')
-        self.transport.close()
 
     def connection_lost(self, exc):
         assert self.state == ['INITIAL', 'CONNECTED', 'EOF'], self.state

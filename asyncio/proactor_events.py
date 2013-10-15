@@ -145,9 +145,8 @@ class _ProactorReadPipeTransport(_ProactorBasePipeTransport,
             if data:
                 self._protocol.data_received(data)
             elif data is not None:
-                try:
-                    self._protocol.eof_received()
-                finally:
+                keep_open = self._protocol.eof_received()
+                if not keep_open:
                     self.close()
 
 

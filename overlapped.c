@@ -233,29 +233,28 @@ overlapped_PostQueuedCompletionStatus(PyObject *self, PyObject *args)
 
 PyDoc_STRVAR(
     BindLocal_doc,
-    "BindLocal(handle, length_of_address_tuple) -> None\n\n"
+    "BindLocal(handle, family) -> None\n\n"
     "Bind a socket handle to an arbitrary local port.\n"
-    "If length_of_address_tuple is 2 then an AF_INET address is used.\n"
-    "If length_of_address_tuple is 4 then an AF_INET6 address is used.");
+    "family should AF_INET or AF_INET6.\n");
 
 static PyObject *
 overlapped_BindLocal(PyObject *self, PyObject *args)
 {
     SOCKET Socket;
-    int TupleLength;
+    int Family;
     BOOL ret;
 
-    if (!PyArg_ParseTuple(args, F_HANDLE "i", &Socket, &TupleLength))
+    if (!PyArg_ParseTuple(args, F_HANDLE "i", &Socket, &Family))
         return NULL;
 
-    if (TupleLength == 2) {
+    if (Family == AF_INET) {
         struct sockaddr_in addr;
         memset(&addr, 0, sizeof(addr));
         addr.sin_family = AF_INET;
         addr.sin_port = 0;
         addr.sin_addr.S_un.S_addr = INADDR_ANY;
         ret = bind(Socket, (SOCKADDR*)&addr, sizeof(addr)) != SOCKET_ERROR;
-    } else if (TupleLength == 4) {
+    } else if (Family == AF_INET6) {
         struct sockaddr_in6 addr;
         memset(&addr, 0, sizeof(addr));
         addr.sin6_family = AF_INET6;

@@ -113,8 +113,8 @@ class ProactorEventLoop(proactor_events.BaseProactorEventLoop):
         f = self._proactor.connect_pipe(address)
         pipe = yield from f
         protocol = protocol_factory()
-        trans = self._make_socket_transport(pipe, protocol,
-                                            extra={'addr': address})
+        trans = self._make_duplex_pipe_transport(pipe, protocol,
+                                                 extra={'addr': address})
         return trans, protocol
 
     @tasks.coroutine
@@ -207,7 +207,7 @@ class IocpProactor:
 
     def accept(self, listener):
         self._register_with_iocp(listener)
-        conn = self._get_accept_socket()
+        conn = self._get_accept_socket(listener.family)
         ov = _overlapped.Overlapped(NULL)
         ov.AcceptEx(listener.fileno(), conn.fileno())
         def finish_accept(trans, key, ov):
@@ -300,8 +300,8 @@ class IocpProactor:
                 f.set_result(value)
         return f
 
-    def _get_accept_socket(self):
-        s = socket.socket()
+    def _get_accept_socket(self, family):
+        s = socket.socket(family)
         s.settimeout(0)
         return s
 

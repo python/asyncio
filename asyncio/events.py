@@ -16,7 +16,7 @@ import sys
 import threading
 import socket
 
-from .log import tulip_log
+from .log import asyncio_log
 
 
 class Handle:
@@ -40,7 +40,7 @@ class Handle:
         try:
             self._callback(*self._args)
         except Exception:
-            tulip_log.exception('Exception in callback %s %r',
+            asyncio_log.exception('Exception in callback %s %r',
                                 self._callback, self._args)
         self = None  # Needed to break cycles when an exception occurs.
 

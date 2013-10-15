@@ -6,12 +6,12 @@ import time
 import unittest
 import unittest.mock
 
-from tulip import base_events
-from tulip import events
-from tulip import futures
-from tulip import protocols
-from tulip import tasks
-from tulip import test_utils
+from asyncio import base_events
+from asyncio import events
+from asyncio import futures
+from asyncio import protocols
+from asyncio import tasks
+from asyncio import test_utils
 
 
 class BaseEventLoopTests(unittest.TestCase):
@@ -183,8 +183,8 @@ class BaseEventLoopTests(unittest.TestCase):
         self.assertEqual([h2], self.loop._scheduled)
         self.assertTrue(self.loop._process_events.called)
 
-    @unittest.mock.patch('tulip.base_events.time')
-    @unittest.mock.patch('tulip.base_events.tulip_log')
+    @unittest.mock.patch('asyncio.base_events.time')
+    @unittest.mock.patch('asyncio.base_events.asyncio_log')
     def test__run_once_logging(self, m_logging, m_time):
         # Log to INFO level if timeout > 1.0 sec.
         idx = -1
@@ -302,7 +302,7 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
     def tearDown(self):
         self.loop.close()
 
-    @unittest.mock.patch('tulip.base_events.socket')
+    @unittest.mock.patch('asyncio.base_events.socket')
     def test_create_connection_multiple_errors(self, m_socket):
 
         class MyProto(protocols.Protocol):
@@ -392,7 +392,7 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
         with self.assertRaises(OSError):
             self.loop.run_until_complete(coro)
 
-    @unittest.mock.patch('tulip.base_events.socket')
+    @unittest.mock.patch('asyncio.base_events.socket')
     def test_create_connection_multiple_errors_local_addr(self, m_socket):
 
         def bind(addr):
@@ -477,7 +477,7 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
         f = self.loop.create_server(MyProto, '0.0.0.0', 0)
         self.assertRaises(OSError, self.loop.run_until_complete, f)
 
-    @unittest.mock.patch('tulip.base_events.socket')
+    @unittest.mock.patch('asyncio.base_events.socket')
     def test_create_server_cant_bind(self, m_socket):
 
         class Err(OSError):
@@ -492,7 +492,7 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
         self.assertRaises(OSError, self.loop.run_until_complete, fut)
         self.assertTrue(m_sock.close.called)
 
-    @unittest.mock.patch('tulip.base_events.socket')
+    @unittest.mock.patch('asyncio.base_events.socket')
     def test_create_datagram_endpoint_no_addrinfo(self, m_socket):
         m_socket.getaddrinfo.return_value = []
 
@@ -520,7 +520,7 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
         self.assertRaises(
             OSError, self.loop.run_until_complete, coro)
 
-    @unittest.mock.patch('tulip.base_events.socket')
+    @unittest.mock.patch('asyncio.base_events.socket')
     def test_create_datagram_endpoint_socket_err(self, m_socket):
         m_socket.getaddrinfo = socket.getaddrinfo
         m_socket.socket.side_effect = OSError
@@ -542,7 +542,7 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
         self.assertRaises(
             ValueError, self.loop.run_until_complete, coro)
 
-    @unittest.mock.patch('tulip.base_events.socket')
+    @unittest.mock.patch('asyncio.base_events.socket')
     def test_create_datagram_endpoint_setblk_err(self, m_socket):
         m_socket.socket.return_value.setblocking.side_effect = OSError
 
@@ -558,7 +558,7 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
             protocols.DatagramProtocol)
         self.assertRaises(ValueError, self.loop.run_until_complete, coro)
 
-    @unittest.mock.patch('tulip.base_events.socket')
+    @unittest.mock.patch('asyncio.base_events.socket')
     def test_create_datagram_endpoint_cant_bind(self, m_socket):
         class Err(OSError):
             pass
@@ -581,7 +581,7 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
         self.loop._accept_connection(MyProto, sock)
         self.assertFalse(sock.close.called)
 
-    @unittest.mock.patch('tulip.selector_events.tulip_log')
+    @unittest.mock.patch('asyncio.selector_events.asyncio_log')
     def test_accept_connection_exception(self, m_log):
         sock = unittest.mock.Mock()
         sock.fileno.return_value = 10

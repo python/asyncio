@@ -534,6 +534,9 @@ class _SelectorSslTransport(_SelectorTransport):
         self._sslcontext = sslcontext
         self._paused = False
 
+        # SSL-specific extra info.  (peercert is set later)
+        self._extra.update(sslcontext=sslcontext)
+
         self._on_handshake()
 
     def _on_handshake(self):
@@ -555,6 +558,13 @@ class _SelectorSslTransport(_SelectorTransport):
             if self._waiter is not None:
                 self._waiter.set_exception(exc)
             raise
+
+        # Add extra info that becomes available after handshake.
+        self._extra.update(peercert=self._sock.getpeercert(),
+                           cipher=self._sock.cipher(),
+                           compression=self._sock.compression(),
+                           )
+
         self._loop.remove_reader(self._sock_fd)
         self._loop.remove_writer(self._sock_fd)
         self._loop.add_reader(self._sock_fd, self._on_ready)

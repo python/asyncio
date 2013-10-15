@@ -256,7 +256,6 @@ class MyProto(protocols.Protocol):
     def eof_received(self):
         assert self.state == 'CONNECTED', self.state
         self.state = 'EOF'
-        self.transport.close()
 
     def connection_lost(self, exc):
         assert self.state in ('CONNECTED', 'EOF'), self.state

@@ -60,11 +60,9 @@ class Protocol(BaseProtocol):
     def eof_received(self):
         """Called when the other end calls write_eof() or equivalent.
 
-        The default implementation does nothing.
-
-        TODO: By default close the transport.  But we don't have the
-        transport as an instance variable (connection_made() may not
-        set it).
+        If this returns a false value (including None), the transport
+        will close itself.  If it returns a true value, closing the
+        transport is up to the protocol.
         """
 
 

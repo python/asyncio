@@ -222,9 +222,15 @@ class _ProactorSocketTransport(_ProactorReadPipeTransport,
 
     def _set_extra(self, sock):
         self._extra['socket'] = sock
-        self._extra['sockname'] = sock.getsockname()
+        try:
+            self._extra['sockname'] = sock.getsockname()
+        except (socket.error, AttributeError):
+            pass
         if 'peername' not in self._extra:
-            self._extra['peername'] = sock.getpeername()
+            try:
+                self._extra['peername'] = sock.getpeername()
+            except (socket.error, AttributeError):
+                pass
 
     def can_write_eof(self):
         return True

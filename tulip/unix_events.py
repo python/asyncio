@@ -163,26 +163,23 @@ class SelectorEventLoop(selector_events.BaseSelectorEventLoop):
 
     def _sig_chld(self):
         try:
-            while True:
-                try:
-                    pid, status = os.waitpid(0, os.WNOHANG)
-                except ChildProcessError:
-                    break
-                if pid == 0:
-                    continue
-                elif os.WIFSIGNALED(status):
-                    returncode = -os.WTERMSIG(status)
-                elif os.WIFEXITED(status):
-                    returncode = os.WEXITSTATUS(status)
-                else:
-                    # covered by
-                    # SelectorEventLoopTests.test__sig_chld_unknown_status
-                    # from tests/unix_events_test.py
-                    # bug in coverage.py version 3.6 ???
-                    continue  # pragma: no cover
-                transp = self._subprocesses.get(pid)
-                if transp is not None:
-                    transp._process_exited(returncode)
+            try:
+                pid, status = os.waitpid(0, os.WNOHANG)
+            except ChildProcessError:
+                return
+            if pid == 0:
+                self.call_soon(self._sig_chld)
+                return
+            elif os.WIFSIGNALED(status):
+                returncode = -os.WTERMSIG(status)
+            elif os.WIFEXITED(status):
+                returncode = os.WEXITSTATUS(status)
+            else:
+                self.call_soon(self._sig_chld)
+                return
+            transp = self._subprocesses.get(pid)
+            if transp is not None:
+                transp._process_exited(returncode)
         except Exception:
             tulip_log.exception('Unknown exception in SIGCHLD handler')
 

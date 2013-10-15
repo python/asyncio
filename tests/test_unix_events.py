@@ -290,6 +290,12 @@ class SelectorEventLoopTests(unittest.TestCase):
         m_log.exception.assert_called_with(
             'Unknown exception in SIGCHLD handler')
 
+    @unittest.mock.patch('os.waitpid')
+    def test__sig_chld_process_error(self, m_waitpid):
+        m_waitpid.side_effect = ChildProcessError
+        self.loop._sig_chld()
+        self.assertTrue(m_waitpid.called)
+
 
 class UnixReadPipeTransportTests(unittest.TestCase):
 

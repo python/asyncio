@@ -224,7 +224,7 @@ class IocpProactor:
         self._register_with_iocp(conn)
         # The socket needs to be locally bound before we call ConnectEx().
         try:
-            _overlapped.BindLocal(conn.fileno(), len(address))
+            _overlapped.BindLocal(conn.fileno(), conn.family)
         except OSError as e:
             if e.winerror != errno.WSAEINVAL:
                 raise

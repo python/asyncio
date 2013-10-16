@@ -8,7 +8,7 @@ import sys
 import urllib.parse
 from http.client import BadStatusLine
 
-from tulip import *
+from asyncio import *
 
 
 class ConnectionPool:

@@ -1,7 +1,7 @@
 """Crude demo for print_stack()."""
 
 
-from tulip import *
+from asyncio import *
 
 
 @coroutine

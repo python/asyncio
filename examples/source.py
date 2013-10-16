@@ -2,7 +2,7 @@
 
 import sys
 
-from tulip import *
+from asyncio import *
 
 def dprint(*args):
     print('source:', *args, file=sys.stderr)
@@ -47,7 +47,7 @@ def start(loop):
 
 def main():
     if '--iocp' in sys.argv:
-        from tulip.windows_events import ProactorEventLoop
+        from asyncio.windows_events import ProactorEventLoop
         loop = ProactorEventLoop()
         set_event_loop(loop)
     loop = get_event_loop()

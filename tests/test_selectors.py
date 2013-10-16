@@ -3,7 +3,7 @@
 import unittest
 import unittest.mock
 
-from tulip import selectors
+from asyncio import selectors
 
 
 class FakeSelector(selectors.BaseSelector):

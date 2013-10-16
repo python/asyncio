@@ -5,9 +5,9 @@ import threading
 import unittest
 import unittest.mock
 
-from tulip import events
-from tulip import futures
-from tulip import test_utils
+from asyncio import events
+from asyncio import futures
+from asyncio import test_utils
 
 
 def _fakefunc(f):
@@ -170,20 +170,20 @@ class FutureTests(unittest.TestCase):
         self.assertRaises(AssertionError, test)
         fut.cancel()
 
-    @unittest.mock.patch('tulip.futures.tulip_log')
+    @unittest.mock.patch('asyncio.futures.asyncio_log')
     def test_tb_logger_abandoned(self, m_log):
         fut = futures.Future(loop=self.loop)
         del fut
         self.assertFalse(m_log.error.called)
 
-    @unittest.mock.patch('tulip.futures.tulip_log')
+    @unittest.mock.patch('asyncio.futures.asyncio_log')
     def test_tb_logger_result_unretrieved(self, m_log):
         fut = futures.Future(loop=self.loop)
         fut.set_result(42)
         del fut
         self.assertFalse(m_log.error.called)
 
-    @unittest.mock.patch('tulip.futures.tulip_log')
+    @unittest.mock.patch('asyncio.futures.asyncio_log')
     def test_tb_logger_result_retrieved(self, m_log):
         fut = futures.Future(loop=self.loop)
         fut.set_result(42)
@@ -191,7 +191,7 @@ class FutureTests(unittest.TestCase):
         del fut
         self.assertFalse(m_log.error.called)
 
-    @unittest.mock.patch('tulip.futures.tulip_log')
+    @unittest.mock.patch('asyncio.futures.asyncio_log')
     def test_tb_logger_exception_unretrieved(self, m_log):
         fut = futures.Future(loop=self.loop)
         fut.set_exception(RuntimeError('boom'))
@@ -199,7 +199,7 @@ class FutureTests(unittest.TestCase):
         test_utils.run_briefly(self.loop)
         self.assertTrue(m_log.error.called)
 
-    @unittest.mock.patch('tulip.futures.tulip_log')
+    @unittest.mock.patch('asyncio.futures.asyncio_log')
     def test_tb_logger_exception_retrieved(self, m_log):
         fut = futures.Future(loop=self.loop)
         fut.set_exception(RuntimeError('boom'))
@@ -207,7 +207,7 @@ class FutureTests(unittest.TestCase):
         del fut
         self.assertFalse(m_log.error.called)
 
-    @unittest.mock.patch('tulip.futures.tulip_log')
+    @unittest.mock.patch('asyncio.futures.asyncio_log')
     def test_tb_logger_exception_result_retrieved(self, m_log):
         fut = futures.Future(loop=self.loop)
         fut.set_exception(RuntimeError('boom'))
@@ -232,7 +232,7 @@ class FutureTests(unittest.TestCase):
         f2 = futures.wrap_future(f1)
         self.assertIs(f1, f2)
 
-    @unittest.mock.patch('tulip.futures.events')
+    @unittest.mock.patch('asyncio.futures.events')
     def test_wrap_future_use_global_loop(self, m_events):
         def run(arg):
             return (arg, threading.get_ident())

@@ -6,7 +6,7 @@ This version adds URL parsing (including SSL) and a Response object.
 import sys
 import urllib.parse
 
-from tulip import *
+from asyncio import *
 
 
 class Response:

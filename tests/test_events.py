@@ -510,7 +510,8 @@ class EventLoopTestsMixin:
     def test_create_ssl_connection(self):
         with test_utils.run_test_server(use_ssl=True) as httpd:
             f = self.loop.create_connection(
-                lambda: MyProto(loop=self.loop), *httpd.address, ssl=True)
+                lambda: MyProto(loop=self.loop), *httpd.address,
+                ssl=test_utils.dummy_ssl_context())
             tr, pr = self.loop.run_until_complete(f)
             self.assertTrue(isinstance(tr, transports.Transport))
             self.assertTrue(isinstance(pr, protocols.Protocol))
@@ -613,7 +614,8 @@ class EventLoopTestsMixin:
         host, port = sock.getsockname()
         self.assertEqual(host, '127.0.0.1')
 
-        f_c = self.loop.create_connection(ClientMyProto, host, port, ssl=True)
+        f_c = self.loop.create_connection(ClientMyProto, host, port,
+                                          ssl=test_utils.dummy_ssl_context())
         client, pr = self.loop.run_until_complete(f_c)
 
         client.write(b'xxx')

@@ -21,7 +21,11 @@ from . import transports
 from .log import tulip_log
 
 
-__all__ = ['SelectorEventLoop']
+__all__ = ['SelectorEventLoop', 'STDIN', 'STDOUT', 'STDERR']
+
+STDIN = 0
+STDOUT = 1
+STDERR = 2
 
 
 if sys.platform == 'win32':  # pragma: no cover
@@ -281,18 +285,17 @@ class _UnixWritePipeTransport(transports.WriteTransport):
 
     def _read_ready(self):
         # pipe was closed by peer
-
         self._close()
 
     def write(self, data):
         assert isinstance(data, bytes), repr(data)
-        assert not self._closing
         if not data:
             return
 
-        if self._conn_lost:
+        if self._conn_lost or self._closing:
             if self._conn_lost >= constants.LOG_THRESHOLD_FOR_CONNLOST_WRITES:
-                tulip_log.warning('os.write(pipe, data) raised exception.')
+                tulip_log.warning('pipe closed by peer or '
+                                  'os.write(pipe, data) raised exception.')
             self._conn_lost += 1
             return
 
@@ -424,11 +427,11 @@ class _UnixSubprocessTransport(transports.SubprocessTransport):
 
         self._pipes = {}
         if stdin == subprocess.PIPE:
-            self._pipes[0] = None
+            self._pipes[STDIN] = None
         if stdout == subprocess.PIPE:
-            self._pipes[1] = None
+            self._pipes[STDOUT] = None
         if stderr == subprocess.PIPE:
-            self._pipes[2] = None
+            self._pipes[STDERR] = None
         self._pending_calls = collections.deque()
         self._finished = False
         self._returncode = None
@@ -471,15 +474,18 @@ class _UnixSubprocessTransport(transports.SubprocessTransport):
         loop = self._loop
         if proc.stdin is not None:
             transp, proto = yield from loop.connect_write_pipe(
-                functools.partial(_UnixWriteSubprocessPipeProto, self, 0),
+                functools.partial(
+                    _UnixWriteSubprocessPipeProto, self, STDIN),
                 proc.stdin)
         if proc.stdout is not None:
             transp, proto = yield from loop.connect_read_pipe(
-                functools.partial(_UnixReadSubprocessPipeProto, self, 1),
+                functools.partial(
+                    _UnixReadSubprocessPipeProto, self, STDOUT),
                 proc.stdout)
         if proc.stderr is not None:
             transp, proto = yield from loop.connect_read_pipe(
-                functools.partial(_UnixReadSubprocessPipeProto, self, 2),
+                functools.partial(
+                    _UnixReadSubprocessPipeProto, self, STDERR),
                 proc.stderr)
         if not self._pipes:
             self._try_connected()

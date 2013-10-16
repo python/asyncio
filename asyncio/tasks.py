@@ -278,7 +278,7 @@ def wait(fs, *, loop=None, timeout=None, return_when=ALL_COMPLETED):
 
     Usage:
 
-        done, pending = yield from tulip.wait(fs)
+        done, pending = yield from asyncio.wait(fs)
 
     Note: This does not raise TimeoutError! Futures that aren't done
     when the timeout occurs are returned in the second set.
@@ -307,7 +307,7 @@ def wait_for(fut, timeout, *, loop=None):
 
     Usage:
 
-        result = yield from tulip.wait_for(fut, 10.0)
+        result = yield from asyncio.wait_for(fut, 10.0)
 
     """
     if loop is None:

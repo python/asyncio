@@ -519,8 +519,12 @@ class _SelectorSslTransport(_SelectorTransport):
             # Client-side may pass ssl=True to use a default context.
             # The default is the same as used by urllib.
             if sslcontext is None:
+                import sys; print('default ssl context', file=sys.stderr)
+                ##import pdb; pdb.set_trace()
                 sslcontext = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
                 sslcontext.options |= ssl.OP_NO_SSLv2
+                sslcontext.set_default_verify_paths()
+                sslcontext.verify_mode = ssl.CERT_REQUIRED
         wrap_kwargs = {
             'server_side': server_side,
             'do_handshake_on_connect': False,

@@ -517,7 +517,10 @@ class _SelectorSslTransport(_SelectorTransport):
                 sslcontext, ssl.SSLContext), 'Must pass an SSLContext'
         else:
             # Client-side may pass ssl=True to use a default context.
-            sslcontext = sslcontext or ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+            # The default is the same as used by urllib.
+            if sslcontext is None:
+                sslcontext = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+                sslcontext.options |= ssl.OP_NO_SSLv2
         wrap_kwargs = {
             'server_side': server_side,
             'do_handshake_on_connect': False,

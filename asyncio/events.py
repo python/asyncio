@@ -1,8 +1,4 @@
-"""Event loop and event loop policy.
-
-Beyond the PEP:
-- Only the main thread has a default event loop.
-"""
+"""Event loop and event loop policy."""
 
 __all__ = ['AbstractEventLoopPolicy', 'DefaultEventLoopPolicy',
            'AbstractEventLoop', 'AbstractServer',

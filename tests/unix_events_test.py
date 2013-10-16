@@ -569,8 +569,9 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         tr.write(b'data')
         tr.write(b'data')
         tr.write(b'data')
+        # This is a bit overspecified. :-(
         m_log.warning.assert_called_with(
-            'os.write(pipe, data) raised exception.')
+            'pipe closed by peer or os.write(pipe, data) raised exception.')
 
     @unittest.mock.patch('os.write')
     def test_write_close(self, m_write):

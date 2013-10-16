@@ -572,6 +572,17 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         m_log.warning.assert_called_with(
             'os.write(pipe, data) raised exception.')
 
+    @unittest.mock.patch('os.write')
+    def test_write_close(self, m_write):
+        tr = unix_events._UnixWritePipeTransport(
+            self.loop, self.pipe, self.protocol)
+        tr._read_ready()  # pipe was closed by peer
+
+        tr.write(b'data')
+        self.assertEqual(tr._conn_lost, 1)
+        tr.write(b'data')
+        self.assertEqual(tr._conn_lost, 2)
+
     def test__read_ready(self):
         tr = unix_events._UnixWritePipeTransport(self.loop, self.pipe,
                                                  self.protocol)

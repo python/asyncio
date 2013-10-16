@@ -4,6 +4,10 @@ import sys
 import test.support
 import unittest
 import unittest.mock
+
+if sys.platform != 'win32':
+    raise unittest.SkipTest('Windows only')
+
 import _winapi
 
 from asyncio import windows_utils

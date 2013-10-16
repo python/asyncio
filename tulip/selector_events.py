@@ -533,6 +533,7 @@ class _SelectorSslTransport(_SelectorTransport):
 
         super().__init__(loop, sslsock, protocol, extra, server)
 
+        self._server_hostname = server_hostname
         self._waiter = waiter
         self._rawsock = rawsock
         self._sslcontext = sslcontext
@@ -563,8 +564,20 @@ class _SelectorSslTransport(_SelectorTransport):
                 self._waiter.set_exception(exc)
             raise
 
+        # Verify hostname if requested.
+        peercert = self._sock.getpeercert()
+        if (self._server_hostname is not None and
+            self._sslcontext.verify_mode == ssl.CERT_REQUIRED):
+            try:
+                ssl.match_hostname(peercert, self._server_hostname)
+            except Exception as exc:
+                self._sock.close()
+                if self._waiter is not None:
+                    self._waiter.set_exception(exc)
+                return
+
         # Add extra info that becomes available after handshake.
-        self._extra.update(peercert=self._sock.getpeercert(),
+        self._extra.update(peercert=peercert,
                            cipher=self._sock.cipher(),
                            compression=self._sock.compression(),
                            )

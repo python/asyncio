@@ -347,8 +347,12 @@ class _UnixWritePipeTransport(transports.WriteTransport):
     def can_write_eof(self):
         return True
 
+    # TODO: Make the relationships between write_eof(), close(),
+    # abort(), _fatal_error() and _close() more straightforward.
+
     def write_eof(self):
-        assert not self._closing
+        if self._closing:
+            return
         assert self._pipe
         self._closing = True
         if not self._buffer:

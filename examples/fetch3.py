@@ -34,7 +34,7 @@ class ConnectionPool:
                     print('* Reusing pooled connection', key, file=sys.stderr)
                 return conn
         reader, writer = yield from open_connection(host, port, ssl=ssl)
-        host, port, *_ = writer.get_extra_info('getpeername')
+        host, port, *_ = writer.get_extra_info('peername')
         key = host, port, ssl
         self.connections[key] = reader, writer
         if self.verbose:
@@ -79,13 +79,13 @@ class Request:
                                                      self.port,
                                                      ssl=self.ssl)
         self.vprint('* Connected to %s' %
-                    (self.writer.get_extra_info('getpeername'),))
+                    (self.writer.get_extra_info('peername'),))
 
     @coroutine
     def putline(self, line):
         self.vprint('>', line)
         self.writer.write(line.encode('latin-1') + b'\r\n')
-        yield from self.writer.drain()
+        ##yield from self.writer.drain()
 
     @coroutine
     def send_request(self):
@@ -197,6 +197,7 @@ def fetch(url, verbose=True, max_redirect=10):
         if not next_url:
             break
         url = urllib.parse.urljoin(url, next_url)
+        print('redirect to', url, file=sys.stderr)
     return body
 
 

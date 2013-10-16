@@ -50,7 +50,8 @@ class StreamReaderTests(unittest.TestCase):
         with test_utils.run_test_server(use_ssl=True) as httpd:
             try:
                 events.set_event_loop(self.loop)
-                f = streams.open_connection(*httpd.address, ssl=True)
+                f = streams.open_connection(*httpd.address,
+                                            ssl=test_utils.dummy_ssl_context())
                 reader, writer = self.loop.run_until_complete(f)
             finally:
                 events.set_event_loop(None)

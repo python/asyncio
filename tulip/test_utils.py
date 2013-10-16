@@ -27,6 +27,13 @@ else:
     from socket import socketpair  # pragma: no cover
 
 
+def dummy_ssl_context():
+    if ssl is None:
+        return None
+    else:
+        return ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+
+
 def run_briefly(loop):
     @tulip.coroutine
     def once():

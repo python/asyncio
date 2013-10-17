@@ -242,7 +242,7 @@ class QueueGetTests(_QueueTestBase):
             when = yield
             self.assertAlmostEqual(0.01, when)
             when = yield 0.01
-            self.assertAlmostEqual(0.06, when)
+            self.assertAlmostEqual(0.061, when)
             yield 0.05
 
         loop = test_utils.TestLoop(gen)
@@ -252,7 +252,7 @@ class QueueGetTests(_QueueTestBase):
 
         @tasks.coroutine
         def queue_get():
-            return (yield from tasks.wait_for(q.get(), 0.05, loop=loop))
+            return (yield from tasks.wait_for(q.get(), 0.051, loop=loop))
 
         @tasks.coroutine
         def test():

@@ -349,6 +349,11 @@ def wait(fs, *, loop=None, timeout=None, return_when=ALL_COMPLETED):
     return (yield from _wait(fs, timeout, return_when, loop))
 
 
+def _release_waiter(waiter, value=True, *args):
+    if not waiter.done():
+        waiter.set_result(value)
+
+
 @coroutine
 def wait_for(fut, timeout, *, loop=None):
     """Wait for the single Future or coroutine to complete, with timeout.
@@ -366,18 +371,21 @@ def wait_for(fut, timeout, *, loop=None):
     if loop is None:
         loop = events.get_event_loop()
 
+    waiter = futures.Future(loop=loop)
+    timeout_handle = loop.call_later(timeout, _release_waiter, waiter, False)
+    cb = functools.partial(_release_waiter, waiter, True)
+
     fut = async(fut, loop=loop)
+    fut.add_done_callback(cb)
 
-    done, pending = yield from _wait([fut], timeout, FIRST_COMPLETED, loop)
-    if done:
-        return done.pop().result()
-
-    raise futures.TimeoutError()
-
-
-def _waiter_timeout(waiter):
-    if not waiter.done():
-        waiter.set_result(False)
+    try:
+        if (yield from waiter):
+            return fut.result()
+        else:
+            fut.remove_done_callback(cb)
+            raise futures.TimeoutError()
+    finally:
+        timeout_handle.cancel()
 
 
 @coroutine
@@ -390,7 +398,7 @@ def _wait(fs, timeout, return_when, loop):
     waiter = futures.Future(loop=loop)
     timeout_handle = None
     if timeout is not None:
-        timeout_handle = loop.call_later(timeout, _waiter_timeout, waiter)
+        timeout_handle = loop.call_later(timeout, _release_waiter, waiter)
     counter = len(fs)
 
     def _on_completion(f):

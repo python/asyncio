@@ -38,8 +38,12 @@ def run_briefly(loop):
     @tulip.coroutine
     def once():
         pass
-    t = tulip.Task(once(), loop=loop)
-    loop.run_until_complete(t)
+    gen = once()
+    t = tulip.Task(gen, loop=loop)
+    try:
+        loop.run_until_complete(t)
+    finally:
+         gen.close()
 
 
 def run_once(loop):

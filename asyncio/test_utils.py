@@ -38,8 +38,12 @@ def run_briefly(loop):
     @tasks.coroutine
     def once():
         pass
-    t = tasks.Task(once(), loop=loop)
-    loop.run_until_complete(t)
+    gen = once()
+    t = tasks.Task(gen, loop=loop)
+    try:
+        loop.run_until_complete(t)
+    finally:
+         gen.close()
 
 
 def run_once(loop):

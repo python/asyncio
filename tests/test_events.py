@@ -926,6 +926,7 @@ class EventLoopTestsMixin:
         ov = getattr(f, 'ov', None)
         self.assertTrue(ov is None or ov.pending)
 
+        @tasks.coroutine
         def main():
             try:
                 self.loop.call_soon(f.cancel)

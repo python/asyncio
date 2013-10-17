@@ -44,9 +44,8 @@ class BaseEventLoopTests(unittest.TestCase):
         self.assertRaises(
             NotImplementedError,
             self.loop._make_write_pipe_transport, m, m)
-        self.assertRaises(
-            NotImplementedError,
-            next, self.loop._make_subprocess_transport(m, m, m, m, m, m, m))
+        gen = self.loop._make_subprocess_transport(m, m, m, m, m, m, m)
+        self.assertRaises(NotImplementedError, next, iter(gen))
 
     def test__add_callback_handle(self):
         h = events.Handle(lambda: False, ())

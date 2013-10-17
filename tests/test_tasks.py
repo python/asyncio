@@ -136,8 +136,10 @@ class TaskTests(unittest.TestCase):
             def __repr__(self):
                 return super().__repr__()
 
-        t = MyTask(coro(), loop=self.loop)
+        gen = coro()
+        t = MyTask(gen, loop=self.loop)
         self.assertEqual(repr(t), 'T[](<coro>)')
+        gen.close()
 
     def test_task_basics(self):
         @tasks.coroutine
@@ -942,10 +944,12 @@ class TaskTests(unittest.TestCase):
         def notmuch():
             return 'ko'
 
-        task = tasks.Task(notmuch(), loop=self.loop)
+        gen = notmuch()
+        task = tasks.Task(gen, loop=self.loop)
         task.set_result('ok')
 
         self.assertRaises(AssertionError, task._step)
+        gen.close()
 
     def test_step_result(self):
         @tasks.coroutine
@@ -1069,7 +1073,11 @@ class TaskTests(unittest.TestCase):
 
         @tasks.coroutine
         def wait_for_future():
-            yield coro()
+            gen = coro()
+            try:
+                yield gen
+            finally:
+                gen.close()
 
         task = wait_for_future()
         self.assertRaises(
@@ -1426,6 +1434,7 @@ class CoroutineGatherTests(GatherTestsBase, unittest.TestCase):
     def wrap_futures(self, *futures):
         coros = []
         for fut in futures:
+            @tasks.coroutine
             def coro(fut=fut):
                 return (yield from fut)
             coros.append(coro())
@@ -1435,10 +1444,18 @@ class CoroutineGatherTests(GatherTestsBase, unittest.TestCase):
         @tasks.coroutine
         def coro():
             return 'abc'
-        fut = tasks.gather(coro(), coro())
+        gen1 = coro()
+        gen2 = coro()
+        fut = tasks.gather(gen1, gen2)
         self.assertIs(fut._loop, self.one_loop)
-        fut = tasks.gather(coro(), coro(), loop=self.other_loop)
+        gen1.close()
+        gen2.close()
+        gen3 = coro()
+        gen4 = coro()
+        fut = tasks.gather(gen3, gen4, loop=self.other_loop)
         self.assertIs(fut._loop, self.other_loop)
+        gen3.close()
+        gen4.close()
 
     def test_cancellation_broadcast(self):
         # Cancelling outer() cancels all children.

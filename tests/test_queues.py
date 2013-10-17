@@ -3,12 +3,12 @@
 import unittest
 import unittest.mock
 
-from tulip import events
-from tulip import futures
-from tulip import locks
-from tulip import queues
-from tulip import tasks
-from tulip import test_utils
+from asyncio import events
+from asyncio import futures
+from asyncio import locks
+from asyncio import queues
+from asyncio import tasks
+from asyncio import test_utils
 
 
 class _QueueTestBase(unittest.TestCase):

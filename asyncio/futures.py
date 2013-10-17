@@ -10,7 +10,7 @@ import logging
 import traceback
 
 from . import events
-from .log import tulip_log
+from .log import asyncio_log
 
 # States for Future.
 _PENDING = 'PENDING'
@@ -99,8 +99,8 @@ class _TracebackLogger:
 
     def __del__(self):
         if self.tb:
-            tulip_log.error('Future/Task exception was never retrieved:\n%s',
-                            ''.join(self.tb))
+            asyncio_log.error('Future/Task exception was never retrieved:\n%s',
+                              ''.join(self.tb))
 
 
 class Future:

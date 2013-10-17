@@ -3,4 +3,5 @@
 import logging
 
 
-tulip_log = logging.getLogger("tulip")
+# Name the logger after the package.
+logger = logging.getLogger(__package__)

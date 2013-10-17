@@ -12,7 +12,7 @@ from . import selector_events
 from . import tasks
 from . import windows_utils
 from . import _overlapped
-from .log import tulip_log
+from .log import logger
 
 
 __all__ = ['SelectorEventLoop', 'ProactorEventLoop', 'IocpProactor']
@@ -135,7 +135,7 @@ class ProactorEventLoop(proactor_events.BaseProactorEventLoop):
                 f = self._proactor.accept_pipe(pipe)
             except OSError:
                 if pipe and pipe.fileno() != -1:
-                    tulip_log.exception('Pipe accept failed')
+                    logger.exception('Pipe accept failed')
                     pipe.close()
             except futures.CancelledError:
                 if pipe:
@@ -363,7 +363,7 @@ class IocpProactor:
 
         while self._cache:
             if not self._poll(1):
-                tulip_log.debug('taking long time to close proactor')
+                logger.debug('taking long time to close proactor')
 
         self._results = []
         if self._iocp is not None:

@@ -19,6 +19,9 @@ ARGS.add_argument(
 ARGS.add_argument(
     '--port', action='store', dest='port',
     default=1111, type=int, help='Port number')
+ARGS.add_argument(
+    '--size', action='store', dest='size',
+    default=16*1024, type=int, help='Data size')
 
 args = None
 
@@ -28,8 +31,6 @@ def dprint(*args):
 
 
 class Client(Protocol):
-
-    data = b'x'*16*1024
 
     def connection_made(self, tr):
         dprint('connecting to', tr.get_extra_info('peername'))
@@ -42,15 +43,16 @@ class Client(Protocol):
             self.tr.write(b'stop')
             self.tr.close()
         else:
-            self.write_some_data()
+            data = b'x' * args.size
+            self.write_some_data(data)
 
-    def write_some_data(self):
+    def write_some_data(self, data):
         if self.lost:
             dprint('lost already')
             return
-        dprint('writing', len(self.data), 'bytes')
-        self.tr.write(self.data)
-        self.loop.call_soon(self.write_some_data)
+        dprint('writing', len(data), 'bytes')
+        self.tr.write(data)
+        self.loop.call_soon(self.write_some_data, data)
 
     def connection_lost(self, exc):
         dprint('lost connection', repr(exc))

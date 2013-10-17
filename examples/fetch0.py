@@ -2,7 +2,7 @@
 
 import sys
 
-from tulip import *
+from asyncio import *
 
 
 @coroutine

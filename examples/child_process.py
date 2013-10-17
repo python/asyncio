@@ -8,18 +8,18 @@ import os
 import sys
 
 try:
-    import tulip
+    import asyncio
 except ImportError:
-    # tulip is not installed
+    # asyncio is not installed
     sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-    import tulip
+    import asyncio
 
-from tulip import streams
-from tulip import protocols
+from asyncio import streams
+from asyncio import protocols
 
 if sys.platform == 'win32':
-    from tulip.windows_utils import Popen, PIPE
-    from tulip.windows_events import ProactorEventLoop
+    from asyncio.windows_utils import Popen, PIPE
+    from asyncio.windows_events import ProactorEventLoop
 else:
     from subprocess import Popen, PIPE
 
@@ -27,20 +27,20 @@ else:
 # Return a write-only transport wrapping a writable pipe
 #
 
-@tulip.coroutine
+@asyncio.coroutine
 def connect_write_pipe(file):
-    loop = tulip.get_event_loop()
+    loop = asyncio.get_event_loop()
     protocol = protocols.Protocol()
-    transport, _ =  yield from loop.connect_write_pipe(tulip.Protocol, file)
+    transport, _ =  yield from loop.connect_write_pipe(asyncio.Protocol, file)
     return transport
 
 #
 # Wrap a readable pipe in a stream
 #
 
-@tulip.coroutine
+@asyncio.coroutine
 def connect_read_pipe(file):
-    loop = tulip.get_event_loop()
+    loop = asyncio.get_event_loop()
     stream_reader = streams.StreamReader(loop=loop)
     def factory():
         return streams.StreamReaderProtocol(stream_reader)
@@ -52,7 +52,7 @@ def connect_read_pipe(file):
 # Example
 #
 
-@tulip.coroutine
+@asyncio.coroutine
 def main(loop):
     # program which prints evaluation of each expression from stdin
     code = r'''if 1:
@@ -88,8 +88,8 @@ def main(loop):
 
     # interact with subprocess
     name = {stdout:'OUT', stderr:'ERR'}
-    registered = {tulip.Task(stderr.readline()): stderr,
-                  tulip.Task(stdout.readline()): stdout}
+    registered = {asyncio.Task(stderr.readline()): stderr,
+                  asyncio.Task(stdout.readline()): stdout}
     while registered:
         # write command
         cmd = next(commands, None)
@@ -102,8 +102,8 @@ def main(loop):
         # get and print lines from stdout, stderr
         timeout = None
         while registered:
-            done, pending = yield from tulip.wait(
-                registered, timeout=timeout, return_when=tulip.FIRST_COMPLETED)
+            done, pending = yield from asyncio.wait(
+                registered, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
             if not done:
                 break
             for f in done:
@@ -111,7 +111,7 @@ def main(loop):
                 res = f.result()
                 print(name[stream], res.decode('ascii').rstrip())
                 if res != b'':
-                    registered[tulip.Task(stream.readline())] = stream
+                    registered[asyncio.Task(stream.readline())] = stream
             timeout = 0.0
 
     stdout_transport.close()
@@ -120,8 +120,8 @@ def main(loop):
 if __name__ == '__main__':
     if sys.platform == 'win32':
         loop = ProactorEventLoop()
-        tulip.set_event_loop(loop)
+        asyncio.set_event_loop(loop)
     else:
-        loop = tulip.get_event_loop()
+        loop = asyncio.get_event_loop()
     loop.run_until_complete(main(loop))
     loop.close()

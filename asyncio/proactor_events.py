@@ -10,7 +10,7 @@ from . import base_events
 from . import constants
 from . import futures
 from . import transports
-from .log import tulip_log
+from .log import asyncio_log
 
 
 class _ProactorBasePipeTransport(transports.BaseTransport):
@@ -50,7 +50,7 @@ class _ProactorBasePipeTransport(transports.BaseTransport):
             self._read_fut.cancel()
 
     def _fatal_error(self, exc):
-        tulip_log.exception('Fatal error for %s', self)
+        asyncio_log.exception('Fatal error for %s', self)
         self._force_close(exc)
 
     def _force_close(self, exc):
@@ -164,7 +164,7 @@ class _ProactorWritePipeTransport(_ProactorBasePipeTransport,
 
         if self._conn_lost:
             if self._conn_lost >= constants.LOG_THRESHOLD_FOR_CONNLOST_WRITES:
-                tulip_log.warning('socket.send() raised exception.')
+                asyncio_log.warning('socket.send() raised exception.')
             self._conn_lost += 1
             return
         self._buffer.append(data)
@@ -221,9 +221,15 @@ class _ProactorSocketTransport(_ProactorReadPipeTransport,
 
     def _set_extra(self, sock):
         self._extra['socket'] = sock
-        self._extra['sockname'] = sock.getsockname()
+        try:
+            self._extra['sockname'] = sock.getsockname()
+        except (socket.error, AttributeError):
+            pass
         if 'peername' not in self._extra:
-            self._extra['peername'] = sock.getpeername()
+            try:
+                self._extra['peername'] = sock.getpeername()
+            except (socket.error, AttributeError):
+                pass
 
     def can_write_eof(self):
         return True
@@ -240,7 +246,7 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
 
     def __init__(self, proactor):
         super().__init__()
-        tulip_log.debug('Using proactor: %s', proactor.__class__.__name__)
+        asyncio_log.debug('Using proactor: %s', proactor.__class__.__name__)
         self._proactor = proactor
         self._selector = proactor   # convenient alias
         proactor.set_loop(self)
@@ -329,7 +335,7 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
                 f = self._proactor.accept(sock)
             except OSError:
                 if sock.fileno() != -1:
-                    tulip_log.exception('Accept failed')
+                    asyncio_log.exception('Accept failed')
                     sock.close()
             except futures.CancelledError:
                 sock.close()

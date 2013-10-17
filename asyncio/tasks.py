@@ -16,7 +16,7 @@ import weakref
 
 from . import events
 from . import futures
-from .log import tulip_log
+from .log import asyncio_log
 
 # If you set _DEBUG to true, @coroutine will wrap the resulting
 # generator objects in a CoroWrapper instance (defined below).  That
@@ -62,8 +62,8 @@ class CoroWrapper:
             code = func.__code__
             filename = code.co_filename
             lineno = code.co_firstlineno
-            tulip_log.error('Coroutine %r defined at %s:%s was never yielded from',
-                            func.__name__, filename, lineno)
+            asyncio_log.error('Coroutine %r defined at %s:%s was never yielded from',
+                              func.__name__, filename, lineno)
 
 
 def coroutine(func):
@@ -331,7 +331,7 @@ def wait(fs, *, loop=None, timeout=None, return_when=ALL_COMPLETED):
 
     Usage:
 
-        done, pending = yield from tulip.wait(fs)
+        done, pending = yield from asyncio.wait(fs)
 
     Note: This does not raise TimeoutError! Futures that aren't done
     when the timeout occurs are returned in the second set.
@@ -360,7 +360,7 @@ def wait_for(fut, timeout, *, loop=None):
 
     Usage:
 
-        result = yield from tulip.wait_for(fut, 10.0)
+        result = yield from asyncio.wait_for(fut, 10.0)
 
     """
     if loop is None:

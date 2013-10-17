@@ -27,7 +27,7 @@ import sys
 from . import events
 from . import futures
 from . import tasks
-from .log import tulip_log
+from .log import asyncio_log
 
 
 __all__ = ['BaseEventLoop', 'Server']
@@ -580,7 +580,7 @@ class BaseEventLoop(events.AbstractEventLoop):
             level = logging.INFO
         else:
             level = logging.DEBUG
-        tulip_log.log(level, 'poll%s took %.3f seconds', argstr, t1-t0)
+        asyncio_log.log(level, 'poll%s took %.3f seconds', argstr, t1-t0)
         self._process_events(event_list)
 
         # Handle 'later' callbacks that are ready.

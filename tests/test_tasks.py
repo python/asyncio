@@ -5,10 +5,10 @@ import unittest
 import unittest.mock
 from unittest.mock import Mock
 
-from tulip import events
-from tulip import futures
-from tulip import tasks
-from tulip import test_utils
+from asyncio import events
+from asyncio import futures
+from asyncio import tasks
+from asyncio import test_utils
 
 
 class Dummy:

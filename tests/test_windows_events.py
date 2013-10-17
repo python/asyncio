@@ -1,13 +1,17 @@
 import os
+import sys
 import unittest
 
-import tulip
+if sys.platform != 'win32':
+    raise unittest.SkipTest('Windows only')
 
-from tulip import windows_events
-from tulip import protocols
-from tulip import streams
-from tulip import transports
-from tulip import test_utils
+import asyncio
+
+from asyncio import windows_events
+from asyncio import protocols
+from asyncio import streams
+from asyncio import transports
+from asyncio import test_utils
 
 
 class UpperProto(protocols.Protocol):
@@ -28,7 +32,7 @@ class ProactorTests(unittest.TestCase):
 
     def setUp(self):
         self.loop = windows_events.ProactorEventLoop()
-        tulip.set_event_loop(None)
+        asyncio.set_event_loop(None)
 
     def tearDown(self):
         self.loop.close()
@@ -37,7 +41,7 @@ class ProactorTests(unittest.TestCase):
     def test_close(self):
         a, b = self.loop._socketpair()
         trans = self.loop._make_socket_transport(a, protocols.Protocol())
-        f = tulip.async(self.loop.sock_recv(b, 100))
+        f = asyncio.async(self.loop.sock_recv(b, 100))
         trans.close()
         self.loop.run_until_complete(f)
         self.assertEqual(f.result(), b'')

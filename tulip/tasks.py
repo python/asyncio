@@ -16,15 +16,61 @@ import weakref
 
 from . import events
 from . import futures
+from .log import tulip_log
+
+# If you set _DEBUG to true, @coroutine will wrap the resulting
+# generator objects in a CoroWrapper instance (defined below).  That
+# instance will log a message when the generator is never iterated
+# over, which may happen when you forget to use "yield from" with a
+# coroutine call.  Note that the value of the _DEBUG flag is taken
+# when the decorator is used, so to be of any use it must be set
+# before you define your coroutines.  A downside of using this feature
+# is that tracebacks show entries for the CoroWrapper.__next__ method
+# when _DEBUG is true.
+_DEBUG = False
+
+
+class CoroWrapper:
+    """Wrapper for coroutine in _DEBUG mode."""
+
+    __slot__ = ['gen', 'func']
+
+    def __init__(self, gen, func):
+        assert inspect.isgenerator(gen), gen
+        self.gen = gen
+        self.func = func
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return next(self.gen)
+
+    def send(self, value):
+        return self.gen.send(value)
+
+    def throw(self, exc):
+        return self.gen.throw(exc)
+
+    def close(self):
+        return self.gen.close()
+
+    def __del__(self):
+        frame = self.gen.gi_frame
+        if frame is not None and frame.f_lasti == -1:
+            func = self.func
+            code = func.__code__
+            filename = code.co_filename
+            lineno = code.co_firstlineno
+            tulip_log.error('Coroutine %r defined at %s:%s was never yielded from',
+                            func.__name__, filename, lineno)
 
 
 def coroutine(func):
     """Decorator to mark coroutines.
 
-    Decorator wraps non generator functions and returns generator wrapper.
-    If non generator function returns generator of Future it yield-from it.
-
-    TODO: This is a feel-good API only. It is not enforced.
+    If the coroutine is not yielded from before it is destroyed,
+    an error message is logged.
     """
     if inspect.isgeneratorfunction(func):
         coro = func
@@ -36,21 +82,28 @@ def coroutine(func):
                 res = yield from res
             return res
 
-    coro._is_coroutine = True  # Not sure who can use this.
-    return coro
+    if not _DEBUG:
+        wrapper = coro
+    else:
+        @functools.wraps(func)
+        def wrapper(*args, **kwds):
+            w = CoroWrapper(coro(*args, **kwds), func)
+            w.__name__ = coro.__name__
+            w.__doc__ = coro.__doc__
+            return w
+
+    wrapper._is_coroutine = True  # For iscoroutinefunction().
+    return wrapper
 
 
-# TODO: Do we need this?
 def iscoroutinefunction(func):
     """Return True if func is a decorated coroutine function."""
-    return (inspect.isgeneratorfunction(func) and
-            getattr(func, '_is_coroutine', False))
+    return getattr(func, '_is_coroutine', False)
 
 
-# TODO: Do we need this?
 def iscoroutine(obj):
     """Return True if obj is a coroutine object."""
-    return inspect.isgenerator(obj)  # TODO: And what?
+    return isinstance(obj, CoroWrapper) or inspect.isgenerator(obj)
 
 
 class Task(futures.Future):
@@ -79,9 +132,9 @@ class Task(futures.Future):
         return {t for t in cls._all_tasks if t._loop is loop}
 
     def __init__(self, coro, *, loop=None):
-        assert inspect.isgenerator(coro)  # Must be a coroutine *object*.
+        assert iscoroutine(coro), repr(coro)  # Not a coroutine function!
         super().__init__(loop=loop)
-        self._coro = coro
+        self._coro = iter(coro)  # Use the iterator just in case.
         self._fut_waiter = None
         self._must_cancel = False
         self._loop.call_soon(self._step)

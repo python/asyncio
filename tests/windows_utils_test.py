@@ -7,7 +7,11 @@ import unittest.mock
 import _winapi
 
 from tulip import windows_utils
-from tulip import _overlapped
+
+try:
+    import _overlapped
+except ImportError:
+    from tulip import _overlapped
 
 
 class WinsocketpairTests(unittest.TestCase):

@@ -43,7 +43,7 @@ def run_briefly(loop):
     try:
         loop.run_until_complete(t)
     finally:
-         gen.close()
+        gen.close()
 
 
 def run_once(loop):

@@ -15,10 +15,10 @@ try:
 except ImportError:  # pragma: no cover
     ssl = None
 
-import tulip
-from tulip import base_events
-from tulip import events
-from tulip import selectors
+from . import tasks
+from . import base_events
+from . import events
+from . import selectors
 
 
 if sys.platform == 'win32':  # pragma: no cover
@@ -35,11 +35,11 @@ def dummy_ssl_context():
 
 
 def run_briefly(loop):
-    @tulip.coroutine
+    @tasks.coroutine
     def once():
         pass
     gen = once()
-    t = tulip.Task(gen, loop=loop)
+    t = tasks.Task(gen, loop=loop)
     try:
         loop.run_until_complete(t)
     finally:
@@ -72,7 +72,14 @@ def run_test_server(*, host='127.0.0.1', port=0, use_ssl=False):
 
     class SSLWSGIServer(SilentWSGIServer):
         def finish_request(self, request, client_address):
+            # The relative location of our test directory (which
+            # contains the sample key and certificate files) differs
+            # between the stdlib and stand-alone Tulip/asyncio.
+            # Prefer our own if we can find it.
             here = os.path.join(os.path.dirname(__file__), '..', 'tests')
+            if not os.path.isdir(here):
+                here = os.path.join(os.path.dirname(os.__file__),
+                                    'test', 'test_asyncio')
             keyfile = os.path.join(here, 'sample.key')
             certfile = os.path.join(here, 'sample.crt')
             ssock = ssl.wrap_socket(request,

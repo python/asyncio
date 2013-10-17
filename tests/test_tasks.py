@@ -374,7 +374,6 @@ class TaskTests(unittest.TestCase):
         self.assertFalse(fut.done())
         self.assertAlmostEqual(0.1, loop.time())
 
-        loop
         # wait for result
         res = loop.run_until_complete(
             tasks.wait_for(fut, 0.3, loop=loop))

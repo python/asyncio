@@ -11,8 +11,12 @@ from . import proactor_events
 from . import selector_events
 from . import tasks
 from . import windows_utils
-from . import _overlapped
 from .log import logger
+
+try:
+    import _overlapped
+except ImportError:
+    from . import _overlapped
 
 
 __all__ = ['SelectorEventLoop', 'ProactorEventLoop', 'IocpProactor']

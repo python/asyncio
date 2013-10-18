@@ -8,10 +8,10 @@ try:
 except ImportError:
     ssl = None
 
-from tulip import events
-from tulip import streams
-from tulip import tasks
-from tulip import test_utils
+from asyncio import events
+from asyncio import streams
+from asyncio import tasks
+from asyncio import test_utils
 
 
 class StreamReaderTests(unittest.TestCase):
@@ -29,7 +29,7 @@ class StreamReaderTests(unittest.TestCase):
         self.loop.close()
         gc.collect()
 
-    @unittest.mock.patch('tulip.streams.events')
+    @unittest.mock.patch('asyncio.streams.events')
     def test_ctor_global_loop(self, m_events):
         stream = streams.StreamReader()
         self.assertIs(stream._loop, m_events.get_event_loop.return_value)

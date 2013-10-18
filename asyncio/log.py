@@ -1,4 +1,4 @@
-"""Tulip logging configuration"""
+"""Logging configuration."""
 
 import logging
 

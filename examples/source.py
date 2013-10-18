@@ -32,6 +32,8 @@ def dprint(*args):
 
 class Client(Protocol):
 
+    total = 0
+
     def connection_made(self, tr):
         dprint('connecting to', tr.get_extra_info('peername'))
         dprint('my socket is', tr.get_extra_info('sockname'))
@@ -50,7 +52,8 @@ class Client(Protocol):
         if self.lost:
             dprint('lost already')
             return
-        dprint('writing', len(data), 'bytes')
+        self.total += len(data)
+        dprint('writing', len(data), 'bytes; total', self.total)
         self.tr.write(data)
         self.loop.call_soon(self.write_some_data, data)
 
@@ -65,8 +68,7 @@ def start(loop, host, port):
     tr, pr = yield from loop.create_connection(Client, host, port)
     dprint('tr =', tr)
     dprint('pr =', pr)
-    res = yield from pr.waiter
-    return res
+    yield from pr.waiter
 
 
 def main():

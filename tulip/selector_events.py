@@ -584,15 +584,22 @@ class _SelectorSslTransport(_SelectorTransport):
             self._loop.add_writer(self._sock_fd, self._on_handshake)
             return
         except Exception as exc:
+            self._loop.remove_reader(self._sock_fd)
+            self._loop.remove_writer(self._sock_fd)
             self._sock.close()
             if self._waiter is not None:
                 self._waiter.set_exception(exc)
             return
         except BaseException as exc:
+            self._loop.remove_reader(self._sock_fd)
+            self._loop.remove_writer(self._sock_fd)
             self._sock.close()
             if self._waiter is not None:
                 self._waiter.set_exception(exc)
             raise
+
+        self._loop.remove_reader(self._sock_fd)
+        self._loop.remove_writer(self._sock_fd)
 
         # Verify hostname if requested.
         peercert = self._sock.getpeercert()
@@ -612,8 +619,6 @@ class _SelectorSslTransport(_SelectorTransport):
                            compression=self._sock.compression(),
                            )
 
-        self._loop.remove_reader(self._sock_fd)
-        self._loop.remove_writer(self._sock_fd)
         self._loop.add_reader(self._sock_fd, self._on_ready)
         self._loop.add_writer(self._sock_fd, self._on_ready)
         self._loop.call_soon(self._protocol.connection_made, self)

@@ -4,14 +4,18 @@ import sys
 import test.support
 import unittest
 import unittest.mock
+
+if sys.platform != 'win32':
+    raise unittest.SkipTest('Windows only')
+
 import _winapi
 
-from tulip import windows_utils
+from asyncio import windows_utils
 
 try:
     import _overlapped
 except ImportError:
-    from tulip import _overlapped
+    from asyncio import _overlapped
 
 
 class WinsocketpairTests(unittest.TestCase):
@@ -25,7 +29,7 @@ class WinsocketpairTests(unittest.TestCase):
         csock.close()
         ssock.close()
 
-    @unittest.mock.patch('tulip.windows_utils.socket')
+    @unittest.mock.patch('asyncio.windows_utils.socket')
     def test_winsocketpair_exc(self, m_socket):
         m_socket.socket.return_value.getsockname.return_value = ('', 12345)
         m_socket.socket.return_value.accept.return_value = object(), object()

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """TCP echo server example."""
 import argparse
-import tulip
+import asyncio
 try:
     import signal
 except ImportError:
     signal = None
 
 
-class EchoServer(tulip.Protocol):
+class EchoServer(asyncio.Protocol):
 
     TIMEOUT = 5.0
 
@@ -21,7 +21,7 @@ class EchoServer(tulip.Protocol):
         self.transport = transport
 
         # start 5 seconds timeout timer
-        self.h_timeout = tulip.get_event_loop().call_later(
+        self.h_timeout = asyncio.get_event_loop().call_later(
             self.TIMEOUT, self.timeout)
 
     def data_received(self, data):
@@ -30,7 +30,7 @@ class EchoServer(tulip.Protocol):
 
         # restart timeout timer
         self.h_timeout.cancel()
-        self.h_timeout = tulip.get_event_loop().call_later(
+        self.h_timeout = asyncio.get_event_loop().call_later(
             self.TIMEOUT, self.timeout)
 
     def eof_received(self):
@@ -41,7 +41,7 @@ class EchoServer(tulip.Protocol):
         self.h_timeout.cancel()
 
 
-class EchoClient(tulip.Protocol):
+class EchoClient(asyncio.Protocol):
 
     message = 'This is the message. It will be echoed.'
 
@@ -54,18 +54,18 @@ class EchoClient(tulip.Protocol):
         print('data received:', data)
 
         # disconnect after 10 seconds
-        tulip.get_event_loop().call_later(10.0, self.transport.close)
+        asyncio.get_event_loop().call_later(10.0, self.transport.close)
 
     def eof_received(self):
         pass
 
     def connection_lost(self, exc):
         print('connection lost:', exc)
-        tulip.get_event_loop().stop()
+        asyncio.get_event_loop().stop()
 
 
 def start_client(loop, host, port):
-    t = tulip.Task(loop.create_connection(EchoClient, host, port))
+    t = asyncio.Task(loop.create_connection(EchoClient, host, port))
     loop.run_until_complete(t)
 
 
@@ -101,7 +101,7 @@ if __name__ == '__main__':
         print('Please specify --server or --client\n')
         ARGS.print_help()
     else:
-        loop = tulip.get_event_loop()
+        loop = asyncio.get_event_loop()
         if signal is not None:
             loop.add_signal_handler(signal.SIGINT, loop.stop)
 

@@ -5,7 +5,7 @@ Usage:
 
 Patterns are matched against the fully qualified name of the test,
 including package, module, class and method,
-e.g. 'tests.events_test.PolicyTests.testPolicy'.
+e.g. 'tests.test_events.PolicyTests.testPolicy'.
 
 For full help, try --help.
 

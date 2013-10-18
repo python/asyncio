@@ -3,7 +3,7 @@
 import argparse
 import sys
 
-from tulip import *
+from asyncio import *
 
 ARGS = argparse.ArgumentParser(description="TCP data sink example.")
 ARGS.add_argument(
@@ -63,7 +63,7 @@ def main():
     global args
     args = ARGS.parse_args()
     if args.iocp:
-        from tulip.windows_events import ProactorEventLoop
+        from asyncio.windows_events import ProactorEventLoop
         loop = ProactorEventLoop()
         set_event_loop(loop)
     else:

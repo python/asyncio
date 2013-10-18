@@ -2,7 +2,7 @@
 """UDP echo example."""
 import argparse
 import sys
-import tulip
+import asyncio
 try:
     import signal
 except ImportError:
@@ -45,18 +45,18 @@ class MyClientUdpEchoProtocol:
 
     def connection_lost(self, exc):
         print('closing transport', exc)
-        loop = tulip.get_event_loop()
+        loop = asyncio.get_event_loop()
         loop.stop()
 
 
 def start_server(loop, addr):
-    t = tulip.Task(loop.create_datagram_endpoint(
+    t = asyncio.Task(loop.create_datagram_endpoint(
         MyServerUdpEchoProtocol, local_addr=addr))
     loop.run_until_complete(t)
 
 
 def start_client(loop, addr):
-    t = tulip.Task(loop.create_datagram_endpoint(
+    t = asyncio.Task(loop.create_datagram_endpoint(
         MyClientUdpEchoProtocol, remote_addr=addr))
     loop.run_until_complete(t)
 
@@ -86,7 +86,7 @@ if __name__ == '__main__':
         print('Please specify --server or --client\n')
         ARGS.print_help()
     else:
-        loop = tulip.get_event_loop()
+        loop = asyncio.get_event_loop()
         if signal is not None:
             loop.add_signal_handler(signal.SIGINT, loop.stop)
 

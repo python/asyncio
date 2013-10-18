@@ -15,8 +15,12 @@ ARGS.add_argument(
 ARGS.add_argument(
     '--port', action='store', dest='port',
     default=1111, type=int, help='Port number')
+ARGS.add_argument(
+    '--maxsize', action='store', dest='maxsize',
+    default=16*1024*1024, type=int, help='Max total data size')
 
 server = None
+args = None
 
 
 def dprint(*args):
@@ -39,7 +43,7 @@ class Service(Protocol):
             return
         self.total += len(data)
         dprint('received', len(data), 'bytes; total', self.total)
-        if self.total > 1e6:
+        if self.total > args.maxsize:
             dprint('closing due to too much data')
             self.tr.close()
 
@@ -56,6 +60,7 @@ def start(loop, host, port):
 
 
 def main():
+    global args
     args = ARGS.parse_args()
     if args.iocp:
         from tulip.windows_events import ProactorEventLoop

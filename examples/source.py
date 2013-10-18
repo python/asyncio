@@ -45,17 +45,19 @@ class Client(Protocol):
             self.tr.write(b'stop')
             self.tr.close()
         else:
-            data = b'x' * args.size
-            self.write_some_data(data)
+            self.data = b'x'*args.size
+            self.write_some_data()
 
-    def write_some_data(self, data):
+    def write_some_data(self):
         if self.lost:
             dprint('lost already')
             return
-        self.total += len(data)
-        dprint('writing', len(data), 'bytes; total', self.total)
+        data = self.data
+        size = len(data)
+        self.total += size
+        dprint('writing', size, 'bytes; total', self.total)
         self.tr.write(data)
-        self.loop.call_soon(self.write_some_data, data)
+        self.loop.call_soon(self.write_some_data)
 
     def connection_lost(self, exc):
         dprint('lost connection', repr(exc))

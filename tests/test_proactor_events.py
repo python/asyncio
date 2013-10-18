@@ -4,12 +4,12 @@ import socket
 import unittest
 import unittest.mock
 
-import tulip
-from tulip.proactor_events import BaseProactorEventLoop
-from tulip.proactor_events import _ProactorSocketTransport
-from tulip.proactor_events import _ProactorWritePipeTransport
-from tulip.proactor_events import _ProactorDuplexPipeTransport
-from tulip import test_utils
+import asyncio
+from asyncio.proactor_events import BaseProactorEventLoop
+from asyncio.proactor_events import _ProactorSocketTransport
+from asyncio.proactor_events import _ProactorWritePipeTransport
+from asyncio.proactor_events import _ProactorDuplexPipeTransport
+from asyncio import test_utils
 
 
 class ProactorSocketTransportTests(unittest.TestCase):
@@ -18,11 +18,11 @@ class ProactorSocketTransportTests(unittest.TestCase):
         self.loop = test_utils.TestLoop()
         self.proactor = unittest.mock.Mock()
         self.loop._proactor = self.proactor
-        self.protocol = test_utils.make_test_protocol(tulip.Protocol)
+        self.protocol = test_utils.make_test_protocol(asyncio.Protocol)
         self.sock = unittest.mock.Mock(socket.socket)
 
     def test_ctor(self):
-        fut = tulip.Future(loop=self.loop)
+        fut = asyncio.Future(loop=self.loop)
         tr = _ProactorSocketTransport(
             self.loop, self.sock, self.protocol, fut)
         test_utils.run_briefly(self.loop)
@@ -38,7 +38,7 @@ class ProactorSocketTransportTests(unittest.TestCase):
         self.assertFalse(self.protocol.eof_received.called)
 
     def test_loop_reading_data(self):
-        res = tulip.Future(loop=self.loop)
+        res = asyncio.Future(loop=self.loop)
         res.set_result(b'data')
 
         tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
@@ -49,7 +49,7 @@ class ProactorSocketTransportTests(unittest.TestCase):
         self.protocol.data_received.assert_called_with(b'data')
 
     def test_loop_reading_no_data(self):
-        res = tulip.Future(loop=self.loop)
+        res = asyncio.Future(loop=self.loop)
         res.set_result(b'')
 
         tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
@@ -135,7 +135,7 @@ class ProactorSocketTransportTests(unittest.TestCase):
         self.loop._proactor.send.return_value.add_done_callback.\
             assert_called_with(tr._loop_writing)
 
-    @unittest.mock.patch('tulip.proactor_events.logger')
+    @unittest.mock.patch('asyncio.proactor_events.logger')
     def test_loop_writing_err(self, m_log):
         err = self.loop._proactor.send.side_effect = OSError()
         tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
@@ -154,7 +154,7 @@ class ProactorSocketTransportTests(unittest.TestCase):
         m_log.warning.assert_called_with('socket.send() raised exception.')
 
     def test_loop_writing_stop(self):
-        fut = tulip.Future(loop=self.loop)
+        fut = asyncio.Future(loop=self.loop)
         fut.set_result(b'data')
 
         tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
@@ -163,7 +163,7 @@ class ProactorSocketTransportTests(unittest.TestCase):
         self.assertIsNone(tr._write_fut)
 
     def test_loop_writing_closing(self):
-        fut = tulip.Future(loop=self.loop)
+        fut = asyncio.Future(loop=self.loop)
         fut.set_result(1)
 
         tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
@@ -207,7 +207,7 @@ class ProactorSocketTransportTests(unittest.TestCase):
         test_utils.run_briefly(self.loop)
         self.assertFalse(self.protocol.connection_lost.called)
 
-    @unittest.mock.patch('tulip.proactor_events.logger')
+    @unittest.mock.patch('asyncio.proactor_events.logger')
     def test_fatal_error(self, m_logging):
         tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
         tr._force_close = unittest.mock.Mock()
@@ -263,7 +263,7 @@ class ProactorSocketTransportTests(unittest.TestCase):
 
     def test_write_eof_buffer(self):
         tr = _ProactorSocketTransport(self.loop, self.sock, self.protocol)
-        f = tulip.Future(loop=self.loop)
+        f = asyncio.Future(loop=self.loop)
         tr._loop._proactor.send.return_value = f
         tr.write(b'data')
         tr.write_eof()
@@ -287,7 +287,7 @@ class ProactorSocketTransportTests(unittest.TestCase):
 
     def test_write_eof_buffer_write_pipe(self):
         tr = _ProactorWritePipeTransport(self.loop, self.sock, self.protocol)
-        f = tulip.Future(loop=self.loop)
+        f = asyncio.Future(loop=self.loop)
         tr._loop._proactor.send.return_value = f
         tr.write(b'data')
         tr.write_eof()
@@ -313,7 +313,7 @@ class ProactorSocketTransportTests(unittest.TestCase):
             self.loop, self.sock, self.protocol)
         futures = []
         for msg in [b'data1', b'data2', b'data3', b'data4', b'']:
-            f = tulip.Future(loop=self.loop)
+            f = asyncio.Future(loop=self.loop)
             f.set_result(msg)
             futures.append(f)
         self.loop._proactor.recv.side_effect = futures
@@ -432,7 +432,7 @@ class BaseProactorEventLoopTests(unittest.TestCase):
     def test_process_events(self):
         self.loop._process_events([])
 
-    @unittest.mock.patch('tulip.proactor_events.logger')
+    @unittest.mock.patch('asyncio.proactor_events.logger')
     def test_create_server(self, m_log):
         pf = unittest.mock.Mock()
         call_soon = self.loop.call_soon = unittest.mock.Mock()
@@ -468,7 +468,7 @@ class BaseProactorEventLoopTests(unittest.TestCase):
         loop = call_soon.call_args[0][0]
 
         # cancelled
-        fut = tulip.Future(loop=self.loop)
+        fut = asyncio.Future(loop=self.loop)
         fut.cancel()
         loop(fut)
         self.assertTrue(self.sock.close.called)

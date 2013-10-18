@@ -14,11 +14,11 @@ if sys.platform == 'win32':
     raise unittest.SkipTest('UNIX only')
 
 
-from tulip import events
-from tulip import futures
-from tulip import protocols
-from tulip import test_utils
-from tulip import unix_events
+from asyncio import events
+from asyncio import futures
+from asyncio import protocols
+from asyncio import test_utils
+from asyncio import unix_events
 
 
 @unittest.skipUnless(signal, 'Signals are not supported')
@@ -48,7 +48,7 @@ class SelectorEventLoopTests(unittest.TestCase):
         self.loop._handle_signal(signal.NSIG + 1, ())
         self.loop.remove_signal_handler.assert_called_with(signal.NSIG + 1)
 
-    @unittest.mock.patch('tulip.unix_events.signal')
+    @unittest.mock.patch('asyncio.unix_events.signal')
     def test_add_signal_handler_setup_error(self, m_signal):
         m_signal.NSIG = signal.NSIG
         m_signal.set_wakeup_fd.side_effect = ValueError
@@ -58,7 +58,7 @@ class SelectorEventLoopTests(unittest.TestCase):
             self.loop.add_signal_handler,
             signal.SIGINT, lambda: True)
 
-    @unittest.mock.patch('tulip.unix_events.signal')
+    @unittest.mock.patch('asyncio.unix_events.signal')
     def test_add_signal_handler(self, m_signal):
         m_signal.NSIG = signal.NSIG
 
@@ -68,7 +68,7 @@ class SelectorEventLoopTests(unittest.TestCase):
         self.assertTrue(isinstance(h, events.Handle))
         self.assertEqual(h._callback, cb)
 
-    @unittest.mock.patch('tulip.unix_events.signal')
+    @unittest.mock.patch('asyncio.unix_events.signal')
     def test_add_signal_handler_install_error(self, m_signal):
         m_signal.NSIG = signal.NSIG
 
@@ -86,8 +86,8 @@ class SelectorEventLoopTests(unittest.TestCase):
             self.loop.add_signal_handler,
             signal.SIGINT, lambda: True)
 
-    @unittest.mock.patch('tulip.unix_events.signal')
-    @unittest.mock.patch('tulip.unix_events.logger')
+    @unittest.mock.patch('asyncio.unix_events.signal')
+    @unittest.mock.patch('asyncio.unix_events.logger')
     def test_add_signal_handler_install_error2(self, m_logging, m_signal):
         m_signal.NSIG = signal.NSIG
 
@@ -103,8 +103,8 @@ class SelectorEventLoopTests(unittest.TestCase):
         self.assertFalse(m_logging.info.called)
         self.assertEqual(1, m_signal.set_wakeup_fd.call_count)
 
-    @unittest.mock.patch('tulip.unix_events.signal')
-    @unittest.mock.patch('tulip.unix_events.logger')
+    @unittest.mock.patch('asyncio.unix_events.signal')
+    @unittest.mock.patch('asyncio.unix_events.logger')
     def test_add_signal_handler_install_error3(self, m_logging, m_signal):
         class Err(OSError):
             errno = errno.EINVAL
@@ -118,7 +118,7 @@ class SelectorEventLoopTests(unittest.TestCase):
         self.assertFalse(m_logging.info.called)
         self.assertEqual(2, m_signal.set_wakeup_fd.call_count)
 
-    @unittest.mock.patch('tulip.unix_events.signal')
+    @unittest.mock.patch('asyncio.unix_events.signal')
     def test_remove_signal_handler(self, m_signal):
         m_signal.NSIG = signal.NSIG
 
@@ -131,7 +131,7 @@ class SelectorEventLoopTests(unittest.TestCase):
         self.assertEqual(
             (signal.SIGHUP, m_signal.SIG_DFL), m_signal.signal.call_args[0])
 
-    @unittest.mock.patch('tulip.unix_events.signal')
+    @unittest.mock.patch('asyncio.unix_events.signal')
     def test_remove_signal_handler_2(self, m_signal):
         m_signal.NSIG = signal.NSIG
         m_signal.SIGINT = signal.SIGINT
@@ -148,8 +148,8 @@ class SelectorEventLoopTests(unittest.TestCase):
             (signal.SIGINT, m_signal.default_int_handler),
             m_signal.signal.call_args[0])
 
-    @unittest.mock.patch('tulip.unix_events.signal')
-    @unittest.mock.patch('tulip.unix_events.logger')
+    @unittest.mock.patch('asyncio.unix_events.signal')
+    @unittest.mock.patch('asyncio.unix_events.logger')
     def test_remove_signal_handler_cleanup_error(self, m_logging, m_signal):
         m_signal.NSIG = signal.NSIG
         self.loop.add_signal_handler(signal.SIGHUP, lambda: True)
@@ -159,7 +159,7 @@ class SelectorEventLoopTests(unittest.TestCase):
         self.loop.remove_signal_handler(signal.SIGHUP)
         self.assertTrue(m_logging.info)
 
-    @unittest.mock.patch('tulip.unix_events.signal')
+    @unittest.mock.patch('asyncio.unix_events.signal')
     def test_remove_signal_handler_error(self, m_signal):
         m_signal.NSIG = signal.NSIG
         self.loop.add_signal_handler(signal.SIGHUP, lambda: True)
@@ -169,7 +169,7 @@ class SelectorEventLoopTests(unittest.TestCase):
         self.assertRaises(
             OSError, self.loop.remove_signal_handler, signal.SIGHUP)
 
-    @unittest.mock.patch('tulip.unix_events.signal')
+    @unittest.mock.patch('asyncio.unix_events.signal')
     def test_remove_signal_handler_error2(self, m_signal):
         m_signal.NSIG = signal.NSIG
         self.loop.add_signal_handler(signal.SIGHUP, lambda: True)
@@ -270,7 +270,7 @@ class SelectorEventLoopTests(unittest.TestCase):
         self.assertFalse(m_WEXITSTATUS.called)
         self.assertFalse(m_WTERMSIG.called)
 
-    @unittest.mock.patch('tulip.unix_events.logger')
+    @unittest.mock.patch('asyncio.unix_events.logger')
     @unittest.mock.patch('os.WTERMSIG')
     @unittest.mock.patch('os.WEXITSTATUS')
     @unittest.mock.patch('os.WIFSIGNALED')
@@ -360,7 +360,7 @@ class UnixReadPipeTransportTests(unittest.TestCase):
         test_utils.run_briefly(self.loop)
         self.assertFalse(self.protocol.data_received.called)
 
-    @unittest.mock.patch('tulip.log.logger.exception')
+    @unittest.mock.patch('asyncio.log.logger.exception')
     @unittest.mock.patch('os.read')
     def test__read_ready_error(self, m_read, m_logexc):
         tr = unix_events._UnixReadPipeTransport(
@@ -550,7 +550,7 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         self.loop.assert_writer(5, tr._write_ready)
         self.assertEqual([b'data'], tr._buffer)
 
-    @unittest.mock.patch('tulip.unix_events.logger')
+    @unittest.mock.patch('asyncio.unix_events.logger')
     @unittest.mock.patch('os.write')
     def test_write_err(self, m_write, m_log):
         tr = unix_events._UnixWritePipeTransport(
@@ -648,7 +648,7 @@ class UnixWritePipeTransportTests(unittest.TestCase):
         self.loop.assert_writer(5, tr._write_ready)
         self.assertEqual([b'data'], tr._buffer)
 
-    @unittest.mock.patch('tulip.log.logger.exception')
+    @unittest.mock.patch('asyncio.log.logger.exception')
     @unittest.mock.patch('os.write')
     def test__write_ready_err(self, m_write, m_logexc):
         tr = unix_events._UnixWritePipeTransport(

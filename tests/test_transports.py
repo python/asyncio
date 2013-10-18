@@ -3,7 +3,7 @@
 import unittest
 import unittest.mock
 
-from tulip import transports
+from asyncio import transports
 
 
 class TransportTests(unittest.TestCase):

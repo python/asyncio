@@ -70,9 +70,9 @@ def start_client(loop, host, port):
 
 
 def start_server(loop, host, port):
-    f = loop.start_serving(EchoServer, host, port)
-    x = loop.run_until_complete(f)[0]
-    print('serving on', x.getsockname())
+    f = loop.create_server(EchoServer, host, port)
+    s = loop.run_until_complete(f)
+    print('serving on', s.sockets[0].getsockname())
 
 
 ARGS = argparse.ArgumentParser(description="TCP Echo example.")

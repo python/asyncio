@@ -41,9 +41,10 @@ for i in `(cd asyncio && ls *.py)`
 do
     if [ $i == selectors.py ]
     then
-        continue
+        maybe_copy asyncio/$i Lib/$i
+    else
+        maybe_copy asyncio/$i Lib/asyncio/$i
     fi
-    maybe_copy asyncio/$i Lib/asyncio/$i
 done
 
 for i in `(cd tests && ls *.py sample.???)`

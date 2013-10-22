@@ -30,5 +30,12 @@ clean:
 	rm -f `find . -type f -name '#*#' `
 	rm -f `find . -type f -name '*.orig' `
 	rm -f `find . -type f -name '*.rej' `
+	rm -rf dist
 	rm -f .coverage
 	rm -rf htmlcov
+	rm -f MANIFEST
+
+
+# Make distributions for Python 3.3
+pypi: clean
+	python3.3 setup.py sdist upload

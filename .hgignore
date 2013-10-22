@@ -10,3 +10,5 @@ venv$
 distribute_setup.py$
 distribute-\d+.\d+.\d+.tar.gz$
 build$
+dist$
+.*\.egg-info$

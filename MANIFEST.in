@@ -1,0 +1,7 @@
+include Makefile
+include *.c *.py
+
+recursive-include examples *.py
+recursive-include tests *.crt
+recursive-include tests *.key
+recursive-include tests *.py

@@ -5,6 +5,7 @@ also includes support for signal handling, see the unix_events sub-module.
 """
 
 import collections
+import errno
 import socket
 try:
     import ssl
@@ -100,7 +101,11 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             conn.setblocking(False)
         except (BlockingIOError, InterruptedError):
             pass  # False alarm.
-        except Exception:
+        except Exception as exc:
+            if isinstance(exc, OSError) and exc.errno == errno.EMFILE:
+                # Too many filedescriptors.  Don't die.
+                logger.error('Out of FDs accepting connections')
+                return
             # Bad error. Stop serving.
             self.remove_reader(sock.fileno())
             sock.close()

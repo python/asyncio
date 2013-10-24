@@ -102,13 +102,6 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         except (BlockingIOError, InterruptedError):
             pass  # False alarm.
         except Exception as exc:
-            if isinstance(exc, OSError) and exc.errno == errno.EMFILE:
-                # Too many filedescriptors.  Don't die.
-                logger.error('Out of FDs accepting connections')
-                return
-            # Bad error. Stop serving.
-            self.remove_reader(sock.fileno())
-            sock.close()
             # There's nowhere to send the error, so just log it.
             # TODO: Someone will want an error handler for this.
             logger.exception('Accept failed')

@@ -588,8 +588,8 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
         sock.accept.side_effect = OSError()
 
         self.loop._accept_connection(MyProto, sock)
-        self.assertTrue(sock.close.called)
         self.assertTrue(m_log.exception.called)
+        self.assertFalse(sock.close.called)
 
 
 if __name__ == '__main__':

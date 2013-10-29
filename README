@@ -17,5 +17,20 @@ To run tests:
 To run coverage (coverage package is required):
   - make coverage
 
+On Windows, things are a little more complicated.  Assume 'P' is your
+Python binary (for example C:\Python33\python.exe).
+
+You must first build the _overlapped.pyd extension and have it placed
+in the asyncio directory, as follows:
+
+    C> P setup.py build --build-lib .
+
+Then you can run the tests as follows:
+
+    C> P runtests.py
+
+And coverage as follows:
+
+    C> P runtests.py --coverage
 
 --Guido van Rossum <guido@python.org>

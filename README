@@ -23,7 +23,7 @@ Python binary (for example C:\Python33\python.exe).
 You must first build the _overlapped.pyd extension and have it placed
 in the asyncio directory, as follows:
 
-    C> P setup.py build --build-lib .
+    C> P setup.py build_ext --inplace
 
 Then you can run the tests as follows:
 

@@ -1,5 +1,10 @@
 import os
-from setuptools import setup, Extension
+try:
+    from setuptools import setup, Extension
+except ImportError:
+    # Use distutils.core as a fallback.
+    # We won't be able to build the Wheel file on Windows.
+    from distutils.core import setup, Extension
 
 extensions = []
 if os.name == 'nt':

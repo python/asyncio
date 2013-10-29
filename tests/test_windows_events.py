@@ -1,10 +1,11 @@
 import os
 import sys
 import unittest
-import _winapi
 
 if sys.platform != 'win32':
     raise unittest.SkipTest('Windows only')
+
+import _winapi
 
 import asyncio
 

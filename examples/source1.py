@@ -43,7 +43,7 @@ class Debug:
                 print(self.label, '[...]', file=sys.stderr)
             end = '\r'
         print(self.label, *args, file=sys.stderr, end=end, flush=True)
-        
+
 
 @coroutine
 def start(loop, args):

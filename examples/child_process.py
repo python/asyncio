@@ -103,7 +103,8 @@ def main(loop):
         timeout = None
         while registered:
             done, pending = yield from asyncio.wait(
-                registered, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
+                registered, timeout=timeout,
+                return_when=asyncio.FIRST_COMPLETED)
             if not done:
                 break
             for f in done:

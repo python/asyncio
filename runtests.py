@@ -231,7 +231,7 @@ def runtests():
 
     if args.coverage:
         cov = coverage.coverage(branch=True,
-                                source=['tulip'],
+                                source=['asyncio'],
                                 )
         cov.start()
 

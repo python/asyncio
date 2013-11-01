@@ -4,9 +4,13 @@ import argparse
 import sys
 
 from asyncio import *
+from asyncio import test_utils
 
 
 ARGS = argparse.ArgumentParser(description="TCP data sink example.")
+ARGS.add_argument(
+    '--tls', action='store_true', dest='tls',
+    default=False, help='Use TLS')
 ARGS.add_argument(
     '--iocp', action='store_true', dest='iocp',
     default=False, help='Use IOCP event loop (Windows only)')
@@ -67,7 +71,11 @@ class Client(Protocol):
 
 @coroutine
 def start(loop, host, port):
-    tr, pr = yield from loop.create_connection(Client, host, port)
+    sslctx = None
+    if args.tls:
+        sslctx = test_utils.dummy_ssl_context()
+    tr, pr = yield from loop.create_connection(Client, host, port,
+                                               ssl=sslctx)
     dprint('tr =', tr)
     dprint('pr =', pr)
     yield from pr.waiter

@@ -18,6 +18,10 @@ class ConnectionPool:
         self.verbose = verbose
         self.connections = {}  # {(host, port, ssl): (reader, writer)}
 
+    def close(self):
+        for _, writer in self.connections.values():
+            writer.close()
+
     @coroutine
     def open_connection(self, host, port, ssl):
         port = port or (443 if ssl else 80)
@@ -187,18 +191,21 @@ class Response:
 @coroutine
 def fetch(url, verbose=True, max_redirect=10):
     pool = ConnectionPool(verbose)
-    for _ in range(max_redirect):
-        request = Request(url, verbose)
-        yield from request.connect(pool)
-        yield from request.send_request()
-        response = yield from request.get_response()
-        body = yield from response.read()
-        next_url = response.get_redirect_url()
-        if not next_url:
-            break
-        url = urllib.parse.urljoin(url, next_url)
-        print('redirect to', url, file=sys.stderr)
-    return body
+    try:
+        for _ in range(max_redirect):
+            request = Request(url, verbose)
+            yield from request.connect(pool)
+            yield from request.send_request()
+            response = yield from request.get_response()
+            body = yield from response.read()
+            next_url = response.get_redirect_url()
+            if not next_url:
+                break
+            url = urllib.parse.urljoin(url, next_url)
+            print('redirect to', url, file=sys.stderr)
+        return body
+    finally:
+        pool.close()
 
 
 def main():

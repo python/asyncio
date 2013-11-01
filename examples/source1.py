@@ -3,9 +3,13 @@
 import argparse
 import sys
 
-from tulip import *
+from asyncio import *
+from asyncio import test_utils
 
 ARGS = argparse.ArgumentParser(description="TCP data sink example.")
+ARGS.add_argument(
+    '--tls', action='store_true', dest='tls',
+    default=False, help='Use TLS')
 ARGS.add_argument(
     '--iocp', action='store_true', dest='iocp',
     default=False, help='Use IOCP event loop (Windows only)')
@@ -49,7 +53,11 @@ class Debug:
 def start(loop, args):
     d = Debug()
     total = 0
-    r, w = yield from open_connection(args.host, args.port)
+    sslctx = None
+    if args.tls:
+        d.print('using dummy SSLContext')
+        sslctx = test_utils.dummy_ssl_context()
+    r, w = yield from open_connection(args.host, args.port, ssl=sslctx)
     d.print('r =', r)
     d.print('w =', w)
     if args.stop:
@@ -75,7 +83,7 @@ def main():
     global args
     args = ARGS.parse_args()
     if args.iocp:
-        from tulip.windows_events import ProactorEventLoop
+        from asyncio.windows_events import ProactorEventLoop
         loop = ProactorEventLoop()
         set_event_loop(loop)
     else:

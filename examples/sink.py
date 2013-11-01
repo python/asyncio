@@ -1,11 +1,15 @@
 """Test service that accepts connections and reads all data off them."""
 
 import argparse
+import os
 import sys
 
 from asyncio import *
 
 ARGS = argparse.ArgumentParser(description="TCP data sink example.")
+ARGS.add_argument(
+    '--tls', action='store_true', dest='tls',
+    default=False, help='Use TLS with a self-signed cert')
 ARGS.add_argument(
     '--iocp', action='store_true', dest='iocp',
     default=False, help='Use IOCP event loop (Windows only)')
@@ -54,8 +58,20 @@ class Service(Protocol):
 @coroutine
 def start(loop, host, port):
     global server
-    server = yield from loop.create_server(Service, host, port)
-    dprint('serving', [s.getsockname() for s in server.sockets])
+    sslctx = None
+    if args.tls:
+        import ssl
+        # TODO: take cert/key from args as well.
+        here = os.path.join(os.path.dirname(__file__), '..', 'tests')
+        sslctx = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+        sslctx.options |= ssl.OP_NO_SSLv2
+        sslctx.load_cert_chain(
+            certfile=os.path.join(here, 'sample.crt'),
+            keyfile=os.path.join(here, 'sample.key'))
+
+    server = yield from loop.create_server(Service, host, port, ssl=sslctx)
+    dprint('serving TLS' if sslctx else 'serving',
+           [s.getsockname() for s in server.sockets])
     yield from server.wait_closed()
 
 

@@ -21,6 +21,10 @@ cov coverage:
 check:
 	$(PYTHON) check.py
 
+# Requires "pip install pep8".
+pep8: check
+	pep8 --ignore E125,E127,E226 tests asyncio
+
 clean:
 	rm -rf `find . -name __pycache__`
 	rm -f `find . -type f -name '*.py[co]' `
@@ -33,6 +37,7 @@ clean:
 	rm -rf dist
 	rm -f .coverage
 	rm -rf htmlcov
+	rm -rf build
 	rm -f MANIFEST
 
 

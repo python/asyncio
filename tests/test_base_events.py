@@ -446,18 +446,22 @@ class BaseEventLoopWithSelectorTests(unittest.TestCase):
 
     def test_create_connection_server_hostname_default(self):
         self.loop.getaddrinfo = unittest.mock.Mock()
+
         def mock_getaddrinfo(*args, **kwds):
             f = futures.Future(loop=self.loop)
             f.set_result([(socket.AF_INET, socket.SOCK_STREAM,
                            socket.SOL_TCP, '', ('1.2.3.4', 80))])
             return f
+
         self.loop.getaddrinfo.side_effect = mock_getaddrinfo
         self.loop.sock_connect = unittest.mock.Mock()
         self.loop.sock_connect.return_value = ()
         self.loop._make_ssl_transport = unittest.mock.Mock()
+
         def mock_make_ssl_transport(sock, protocol, sslcontext, waiter,
                                     **kwds):
             waiter.set_result(None)
+
         self.loop._make_ssl_transport.side_effect = mock_make_ssl_transport
         ANY = unittest.mock.ANY
         # First try the default server_hostname.

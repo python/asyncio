@@ -458,8 +458,11 @@ class _WindowsSubprocessTransport(base_subprocess.BaseSubprocessTransport):
         f.add_done_callback(callback)
 
 
+SelectorEventLoop = _WindowsSelectorEventLoop
+
+
 class _WindowsDefaultEventLoopPolicy(events.BaseDefaultEventLoopPolicy):
     _loop_factory = SelectorEventLoop
 
-SelectorEventLoop = _WindowsSelectorEventLoop
+
 DefaultEventLoopPolicy = _WindowsDefaultEventLoopPolicy

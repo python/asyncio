@@ -13,8 +13,54 @@ class FakeSelector(selectors.BaseSelector):
         raise NotImplementedError
 
 
-class BaseSelectorTests(unittest.TestCase):
+class _SelectorMappingTests(unittest.TestCase):
 
+    def test_len(self):
+        s = FakeSelector()
+        map = selectors._SelectorMapping(s)
+        self.assertTrue(map.__len__() == 0)
+
+        f = unittest.mock.Mock()
+        f.fileno.return_value = 10
+        s.register(f, selectors.EVENT_READ, None)
+        self.assertTrue(len(map) == 1)
+
+    def test_getitem(self):
+        s = FakeSelector()
+        map = selectors._SelectorMapping(s)
+        f = unittest.mock.Mock()
+        f.fileno.return_value = 10
+        s.register(f, selectors.EVENT_READ, None)
+        attended = selectors.SelectorKey(f, 10, selectors.EVENT_READ, None)
+        self.assertEqual(attended, map.__getitem__(f))
+
+    def test_getitem_key_error(self):
+        s = FakeSelector()
+        map = selectors._SelectorMapping(s)
+        self.assertTrue(len(map) == 0)
+        f = unittest.mock.Mock()
+        f.fileno.return_value = 10
+        s.register(f, selectors.EVENT_READ, None)
+        self.assertRaises(KeyError, map.__getitem__, 5)
+
+    def test_iter(self):
+        s = FakeSelector()
+        map = selectors._SelectorMapping(s)
+        self.assertTrue(len(map) == 0)
+        f = unittest.mock.Mock()
+        f.fileno.return_value = 5
+        s.register(f, selectors.EVENT_READ, None)
+        counter = 0
+        for fileno in map.__iter__():
+            self.assertEqual(5, fileno)
+            counter += 1
+
+        for idx in map:
+            self.assertEqual(f, map[idx].fileobj)
+        self.assertEqual(1, counter)
+
+
+class BaseSelectorTests(unittest.TestCase):
     def test_fileobj_to_fd(self):
         self.assertEqual(10, selectors._fileobj_to_fd(10))
 
@@ -23,6 +69,9 @@ class BaseSelectorTests(unittest.TestCase):
         self.assertEqual(10, selectors._fileobj_to_fd(f))
 
         f.fileno.side_effect = AttributeError
+        self.assertRaises(ValueError, selectors._fileobj_to_fd, f)
+
+        f.fileno.return_value = -1
         self.assertRaises(ValueError, selectors._fileobj_to_fd, f)
 
     def test_selector_key_repr(self):
@@ -102,6 +151,22 @@ class BaseSelectorTests(unittest.TestCase):
         self.assertEqual(
             selectors.SelectorKey(fobj, 10, selectors.EVENT_READ, d2),
             s.get_key(fobj))
+
+    def test_modify_data_use_a_shortcut(self):
+        fobj = unittest.mock.Mock()
+        fobj.fileno.return_value = 10
+
+        d1 = object()
+        d2 = object()
+
+        s = FakeSelector()
+        key = s.register(fobj, selectors.EVENT_READ, d1)
+
+        s.unregister = unittest.mock.Mock()
+        s.register = unittest.mock.Mock()
+        key2 = s.modify(fobj, selectors.EVENT_READ, d2)
+        self.assertFalse(s.unregister.called)
+        self.assertFalse(s.register.called)
 
     def test_modify_same(self):
         fobj = unittest.mock.Mock()

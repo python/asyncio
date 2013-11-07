@@ -49,6 +49,10 @@ done
 
 for i in `(cd tests && ls *.py sample.???)`
 do
+    if [ $i == test_selectors.py ]
+    then
+        continue
+    fi
     maybe_copy tests/$i Lib/test/test_asyncio/$i
 done
 

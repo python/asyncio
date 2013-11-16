@@ -19,8 +19,8 @@ class MyServerUdpEchoProtocol:
         print('Data received:', data, addr)
         self.transport.sendto(data, addr)
 
-    def connection_refused(self, exc):
-        print('Connection refused:', exc)
+    def error_received(self, exc):
+        print('Error received:', exc)
 
     def connection_lost(self, exc):
         print('stop', exc)
@@ -40,8 +40,8 @@ class MyClientUdpEchoProtocol:
         print('received "{}"'.format(data.decode()))
         self.transport.close()
 
-    def connection_refused(self, exc):
-        print('Connection refused:', exc)
+    def error_received(self, exc):
+        print('Error received:', exc)
 
     def connection_lost(self, exc):
         print('closing transport', exc)

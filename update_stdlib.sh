@@ -29,10 +29,11 @@ maybe_copy()
     fi
     echo ======== $SRC === $DST ========
     diff -u $DST $SRC
-    echo -n "Copy $SRC? [y/N] "
+    echo -n "Copy $SRC? [y/N/back] "
     read X
     case $X in
         [yY]*) echo Copying $SRC; cp $SRC $DST;;
+	back) echo Copying TO $SRC; cp $DST $SRC;;
         *) echo Not copying $SRC;;
     esac
 }

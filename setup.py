@@ -15,7 +15,7 @@ if os.name == 'nt':
 
 setup(
     name="asyncio",
-    version="0.1.1",
+    version="0.2.1",
 
     description="reference implementation of PEP 3156",
     long_description=open("README").read(),

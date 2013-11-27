@@ -490,7 +490,7 @@ class _SelectorSocketTransport(_SelectorTransport):
                     self.close()
 
     def write(self, data):
-        assert isinstance(data, bytes), repr(type(data))
+        assert isinstance(data, (bytes, bytearray, memoryview)), repr(type(data))
         assert not self._eof, 'Cannot call write() after write_eof()'
         if not data:
             return
@@ -740,7 +740,7 @@ class _SelectorSslTransport(_SelectorTransport):
                 self._call_connection_lost(None)
 
     def write(self, data):
-        assert isinstance(data, bytes), repr(type(data))
+        assert isinstance(data, (bytes, bytearray, memoryview)), repr(type(data))
         if not data:
             return
 
@@ -787,7 +787,7 @@ class _SelectorDatagramTransport(_SelectorTransport):
             self._protocol.datagram_received(data, addr)
 
     def sendto(self, data, addr=None):
-        assert isinstance(data, bytes), repr(type(data))
+        assert isinstance(data, (bytes, bytearray, memoryview)), repr(type(data))
         if not data:
             return
 
@@ -817,7 +817,8 @@ class _SelectorDatagramTransport(_SelectorTransport):
                 self._fatal_error(exc)
                 return
 
-        self._buffer.append((data, addr))
+        # Ensure that what we buffer is immutable.
+        self._buffer.append((bytes(data), addr))
         self._maybe_pause_protocol()
 
     def _sendto_ready(self):

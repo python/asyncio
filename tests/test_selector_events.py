@@ -787,6 +787,25 @@ class SelectorSocketTransportTests(unittest.TestCase):
         transport.write(data)
         self.sock.send.assert_called_with(data)
 
+    def test_write_bytearray(self):
+        data = bytearray(b'data')
+        self.sock.send.return_value = len(data)
+
+        transport = _SelectorSocketTransport(
+            self.loop, self.sock, self.protocol)
+        transport.write(data)
+        self.sock.send.assert_called_with(data)
+        self.assertEqual(data, bytearray(b'data'))  # Hasn't been mutated.
+
+    def test_write_memoryview(self):
+        data = memoryview(b'data')
+        self.sock.send.return_value = len(data)
+
+        transport = _SelectorSocketTransport(
+            self.loop, self.sock, self.protocol)
+        transport.write(data)
+        self.sock.send.assert_called_with(data)
+
     def test_write_no_data(self):
         transport = _SelectorSocketTransport(
             self.loop, self.sock, self.protocol)
@@ -806,6 +825,29 @@ class SelectorSocketTransportTests(unittest.TestCase):
 
     def test_write_partial(self):
         data = b'data'
+        self.sock.send.return_value = 2
+
+        transport = _SelectorSocketTransport(
+            self.loop, self.sock, self.protocol)
+        transport.write(data)
+
+        self.loop.assert_writer(7, transport._write_ready)
+        self.assertEqual(list_to_buffer([b'ta']), transport._buffer)
+
+    def test_write_partial_bytearray(self):
+        data = bytearray(b'data')
+        self.sock.send.return_value = 2
+
+        transport = _SelectorSocketTransport(
+            self.loop, self.sock, self.protocol)
+        transport.write(data)
+
+        self.loop.assert_writer(7, transport._write_ready)
+        self.assertEqual(list_to_buffer([b'ta']), transport._buffer)
+        self.assertEqual(data, bytearray(b'data'))  # Hasn't been mutated.
+
+    def test_write_partial_memoryview(self):
+        data = memoryview(b'data')
         self.sock.send.return_value = 2
 
         transport = _SelectorSocketTransport(
@@ -1067,6 +1109,25 @@ class SelectorSslTransportTests(unittest.TestCase):
         tr.resume_reading()
         self.assertFalse(tr._paused)
         self.loop.assert_reader(1, tr._read_ready)
+
+    def test_write(self):
+        transport = self._make_one()
+        transport.write(b'data')
+        self.assertEqual(list_to_buffer([b'data']), transport._buffer)
+
+    def test_write_bytearray(self):
+        transport = self._make_one()
+        data = bytearray(b'data')
+        transport.write(data)
+        self.assertEqual(list_to_buffer([b'data']), transport._buffer)
+        self.assertEqual(data, bytearray(b'data'))  # Hasn't been mutated.
+        self.assertIsNot(data, transport._buffer)  # Hasn't been incorporated.
+
+    def test_write_memoryview(self):
+        transport = self._make_one()
+        data = memoryview(b'data')
+        transport.write(data)
+        self.assertEqual(list_to_buffer([b'data']), transport._buffer)
 
     def test_write_no_data(self):
         transport = self._make_one()
@@ -1358,6 +1419,24 @@ class SelectorDatagramTransportTests(unittest.TestCase):
         self.assertEqual(
             self.sock.sendto.call_args[0], (data, ('0.0.0.0', 1234)))
 
+    def test_sendto_bytearray(self):
+        data = bytearray(b'data')
+        transport = _SelectorDatagramTransport(
+            self.loop, self.sock, self.protocol)
+        transport.sendto(data, ('0.0.0.0', 1234))
+        self.assertTrue(self.sock.sendto.called)
+        self.assertEqual(
+            self.sock.sendto.call_args[0], (data, ('0.0.0.0', 1234)))
+
+    def test_sendto_memoryview(self):
+        data = memoryview(b'data')
+        transport = _SelectorDatagramTransport(
+            self.loop, self.sock, self.protocol)
+        transport.sendto(data, ('0.0.0.0', 1234))
+        self.assertTrue(self.sock.sendto.called)
+        self.assertEqual(
+            self.sock.sendto.call_args[0], (data, ('0.0.0.0', 1234)))
+
     def test_sendto_no_data(self):
         transport = _SelectorDatagramTransport(
             self.loop, self.sock, self.protocol)
@@ -1377,6 +1456,32 @@ class SelectorDatagramTransportTests(unittest.TestCase):
             [(b'data1', ('0.0.0.0', 12345)),
              (b'data2', ('0.0.0.0', 12345))],
             list(transport._buffer))
+
+    def test_sendto_buffer_bytearray(self):
+        data2 = bytearray(b'data2')
+        transport = _SelectorDatagramTransport(
+            self.loop, self.sock, self.protocol)
+        transport._buffer.append((b'data1', ('0.0.0.0', 12345)))
+        transport.sendto(data2, ('0.0.0.0', 12345))
+        self.assertFalse(self.sock.sendto.called)
+        self.assertEqual(
+            [(b'data1', ('0.0.0.0', 12345)),
+             (b'data2', ('0.0.0.0', 12345))],
+            list(transport._buffer))
+        self.assertIsInstance(transport._buffer[1][0], bytes)
+
+    def test_sendto_buffer_memoryview(self):
+        data2 = memoryview(b'data2')
+        transport = _SelectorDatagramTransport(
+            self.loop, self.sock, self.protocol)
+        transport._buffer.append((b'data1', ('0.0.0.0', 12345)))
+        transport.sendto(data2, ('0.0.0.0', 12345))
+        self.assertFalse(self.sock.sendto.called)
+        self.assertEqual(
+            [(b'data1', ('0.0.0.0', 12345)),
+             (b'data2', ('0.0.0.0', 12345))],
+            list(transport._buffer))
+        self.assertIsInstance(transport._buffer[1][0], bytes)
 
     def test_sendto_tryagain(self):
         data = b'data'

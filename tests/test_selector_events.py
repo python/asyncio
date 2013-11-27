@@ -905,7 +905,7 @@ class SelectorSocketTransportTests(unittest.TestCase):
     def test_write_str(self):
         transport = _SelectorSocketTransport(
             self.loop, self.sock, self.protocol)
-        self.assertRaises(AssertionError, transport.write, 'str')
+        self.assertRaises(TypeError, transport.write, 'str')
 
     def test_write_closing(self):
         transport = _SelectorSocketTransport(
@@ -945,6 +945,7 @@ class SelectorSocketTransportTests(unittest.TestCase):
     def test_write_ready_no_data(self):
         transport = _SelectorSocketTransport(
             self.loop, self.sock, self.protocol)
+        # This is an internal error.
         self.assertRaises(AssertionError, transport._write_ready)
 
     def test_write_ready_partial(self):
@@ -1137,7 +1138,7 @@ class SelectorSslTransportTests(unittest.TestCase):
 
     def test_write_str(self):
         transport = self._make_one()
-        self.assertRaises(AssertionError, transport.write, 'str')
+        self.assertRaises(TypeError, transport.write, 'str')
 
     def test_write_closing(self):
         transport = self._make_one()
@@ -1547,13 +1548,13 @@ class SelectorDatagramTransportTests(unittest.TestCase):
     def test_sendto_str(self):
         transport = _SelectorDatagramTransport(
             self.loop, self.sock, self.protocol)
-        self.assertRaises(AssertionError, transport.sendto, 'str', ())
+        self.assertRaises(TypeError, transport.sendto, 'str', ())
 
     def test_sendto_connected_addr(self):
         transport = _SelectorDatagramTransport(
             self.loop, self.sock, self.protocol, ('0.0.0.0', 1))
         self.assertRaises(
-            AssertionError, transport.sendto, b'str', ('0.0.0.0', 2))
+            ValueError, transport.sendto, b'str', ('0.0.0.0', 2))
 
     def test_sendto_closing(self):
         transport = _SelectorDatagramTransport(

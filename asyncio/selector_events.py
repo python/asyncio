@@ -435,7 +435,9 @@ class _SelectorTransport(transports.Transport):
                 high = 4*low
         if low is None:
             low = high // 4
-        assert 0 <= low <= high, repr((low, high))
+        if not high >= low >= 0:
+            raise ValueError('high (%r) must be >= low (%r) must be >= 0' %
+                             (high, low))
         self._high_water = high
         self._low_water = low
 
@@ -457,13 +459,16 @@ class _SelectorSocketTransport(_SelectorTransport):
             self._loop.call_soon(waiter.set_result, None)
 
     def pause_reading(self):
-        assert not self._closing, 'Cannot pause_reading() when closing'
-        assert not self._paused, 'Already paused'
+        if self._closing:
+            raise RuntimeError('Cannot pause_reading() when closing')
+        if self._paused:
+            raise RuntimeError('Already paused')
         self._paused = True
         self._loop.remove_reader(self._sock_fd)
 
     def resume_reading(self):
-        assert self._paused, 'Not paused'
+        if not self._paused:
+            raise RuntimeError('Not paused')
         self._paused = False
         if self._closing:
             return
@@ -490,8 +495,11 @@ class _SelectorSocketTransport(_SelectorTransport):
                     self.close()
 
     def write(self, data):
-        assert isinstance(data, (bytes, bytearray, memoryview)), repr(type(data))
-        assert not self._eof, 'Cannot call write() after write_eof()'
+        if not isinstance(data, (bytes, bytearray, memoryview)):
+            raise TypeError('data argument must be byte-ish (%r)',
+                            type(data))
+        if self._eof:
+            raise RuntimeError('Cannot call write() after write_eof()')
         if not data:
             return
 
@@ -663,13 +671,16 @@ class _SelectorSslTransport(_SelectorTransport):
         # accept more data for the buffer and eventually the app will
         # call resume_reading() again, and things will flow again.
 
-        assert not self._closing, 'Cannot pause_reading() when closing'
-        assert not self._paused, 'Already paused'
+        if self._closing:
+            raise RuntimeError('Cannot pause_reading() when closing')
+        if self._paused:
+            raise RuntimeError('Already paused')
         self._paused = True
         self._loop.remove_reader(self._sock_fd)
 
     def resume_reading(self):
-        assert self._paused, 'Not paused'
+        if not self._paused:
+            raise ('Not paused')
         self._paused = False
         if self._closing:
             return
@@ -740,7 +751,9 @@ class _SelectorSslTransport(_SelectorTransport):
                 self._call_connection_lost(None)
 
     def write(self, data):
-        assert isinstance(data, (bytes, bytearray, memoryview)), repr(type(data))
+        if not isinstance(data, (bytes, bytearray, memoryview)):
+            raise TypeError('data argument must be byte-ish (%r)',
+                            type(data))
         if not data:
             return
 
@@ -787,12 +800,15 @@ class _SelectorDatagramTransport(_SelectorTransport):
             self._protocol.datagram_received(data, addr)
 
     def sendto(self, data, addr=None):
-        assert isinstance(data, (bytes, bytearray, memoryview)), repr(type(data))
+        if not isinstance(data, (bytes, bytearray, memoryview)):
+            raise TypeError('data argument must be byte-ish (%r)',
+                            type(data))
         if not data:
             return
 
-        if self._address:
-            assert addr in (None, self._address)
+        if self._address and addr not in (None, self._address):
+            raise ValueError('Invalid address: must be None or %s' %
+                             (self._address,))
 
         if self._conn_lost and self._address:
             if self._conn_lost >= constants.LOG_THRESHOLD_FOR_CONNLOST_WRITES:

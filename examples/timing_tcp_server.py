@@ -75,7 +75,8 @@ class MyServer:
                 msg = args[1]
                 client_writer.write("begin\n".encode("utf-8"))
                 for idx in range(times):
-                    client_writer.write("{}. {}\n".format(idx+1, msg + 'x'*random.randint(10, 50))
+                    client_writer.write("{}. {}\n".format(
+                        idx+1, msg + 'x'*random.randint(10, 50))
                                         .encode("utf-8"))
                 client_writer.write("end\n".encode("utf-8"))
             else:
@@ -148,7 +149,8 @@ def main():
                     break
             t1 = time.time()
             dt = t1 - t0
-            print("Time taken: {:.3f} seconds ({:.6f} per repetition)".format(dt, dt/N))
+            print("Time taken: {:.3f} seconds ({:.6f} per repetition)"
+                  .format(dt, dt/N))
             times.append(dt)
 
         writer.close()

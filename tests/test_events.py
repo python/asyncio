@@ -1606,12 +1606,12 @@ class PolicyTests(unittest.TestCase):
                 policy, "set_event_loop",
                 wraps=policy.set_event_loop) as m_set_event_loop:
 
-                loop = policy.get_event_loop()
+            loop = policy.get_event_loop()
 
-                # policy._local._loop must be set through .set_event_loop()
-                # (the unix DefaultEventLoopPolicy needs this call to attach
-                # the child watcher correctly)
-                m_set_event_loop.assert_called_with(loop)
+            # policy._local._loop must be set through .set_event_loop()
+            # (the unix DefaultEventLoopPolicy needs this call to attach
+            # the child watcher correctly)
+            m_set_event_loop.assert_called_with(loop)
 
         loop.close()
 

@@ -24,7 +24,7 @@ class _ProactorBasePipeTransport(transports.BaseTransport):
         self._sock = sock
         self._protocol = protocol
         self._server = server
-        self._buffer = []
+        self._buffer = []  # TODO: Use bytearray like selector_events.py.
         self._read_fut = None
         self._write_fut = None
         self._conn_lost = 0
@@ -95,12 +95,15 @@ class _ProactorReadPipeTransport(_ProactorBasePipeTransport,
         self._loop.call_soon(self._loop_reading)
 
     def pause_reading(self):
-        assert not self._closing, 'Cannot pause_reading() when closing'
-        assert not self._paused, 'Already paused'
+        if self._closing:
+            raise RuntimeError('Cannot pause_reading() when closing')
+        if self._paused:
+            raise RuntimeError('Already paused')
         self._paused = True
 
     def resume_reading(self):
-        assert self._paused, 'Not paused'
+        if not self._paused:
+            raise RuntimeError('Not paused')
         self._paused = False
         if self._closing:
             return
@@ -155,9 +158,11 @@ class _ProactorWritePipeTransport(_ProactorBasePipeTransport,
     """Transport for write pipes."""
 
     def write(self, data):
-        assert isinstance(data, bytes), repr(data)
+        if not isinstance(data, (bytes, bytearray, memoryview)):
+            raise TypeError('data argument must be byte-ish (%r)',
+                            type(data))
         if self._eof_written:
-            raise IOError('write_eof() already called')
+            raise RuntimeError('write_eof() already called')
 
         if not data:
             return
@@ -167,7 +172,7 @@ class _ProactorWritePipeTransport(_ProactorBasePipeTransport,
                 logger.warning('socket.send() raised exception.')
             self._conn_lost += 1
             return
-        self._buffer.append(data)
+        self._buffer.append(bytes(data))
         if self._write_fut is None:
             self._loop_writing()
 
@@ -330,7 +335,8 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
         self._csock.send(b'x')
 
     def _start_serving(self, protocol_factory, sock, ssl=None, server=None):
-        assert not ssl, 'IocpEventLoop is incompatible with SSL.'
+        if ssl:
+            raise ValueError('IocpEventLoop is incompatible with SSL.')
 
         def loop(f=None):
             try:

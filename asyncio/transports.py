@@ -85,11 +85,10 @@ class WriteTransport(BaseTransport):
     def writelines(self, list_of_data):
         """Write a list (or any iterable) of data bytes to the transport.
 
-        The default implementation just calls write() for each item in
-        the list/iterable.
+        The default implementation concatenates the arguments and
+        calls write() on the result.
         """
-        for data in list_of_data:
-            self.write(data)
+        self.write(b''.join(list_of_data))
 
     def write_eof(self):
         """Close the write end after flushing buffered data.

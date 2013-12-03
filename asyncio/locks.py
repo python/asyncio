@@ -79,7 +79,7 @@ class Lock:
         return '<{} [{}]>'.format(res[1:-1], extra)
 
     def locked(self):
-        """Return true if lock is acquired."""
+        """Return True if lock is acquired."""
         return self._locked
 
     @tasks.coroutine
@@ -138,7 +138,7 @@ class Lock:
 
 
 class Event:
-    """An Event implementation, our equivalent to threading.Event.
+    """An Event implementation, asynchronous equivalent to threading.Event.
 
     Class implementing event objects. An event manages a flag that can be set
     to true with the set() method and reset to false with the clear() method.
@@ -162,7 +162,7 @@ class Event:
         return '<{} [{}]>'.format(res[1:-1], extra)
 
     def is_set(self):
-        """Return true if and only if the internal flag is true."""
+        """Return True if and only if the internal flag is true."""
         return self._value
 
     def set(self):
@@ -204,7 +204,7 @@ class Event:
 
 
 class Condition:
-    """A Condition implementation, our equivalent to threading.Condition.
+    """A Condition implementation, asynchronous equivalent to threading.Condition.
 
     This class implements condition variable objects. A condition variable
     allows one or more coroutines to wait until they are notified by another

@@ -24,7 +24,7 @@ class _ProactorBasePipeTransport(transports.BaseTransport):
         self._sock = sock
         self._protocol = protocol
         self._server = server
-        self._buffer = []  # TODO: Use bytearray like selector_events.py.
+        self._buffer = None  # None or bytearray.
         self._read_fut = None
         self._write_fut = None
         self._conn_lost = 0
@@ -63,7 +63,7 @@ class _ProactorBasePipeTransport(transports.BaseTransport):
         if self._read_fut:
             self._read_fut.cancel()
         self._write_fut = self._read_fut = None
-        self._buffer = []
+        self._buffer = None
         self._loop.call_soon(self._call_connection_lost, exc)
 
     def _call_connection_lost(self, exc):
@@ -172,18 +172,33 @@ class _ProactorWritePipeTransport(_ProactorBasePipeTransport,
                 logger.warning('socket.send() raised exception.')
             self._conn_lost += 1
             return
-        self._buffer.append(bytes(data))
-        if self._write_fut is None:
-            self._loop_writing()
 
-    def _loop_writing(self, f=None):
+        # Observable states:
+        # 1. IDLE: _write_fut and _buffer both None
+        # 2. WRITING: _write_fut set; _buffer None
+        # 3. BACKED UP: _write_fut set; _buffer a bytearray
+        # We always copy the data, so the caller can't modify it
+        # while we're still waiting for the I/O to happen.
+        if self._write_fut is None:  # IDLE -> WRITING
+            assert self._buffer is None
+            # Pass a copy, except if it's already immutable.
+            self._loop_writing(data=bytes(data))
+        elif not self._buffer:  # WRITING -> BACKED UP
+            # Make a mutable copy which we can extend.
+            self._buffer = bytearray(data)
+        else:  # BACKED UP
+            # Append to buffer (also copies).
+            self._buffer.extend(data)
+
+    def _loop_writing(self, f=None, data=None):
         try:
             assert f is self._write_fut
             self._write_fut = None
             if f:
                 f.result()
-            data = b''.join(self._buffer)
-            self._buffer = []
+            if data is None:
+                data = self._buffer
+                self._buffer = None
             if not data:
                 if self._closing:
                     self._loop.call_soon(self._call_connection_lost, None)

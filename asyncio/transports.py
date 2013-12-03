@@ -1,5 +1,9 @@
 """Abstract Transport class."""
 
+import sys
+
+PY34 = sys.version_info >= (3, 4)
+
 __all__ = ['ReadTransport', 'WriteTransport', 'Transport']
 
 
@@ -88,6 +92,11 @@ class WriteTransport(BaseTransport):
         The default implementation concatenates the arguments and
         calls write() on the result.
         """
+        if not PY34:
+            # In Python 3.3, bytes.join() doesn't handle memoryview.
+            list_of_data = (
+                bytes(data) if isinstance(data, memoryview) else data
+                for data in list_of_data)
         self.write(b''.join(list_of_data))
 
     def write_eof(self):

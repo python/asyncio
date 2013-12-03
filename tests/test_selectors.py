@@ -6,7 +6,7 @@ import unittest.mock
 from asyncio import selectors
 
 
-class FakeSelector(selectors.BaseSelector):
+class FakeSelector(selectors._BaseSelectorImpl):
     """Trivial non-abstract subclass of BaseSelector."""
 
     def select(self, timeout=None):

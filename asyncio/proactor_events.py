@@ -30,6 +30,8 @@ class _ProactorBasePipeTransport(transports.BaseTransport):
         self._conn_lost = 0
         self._closing = False  # Set when close() called.
         self._eof_written = False
+        self._protocol_paused = False
+        self.set_write_buffer_limits()
         if self._server is not None:
             self._server.attach(self)
         self._loop.call_soon(self._protocol.connection_made, self)
@@ -81,6 +83,53 @@ class _ProactorBasePipeTransport(transports.BaseTransport):
             if server is not None:
                 server.detach(self)
                 self._server = None
+
+    # XXX The next four methods are nearly identical to corresponding
+    # ones in _SelectorTransport.  Maybe refactor buffer management to
+    # share the implementations?  (Also these are really only needed
+    # by _ProactorWritePipeTransport but since _buffer is defined on
+    # the base class I am putting it here for now.)
+
+    def _maybe_pause_protocol(self):
+        size = self.get_write_buffer_size()
+        if size <= self._high_water:
+            return
+        if not self._protocol_paused:
+            self._protocol_paused = True
+            try:
+                self._protocol.pause_writing()
+            except Exception:
+                logger.exception('pause_writing() failed')
+
+    def _maybe_resume_protocol(self):
+        if (self._protocol_paused and
+            self.get_write_buffer_size() <= self._low_water):
+            self._protocol_paused = False
+            try:
+                self._protocol.resume_writing()
+            except Exception:
+                logger.exception('resume_writing() failed')
+
+    def set_write_buffer_limits(self, high=None, low=None):
+        if high is None:
+            if low is None:
+                high = 64*1024
+            else:
+                high = 4*low
+        if low is None:
+            low = high // 4
+        if not high >= low >= 0:
+            raise ValueError('high (%r) must be >= low (%r) must be >= 0' %
+                             (high, low))
+        self._high_water = high
+        self._low_water = low
+
+    def get_write_buffer_size(self):
+        # NOTE: This doesn't take into account data already passed to
+        # send() even if send() hasn't finished yet.
+        if not self._buffer:
+            return 0
+        return len(self._buffer)
 
 
 class _ProactorReadPipeTransport(_ProactorBasePipeTransport,
@@ -183,12 +232,18 @@ class _ProactorWritePipeTransport(_ProactorBasePipeTransport,
             assert self._buffer is None
             # Pass a copy, except if it's already immutable.
             self._loop_writing(data=bytes(data))
+            # XXX Should we pause the protocol at this point
+            # if len(data) > self._high_water?  (That would
+            # require keeping track of the number of bytes passed
+            # to a send() that hasn't finished yet.)
         elif not self._buffer:  # WRITING -> BACKED UP
             # Make a mutable copy which we can extend.
             self._buffer = bytearray(data)
+            self._maybe_pause_protocol()
         else:  # BACKED UP
             # Append to buffer (also copies).
             self._buffer.extend(data)
+            self._maybe_pause_protocol()
 
     def _loop_writing(self, f=None, data=None):
         try:
@@ -204,9 +259,15 @@ class _ProactorWritePipeTransport(_ProactorBasePipeTransport,
                     self._loop.call_soon(self._call_connection_lost, None)
                 if self._eof_written:
                     self._sock.shutdown(socket.SHUT_WR)
-                return
-            self._write_fut = self._loop._proactor.send(self._sock, data)
-            self._write_fut.add_done_callback(self._loop_writing)
+            else:
+                self._write_fut = self._loop._proactor.send(self._sock, data)
+                self._write_fut.add_done_callback(self._loop_writing)
+            # Now that we've reduced the buffer size, tell the
+            # protocol to resume writing if it was paused.  Note that
+            # we do this last since the callback is called immediately
+            # and it may add more data to the buffer (even causing the
+            # protocol to be paused again).
+            self._maybe_resume_protocol()
         except ConnectionResetError as exc:
             self._force_close(exc)
         except OSError as exc:

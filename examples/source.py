@@ -90,8 +90,10 @@ def main():
         set_event_loop(loop)
     else:
         loop = get_event_loop()
-    loop.run_until_complete(start(loop, args.host, args.port))
-    loop.close()
+    try:
+        loop.run_until_complete(start(loop, args.host, args.port))
+    finally:
+        loop.close()
 
 
 if __name__ == '__main__':

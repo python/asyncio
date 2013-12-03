@@ -24,7 +24,10 @@ def fetch():
 
 def main():
     loop = get_event_loop()
-    body = loop.run_until_complete(fetch())
+    try:
+        body = loop.run_until_complete(fetch())
+    finally:
+        loop.close()
     print(body.decode('latin-1'), end='')
 
 

@@ -1,7 +1,7 @@
 """Fetch one URL and write its content to stdout.
 
 This version adds a primitive connection pool, redirect following and
-chunked transfer-encoding.
+chunked transfer-encoding.  It also supports a --iocp flag.
 """
 
 import sys
@@ -209,8 +209,16 @@ def fetch(url, verbose=True, max_redirect=10):
 
 
 def main():
-    loop = get_event_loop()
-    body = loop.run_until_complete(fetch(sys.argv[1], '-v' in sys.argv))
+    if '--iocp' in sys.argv:
+        from asyncio.windows_events import ProactorEventLoop
+        loop = ProactorEventLoop()
+        set_event_loop(loop)
+    else:
+        loop = get_event_loop()
+    try:
+        body = loop.run_until_complete(fetch(sys.argv[1], '-v' in sys.argv))
+    finally:
+        loop.close()
     sys.stdout.buffer.write(body)
 
 

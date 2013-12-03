@@ -67,7 +67,10 @@ def fetch(url, verbose=True):
 
 def main():
     loop = get_event_loop()
-    body = loop.run_until_complete(fetch(sys.argv[1], '-v' in sys.argv))
+    try:
+        body = loop.run_until_complete(fetch(sys.argv[1], '-v' in sys.argv))
+    finally:
+        loop.close()
     print(body.decode('latin-1'), end='')
 
 

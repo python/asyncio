@@ -66,8 +66,8 @@ def start(loop, host, port):
         sslctx = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
         sslctx.options |= ssl.OP_NO_SSLv2
         sslctx.load_cert_chain(
-            certfile=os.path.join(here, 'sample.crt'),
-            keyfile=os.path.join(here, 'sample.key'))
+            certfile=os.path.join(here, 'ssl_cert.pem'),
+            keyfile=os.path.join(here, 'ssl_key.pem'))
 
     server = yield from loop.create_server(Service, host, port, ssl=sslctx)
     dprint('serving TLS' if sslctx else 'serving',

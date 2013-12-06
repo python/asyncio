@@ -48,7 +48,7 @@ do
     fi
 done
 
-for i in `(cd tests && ls *.py sample.???)`
+for i in `(cd tests && ls *.py *.pem)`
 do
     if [ $i == test_selectors.py ]
     then

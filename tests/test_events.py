@@ -10,6 +10,9 @@ try:
     import ssl
 except ImportError:
     ssl = None
+    HAS_SNI = False
+else:
+    from ssl import HAS_SNI
 import subprocess
 import sys
 import threading
@@ -666,6 +669,7 @@ class EventLoopTestsMixin:
         server.close()
 
     @unittest.skipIf(ssl is None, 'No ssl module')
+    @unittest.skipUnless(HAS_SNI, 'No SNI support in ssl module')
     def test_create_server_ssl_verify_failed(self):
         proto = None
 
@@ -694,6 +698,7 @@ class EventLoopTestsMixin:
         server.close()
 
     @unittest.skipIf(ssl is None, 'No ssl module')
+    @unittest.skipUnless(HAS_SNI, 'No SNI support in ssl module')
     def test_create_server_ssl_match_failed(self):
         proto = None
 
@@ -724,6 +729,7 @@ class EventLoopTestsMixin:
         server.close()
 
     @unittest.skipIf(ssl is None, 'No ssl module')
+    @unittest.skipUnless(HAS_SNI, 'No SNI support in ssl module')
     def test_create_server_ssl_verified(self):
         proto = None
 
@@ -899,7 +905,7 @@ class EventLoopTestsMixin:
     def test_internal_fds(self):
         loop = self.create_event_loop()
         if not isinstance(loop, selector_events.BaseSelectorEventLoop):
-            return
+            self.skipTest('loop is not a BaseSelectorEventLoop')
 
         self.assertEqual(1, loop._internal_fds)
         loop.close()

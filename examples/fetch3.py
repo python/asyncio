@@ -167,19 +167,19 @@ class Response:
         if nbytes is None:
             if self.get_header('transfer-encoding', '').lower() == 'chunked':
                 blocks = []
-                while True:
+                size = -1
+                while size:
                     size_header = yield from self.reader.readline()
                     if not size_header:
                         break
                     parts = size_header.split(b';')
                     size = int(parts[0], 16)
-                    if not size:
-                        break
-                    block = yield from self.reader.readexactly(size)
-                    assert len(block) == size, (len(block), size)
-                    blocks.append(block)
+                    if size:
+                        block = yield from self.reader.readexactly(size)
+                        assert len(block) == size, (len(block), size)
+                        blocks.append(block)
                     crlf = yield from self.reader.readline()
-                    assert crlf == b'\r\n'
+                    assert crlf == b'\r\n', repr(crlf)
                 body = b''.join(blocks)
             else:
                 body = yield from self.reader.read()

@@ -3,13 +3,17 @@
 """A simple web crawler."""
 
 # TODO:
-# - Less verbose logging.
+# - Make VPrinter a sub-object, not a base class.
+# - More organized logging (with task ID?).  Use logging module.
+# - Nicer reporting, e.g. total bytes, total html bytes,
+#   success/redirect/error counts, time of day (local+UTC).
 # - Support gzip encoding.
 # - Close connection if HTTP/1.0 response.
-# - Add timeouts.
+# - Add timeouts.  (E.g. when switching networks, all seems to hang.)
 # - Improve class structure (e.g. add a Connection class).
 # - Skip reading large non-text/html files?
 # - Use ETag and If-Modified-Since?
+# - Handle out of file descriptors directly?  (How?)
 
 import argparse
 import asyncio
@@ -42,10 +46,10 @@ ARGS.add_argument(
     default=4, help='Limit retries on network errors')
 ARGS.add_argument(
     '--max_tasks', action='store', type=int, metavar='N',
-    default=5, help='Limit concurrent connections')
+    default=100, help='Limit concurrent connections')
 ARGS.add_argument(
     '--max_pool', action='store', type=int, metavar='N',
-    default=10, help='Limit connection pool size')
+    default=100, help='Limit connection pool size')
 ARGS.add_argument(
     '--exclude', action='store', metavar='REGEX',
     help='Exclude matching URLs')
@@ -69,6 +73,7 @@ ESCAPES = [('quot', '"'),
            ('lt', '<'),
            ('amp', '&')  # Must be last.
            ]
+
 
 def unescape(url):
     """Turn &amp; into &, and so on.
@@ -425,7 +430,7 @@ class Response(VPrinter):
                     if not size:
                         break
                 body = b''.join(blocks)
-                self.vprint('chunked response had',len(body),
+                self.vprint('chunked response had', len(body),
                             'bytes in', len(blocks), 'blocks')
             else:
                 self.vvvprint('reading until EOF')

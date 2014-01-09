@@ -34,6 +34,10 @@ class ConnectionPool:
             key = h, p, ssl
             conn = self.connections.get(key)
             if conn:
+                reader, writer = conn
+                if reader._eof:
+                    self.connections.pop(key)
+                    continue
                 if self.verbose:
                     print('* Reusing pooled connection', key, file=sys.stderr)
                 return conn

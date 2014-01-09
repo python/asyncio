@@ -5,12 +5,12 @@
 # TODO:
 # - Make VPrinter a sub-object, not a base class.
 # - More organized logging (with task ID?).  Use logging module.
-# - Nicer reporting, e.g. total bytes, total html bytes,
-#   success/redirect/error counts, time of day (local+UTC).
+# - KeyboardInterrupt in HTML parsing may hang or report unretrieved error.
 # - Support gzip encoding.
 # - Close connection if HTTP/1.0 response.
 # - Add timeouts.  (E.g. when switching networks, all seems to hang.)
 # - Improve class structure (e.g. add a Connection class).
+# - Add arguments to specify TLS settings (e.g. cert/key files).
 # - Skip reading large non-text/html files?
 # - Use ETag and If-Modified-Since?
 # - Handle out of file descriptors directly?  (How?)
@@ -224,7 +224,7 @@ class ConnectionPool(VPrinter):
         # Close oldest overall connection(s) if limit reached.
         while len(self.queue) > self.max_pool:
             key, pair = self.queue.pop(0)
-            self.vprint('closing olderst connection', key)
+            self.vprint('closing oldest connection', key)
             pairs = self.connections.get(key)
             p = pairs.pop(0)
             assert pair == p, (key, pair, p, pairs)
@@ -549,34 +549,71 @@ class Fetcher(VPrinter):
                         if self.crawler.add_url(url):
                             self.new_urls.add(url)
 
-    def report(self, file=None):
-        """Print a report on the state for this URL."""
+    def report(self, stats, file=None):
+        """Print a report on the state for this URL.
+
+        Also update the Stats instance.
+        """
         if self.task is not None:
             if not self.task.done():
+                stats.add('pending')
                 print(self.url, 'pending', file=file)
                 return
             elif self.task.cancelled():
+                stats.add('cancelled')
                 print(self.url, 'cancelled', file=file)
                 return
             elif self.task.exception():
-                print(self.url, self.task.exception(), file=file)
+                stats.add('exception')
+                exc = self.task.exception()
+                stats.add('exception_' + exc.__class__.__name__)
+                print(self.url, exc, file=file)
                 return
         if len(self.exceptions) == self.tries:
-            print(self.url, 'error', self.exceptions[-1], file=file)
+            stats.add('fail')
+            exc = self.exceptions[-1]
+            stats.add('fail_' + str(exc.__class__.__name__))
+            print(self.url, 'error', exc, file=file)
         elif self.next_url:
+            stats.add('redirect')
             print(self.url, self.response.status, 'redirect', self.next_url,
                   file=file)
         elif self.ctype == 'text/html':
+            stats.add('html')
+            size = len(self.body or b'')
+            stats.add('html_bytes', size)
             print(self.url, self.response.status,
                   self.ctype, self.encoding,
-                  len(self.body or b''),
+                  size,
                   '%d/%d' % (len(self.new_urls or ()), len(self.urls or ())),
                   file=file)
         else:
+            size = len(self.body or b'')
+            if self.response.status == 200:
+                stats.add('other')
+                stats.add('other_bytes', size)
+            else:
+                stats.add('error')
+                stats.add('error_bytes', size)
+                stats.add('status_%s' % self.response.status)
             print(self.url, self.response.status,
                   self.ctype, self.encoding,
-                  len(self.body or b''), self.ctype,
+                  size,
                   file=file)
+
+
+class Stats:
+    """Record stats of various sorts."""
+
+    def __init__(self):
+        self.stats = {}
+
+    def add(self, key, count=1):
+        self.stats[key] = self.stats.get(key, 0) + count
+
+    def report(self, file=None):
+        for key, count in sorted(self.stats.items()):
+            print('  %-20s %10d' % (key, count), file=file)
 
 
 class Crawler(VPrinter):
@@ -742,18 +779,30 @@ class Crawler(VPrinter):
             speed = len(self.done) / dt / self.max_tasks
         else:
             speed = 0
+        stats = Stats()
         if self.verbose > 0:
             print('*** Report ***', file=file)
             try:
-                for url, fetcher in sorted(self.done.items()):
-                    fetcher.report(file=file)
+                show = []
+                show.extend(self.done.items())
+                show.extend(self.busy.items())
+                show.sort()
+                for url, fetcher in show:
+                    fetcher.report(stats, file=file)
             except KeyboardInterrupt:
                 print('\nInterrupted', file=file)
-        print('Crawled', len(self.done),
+        print('Finished', len(self.done),
               'urls in %.3f secs' % dt,
               '(max_tasks=%d)' % self.max_tasks,
               '(%.3f urls/sec/task)' % speed,
               file=file)
+        stats.report(file=file)
+        if self.todo:
+            print('Todo:', len(self.todo), file=file)
+        if self.busy:
+            print('Busy:', len(self.busy), file=file)
+        print('Done:', len(self.done), file=file)
+        print('Date:', time.ctime(), 'local time', file=file)
 
 
 def main():

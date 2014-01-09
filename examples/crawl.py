@@ -3,8 +3,8 @@
 """A simple web crawler."""
 
 # TODO:
-# - Make VPrinter a sub-object, not a base class.
-# - More organized logging (with task ID?).  Use logging module.
+# - More organized logging (with task ID or URL?).
+# - Use logging module for Logger.
 # - KeyboardInterrupt in HTML parsing may hang or report unretrieved error.
 # - Support gzip encoding.
 # - Close connection if HTTP/1.0 response.
@@ -59,13 +59,12 @@ ARGS.add_argument(
 ARGS.add_argument(
     '--lenient', action='store_false', dest='strict',
     default=False, help='Lenient host matching')
-
 ARGS.add_argument(
-    '-v', '--verbose', action='count', dest='verbose',
+    '-v', '--verbose', action='count', dest='level',
     default=1, help='Verbose logging (repeat for more verbose)')
 ARGS.add_argument(
-    '-q', '--quiet', action='store_const', const=0, dest='verbose',
-    help='Quiet logging (opposite of --verbose)')
+    '-q', '--quiet', action='store_const', const=0, dest='level',
+    default=1, help='Quiet logging (opposite of --verbose)')
 
 
 ESCAPES = [('quot', '"'),
@@ -92,39 +91,23 @@ def fix_url(url):
     return url
 
 
-class VPrinter:
-    """Mix-in class defining vprint() which is like print() if verbose > 0.
+class Logger:
 
-    The output goes to stderr.  Only positional arguments are
-    supported.  There are also methods vvprint(), vvvprint()
-    etc. which print() only if verbose > larger values.
+    def __init__(self, level):
+        self.level = level
 
-    The verbose instance variable is public.
-
-    TODO: This should probably be a shared object rather than a mix-in class.
-    """
-
-    def __init__(self, verbose):
-        self.verbose = verbose
-
-    def _nvprint(self, n, args):
-        if self.verbose >= n:
+    def _log(self, n, args):
+        if self.level >= n:
             print(*args, file=sys.stderr, flush=True)
 
-    def nvprint(self, n, *args):
-        self._nvprint(n, args)
+    def log(self, n, *args):
+        self._log(n, args)
 
-    def vprint(self, *args):
-        self._nvprint(1, args)
-
-    def vvprint(self, *args):
-        self._nvprint(2, args)
-
-    def vvvprint(self, *args):
-        self._nvprint(3, args)
+    def __call__(self, n, *args):
+        self._log(n, args)
 
 
-class ConnectionPool(VPrinter):
+class ConnectionPool:
     """A connection pool.
 
     To open a connection, use reserve().  To recycle it, use unreserve().
@@ -139,8 +122,8 @@ class ConnectionPool(VPrinter):
     There are limits to both the overal pool and the per-key pool.
     """
 
-    def __init__(self, max_pool=10, max_tasks=5, verbose=0):
-        VPrinter.__init__(self, verbose)
+    def __init__(self, log, max_pool=10, max_tasks=5):
+        self.log = log
         self.max_pool = max_pool  # Overall limit.
         self.max_tasks = max_tasks  # Per-key limit.
         self.loop = asyncio.get_event_loop()
@@ -162,9 +145,9 @@ class ConnectionPool(VPrinter):
         try:
             ipaddrs = yield from self.loop.getaddrinfo(host, port)
         except Exception as exc:
-            self.vprint('Exception %r for (%r, %r)' % (exc, host, port))
+            self.log(0, 'Exception %r for (%r, %r)' % (exc, host, port))
             raise
-        self.vprint('* %s resolves to %s' %
+        self.log(1, '* %s resolves to %s' %
                     (host, ', '.join(ip[4][0] for ip in ipaddrs)))
 
         # Look for a reusable connection.
@@ -179,11 +162,11 @@ class ConnectionPool(VPrinter):
                     del self.connections[key]
                 reader, writer = pair
                 if reader._eof:
-                    self.vprint('(cached connection closed for %s)' %
+                    self.log(1, '(cached connection closed for %s)' %
                                 repr(key))
                     writer.close()  # Just in case.
                 else:
-                    self.vprint('* Reusing pooled connection', key,
+                    self.log(1, '* Reusing pooled connection', key,
                                 'FD =', writer._transport._sock.fileno())
                     return key, reader, writer
 
@@ -194,9 +177,9 @@ class ConnectionPool(VPrinter):
         if peername:
             host, port, *_ = peername
         else:
-            self.vprint('NO PEERNAME???', host, port, ssl)
+            self.log(1, 'NO PEERNAME???', host, port, ssl)
         key = host, port, ssl
-        self.vprint('* New connection', key,
+        self.log(1, '* New connection', key,
                     'FD =', writer._transport._sock.fileno())
         return key, reader, writer
 
@@ -216,7 +199,7 @@ class ConnectionPool(VPrinter):
         # Close oldest connection(s) for this key if limit reached.
         while len(pairs) > self.max_tasks:
             pair = pairs.pop(0)
-            self.vprint('closing oldest connection for', key)
+            self.log(1, 'closing oldest connection for', key)
             self.queue.remove((key, pair))
             reader, writer = pair
             writer.close()
@@ -224,7 +207,7 @@ class ConnectionPool(VPrinter):
         # Close oldest overall connection(s) if limit reached.
         while len(self.queue) > self.max_pool:
             key, pair = self.queue.pop(0)
-            self.vprint('closing oldest connection', key)
+            self.log(1, 'closing oldest connection', key)
             pairs = self.connections.get(key)
             p = pairs.pop(0)
             assert pair == p, (key, pair, p, pairs)
@@ -232,15 +215,15 @@ class ConnectionPool(VPrinter):
             writer.close()
 
 
-class Request(VPrinter):
+class Request:
     """HTTP request.
 
     Use connect() to open a connection; send_request() to send the
     request; get_response() to receive the response headers.
     """
 
-    def __init__(self, url, pool, verbose=0):
-        VPrinter.__init__(self, verbose)
+    def __init__(self, log, url, pool):
+        self.log = log
         self.url = url
         self.pool = pool
         self.parts = urllib.parse.urlparse(self.url)
@@ -266,13 +249,13 @@ class Request(VPrinter):
     @asyncio.coroutine
     def connect(self):
         """Open a connection to the server."""
-        self.vprint('* Connecting to %s:%s using %s for %s' %
+        self.log(1, '* Connecting to %s:%s using %s for %s' %
                     (self.hostname, self.port,
                      'ssl' if self.ssl else 'tcp',
                      self.url))
         self.key, self.reader, self.writer = \
             yield from self.pool.reserve(self.hostname, self.port, self.ssl)
-        self.vprint('* Connected to %s' %
+        self.log(1, '* Connected to %s' %
                     (self.writer.get_extra_info('peername'),))
 
     def recycle_connection(self):
@@ -295,7 +278,7 @@ class Request(VPrinter):
 
         Used for the request line and headers.
         """
-        self.vvprint('>', line)
+        self.log(2, '>', line)
         self.writer.write(line.encode('latin-1') + b'\r\n')
 
     @asyncio.coroutine
@@ -317,12 +300,12 @@ class Request(VPrinter):
     @asyncio.coroutine
     def get_response(self):
         """Receive the response."""
-        response = Response(self.reader, self.verbose)
+        response = Response(self.log, self.reader)
         yield from response.read_headers()
         return response
 
 
-class Response(VPrinter):
+class Response:
     """HTTP response.
 
     Call read_headers() to receive the request headers.  Then check
@@ -330,8 +313,8 @@ class Response(VPrinter):
     Finally call read() to receive the body.
     """
 
-    def __init__(self, reader, verbose=0):
-        VPrinter.__init__(self, verbose)
+    def __init__(self, log, reader):
+        self.log = log
         self.reader = reader
         self.http_version = None  # 'HTTP/1.1'
         self.status = None  # 200
@@ -342,7 +325,7 @@ class Response(VPrinter):
     def getline(self):
         """Read one line from the connection."""
         line = (yield from self.reader.readline()).decode('latin-1').rstrip()
-        self.vvprint('<', line)
+        self.log(2, '<', line)
         return line
 
     @asyncio.coroutine
@@ -351,7 +334,7 @@ class Response(VPrinter):
         status_line = yield from self.getline()
         status_parts = status_line.split(None, 2)
         if len(status_parts) != 3:
-            self.vprint('bad status_line', repr(status_line))
+            self.log(0, 'bad status_line', repr(status_line))
             raise BadStatusLine(status_line)
         self.http_version, status, self.reason = status_parts
         self.status = int(status)
@@ -386,10 +369,10 @@ class Response(VPrinter):
         blocks = []
         nread = 0
         while nread < nbytes:
-            self.vvvprint('reading block', len(blocks),
-                          'with', nbytes - nread, 'bytes remaining')
+            self.log(3, 'reading block', len(blocks),
+                     'with', nbytes - nread, 'bytes remaining')
             block = yield from self.reader.read(nbytes-nread)
-            self.vvvprint('read', len(block), 'bytes')
+            self.log(3, 'read', len(block), 'bytes')
             if not block:
                 raise EOFError('EOF with %d more bytes expected' %
                                (nbytes - nread))
@@ -410,18 +393,18 @@ class Response(VPrinter):
                 break
         if nbytes is None:
             if self.get_header('transfer-encoding').lower() == 'chunked':
-                self.vvprint('parsing chunked response')
+                self.log(2, 'parsing chunked response')
                 blocks = []
                 while True:
                     size_header = yield from self.reader.readline()
                     if not size_header:
-                        self.vprint('premature end of chunked response')
+                        self.log(0, 'premature end of chunked response')
                         break
-                    self.vvvprint('size_header =', repr(size_header))
+                    self.log(3, 'size_header =', repr(size_header))
                     parts = size_header.split(b';')
                     size = int(parts[0], 16)
                     if size:
-                        self.vvvprint('reading chunk of', size, 'bytes')
+                        self.log(3, 'reading chunk of', size, 'bytes')
                         block = yield from self.readexactly(size)
                         assert len(block) == size, (len(block), size)
                         blocks.append(block)
@@ -430,10 +413,10 @@ class Response(VPrinter):
                     if not size:
                         break
                 body = b''.join(blocks)
-                self.vprint('chunked response had', len(body),
+                self.log(1, 'chunked response had', len(body),
                             'bytes in', len(blocks), 'blocks')
             else:
-                self.vvvprint('reading until EOF')
+                self.log(3, 'reading until EOF')
                 body = yield from self.reader.read()
                 # TODO: Should make sure not to recycle the connection
                 # in this case.
@@ -442,7 +425,7 @@ class Response(VPrinter):
         return body
 
 
-class Fetcher(VPrinter):
+class Fetcher:
     """Logic and state for one URL.
 
     When found in crawler.busy, this represents a URL to be fetched or
@@ -456,8 +439,8 @@ class Fetcher(VPrinter):
     Call fetch() to do the fetching, then report() to print the results.
     """
 
-    def __init__(self, url, crawler, max_redirect=10, max_tries=4, verbose=0):
-        VPrinter.__init__(self, verbose)
+    def __init__(self, log, url, crawler, max_redirect=10, max_tries=4):
+        self.log = log
         self.url = url
         self.crawler = crawler
         # We don't loop resolving redirects here -- we just use this
@@ -490,8 +473,7 @@ class Fetcher(VPrinter):
             self.tries += 1
             self.request = None
             try:
-                self.request = Request(self.url, self.crawler.pool,
-                                       self.verbose)
+                self.request = Request(self.log, self.url, self.crawler.pool)
                 yield from self.request.connect()
                 yield from self.request.send_request()
                 self.response = yield from self.request.get_response()
@@ -502,11 +484,11 @@ class Fetcher(VPrinter):
                     self.request.recycle_connection()
                     self.request = None
                 if self.tries > 1:
-                    self.vprint('try', self.tries, 'for', self.url, 'success')
+                    self.log(1, 'try', self.tries, 'for', self.url, 'success')
                 break
             except (BadStatusLine, OSError) as exc:
                 self.exceptions.append(exc)
-                self.vprint('try', self.tries, 'for', self.url,
+                self.log(1, 'try', self.tries, 'for', self.url,
                             'raised', repr(exc))
                 ##import pdb; pdb.set_trace()
                 # Don't reuse the connection in this case.
@@ -515,17 +497,17 @@ class Fetcher(VPrinter):
                     self.request.close()
         else:
             # We never broke out of the while loop, i.e. all tries failed.
-            self.vprint('no success for', self.url,
+            self.log(0, 'no success for', self.url,
                         'in', self.max_tries, 'tries')
             return
         next_url = self.response.get_redirect_url()
         if next_url:
             self.next_url = urllib.parse.urljoin(self.url, next_url)
             if self.max_redirect > 0:
-                self.vprint('redirect to', self.next_url, 'from', self.url)
+                self.log(1, 'redirect to', self.next_url, 'from', self.url)
                 self.crawler.add_url(self.next_url, self.max_redirect-1)
             else:
-                self.vprint('redirect limit reached for', self.next_url,
+                self.log(0, 'redirect limit reached for', self.next_url,
                             'from', self.url)
         else:
             if self.response.status == 200:
@@ -536,10 +518,11 @@ class Fetcher(VPrinter):
                 self.encoding = self.pdict.get('charset', 'utf-8')
                 if self.ctype == 'text/html':
                     body = self.body.decode(self.encoding, 'replace')
+                    # Replace href with (?:href|src) to follow image links.
                     self.urls = set(re.findall(r'(?i)href=["\']?([^\s"\'<>]+)',
                                                body))
                     if self.urls:
-                        self.vprint('got', len(self.urls),
+                        self.log(1, 'got', len(self.urls),
                                     'distinct urls from', self.url)
                     self.new_urls = set()
                     for url in self.urls:
@@ -616,7 +599,7 @@ class Stats:
             print('  %-20s %10d' % (key, count), file=file)
 
 
-class Crawler(VPrinter):
+class Crawler:
     """Crawl a set of URLs.
 
     This manages three disjoint sets of URLs (todo, busy, done).  The
@@ -624,12 +607,12 @@ class Crawler(VPrinter):
     the redirect limit, while the values in busy and done are Fetcher
     instances.
     """
-    def __init__(self,
+    def __init__(self, log,
                  roots, exclude=None, strict=True,  # What to crawl.
                  max_redirect=10, max_tries=4,  # Per-url limits.
                  max_tasks=10, max_pool=10,  # Global limits.
-                 verbose=0):
-        VPrinter.__init__(self, verbose)
+                 ):
+        self.log = log
         self.roots = roots
         self.exclude = exclude
         self.strict = strict
@@ -640,7 +623,7 @@ class Crawler(VPrinter):
         self.todo = {}
         self.busy = {}
         self.done = {}
-        self.pool = ConnectionPool(max_pool, max_tasks, self.verbose)
+        self.pool = ConnectionPool(self.log, max_pool, max_tasks)
         self.root_domains = set()
         for root in roots:
             parts = urllib.parse.urlparse(root)
@@ -719,17 +702,17 @@ class Crawler(VPrinter):
             return False
         parts = urllib.parse.urlparse(url)
         if parts.scheme not in ('http', 'https'):
-            self.vvprint('skipping non-http scheme in', url)
+            self.log(2, 'skipping non-http scheme in', url)
             return False
         host, port = urllib.parse.splitport(parts.netloc)
         if not self.host_okay(host):
-            self.vvprint('skipping non-root host in', url)
+            self.log(2, 'skipping non-root host in', url)
             return False
         if max_redirect is None:
             max_redirect = self.max_redirect
         if url in self.todo or url in self.busy or url in self.done:
             return False
-        self.vprint('adding', url, max_redirect)
+        self.log(1, 'adding', url, max_redirect)
         self.todo[url] = max_redirect
         return True
 
@@ -740,11 +723,11 @@ class Crawler(VPrinter):
             while self.todo or self.busy:
                 if self.todo:
                     url, max_redirect = self.todo.popitem()
-                    fetcher = Fetcher(url,
+                    fetcher = Fetcher(self.log, url,
                                       crawler=self,
                                       max_redirect=max_redirect,
                                       max_tries=self.max_tries,
-                                      verbose=self.verbose)
+                                      )
                     self.busy[url] = fetcher
                     fetcher.task = asyncio.Task(self.fetch(fetcher))
                 else:
@@ -761,10 +744,9 @@ class Crawler(VPrinter):
         with (yield from self.governor):
             try:
                 yield from fetcher.fetch()  # Fetcher gonna fetch.
-            except Exception:
+            finally:
                 # Force GC of the task, so the error is logged.
                 fetcher.task = None
-                raise
         with (yield from self.termination):
             self.done[url] = fetcher
             del self.busy[url]
@@ -780,27 +762,24 @@ class Crawler(VPrinter):
         else:
             speed = 0
         stats = Stats()
-        if self.verbose > 0:
-            print('*** Report ***', file=file)
-            try:
-                show = []
-                show.extend(self.done.items())
-                show.extend(self.busy.items())
-                show.sort()
-                for url, fetcher in show:
-                    fetcher.report(stats, file=file)
-            except KeyboardInterrupt:
-                print('\nInterrupted', file=file)
+        print('*** Report ***', file=file)
+        try:
+            show = []
+            show.extend(self.done.items())
+            show.extend(self.busy.items())
+            show.sort()
+            for url, fetcher in show:
+                fetcher.report(stats, file=file)
+        except KeyboardInterrupt:
+            print('\nInterrupted', file=file)
         print('Finished', len(self.done),
               'urls in %.3f secs' % dt,
               '(max_tasks=%d)' % self.max_tasks,
               '(%.3f urls/sec/task)' % speed,
               file=file)
         stats.report(file=file)
-        if self.todo:
-            print('Todo:', len(self.todo), file=file)
-        if self.busy:
-            print('Busy:', len(self.busy), file=file)
+        print('Todo:', len(self.todo), file=file)
+        print('Busy:', len(self.busy), file=file)
         print('Done:', len(self.done), file=file)
         print('Date:', time.ctime(), 'local time', file=file)
 
@@ -815,6 +794,8 @@ def main():
         print('Use --help for command line help')
         return
 
+    log = Logger(args.level)
+
     if args.iocp:
         from asyncio.windows_events import ProactorEventLoop
         loop = ProactorEventLoop()
@@ -827,14 +808,14 @@ def main():
 
     roots = {fix_url(root) for root in args.roots}
 
-    crawler = Crawler(roots,
-                      exclude=args.exclude,
+    crawler = Crawler(log,
+                      roots, exclude=args.exclude,
                       strict=args.strict,
                       max_redirect=args.max_redirect,
                       max_tries=args.max_tries,
                       max_tasks=args.max_tasks,
                       max_pool=args.max_pool,
-                      verbose=args.verbose)
+                      )
     try:
         loop.run_until_complete(crawler.crawl())  # Crawler gonna crawl.
     except KeyboardInterrupt:

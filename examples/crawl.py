@@ -6,7 +6,10 @@
 # - Less verbose logging.
 # - Support gzip encoding.
 # - Close connection if HTTP/1.0 response.
-# - Expire connections in pool if too many.
+# - Add timeouts.
+# - Improve class structure (e.g. add a Connection class).
+# - Skip reading large non-text/html files?
+# - Use ETag and If-Modified-Since?
 
 import argparse
 import asyncio
@@ -30,19 +33,29 @@ ARGS.add_argument(
     default=False, help='Use Select event loop instead of default')
 ARGS.add_argument(
     'roots', nargs='*',
-    default=['http://python.org'], help='Root URL (may be repeated)')
+    default=[], help='Root URL (may be repeated)')
 ARGS.add_argument(
     '--max_redirect', action='store', type=int, metavar='N',
-    default=10, help='Limit redirection (for 301, 302 etc.)')
+    default=10, help='Limit redirection chains (for 301, 302 etc.)')
 ARGS.add_argument(
     '--max_tries', action='store', type=int, metavar='N',
     default=4, help='Limit retries on network errors')
 ARGS.add_argument(
     '--max_tasks', action='store', type=int, metavar='N',
-    default=5, help='Limit on concurrent connections')
+    default=5, help='Limit concurrent connections')
+ARGS.add_argument(
+    '--max_pool', action='store', type=int, metavar='N',
+    default=10, help='Limit connection pool size')
 ARGS.add_argument(
     '--exclude', action='store', metavar='REGEX',
     help='Exclude matching URLs')
+ARGS.add_argument(
+    '--strict', action='store_true',
+    default=True, help='Strict host matching (default)')
+ARGS.add_argument(
+    '--lenient', action='store_false', dest='strict',
+    default=False, help='Lenient host matching')
+
 ARGS.add_argument(
     '-v', '--verbose', action='count', dest='verbose',
     default=1, help='Verbose logging (repeat for more verbose)')
@@ -117,18 +130,25 @@ class ConnectionPool(VPrinter):
     out, and unreserve()' puts it back in.  It is up to the caller to
     only call unreserve() for reusable connections.  (That logic is
     implemented in the Request class.)
+
+    There are limits to both the overal pool and the per-key pool.
     """
 
-    def __init__(self, verbose=0):
+    def __init__(self, max_pool=10, max_tasks=5, verbose=0):
         VPrinter.__init__(self, verbose)
+        self.max_pool = max_pool  # Overall limit.
+        self.max_tasks = max_tasks  # Per-key limit.
         self.loop = asyncio.get_event_loop()
         self.connections = {}  # {(host, port, ssl): [(reader, writer)]}
+        self.queue = []  # [(key, pair)]
 
     def close(self):
         """Close all connections available for reuse."""
         for pairs in self.connections.values():
             for _, writer in pairs:
                 writer.close()
+        self.connections.clear()
+        self.queue.clear()
 
     @asyncio.coroutine
     def reserve(self, host, port, ssl):
@@ -141,20 +161,28 @@ class ConnectionPool(VPrinter):
             raise
         self.vprint('* %s resolves to %s' %
                     (host, ', '.join(ip[4][0] for ip in ipaddrs)))
+
+        # Look for a reusable connection.
         for _, _, _, _, (h, p, *_) in ipaddrs:
             key = h, p, ssl
             pair = None
             pairs = self.connections.get(key)
             while pairs:
                 pair = pairs.pop(0)
+                self.queue.remove((key, pair))
                 if not pairs:
                     del self.connections[key]
                 reader, writer = pair
                 if reader._eof:
-                    self.vprint('(cached connection closed for %s)' % repr(key))
+                    self.vprint('(cached connection closed for %s)' %
+                                repr(key))
+                    writer.close()  # Just in case.
                 else:
-                    self.vprint('* Reusing pooled connection', key, 'FD =', writer._transport._sock.fileno())
+                    self.vprint('* Reusing pooled connection', key,
+                                'FD =', writer._transport._sock.fileno())
                     return key, reader, writer
+
+        # Create a new connection.
         reader, writer = yield from asyncio.open_connection(host, port,
                                                             ssl=ssl)
         peername = writer.get_extra_info('peername')
@@ -163,17 +191,40 @@ class ConnectionPool(VPrinter):
         else:
             self.vprint('NO PEERNAME???', host, port, ssl)
         key = host, port, ssl
-        self.vprint('* New connection', key, 'FD =', writer._transport._sock.fileno())
+        self.vprint('* New connection', key,
+                    'FD =', writer._transport._sock.fileno())
         return key, reader, writer
 
     def unreserve(self, key, reader, writer):
-        """Make a connection available for reuse."""
+        """Make a connection available for reuse.
+
+        This also prunes the pool if it exceeds the size limits.
+        """
         if reader._eof:
+            writer.close()
             return
-        pairs = self.connections.get(key)
-        if pairs is None:
-            self.connections[key] = pairs = []
-        pairs.append((reader, writer))
+        pair = reader, writer
+        pairs = self.connections.setdefault(key, [])
+        pairs.append(pair)
+        self.queue.append((key, pair))
+
+        # Close oldest connection(s) for this key if limit reached.
+        while len(pairs) > self.max_tasks:
+            pair = pairs.pop(0)
+            self.vprint('closing oldest connection for', key)
+            self.queue.remove((key, pair))
+            reader, writer = pair
+            writer.close()
+
+        # Close oldest overall connection(s) if limit reached.
+        while len(self.queue) > self.max_pool:
+            key, pair = self.queue.pop(0)
+            self.vprint('closing olderst connection', key)
+            pairs = self.connections.get(key)
+            p = pairs.pop(0)
+            assert pair == p, (key, pair, p, pairs)
+            reader, writer = pair
+            writer.close()
 
 
 class Request(VPrinter):
@@ -531,24 +582,44 @@ class Crawler(VPrinter):
     the redirect limit, while the values in busy and done are Fetcher
     instances.
     """
-    def __init__(self, roots,
-                 max_redirect=10, max_tries=4, max_tasks=10, exclude=None,
+    def __init__(self,
+                 roots, exclude=None, strict=True,  # What to crawl.
+                 max_redirect=10, max_tries=4,  # Per-url limits.
+                 max_tasks=10, max_pool=10,  # Global limits.
                  verbose=0):
         VPrinter.__init__(self, verbose)
         self.roots = roots
+        self.exclude = exclude
+        self.strict = strict
         self.max_redirect = max_redirect
         self.max_tries = max_tries
         self.max_tasks = max_tasks
-        self.exclude = exclude
+        self.max_pool = max_pool
         self.todo = {}
         self.busy = {}
         self.done = {}
-        self.pool = ConnectionPool(self.verbose)
+        self.pool = ConnectionPool(max_pool, max_tasks, self.verbose)
         self.root_domains = set()
         for root in roots:
             parts = urllib.parse.urlparse(root)
             host, port = urllib.parse.splitport(parts.netloc)
-            self.root_domains.add(host.lower())
+            if not host:
+                continue
+            if re.match(r'\A[\d\.]*\Z', host):
+                self.root_domains.add(host)
+            else:
+                host = host.lower()
+                if self.strict:
+                    self.root_domains.add(host)
+                    if host.startswith('www.'):
+                        self.root_domains.add(host[4:])
+                    else:
+                        self.root_domains.add('www.' + host)
+                else:
+                    parts = host.split('.')
+                    if len(parts) > 2:
+                        host = '.'.join(parts[-2:])
+                    self.root_domains.add(host)
         for root in roots:
             self.add_url(root)
         self.governor = asyncio.locks.Semaphore(max_tasks)
@@ -563,13 +634,25 @@ class Crawler(VPrinter):
     def host_okay(self, host):
         """Check if a host should be crawled.
 
-        It must match one of the root URLs, but leading 'www.' on the
-        domain is ignored.  However, other subdomains (e.g. 'mail.',
-        'docs.') are not crawled unless mentioned in a root URL.
+        A literal match (after lowercasing) is always good.  For hosts
+        that don't look like IP addresses, some approximate matches
+        are okay depending on the strict flag.
         """
         host = host.lower()
         if host in self.root_domains:
             return True
+        if re.match(r'\A[\d\.]*\Z', host):
+            return False
+        if self.strict:
+            return self._host_okay_strictish(host)
+        else:
+            return self._host_okay_lenient(host)
+
+    def _host_okay_strictish(self, host):
+        """Check if a host should be crawled, strict-ish version.
+
+        This checks for equality modulo an initial 'www.' component.
+         """
         if host.startswith('www.'):
             if host[4:] in self.root_domains:
                 return True
@@ -577,6 +660,16 @@ class Crawler(VPrinter):
             if 'www.' + host in self.root_domains:
                 return True
         return False
+
+    def _host_okay_lenient(self, host):
+        """Check if a host should be crawled, lenient version.
+
+        This compares the last two components of the host.
+        """
+        parts = host.split('.')
+        if len(parts) > 2:
+            host = '.'.join(parts[-2:])
+        return host in self.root_domains
 
     def add_url(self, url, max_redirect=None):
         """Add a URL to the todo list if not seen before."""
@@ -664,6 +757,9 @@ def main():
     Parse arguments, set up event loop, run crawler, print report.
     """
     args = ARGS.parse_args()
+    if not args.roots:
+        print('Use --help for command line help')
+        return
 
     if args.iocp:
         from asyncio.windows_events import ProactorEventLoop
@@ -678,10 +774,12 @@ def main():
     roots = {fix_url(root) for root in args.roots}
 
     crawler = Crawler(roots,
+                      exclude=args.exclude,
+                      strict=args.strict,
                       max_redirect=args.max_redirect,
                       max_tries=args.max_tries,
                       max_tasks=args.max_tasks,
-                      exclude=args.exclude,
+                      max_pool=args.max_pool,
                       verbose=args.verbose)
     try:
         loop.run_until_complete(crawler.crawl())  # Crawler gonna crawl.

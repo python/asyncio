@@ -2,13 +2,9 @@
 
 import sys
 
-# The selectors module is in the stdlib in Python 3.4 but not in 3.3.
-# Do this first, so the other submodules can use "from . import selectors".
-# Prefer asyncio/selectors.py over the stdlib one, as ours may be newer.
-try:
-    from . import selectors
-except ImportError:
-    import selectors  # Will also be exported.
+# Prefer asyncio/selectors.py over the stdlib one, as ours may be newer
+# and contains a workaround for a timeout rounding issue.
+from . import selectors
 
 if sys.platform == 'win32':
     # Similar thing for _overlapped.

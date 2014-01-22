@@ -417,9 +417,7 @@ if hasattr(select, 'epoll'):
                 timeout = 0
             else:
                 # epoll_wait() has a resolution of 1 millisecond, round away
-                # from zero to wait *at least* timeout seconds. Workaround for
-                # the following Python bug:
-                # http://bugs.python.org/issue20311
+                # from zero to wait *at least* timeout seconds.
                 timeout = math.ceil(timeout * 1e3) * 1e-3
             max_ev = len(self._fd_to_key)
             ready = []

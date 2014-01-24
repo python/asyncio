@@ -300,8 +300,12 @@ class StreamReaderTests(unittest.TestCase):
             stream.feed_eof()
         self.loop.call_soon(cb)
 
-        data = self.loop.run_until_complete(read_task)
-        self.assertEqual(self.DATA, data)
+        with self.assertRaises(asyncio.IncompleteReadError) as cm:
+            self.loop.run_until_complete(read_task)
+        self.assertEqual(cm.exception.partial, self.DATA)
+        self.assertEqual(cm.exception.expected, n)
+        self.assertEqual(str(cm.exception),
+                         '18 bytes read on a total of 36 expected bytes')
         self.assertFalse(stream._byte_count)
 
     def test_readexactly_exception(self):

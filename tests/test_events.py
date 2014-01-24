@@ -953,9 +953,6 @@ class EventLoopTestsMixin:
 
     @unittest.skipUnless(sys.platform != 'win32',
                          "Don't support pipes for Windows")
-    # kqueue doesn't support character devices (PTY) on Mac OS X older
-    # than 10.9 (Maverick)
-    @support.requires_mac_ver(10, 9)
     def test_read_pty_output(self):
         proto = None
 
@@ -1078,9 +1075,6 @@ class EventLoopTestsMixin:
 
     @unittest.skipUnless(sys.platform != 'win32',
                          "Don't support pipes for Windows")
-    # kqueue doesn't support character devices (PTY) on Mac OS X older
-    # than 10.9 (Maverick)
-    @support.requires_mac_ver(10, 9)
     def test_write_pty(self):
         proto = None
         transport = None
@@ -1541,6 +1535,18 @@ else:
             def create_event_loop(self):
                 return asyncio.SelectorEventLoop(
                     selectors.KqueueSelector())
+
+            # kqueue doesn't support character devices (PTY) on Mac OS X older
+            # than 10.9 (Maverick)
+            @support.requires_mac_ver(10, 9)
+            def test_read_pty_output(self):
+                super().test_read_pty_output()
+
+            # kqueue doesn't support character devices (PTY) on Mac OS X older
+            # than 10.9 (Maverick)
+            @support.requires_mac_ver(10, 9)
+            def test_write_pty(self):
+                super().test_write_pty()
 
     if hasattr(selectors, 'EpollSelector'):
         class EPollEventLoopTests(UnixEventLoopTestsMixin,

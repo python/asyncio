@@ -1076,6 +1076,56 @@ class EventLoopTestsMixin:
         self.loop.run_until_complete(proto.done)
         self.assertEqual('CLOSED', proto.state)
 
+    @unittest.skipUnless(sys.platform != 'win32',
+                         "Don't support pipes for Windows")
+    # kqueue doesn't support character devices (PTY) on Mac OS X older
+    # than 10.9 (Maverick)
+    @support.requires_mac_ver(10, 9)
+    def test_write_pty(self):
+        proto = None
+        transport = None
+
+        def factory():
+            nonlocal proto
+            proto = MyWritePipeProto(loop=self.loop)
+            return proto
+
+        master, slave = os.openpty()
+        slave_write_obj = io.open(slave, 'wb', 0)
+
+        @asyncio.coroutine
+        def connect():
+            nonlocal transport
+            t, p = yield from self.loop.connect_write_pipe(factory,
+                                                           slave_write_obj)
+            self.assertIs(p, proto)
+            self.assertIs(t, proto.transport)
+            self.assertEqual('CONNECTED', proto.state)
+            transport = t
+
+        self.loop.run_until_complete(connect())
+
+        transport.write(b'1')
+        test_utils.run_briefly(self.loop)
+        data = os.read(master, 1024)
+        self.assertEqual(b'1', data)
+
+        transport.write(b'2345')
+        test_utils.run_briefly(self.loop)
+        data = os.read(master, 1024)
+        self.assertEqual(b'2345', data)
+        self.assertEqual('CONNECTED', proto.state)
+
+        os.close(master)
+
+        # extra info is available
+        self.assertIsNotNone(proto.transport.get_extra_info('pipe'))
+
+        # close connection
+        proto.transport.close()
+        self.loop.run_until_complete(proto.done)
+        self.assertEqual('CLOSED', proto.state)
+
     def test_prompt_cancellation(self):
         r, w = test_utils.socketpair()
         r.setblocking(False)

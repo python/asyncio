@@ -16,7 +16,6 @@ except ImportError:
 import asyncio
 from asyncio import selectors
 from asyncio import test_utils
-from asyncio.protocols import DatagramProtocol, Protocol
 from asyncio.selector_events import BaseSelectorEventLoop
 from asyncio.selector_events import _SelectorTransport
 from asyncio.selector_events import _SelectorSslTransport
@@ -585,7 +584,7 @@ class SelectorTransportTests(unittest.TestCase):
 
     def setUp(self):
         self.loop = test_utils.TestLoop()
-        self.protocol = test_utils.make_test_protocol(Protocol)
+        self.protocol = test_utils.make_test_protocol(asyncio.Protocol)
         self.sock = unittest.mock.Mock(socket.socket)
         self.sock.fileno.return_value = 7
 
@@ -672,7 +671,7 @@ class SelectorSocketTransportTests(unittest.TestCase):
 
     def setUp(self):
         self.loop = test_utils.TestLoop()
-        self.protocol = test_utils.make_test_protocol(Protocol)
+        self.protocol = test_utils.make_test_protocol(asyncio.Protocol)
         self.sock = unittest.mock.Mock(socket.socket)
         self.sock_fd = self.sock.fileno.return_value = 7
 
@@ -1037,7 +1036,7 @@ class SelectorSslTransportTests(unittest.TestCase):
 
     def setUp(self):
         self.loop = test_utils.TestLoop()
-        self.protocol = test_utils.make_test_protocol(Protocol)
+        self.protocol = test_utils.make_test_protocol(asyncio.Protocol)
         self.sock = unittest.mock.Mock(socket.socket)
         self.sock.fileno.return_value = 7
         self.sslsock = unittest.mock.Mock()
@@ -1366,7 +1365,7 @@ class SelectorDatagramTransportTests(unittest.TestCase):
 
     def setUp(self):
         self.loop = test_utils.TestLoop()
-        self.protocol = test_utils.make_test_protocol(DatagramProtocol)
+        self.protocol = test_utils.make_test_protocol(asyncio.DatagramProtocol)
         self.sock = unittest.mock.Mock(spec_set=socket.socket)
         self.sock.fileno.return_value = 7
 

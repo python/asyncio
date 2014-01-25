@@ -16,14 +16,13 @@ except ImportError:
 import asyncio
 from asyncio import selectors
 from asyncio import test_utils
-from asyncio.selector_events import BaseSelectorEventLoop
 from asyncio.selector_events import _SelectorTransport
 from asyncio.selector_events import _SelectorSslTransport
 from asyncio.selector_events import _SelectorSocketTransport
 from asyncio.selector_events import _SelectorDatagramTransport
 
 
-class TestBaseSelectorEventLoop(BaseSelectorEventLoop):
+class TestBaseSelectorEventLoop(asyncio.BaseSelectorEventLoop):
 
     def _make_self_pipe(self):
         self._ssock = unittest.mock.Mock()

@@ -260,7 +260,7 @@ class _UnixWritePipeTransport(transports.WriteTransport):
         mode = os.fstat(self._fileno).st_mode
         is_socket = stat.S_ISSOCK(mode)
         if not (is_socket or
-                stat.S_ISFIFO(mode) or 
+                stat.S_ISFIFO(mode) or
                 stat.S_ISCHR(mode)):
             raise ValueError("Pipe transport is only for "
                              "pipes, sockets and character devices")

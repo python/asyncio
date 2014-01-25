@@ -453,3 +453,94 @@ class StreamReader:
 
     def close(self):
         return self._transport.close()
+
+
+class SubprocessStreamProtocol(protocols.SubprocessProtocol):
+    def __init__(self, limit=_DEFAULT_LIMIT):
+        self._pipes = {}   # file descriptor (int) => StreamReaderProtocol
+        self.limit = limit
+        self.stdin = None   # TODO: _UnixWritePipeTransport, but should be StreamWriter
+        self.stdout = None  # StreamReader
+        self.stderr = None  # StreamReader
+        self._waiters = []  # list of Future waiting for the exit of the process,
+                            # the result is the returncode of the process
+        self._returncode = None
+        self._loop = None
+
+    def connection_made(self, transport):
+        self._loop = transport._loop
+        proc = transport._proc
+        if proc.stdin is not None:
+            # FIXME: implement StreamWriter for stdin
+            # stdin_transport = transport.get_pipe_transport(0) # _UnixWritePipeTransport
+            # stdin_protocol = stdin_transport._protocol # WriteSubprocessPipeProto
+            # class FakeReader:
+            #     pass
+            # stdin_reader = FakeReader() # ???
+            # stdin_reader._exception = None
+            # self.stdin = asyncio.StreamWriter(stdin_transport, stdin_protocol, stdin_reader, loop=self._loop)
+            self.stdin = transport.get_pipe_transport(0)
+        if proc.stdout is not None:
+            self.stdout = self._get_protocol(1)._stream_reader
+        if proc.stderr is not None:
+            self.stderr = self._get_protocol(2)._stream_reader
+
+    def get_pipe_reader(self, fd):
+        if fd in self._pipes:
+            return self._pipes[fd]._stream_reader
+        else:
+            return None
+
+    def _get_protocol(self, fd):
+        try:
+            return self._pipes[fd]
+        except KeyError:
+            reader = StreamReader(limit=self.limit)
+            protocol = StreamReaderProtocol(reader, loop=self._loop)
+            self._pipes[fd] = protocol
+            return protocol
+
+    def pipe_data_received(self, fd, data):
+        protocol = self._get_protocol(fd)
+        protocol.data_received(data)
+
+    def pipe_connection_lost(self, fd, exc):
+        protocol = self._get_protocol(fd)
+        protocol.connection_lost(exc)
+
+    @tasks.coroutine
+    def wait(self):
+        """
+        Wait until the process exit and return the process return code.
+        """
+        if self._returncode:
+            return self._returncode
+
+        fut = tasks.Future()
+        self._waiters.append(fut)
+        yield from fut
+        return fut.result()
+
+    def process_exited(self, returncode):
+        self._returncode = returncode
+        # FIXME: not thread safe
+        waiters = self._waiters.copy()
+        self._waiters.clear()
+        for waiter in waiters:
+            waiter.set_result(returncode)
+
+    # FIXME: remove loop
+    @tasks.coroutine
+    def connect_read_pipe(self, loop, transport, fd, pipe):
+        from . import base_subprocess
+        return (yield from loop.connect_read_pipe(
+            lambda: base_subprocess.ReadSubprocessPipeProto(transport, fd),
+            pipe))
+
+    @tasks.coroutine
+    def connect_write_pipe(self, loop, transport, fd, pipe):
+        from . import base_subprocess
+        return (yield from loop.connect_write_pipe(
+            lambda: base_subprocess.WriteSubprocessPipeProto(transport, fd),
+            pipe))
+

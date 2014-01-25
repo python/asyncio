@@ -1,4 +1,6 @@
 """Abstract Protocol class."""
+# FIXME: don't create tasks in protocols
+from . import tasks
 
 __all__ = ['BaseProtocol', 'Protocol', 'DatagramProtocol',
            'SubprocessProtocol']
@@ -125,5 +127,21 @@ class SubprocessProtocol(BaseProtocol):
         fd is the int file descriptor that was closed.
         """
 
-    def process_exited(self):
+    def process_exited(self, returncode):
         """Called when subprocess has exited."""
+
+    # FIXME: remove loop
+    @tasks.coroutine
+    def connect_read_pipe(self, loop, transport, fd, pipe):
+        from . import base_subprocess
+        return (yield from loop.connect_read_pipe(
+            lambda: base_subprocess.ReadSubprocessPipeProto(transport, fd),
+            pipe))
+
+    @tasks.coroutine
+    def connect_write_pipe(self, loop, transport, fd, pipe):
+        from . import base_subprocess
+        return (yield from loop.connect_write_pipe(
+            lambda: base_subprocess.WriteSubprocessPipeProto(transport, fd),
+            pipe))
+

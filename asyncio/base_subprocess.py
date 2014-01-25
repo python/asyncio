@@ -75,17 +75,11 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
         proc = self._proc
         loop = self._loop
         if proc.stdin is not None:
-            transp, proto = yield from loop.connect_write_pipe(
-                lambda: WriteSubprocessPipeProto(self, STDIN),
-                proc.stdin)
+            transp, proto = yield from self._protocol.connect_write_pipe(self._loop, self, STDIN, proc.stdin)
         if proc.stdout is not None:
-            transp, proto = yield from loop.connect_read_pipe(
-                lambda: ReadSubprocessPipeProto(self, STDOUT),
-                proc.stdout)
+            transp, proto = yield from self._protocol.connect_read_pipe(self._loop, self, STDOUT, proc.stdout)
         if proc.stderr is not None:
-            transp, proto = yield from loop.connect_read_pipe(
-                lambda: ReadSubprocessPipeProto(self, STDERR),
-                proc.stderr)
+            transp, proto = yield from self._protocol.connect_read_pipe(self._loop, self, STDERR, proc.stderr)
         if not self._pipes:
             self._try_connected()
 
@@ -115,7 +109,7 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
         assert self._returncode is None, self._returncode
         self._returncode = returncode
         self._loop._subprocess_closed(self)
-        self._call(self._protocol.process_exited)
+        self._call(self._protocol.process_exited, returncode)
         self._try_finish()
 
     def _try_finish(self):

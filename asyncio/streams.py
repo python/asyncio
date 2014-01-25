@@ -2,6 +2,7 @@
 
 __all__ = ['StreamReader', 'StreamWriter', 'StreamReaderProtocol',
            'open_connection', 'start_server', 'IncompleteReadError',
+           'connect_read_pipe', 'connect_write_pipe',
            ]
 
 import collections
@@ -157,6 +158,33 @@ class StreamReaderProtocol(protocols.Protocol):
             if not waiter.done():
                 waiter.set_result(None)
 
+#
+# Return a write-only transport wrapping a writable pipe
+#
+
+@tasks.coroutine
+def connect_write_pipe(file, loop=None):
+    if loop is None:
+        loop = events.get_event_loop()
+    protocol = protocols.Protocol()
+    transport, _ =  yield from loop.connect_write_pipe(protocols.Protocol, file)
+    writer = StreamWriter(transport, protocol, None, loop)
+    return writer
+
+#
+# Wrap a readable pipe in a stream
+#
+
+@tasks.coroutine
+def connect_read_pipe(file, loop=None):
+    if loop is None:
+        loop = events.get_event_loop()
+    stream_reader = StreamReader(loop=loop)
+    def factory():
+        return StreamReaderProtocol(stream_reader)
+    _transport, _ = yield from loop.connect_read_pipe(factory, file)
+    return stream_reader
+
 
 class StreamWriter:
     """Wraps a Transport.
@@ -211,7 +239,7 @@ class StreamWriter:
         completed, which will happen when the buffer is (partially)
         drained and the protocol is resumed.
         """
-        if self._reader._exception is not None:
+        if self._reader is not None and self._reader._exception is not None:
             raise self._reader._exception
         if self._transport._conn_lost:  # Uses private variable.
             raise ConnectionResetError('Connection lost')
@@ -422,3 +450,6 @@ class StreamReader:
             n -= len(block)
 
         return b''.join(blocks)
+
+    def close(self):
+        return self._transport.close()

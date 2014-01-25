@@ -23,29 +23,6 @@ if sys.platform == 'win32':
 else:
     from subprocess import Popen, PIPE
 
-#
-# Return a write-only transport wrapping a writable pipe
-#
-
-@asyncio.coroutine
-def connect_write_pipe(file):
-    loop = asyncio.get_event_loop()
-    protocol = protocols.Protocol()
-    transport, _ =  yield from loop.connect_write_pipe(asyncio.Protocol, file)
-    return transport
-
-#
-# Wrap a readable pipe in a stream
-#
-
-@asyncio.coroutine
-def connect_read_pipe(file):
-    loop = asyncio.get_event_loop()
-    stream_reader = streams.StreamReader(loop=loop)
-    def factory():
-        return streams.StreamReaderProtocol(stream_reader)
-    transport, _ = yield from loop.connect_read_pipe(factory, file)
-    return stream_reader, transport
 
 
 #
@@ -82,9 +59,9 @@ def main(loop):
     p = Popen([sys.executable, '-c', code],
               stdin=PIPE, stdout=PIPE, stderr=PIPE)
 
-    stdin = yield from connect_write_pipe(p.stdin)
-    stdout, stdout_transport = yield from connect_read_pipe(p.stdout)
-    stderr, stderr_transport = yield from connect_read_pipe(p.stderr)
+    stdin = yield from asyncio.connect_write_pipe(p.stdin)
+    stdout = yield from asyncio.connect_read_pipe(p.stdout)
+    stderr = yield from asyncio.connect_read_pipe(p.stderr)
 
     # interact with subprocess
     name = {stdout:'OUT', stderr:'ERR'}
@@ -115,8 +92,8 @@ def main(loop):
                     registered[asyncio.Task(stream.readline())] = stream
             timeout = 0.0
 
-    stdout_transport.close()
-    stderr_transport.close()
+    stdout.close()
+    stderr.close()
 
 if __name__ == '__main__':
     if sys.platform == 'win32':

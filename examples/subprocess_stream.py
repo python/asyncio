@@ -1,9 +1,8 @@
 import asyncio
-from asyncio.base_subprocess import SubprocessStreamProtocol
 
 @asyncio.coroutine
 def cat(loop):
-    transport, protocol = yield from loop.subprocess_shell(SubprocessStreamProtocol, "cat")
+    transport, protocol = yield from asyncio.subprocess_shell("cat")
     print("pid: %s" % transport.get_pid())
     stdin = protocol.stdin
     stdout = protocol.stdout
@@ -20,7 +19,7 @@ def cat(loop):
 
 @asyncio.coroutine
 def ls(loop):
-    transport, protocol = yield from loop.subprocess_shell(SubprocessStreamProtocol, "ls", stdin=None)
+    transport, protocol = yield from asyncio.subprocess_shell("ls", stdin=None)
     while True:
         line = yield from protocol.stdout.readline()
         if not line:

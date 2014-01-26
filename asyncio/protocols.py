@@ -1,6 +1,4 @@
 """Abstract Protocol class."""
-# FIXME: don't create tasks in protocols
-from . import tasks
 
 __all__ = ['BaseProtocol', 'Protocol', 'DatagramProtocol',
            'SubprocessProtocol']
@@ -113,6 +111,9 @@ class DatagramProtocol(BaseProtocol):
 class SubprocessProtocol(BaseProtocol):
     """Interface for protocol for subprocess calls."""
 
+    def pipe_connection_made(self, fd, pipe):
+        pass
+
     def pipe_data_received(self, fd, data):
         """Called when the subprocess writes data into stdout/stderr pipe.
 
@@ -129,19 +130,4 @@ class SubprocessProtocol(BaseProtocol):
 
     def process_exited(self, returncode):
         """Called when subprocess has exited."""
-
-    # FIXME: remove loop
-    @tasks.coroutine
-    def connect_read_pipe(self, loop, transport, fd, pipe):
-        from . import base_subprocess
-        return (yield from loop.connect_read_pipe(
-            lambda: base_subprocess.ReadSubprocessPipeProto(transport, fd),
-            pipe))
-
-    @tasks.coroutine
-    def connect_write_pipe(self, loop, transport, fd, pipe):
-        from . import base_subprocess
-        return (yield from loop.connect_write_pipe(
-            lambda: base_subprocess.WriteSubprocessPipeProto(transport, fd),
-            pipe))
 

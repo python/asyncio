@@ -156,9 +156,13 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
     def _make_subprocess_transport(self, protocol, args, shell,
                                    stdin, stdout, stderr, bufsize,
                                    extra=None, **kwargs):
+        read_pipe_protocol_factory = kwargs.pop('read_pipe_protocol_factory', None)
+        write_pipe_protocol_factory = kwargs.pop('write_pipe_protocol_factory', None)
         with events.get_child_watcher() as watcher:
             transp = _UnixSubprocessTransport(self, protocol, args, shell,
                                               stdin, stdout, stderr, bufsize,
+                                              read_pipe_protocol_factory,
+                                              write_pipe_protocol_factory,
                                               extra=None, **kwargs)
             yield from transp._post_init()
             watcher.add_child_handler(transp.get_pid(),

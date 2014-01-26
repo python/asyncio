@@ -115,11 +115,10 @@ class SubprocessStreamProtocol(protocols.SubprocessProtocol):
         self.stdout = None
         self.stderr = None
         self._waiters = []
-        self._returncode = None
-        self._loop = None
+        self._transport = None
 
     def connection_made(self, transport):
-        self._loop = transport._loop
+        self._transport = transport
         proc = transport._proc
         if proc.stdout is not None:
             self.stdout = self._get_protocol(1)._stream_reader
@@ -137,7 +136,7 @@ class SubprocessStreamProtocol(protocols.SubprocessProtocol):
             return self._pipes[fd]
         except KeyError:
             reader = streams.StreamReader(limit=self.limit)
-            protocol = streams.StreamReaderProtocol(reader, loop=self._loop)
+            protocol = streams.StreamReaderProtocol(reader, loop=self._transport._loop)
             self._pipes[fd] = protocol
             return protocol
 
@@ -154,16 +153,17 @@ class SubprocessStreamProtocol(protocols.SubprocessProtocol):
         """
         Wait until the process exit and return the process return code.
         """
-        if self._returncode:
-            return self._returncode
+        returncode = self._transport.get_returncode()
+        if returncode is not None:
+            return returncode
 
         fut = tasks.Future()
         self._waiters.append(fut)
         yield from fut
         return fut.result()
 
-    def process_exited(self, returncode):
-        self._returncode = returncode
+    def process_exited(self):
+        returncode = self._transport.get_returncode()
         # FIXME: not thread safe
         waiters = self._waiters.copy()
         self._waiters.clear()

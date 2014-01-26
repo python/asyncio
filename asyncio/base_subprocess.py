@@ -128,7 +128,7 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
         assert self._returncode is None, self._returncode
         self._returncode = returncode
         self._loop._subprocess_closed(self)
-        self._call(self._protocol.process_exited, returncode)
+        self._call(self._protocol.process_exited)
         self._try_finish()
 
     def _try_finish(self):
@@ -177,5 +177,3 @@ class ReadSubprocessPipeProto(WriteSubprocessPipeProto,
 
     def data_received(self, data):
         self.proc._pipe_data_received(self.fd, data)
-
-

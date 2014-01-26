@@ -128,6 +128,6 @@ class SubprocessProtocol(BaseProtocol):
         fd is the int file descriptor that was closed.
         """
 
-    def process_exited(self, returncode):
+    def process_exited(self):
         """Called when subprocess has exited."""
 

@@ -15,7 +15,6 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
 
     def __init__(self, loop, protocol, args, shell,
                  stdin, stdout, stderr, bufsize,
-                 read_pipe_protocol_factory, write_pipe_protocol_factory,
                  extra=None, **kwargs):
         super().__init__(extra)
         self._protocol = protocol
@@ -31,14 +30,14 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
         self._pending_calls = collections.deque()
         self._finished = False
         self._returncode = None
-        if read_pipe_protocol_factory is not None:
-            self._read_pipe_proto_factory = read_pipe_protocol_factory
+        if protocol.read_pipe_protocol is not None:
+            self._read_pipe_protocol = protocol.read_pipe_protocol
         else:
-            self._read_pipe_proto_factory = ReadSubprocessPipeProto
-        if write_pipe_protocol_factory is not None:
-            self._write_pipe_proto_factory = write_pipe_protocol_factory
+            self._read_pipe_protocol = ReadSubprocessPipeProto
+        if protocol.write_pipe_protocol is not None:
+            self._write_pipe_protocol = protocol.write_pipe_protocol
         else:
-            self._write_pipe_proto_factory = WriteSubprocessPipeProto
+            self._write_pipe_protocol = WriteSubprocessPipeProto
         self._start(args=args, shell=shell, stdin=stdin, stdout=stdout,
                     stderr=stderr, bufsize=bufsize, **kwargs)
         self._extra['subprocess'] = self._proc
@@ -85,15 +84,15 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
         loop = self._loop
         if proc.stdin is not None:
             yield from loop.connect_write_pipe(
-                lambda: self._write_pipe_proto_factory(self, STDIN),
+                lambda: self._write_pipe_protocol(self, STDIN),
                 proc.stdin)
         if proc.stdout is not None:
             yield from loop.connect_read_pipe(
-                lambda: self._read_pipe_proto_factory(self, STDOUT),
+                lambda: self._read_pipe_protocol(self, STDOUT),
                 proc.stdout)
         if proc.stderr is not None:
             yield from loop.connect_read_pipe(
-                lambda: self._read_pipe_proto_factory(self, STDERR),
+                lambda: self._read_pipe_protocol(self, STDERR),
                 proc.stderr)
         if not self._pipes:
             self._try_connected()

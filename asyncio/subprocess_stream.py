@@ -1,4 +1,4 @@
-__all__ = ['subprocess_shell', 'subprocess_exec']
+__all__ = ['SubprocessStreamProtocol']
 
 from . import base_subprocess
 from . import events
@@ -108,6 +108,8 @@ class WritePipeStream:
 
 
 class SubprocessStreamProtocol(protocols.SubprocessProtocol):
+    write_pipe_protocol = WriteSubprocessPipeStreamProto
+
     def __init__(self, limit=streams._DEFAULT_LIMIT):
         self._pipes = {}
         self.limit = limit
@@ -173,21 +175,3 @@ class SubprocessStreamProtocol(protocols.SubprocessProtocol):
     def pipe_connection_made(self, fd, pipe):
         if fd == 0:
             self.stdin = pipe.writer
-
-@tasks.coroutine
-def subprocess_exec(*args, **kwargs):
-    loop = kwargs.pop('loop', None)
-    if loop is None:
-        loop = events.get_event_loop()
-    kwargs['write_pipe_proto_factory'] = WriteSubprocessPipeStreamProto
-    yield from loop.subprocess_exec(SubprocessStreamProtocol, *args, **kwargs)
-
-
-@tasks.coroutine
-def subprocess_shell(*args, **kwargs):
-    loop = kwargs.pop('loop', None)
-    if loop is None:
-        loop = events.get_event_loop()
-    kwargs['write_pipe_protocol_factory'] = WriteSubprocessPipeStreamProto
-    return (yield from loop.subprocess_shell(SubprocessStreamProtocol, *args, **kwargs))
-

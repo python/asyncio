@@ -111,6 +111,9 @@ class DatagramProtocol(BaseProtocol):
 class SubprocessProtocol(BaseProtocol):
     """Interface for protocol for subprocess calls."""
 
+    read_pipe_protocol = None
+    write_pipe_protocol = None
+
     def pipe_connection_made(self, fd, pipe):
         pass
 

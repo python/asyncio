@@ -2,7 +2,6 @@ __all__ = ['SubprocessStreamProtocol']
 
 from . import base_subprocess
 from . import events
-from . import protocols
 from . import streams
 from . import tasks
 
@@ -130,7 +129,7 @@ class ReadSubprocessPipeStreamProto(base_subprocess.ReadSubprocessPipeProto):
         self._stream_reader.feed_eof()
 
 
-class SubprocessStreamProtocol(protocols.SubprocessProtocol):
+class SubprocessStreamProtocol(base_subprocess.SubprocessProtocol):
     def __init__(self, limit=streams._DEFAULT_LIMIT):
         self._pipes = {}
         self.limit = limit

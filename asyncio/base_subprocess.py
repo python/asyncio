@@ -1,4 +1,4 @@
-__all__ = ['SubprocessTransport']
+__all__ = ['SubprocessProtocol']
 
 import collections
 import subprocess
@@ -13,7 +13,8 @@ STDOUT = 1
 STDERR = 2
 
 
-class SubprocessTransport(transports.BaseTransport):
+class SubprocessProtocol(protocols.BaseProtocol):
+    """Interface for protocol for subprocess calls."""
 
     def create_read_pipe_protocol(self, transport, fd):
         return ReadSubprocessPipeProto(transport, fd)
@@ -21,57 +22,25 @@ class SubprocessTransport(transports.BaseTransport):
     def create_write_pipe_protocol(self, transport, fd):
         return WriteSubprocessPipeProto(transport, fd)
 
-    def get_pid(self):
-        """Get subprocess id."""
-        raise NotImplementedError
+    def pipe_data_received(self, fd, data):
+        """Called when the subprocess writes data into stdout/stderr pipe.
 
-    def get_returncode(self):
-        """Get subprocess returncode.
-
-        See also
-        http://docs.python.org/3/library/subprocess#subprocess.Popen.returncode
+        fd is int file dascriptor.
+        data is bytes object.
         """
-        raise NotImplementedError
 
-    def get_pipe_transport(self, fd):
-        """Get transport for pipe with number fd."""
-        raise NotImplementedError
+    def pipe_connection_lost(self, fd, exc):
+        """Called when a file descriptor associated with the child process is
+        closed.
 
-    def send_signal(self, signal):
-        """Send signal to subprocess.
-
-        See also:
-        docs.python.org/3/library/subprocess#subprocess.Popen.send_signal
+        fd is the int file descriptor that was closed.
         """
-        raise NotImplementedError
 
-    def terminate(self):
-        """Stop the subprocess.
-
-        Alias for close() method.
-
-        On Posix OSs the method sends SIGTERM to the subprocess.
-        On Windows the Win32 API function TerminateProcess()
-         is called to stop the subprocess.
-
-        See also:
-        http://docs.python.org/3/library/subprocess#subprocess.Popen.terminate
-        """
-        raise NotImplementedError
-
-    def kill(self):
-        """Kill the subprocess.
-
-        On Posix OSs the function sends SIGKILL to the subprocess.
-        On Windows kill() is an alias for terminate().
-
-        See also:
-        http://docs.python.org/3/library/subprocess#subprocess.Popen.kill
-        """
-        raise NotImplementedError
+    def process_exited(self):
+        """Called when subprocess has exited."""
 
 
-class BaseSubprocessTransport(SubprocessTransport):
+class BaseSubprocessTransport(transports.SubprocessTransport):
 
     def __init__(self, loop, protocol, args, shell,
                  stdin, stdout, stderr, bufsize,

@@ -141,12 +141,18 @@ class SubprocessStreamProtocol(protocols.SubprocessProtocol):
         self._transport = None
 
     def create_read_pipe_protocol(self, transport, fd):
-        protocol = ReadSubprocessPipeStreamProto(transport, fd, self.limit)
-        self.pipe_connection_made(fd, protocol)
-        return protocol
+        pipe = ReadSubprocessPipeStreamProto(transport, fd, self.limit)
+        if fd == 1:
+            self.stdout = pipe._stream_reader
+        elif fd == 2:
+            self.stderr = pipe._stream_reader
+        return pipe
 
     def create_write_pipe_protocol(self, transport, fd):
-        return WriteSubprocessPipeStreamProto(transport, fd)
+        pipe = WriteSubprocessPipeStreamProto(transport, fd)
+        if fd == 0:
+            self.stdin = pipe.writer
+        return pipe
 
     def connection_made(self, transport):
         self._transport = transport
@@ -180,12 +186,3 @@ class SubprocessStreamProtocol(protocols.SubprocessProtocol):
         self._waiters.clear()
         for waiter in waiters:
             waiter.set_result(returncode)
-
-    def pipe_connection_made(self, fd, pipe):
-        self._pipes[fd] = pipe
-        if fd == 0:
-            self.stdin = pipe.writer
-        elif fd == 1:
-            self.stdout = pipe._stream_reader
-        elif fd == 2:
-            self.stderr = pipe._stream_reader

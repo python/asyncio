@@ -37,7 +37,7 @@ class _ContextManager:
             self._lock.release()
         finally:
             self._lock = None  # Crudely prevent reuse.
-        
+
 
 class Lock:
     """Primitive lock objects.

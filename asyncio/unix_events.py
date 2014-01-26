@@ -284,6 +284,16 @@ class _UnixWritePipeTransport(transports.WriteTransport):
         # Pipe was closed by peer.
         self._close()
 
+    # FIXME: inline this method?
+    def _pause_protocol(self):
+        # FIXME: try/except as _SelectorTransport._maybe_pause_protocol?
+        self._protocol.pause_writing()
+
+    # FIXME: inline this method?
+    def _resume_protocol(self):
+        # FIXME: try/except as _SelectorTransport._maybe_resume_protocol?
+        self._protocol.resume_writing()
+
     def write(self, data):
         assert isinstance(data, bytes), repr(data)
         if not data:
@@ -313,6 +323,7 @@ class _UnixWritePipeTransport(transports.WriteTransport):
             self._loop.add_writer(self._fileno, self._write_ready)
 
         self._buffer.append(data)
+        self._pause_protocol()
 
     def _write_ready(self):
         data = b''.join(self._buffer)
@@ -332,6 +343,8 @@ class _UnixWritePipeTransport(transports.WriteTransport):
         else:
             if n == len(data):
                 self._loop.remove_writer(self._fileno)
+                # FIXME: move resume after the closing block?
+                self._resume_protocol()
                 if self._closing:
                     self._loop.remove_reader(self._fileno)
                     self._call_connection_lost(None)

@@ -259,13 +259,12 @@ class WritePipeStream:
 
 class SubprocessStreamProtocol(protocols.SubprocessProtocol):
     def __init__(self, limit=streams._DEFAULT_LIMIT):
-        self._pipes = {}   # file descriptor (int) => StreamReaderProtocol
+        self._pipes = {}
         self.limit = limit
-        self.stdin = None   # TODO: _UnixWritePipeTransport, but should be StreamWriter
-        self.stdout = None  # StreamReader
-        self.stderr = None  # StreamReader
-        self._waiters = []  # list of Future waiting for the exit of the process,
-                            # the result is the returncode of the process
+        self.stdin = None
+        self.stdout = None
+        self.stderr = None
+        self._waiters = []
         self._returncode = None
         self._loop = None
 

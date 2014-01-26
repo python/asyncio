@@ -114,9 +114,6 @@ class SubprocessProtocol(BaseProtocol):
     read_pipe_protocol = None
     write_pipe_protocol = None
 
-    def pipe_connection_made(self, fd, pipe):
-        pass
-
     def pipe_data_received(self, fd, data):
         """Called when the subprocess writes data into stdout/stderr pipe.
 

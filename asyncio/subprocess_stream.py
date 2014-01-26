@@ -131,8 +131,6 @@ class ReadSubprocessPipeStreamProto(base_subprocess.ReadSubprocessPipeProto):
 
 
 class SubprocessStreamProtocol(protocols.SubprocessProtocol):
-    write_pipe_protocol = WriteSubprocessPipeStreamProto
-
     def __init__(self, limit=streams._DEFAULT_LIMIT):
         self._pipes = {}
         self.limit = limit
@@ -142,10 +140,13 @@ class SubprocessStreamProtocol(protocols.SubprocessProtocol):
         self._waiters = []
         self._transport = None
 
-    def read_pipe_protocol(self, transport, fd):
+    def create_read_pipe_protocol(self, transport, fd):
         protocol = ReadSubprocessPipeStreamProto(transport, fd, self.limit)
         self.pipe_connection_made(fd, protocol)
         return protocol
+
+    def create_write_pipe_protocol(self, transport, fd):
+        return WriteSubprocessPipeStreamProto(transport, fd)
 
     def connection_made(self, transport):
         self._transport = transport

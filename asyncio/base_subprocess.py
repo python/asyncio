@@ -112,7 +112,6 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
             self._pending_calls = None
 
     def _pipe_connection_made(self, fd, pipe):
-        self._try_connected()
         self._protocol.pipe_connection_made(fd, pipe)
 
     def _pipe_connection_lost(self, fd, exc):
@@ -161,6 +160,7 @@ class WriteSubprocessPipeProto(protocols.BaseProtocol):
     def connection_made(self, transport):
         self.connected = True
         self.pipe = transport
+        self.proc._try_connected()
         self.proc._pipe_connection_made(self.fd, self)
 
     def connection_lost(self, exc):

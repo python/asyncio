@@ -19,6 +19,7 @@ class WriteSubprocessPipeStreamProto(base_subprocess.WriteSubprocessPipeProto):
         self.writer._loop = transport._loop
 
     def connection_lost(self, exc):
+        # FIXME: call super().connection_lost(exc)
         # Also wake up the writing side.
         if self._paused:
             waiter = self._drain_waiter
@@ -106,6 +107,28 @@ class WritePipeStream:
         self._protocol._drain_waiter = waiter
         return waiter
 
+class ReadSubprocessPipeStreamProto(base_subprocess.ReadSubprocessPipeProto):
+    def __init__(self, proc, fd, limit=streams._DEFAULT_LIMIT):
+        super().__init__(proc, fd)
+        self._stream_reader = streams.StreamReader(limit=limit)
+
+    def connection_made(self, transport):
+        super().connection_made(transport)
+        self._stream_reader.set_transport(transport)
+
+    def connection_lost(self, exc):
+        # FIXME: call super().connection_lost(exc)
+        if exc is None:
+            self._stream_reader.feed_eof()
+        else:
+            self._stream_reader.set_exception(exc)
+
+    def data_received(self, data):
+        self._stream_reader.feed_data(data)
+
+    def eof_received(self):
+        self._stream_reader.feed_eof()
+
 
 class SubprocessStreamProtocol(protocols.SubprocessProtocol):
     write_pipe_protocol = WriteSubprocessPipeStreamProto
@@ -119,36 +142,21 @@ class SubprocessStreamProtocol(protocols.SubprocessProtocol):
         self._waiters = []
         self._transport = None
 
+    def read_pipe_protocol(self, transport, fd):
+        protocol = ReadSubprocessPipeStreamProto(transport, fd, self.limit)
+        self.pipe_connection_made(fd, protocol)
+        return protocol
+
     def connection_made(self, transport):
         self._transport = transport
-        proc = transport._proc
-        if proc.stdout is not None:
-            self.stdout = self._get_protocol(1)._stream_reader
-        if proc.stderr is not None:
-            self.stderr = self._get_protocol(2)._stream_reader
-
-    def get_pipe_reader(self, fd):
-        if fd in self._pipes:
-            return self._pipes[fd]._stream_reader
-        else:
-            return None
-
-    def _get_protocol(self, fd):
-        try:
-            return self._pipes[fd]
-        except KeyError:
-            reader = streams.StreamReader(limit=self.limit)
-            protocol = streams.StreamReaderProtocol(reader, loop=self._transport._loop)
-            self._pipes[fd] = protocol
-            return protocol
 
     def pipe_data_received(self, fd, data):
-        protocol = self._get_protocol(fd)
-        protocol.data_received(data)
+        pipe = self._pipes[fd]
+        pipe.data_received(data)
 
     def pipe_connection_lost(self, fd, exc):
-        protocol = self._get_protocol(fd)
-        protocol.connection_lost(exc)
+        pipe = self._pipes[fd]
+        pipe.connection_lost(exc)
 
     @tasks.coroutine
     def wait(self):
@@ -173,5 +181,10 @@ class SubprocessStreamProtocol(protocols.SubprocessProtocol):
             waiter.set_result(returncode)
 
     def pipe_connection_made(self, fd, pipe):
+        self._pipes[fd] = pipe
         if fd == 0:
             self.stdin = pipe.writer
+        elif fd == 1:
+            self.stdout = pipe._stream_reader
+        elif fd == 2:
+            self.stderr = pipe._stream_reader

@@ -162,11 +162,10 @@ class ReadSubprocessPipeProto(WriteSubprocessPipeProto,
 
 
 class WriteSubprocessPipeStreamProto(WriteSubprocessPipeProto):
-    def __init__(self, process_transport, fd, loop=None):
+    def __init__(self, process_transport, fd):
         WriteSubprocessPipeProto.__init__(self, process_transport, fd)
         self._drain_waiter = None
         self._paused = False
-        self._loop = loop  # May be None; we may never need it.
 
     def connection_lost(self, exc):
         # Also wake up the writing side.
@@ -271,16 +270,6 @@ class SubprocessStreamProtocol(protocols.SubprocessProtocol):
     def connection_made(self, transport):
         self._loop = transport._loop
         proc = transport._proc
-        #if proc.stdin is not None:
-        #    # FIXME: implement StreamWriter for stdin
-        #    # stdin_transport = transport.get_pipe_transport(0) # _UnixWritePipeTransport
-        #    # stdin_protocol = stdin_transport._protocol # WriteSubprocessPipeProto
-        #    # class FakeReader:
-        #    #     pass
-        #    # stdin_reader = FakeReader() # ???
-        #    # stdin_reader._exception = None
-        #    # self.stdin = asyncio.StreamWriter(stdin_transport, stdin_protocol, stdin_reader, loop=self._loop)
-        #    self.stdin = transport.get_pipe_transport(0)
         if proc.stdout is not None:
             self.stdout = self._get_protocol(1)._stream_reader
         if proc.stderr is not None:
@@ -339,7 +328,7 @@ class SubprocessStreamProtocol(protocols.SubprocessProtocol):
 
     @tasks.coroutine
     def connect_write_pipe(self, loop, process_transport, fd, pipe):
-        transport, protocol =  yield from loop.connect_write_pipe(lambda: WriteSubprocessPipeStreamProto(process_transport, fd, loop), pipe)
+        transport, protocol =  yield from loop.connect_write_pipe(lambda: WriteSubprocessPipeStreamProto(process_transport, fd), pipe)
         writer = WritePipeStream(transport, protocol, loop)
         if fd == 0:
             self.stdin = writer

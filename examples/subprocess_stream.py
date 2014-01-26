@@ -2,26 +2,27 @@ import asyncio
 
 @asyncio.coroutine
 def cat(loop):
-    transport, protocol = yield from loop.subprocess_shell(asyncio.SubprocessStreamProtocol, "cat")
+    transport, proc = yield from loop.subprocess_shell(asyncio.SubprocessStreamProtocol, "cat")
     print("pid: %s" % transport.get_pid())
-    stdin = protocol.stdin
-    stdout = protocol.stdout
 
     message = "Hello World!"
     print("cat write: %r" % message)
-    stdin.write(message.encode('ascii'))
-    yield from stdin.drain()
+    proc.stdin.write(message.encode('ascii'))
+    yield from proc.stdin.drain()
 
-    stdin.close()
-    read = yield from stdout.read()
+    proc.stdin.close()
+    read = yield from proc.stdout.read()
     print("cat read: %r" % read.decode('ascii'))
+
+    returncode = yield from proc.wait()
+    print("exit code: %s" % returncode)
     transport.close()
 
 @asyncio.coroutine
 def ls(loop):
-    transport, protocol = yield from loop.subprocess_exec(asyncio.SubprocessStreamProtocol, "ls", stdin=None)
+    transport, proc = yield from loop.subprocess_exec(asyncio.SubprocessStreamProtocol, "ls", stdin=None)
     while True:
-        line = yield from protocol.stdout.readline()
+        line = yield from proc.stdout.readline()
         if not line:
             break
         print("ls>>", line.decode('ascii').rstrip())

@@ -108,9 +108,10 @@ class SubprocessStreamProtocol(base_subprocess.SubprocessProtocol):
         """
         Wait until the process exit and return the process return code.
         """
-        returncode = self._transport.get_returncode()
-        if returncode is not None:
-            return returncode
+        if self._transport is not None:
+            returncode = self._transport.get_returncode()
+            if returncode is not None:
+                return returncode
 
         fut = tasks.Future()
         self._waiters.append(fut)

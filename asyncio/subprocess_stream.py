@@ -1,5 +1,7 @@
 __all__ = ['SubprocessStreamProtocol']
 
+import functools
+
 from . import base_subprocess
 from . import events
 from . import protocols
@@ -7,15 +9,16 @@ from . import streams
 from . import tasks
 
 class WriteSubprocessPipeStreamProto(base_subprocess.WriteSubprocessPipeProto):
-    def __init__(self, process_transport, fd):
-        base_subprocess.WriteSubprocessPipeProto.__init__(self, process_transport, fd)
+    def __init__(self, process_transport, fd, waiter):
+        base_subprocess.WriteSubprocessPipeProto.__init__(self, process_transport, fd, waiter)
         self._drain_waiter = None
         self._paused = False
-        self.writer = None
+        self.writer = streams.StreamWriter(None, self, None, None)
 
     def connection_made(self, transport):
         super().connection_made(transport)
-        self.writer = streams.StreamWriter(transport, self, None, transport._loop)
+        self.writer._transport = transport
+        self.writer._loop = transport._loop
 
     def connection_lost(self, exc):
         super().connection_lost(exc)
@@ -46,8 +49,8 @@ class WriteSubprocessPipeStreamProto(base_subprocess.WriteSubprocessPipeProto):
 
 class ReadSubprocessPipeStreamProto(base_subprocess.WriteSubprocessPipeProto,
                                     protocols.Protocol):
-    def __init__(self, proc, fd, limit=streams._DEFAULT_LIMIT):
-        super().__init__(proc, fd)
+    def __init__(self, proc, fd, waiter=None, limit=streams._DEFAULT_LIMIT):
+        super().__init__(proc, fd, waiter)
         self._stream_reader = streams.StreamReader(limit=limit)
 
     def connection_made(self, transport):
@@ -78,24 +81,27 @@ class SubprocessStreamProtocol(base_subprocess.SubprocessProtocol):
         self._waiters = []
         self._transport = None
 
-    def create_read_pipe_protocol(self, transport, fd):
-        pipe = ReadSubprocessPipeStreamProto(transport, fd, self.limit)
-        self._pipes[fd] = pipe
+    def _pipe_connection_made(self, pipe, fut):
+        fd = pipe.fd
+        if fd == 0:
+            self.stdin = pipe.writer
+        if fd == 1:
+            self.stdout = pipe._stream_reader
+        if fd == 2:
+            self.stderr = pipe._stream_reader
+
+    def create_read_pipe_protocol(self, transport, fd, waiter):
+        pipe = ReadSubprocessPipeStreamProto(transport, fd, waiter, self.limit)
+        waiter.add_done_callback(functools.partial(self._pipe_connection_made, pipe))
         return pipe
 
-    def create_write_pipe_protocol(self, transport, fd):
-        pipe = WriteSubprocessPipeStreamProto(transport, fd)
-        self._pipes[fd] = pipe
+    def create_write_pipe_protocol(self, transport, fd, waiter=None):
+        pipe = WriteSubprocessPipeStreamProto(transport, fd, waiter)
+        waiter.add_done_callback(functools.partial(self._pipe_connection_made, pipe))
         return pipe
 
     def connection_made(self, transport):
         self._transport = transport
-        if 0 in self._pipes:
-            self.stdin = self._pipes[0].writer
-        if 1 in self._pipes:
-            self.stdout = self._pipes[1]._stream_reader
-        if 2 in self._pipes:
-            self.stderr = self._pipes[1]._stream_reader
 
     @tasks.coroutine
     def wait(self):

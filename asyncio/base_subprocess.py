@@ -3,6 +3,7 @@ __all__ = ['SubprocessProtocol']
 import collections
 import subprocess
 
+from . import futures
 from . import protocols
 from . import tasks
 from . import transports
@@ -16,11 +17,11 @@ STDERR = 2
 class SubprocessProtocol(protocols.BaseProtocol):
     """Interface for protocol for subprocess calls."""
 
-    def create_read_pipe_protocol(self, transport, fd):
-        return ReadSubprocessPipeProto(transport, fd)
+    def create_read_pipe_protocol(self, transport, fd, waiter=None):
+        return ReadSubprocessPipeProto(transport, fd, waiter)
 
-    def create_write_pipe_protocol(self, transport, fd):
-        return WriteSubprocessPipeProto(transport, fd)
+    def create_write_pipe_protocol(self, transport, fd, waiter=None):
+        return WriteSubprocessPipeProto(transport, fd, waiter)
 
     def pipe_data_received(self, fd, data):
         """Called when the subprocess writes data into stdout/stderr pipe.
@@ -104,33 +105,38 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
         proc = self._proc
         loop = self._loop
         if proc.stdin is not None:
-            yield from loop.connect_write_pipe(
-                lambda: self._protocol.create_write_pipe_protocol(self, STDIN),
+            f = futures.Future()
+            _, pipe = yield from loop.connect_write_pipe(
+                lambda: self._protocol.create_write_pipe_protocol(self, STDIN, f),
                 proc.stdin)
+            yield from f
+            self._pipes[STDIN] = pipe
         if proc.stdout is not None:
-            yield from loop.connect_read_pipe(
-                lambda: self._protocol.create_read_pipe_protocol(self, STDOUT),
+            f = futures.Future()
+            _, pipe = yield from loop.connect_read_pipe(
+                lambda: self._protocol.create_read_pipe_protocol(self, STDOUT, f),
                 proc.stdout)
+            yield from f
+            self._pipes[STDOUT] = pipe
         if proc.stderr is not None:
-            yield from loop.connect_read_pipe(
-                lambda: self._protocol.create_read_pipe_protocol(self, STDERR),
+            f = futures.Future()
+            _, pipe = yield from loop.connect_read_pipe(
+                lambda: self._protocol.create_read_pipe_protocol(self, STDERR, f),
                 proc.stderr)
-        if not self._pipes:
-            self._try_connected()
+            yield from f
+            self._pipes[STDERR] = pipe
+
+        assert self._pending_calls is not None
+        self._loop.call_soon(self._protocol.connection_made, self)
+        for callback, data in self._pending_calls:
+            self._loop.call_soon(callback, *data)
+        self._pending_calls = None
 
     def _call(self, cb, *data):
         if self._pending_calls is not None:
             self._pending_calls.append((cb, data))
         else:
             self._loop.call_soon(cb, *data)
-
-    def _try_connected(self):
-        assert self._pending_calls is not None
-        if all(p is not None and p.connected for p in self._pipes.values()):
-            self._loop.call_soon(self._protocol.connection_made, self)
-            for callback, data in self._pending_calls:
-                self._loop.call_soon(callback, *data)
-            self._pending_calls = None
 
     def _pipe_connection_lost(self, fd, exc):
         self._call(self._protocol.pipe_connection_lost, fd, exc)
@@ -167,17 +173,16 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
 class WriteSubprocessPipeProto(protocols.BaseProtocol):
     pipe = None
 
-    def __init__(self, proc, fd):
+    def __init__(self, proc, fd, waiter=None):
         self.proc = proc
         self.fd = fd
-        self.connected = False
         self.disconnected = False
-        proc._pipes[fd] = self
+        self._waiter = waiter
 
     def connection_made(self, transport):
-        self.connected = True
         self.pipe = transport
-        self.proc._try_connected()
+        if self._waiter:
+            self._waiter.set_result(None)
 
     def connection_lost(self, exc):
         self.disconnected = True

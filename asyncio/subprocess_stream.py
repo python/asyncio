@@ -10,7 +10,7 @@ class WriteSubprocessPipeStreamProto(base_subprocess.WriteSubprocessPipeProto):
         base_subprocess.WriteSubprocessPipeProto.__init__(self, process_transport, fd)
         self._drain_waiter = None
         self._paused = False
-        self.writer = WritePipeStream(None, self, None)
+        self.writer = streams.StreamWriter(None, self, None, None)
 
     def connection_made(self, transport):
         super().connection_made(transport)
@@ -43,68 +43,6 @@ class WriteSubprocessPipeStreamProto(base_subprocess.WriteSubprocessPipeProto):
             if not waiter.done():
                 waiter.set_result(None)
 
-
-class WritePipeStream:
-    """Wraps a Transport.
-
-    This exposes write(), writelines(), [can_]write_eof(),
-    get_extra_info() and close().  It adds drain() which returns an
-    optional Future on which you can wait for flow control.  It also
-    adds a transport property which references the Transport
-    directly.
-    """
-
-    def __init__(self, transport, protocol, loop):
-        self._transport = transport
-        self._protocol = protocol
-        self._loop = loop
-
-    @property
-    def transport(self):
-        return self._transport
-
-    def write(self, data):
-        self._transport.write(data)
-
-    def writelines(self, data):
-        self._transport.writelines(data)
-
-    def write_eof(self):
-        return self._transport.write_eof()
-
-    def can_write_eof(self):
-        return self._transport.can_write_eof()
-
-    def close(self):
-        return self._transport.close()
-
-    def get_extra_info(self, name, default=None):
-        return self._transport.get_extra_info(name, default)
-
-    def drain(self):
-        """This method has an unusual return value.
-
-        The intended use is to write
-
-          w.write(data)
-          yield from w.drain()
-
-        When there's nothing to wait for, drain() returns (), and the
-        yield-from continues immediately.  When the transport buffer
-        is full (the protocol is paused), drain() creates and returns
-        a Future and the yield-from will block until that Future is
-        completed, which will happen when the buffer is (partially)
-        drained and the protocol is resumed.
-        """
-        if self._transport._conn_lost:  # Uses private variable.
-            raise ConnectionResetError('Connection lost')
-        if not self._protocol._paused:
-            return ()
-        waiter = self._protocol._drain_waiter
-        assert waiter is None or waiter.cancelled()
-        waiter = futures.Future(loop=self._loop)
-        self._protocol._drain_waiter = waiter
-        return waiter
 
 class ReadSubprocessPipeStreamProto(base_subprocess.ReadSubprocessPipeProto):
     def __init__(self, proc, fd, limit=streams._DEFAULT_LIMIT):

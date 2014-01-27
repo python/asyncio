@@ -183,9 +183,6 @@ class WriteSubprocessPipeProto(protocols.BaseProtocol):
         self.disconnected = True
         self.proc._pipe_connection_lost(self.fd, exc)
 
-    def eof_received(self):
-        pass
-
 
 class ReadSubprocessPipeProto(WriteSubprocessPipeProto,
                               protocols.Protocol):

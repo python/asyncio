@@ -211,7 +211,7 @@ class StreamWriter:
         completed, which will happen when the buffer is (partially)
         drained and the protocol is resumed.
         """
-        if self._reader._exception is not None:
+        if self._reader is not None and self._reader._exception is not None:
             raise self._reader._exception
         if self._transport._conn_lost:  # Uses private variable.
             raise ConnectionResetError('Connection lost')

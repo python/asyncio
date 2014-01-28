@@ -135,12 +135,12 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
             self._loop = None
 
 
-class WriteSubprocessPipeProto(protocols.BaseProtocol):
-    pipe = None
+class _SubprocessPipeProtocolMixin:
 
     def __init__(self, proc, fd):
         self.proc = proc
         self.fd = fd
+        self.pipe = None
         self.disconnected = False
 
     def connection_made(self, transport):
@@ -150,6 +150,9 @@ class WriteSubprocessPipeProto(protocols.BaseProtocol):
         self.disconnected = True
         self.proc._pipe_connection_lost(self.fd, exc)
 
+class WriteSubprocessPipeProto(_SubprocessPipeProtocolMixin,
+                               protocols.BaseProtocol):
+
     def pause_writing(self):
         self.proc._protocol.pause_writing()
 
@@ -157,7 +160,7 @@ class WriteSubprocessPipeProto(protocols.BaseProtocol):
         self.proc._protocol.resume_writing()
 
 
-class ReadSubprocessPipeProto(WriteSubprocessPipeProto,
+class ReadSubprocessPipeProto(_SubprocessPipeProtocolMixin,
                               protocols.Protocol):
 
     def data_received(self, data):

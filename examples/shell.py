@@ -2,10 +2,13 @@
 
 import asyncio
 import signal
+import subprocess
 
 @asyncio.coroutine
 def cat(loop):
-    proc = yield from asyncio.run_shell("cat")
+    proc = yield from asyncio.run_shell("cat",
+                                        stdin=subprocess.PIPE,
+                                        stdout=subprocess.PIPE)
     # test get_pid()
     print("pid: %s" % proc.get_pid())
 
@@ -23,7 +26,7 @@ def cat(loop):
 
 @asyncio.coroutine
 def ls(loop):
-    proc = yield from asyncio.run_program("ls", stdin=None)
+    proc = yield from asyncio.run_program("ls", stdout=subprocess.PIPE)
     while True:
         line = yield from proc.stdout.readline()
         if not line:
@@ -38,7 +41,7 @@ def ls(loop):
 
 @asyncio.coroutine
 def call(*args, timeout=None):
-    proc = yield from asyncio.run_program(*args, stdin=None, stdout=None, stderr=None)
+    proc = yield from asyncio.run_program(*args)
     try:
         task = proc.wait()
         if timeout is not None:

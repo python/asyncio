@@ -126,8 +126,7 @@ class BaseEventLoop(events.AbstractEventLoop):
 
     @tasks.coroutine
     def _make_subprocess_transport(self, protocol, args, shell,
-                                   stdin, stdout, stderr, bufsize,
-                                   extra=None, **kwargs):
+                                   bufsize, extra=None, **kwargs):
         """Create subprocess transport."""
         raise NotImplementedError
 
@@ -548,8 +547,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         return transport, protocol
 
     @tasks.coroutine
-    def subprocess_shell(self, protocol_factory, cmd, *, stdin=subprocess.PIPE,
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    def subprocess_shell(self, protocol_factory, cmd, *,
                          universal_newlines=False, shell=True, bufsize=0,
                          **kwargs):
         assert not universal_newlines, "universal_newlines must be False"
@@ -557,19 +555,18 @@ class BaseEventLoop(events.AbstractEventLoop):
         assert isinstance(cmd, str), cmd
         protocol = protocol_factory()
         transport = yield from self._make_subprocess_transport(
-            protocol, cmd, True, stdin, stdout, stderr, bufsize, **kwargs)
+            protocol, cmd, True, bufsize, **kwargs)
         return transport, protocol
 
     @tasks.coroutine
-    def subprocess_exec(self, protocol_factory, *args, stdin=subprocess.PIPE,
-                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    def subprocess_exec(self, protocol_factory, *args,
                         universal_newlines=False, shell=False, bufsize=0,
                         **kwargs):
         assert not universal_newlines, "universal_newlines must be False"
         assert not shell, "shell must be False"
         protocol = protocol_factory()
         transport = yield from self._make_subprocess_transport(
-            protocol, args, False, stdin, stdout, stderr, bufsize, **kwargs)
+            protocol, args, False, bufsize, **kwargs)
         return transport, protocol
 
     def _add_callback(self, handle):

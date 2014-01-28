@@ -14,27 +14,19 @@ STDERR = 2
 class BaseSubprocessTransport(transports.SubprocessTransport):
 
     def __init__(self, loop, protocol, args, shell,
-                 stdin, stdout, stderr, bufsize,
-                 extra=None, **kwargs):
+                 bufsize, extra=None, **kwargs):
         super().__init__(extra)
         self._protocol = protocol
         self._loop = loop
 
         self._pipes = {}
-        if stdin == subprocess.PIPE:
-            self._pipes[STDIN] = None
-        if stdout == subprocess.PIPE:
-            self._pipes[STDOUT] = None
-        if stderr == subprocess.PIPE:
-            self._pipes[STDERR] = None
         self._pending_calls = collections.deque()
         self._finished = False
         self._returncode = None
-        self._start(args=args, shell=shell, stdin=stdin, stdout=stdout,
-                    stderr=stderr, bufsize=bufsize, **kwargs)
+        self._start(args=args, shell=shell, bufsize=bufsize, **kwargs)
         self._extra['subprocess'] = self._proc
 
-    def _start(self, args, shell, stdin, stdout, stderr, bufsize, **kwargs):
+    def _start(self, args, shell, bufsize, **kwargs):
         raise NotImplementedError
 
     def _make_write_subprocess_pipe_proto(self, fd):
@@ -121,8 +113,7 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
         assert not self._finished
         if self._returncode is None:
             return
-        if all(p is not None and p.disconnected
-               for p in self._pipes.values()):
+        if all(p.disconnected for p in self._pipes.values()):
             self._finished = True
             self._loop.call_soon(self._call_connection_lost, None)
 

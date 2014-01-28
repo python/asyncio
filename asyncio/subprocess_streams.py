@@ -74,10 +74,9 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
         """
         Wait until the process exit and return the process return code.
         """
-        if self._transport is not None:
-            returncode = self._transport.get_returncode()
-            if returncode is not None:
-                return returncode
+        returncode = self._transport.get_returncode()
+        if returncode is not None:
+            return returncode
 
         waiter = futures.Future()
         self._waiters.append(waiter)

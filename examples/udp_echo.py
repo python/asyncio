@@ -52,7 +52,8 @@ class MyClientUdpEchoProtocol:
 def start_server(loop, addr):
     t = asyncio.Task(loop.create_datagram_endpoint(
         MyServerUdpEchoProtocol, local_addr=addr))
-    loop.run_until_complete(t)
+    transport, server = loop.run_until_complete(t)
+    return transport
 
 
 def start_client(loop, addr):
@@ -91,11 +92,13 @@ if __name__ == '__main__':
             loop.add_signal_handler(signal.SIGINT, loop.stop)
 
         if '--server' in sys.argv:
-            start_server(loop, (args.host, args.port))
+            server = start_server(loop, (args.host, args.port))
         else:
             start_client(loop, (args.host, args.port))
 
         try:
             loop.run_forever()
         finally:
+            if '--server' in sys.argv:
+                server.close()
             loop.close()

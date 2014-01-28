@@ -6,15 +6,20 @@ import subprocess
 
 @asyncio.coroutine
 def send_input(writer, input):
-    for line in input:
-        print('sending', len(line), 'bytes')
-        writer.write(line)
-        d = writer.drain()
-        if d:
-            print('pause writing')
-            yield from d
-            print('resume writing')
-    writer.close()
+    try:
+        for line in input:
+            print('sending', len(line), 'bytes')
+            writer.write(line)
+            d = writer.drain()
+            if d:
+                print('pause writing')
+                yield from d
+                print('resume writing')
+        writer.close()
+    except BrokenPipeError:
+        print('stdin: broken pipe error')
+    except ConnectionResetError:
+        print('stdin: connection reset error')
 
 @asyncio.coroutine
 def log_errors(reader):

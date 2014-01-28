@@ -64,7 +64,11 @@ def start(cmd, input=None, **kwds):
 
 
 def main():
-    loop = asyncio.get_event_loop()
+    if os.name == 'nt':
+        loop = asyncio.ProactorEventLoop()
+        asyncio.set_event_loop(loop)
+    else:
+        loop = asyncio.get_event_loop()
 ##     print('-'*20)
 ##     loop.run_until_complete(start('cat', [b'one\n', b'two\n', b'three\n']))
 ##     print('-'*20)

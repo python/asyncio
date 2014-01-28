@@ -27,7 +27,6 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
         if stdin is not None:
             self.stdin = streams.StreamWriter(stdin,
                                               protocol=self,
-                                              reader=self.stdout,
                                               loop=transport._loop)
         self.waiter.set_result(None)
 

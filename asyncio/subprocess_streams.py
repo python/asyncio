@@ -83,6 +83,15 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
         yield from waiter
         return waiter.result()
 
+    def get_pid(self):
+        return self._transport.get_pid()
+
+    def get_subprocess(self):
+        return self._transport.get_extra_info('subprocess')
+
+    def close(self):
+        self._transport.close()
+
 
 @tasks.coroutine
 def run_shell(cmd, **kwds):
@@ -93,7 +102,7 @@ def run_shell(cmd, **kwds):
                                             SubprocessStreamProtocol,
                                             cmd, **kwds)
     yield from protocol.waiter
-    return transport, protocol
+    return protocol
 
 @tasks.coroutine
 def run_program(*args, **kwds):
@@ -104,4 +113,4 @@ def run_program(*args, **kwds):
                                             SubprocessStreamProtocol,
                                             *args, **kwds)
     yield from protocol.waiter
-    return transport, protocol
+    return protocol

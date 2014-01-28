@@ -1,11 +1,13 @@
 # Test script for the subproces-stream branch of Tulip
 
 import asyncio
+import signal
 
 @asyncio.coroutine
 def cat(loop):
-    transport, proc = yield from asyncio.run_shell("cat")
-    print("pid: %s" % transport.get_pid())
+    proc = yield from asyncio.run_shell("cat")
+    # test get_pid()
+    print("pid: %s" % proc.get_pid())
 
     message = "Hello World!"
     print("cat write: %r" % message)
@@ -21,17 +23,22 @@ def cat(loop):
 
 @asyncio.coroutine
 def ls(loop):
-    transport, proc = yield from asyncio.run_program("ls", stdin=None)
+    proc = yield from asyncio.run_program("ls", stdin=None)
     while True:
         line = yield from proc.stdout.readline()
         if not line:
             break
         print("ls>>", line.decode('ascii').rstrip())
-    transport.close()
+    # use the Popen object
+    try:
+        proc.get_subprocess().send_signal(signal.SIGINT)
+    except ProcessLookupError:
+        pass
+    proc.close()
 
 @asyncio.coroutine
 def call(*args, timeout=None):
-    transport, proc = yield from asyncio.run_program(*args, stdin=None, stdout=None, stderr=None)
+    proc = yield from asyncio.run_program(*args, stdin=None, stdout=None, stderr=None)
     try:
         task = proc.wait()
         if timeout is not None:
@@ -41,7 +48,7 @@ def call(*args, timeout=None):
         return returncode
     except asyncio.TimeoutError:
         print("timeout! (%.1f sec)" % timeout)
-        transport.close()
+        proc.close()
 
 loop = asyncio.get_event_loop()
 loop.run_until_complete(cat(loop))

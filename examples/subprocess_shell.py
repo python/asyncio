@@ -42,7 +42,7 @@ def read_stdout(stdout):
 def start(cmd, input=None, **kwds):
     if input is None and 'stdin' not in kwds:
         kwds['stdin'] = None
-    transport, proc = yield from asyncio.subprocess_shell(cmd, **kwds)
+    proc = yield from asyncio.run_shell(cmd, **kwds)
 
     tasks = []
     if input is not None:

@@ -71,8 +71,7 @@ def start_client(loop, host, port):
 
 def start_server(loop, host, port):
     f = loop.create_server(EchoServer, host, port)
-    s = loop.run_until_complete(f)
-    print('serving on', s.sockets[0].getsockname())
+    return loop.run_until_complete(f)
 
 
 ARGS = argparse.ArgumentParser(description="TCP Echo example.")
@@ -106,11 +105,13 @@ if __name__ == '__main__':
             loop.add_signal_handler(signal.SIGINT, loop.stop)
 
         if args.server:
-            start_server(loop, args.host, args.port)
+            server = start_server(loop, args.host, args.port)
         else:
             start_client(loop, args.host, args.port)
 
         try:
             loop.run_forever()
         finally:
+            if args.server:
+                server.close()
             loop.close()

@@ -175,10 +175,13 @@ def main():
     if args.tls:
         sslctx = test_utils.dummy_ssl_context()
     cache = CacheClient(args.host, args.port, sslctx=sslctx, loop=loop)
-    loop.run_until_complete(
-        asyncio.gather(
-            *[testing(i, cache, loop) for i in range(args.ntasks)],
-            loop=loop))
+    try:
+        loop.run_until_complete(
+            asyncio.gather(
+                *[testing(i, cache, loop) for i in range(args.ntasks)],
+                loop=loop))
+    finally:
+        loop.close()
 
 
 @asyncio.coroutine

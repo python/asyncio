@@ -47,6 +47,7 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
             self.stdin = None
             if pipe is not None:
                 pipe.close()
+            self._wakeup_drain_waiter(exc)
             return
         if fd == 1:
             reader = self.stdout

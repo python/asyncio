@@ -114,6 +114,21 @@ class FlowControlMixin(protocols.Protocol):
             if not waiter.done():
                 waiter.set_result(None)
 
+    def _wakeup_drain_waiter(self, exc):
+        # Also wake up the writing side.
+        if not self._paused:
+            return
+        waiter = self._drain_waiter
+        if waiter is None:
+            return
+        self._drain_waiter = None
+        if waiter.done():
+            return
+        if exc is None:
+            waiter.set_result(None)
+        else:
+            waiter.set_exception(exc)
+
 
 class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
     """Helper class to adapt between Protocol and StreamReader.
@@ -147,16 +162,7 @@ class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
             self._stream_reader.feed_eof()
         else:
             self._stream_reader.set_exception(exc)
-        # Also wake up the writing side.
-        if self._paused:
-            waiter = self._drain_waiter
-            if waiter is not None:
-                self._drain_waiter = None
-                if not waiter.done():
-                    if exc is None:
-                        waiter.set_result(None)
-                    else:
-                        waiter.set_exception(exc)
+        self._wakeup_drain_waiter(exc)
 
     def data_received(self, data):
         self._stream_reader.feed_data(data)

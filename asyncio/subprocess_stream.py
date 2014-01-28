@@ -86,7 +86,7 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
 
 
 @tasks.coroutine
-def subprocess_shell(cmd, **kwds):
+def run_shell(cmd, **kwds):
     loop = kwds.pop('loop', None)
     if loop is None:
         loop = events.get_event_loop()
@@ -97,7 +97,7 @@ def subprocess_shell(cmd, **kwds):
     return transport, protocol
 
 @tasks.coroutine
-def subprocess_exec(*args, **kwds):
+def run_program(*args, **kwds):
     loop = kwds.pop('loop', None)
     if loop is None:
         loop = events.get_event_loop()

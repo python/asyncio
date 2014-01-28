@@ -72,7 +72,7 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
             waiter.set_result(returncode)
 
     @tasks.coroutine
-    def wait(self, timeout=None):
+    def wait(self):
         """
         Wait until the process exit and return the process return code.
         """
@@ -82,14 +82,7 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
 
         waiter = futures.Future()
         self._waiters.append(waiter)
-        if timeout is not None:
-            try:
-                yield from tasks.wait_for(waiter, timeout)
-            except futures.TimeoutError:
-                self._waiters.remove(waiter)
-                raise
-        else:
-            yield from waiter
+        yield from waiter
         return waiter.result()
 
     def get_pid(self):

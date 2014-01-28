@@ -1,6 +1,7 @@
 """Example writing to *and* reading from a subprocess."""
 
 import asyncio
+import os
 import subprocess
 
 

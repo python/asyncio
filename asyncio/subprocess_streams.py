@@ -92,6 +92,16 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
     def close(self):
         self._transport.close()
 
+    def send_signal(self, signal):
+        self._transport.send_signal(signal)
+
+    def terminate(self):
+        self._transport.terminate()
+
+    def kill(self):
+        self._transport.kill()
+
+
 
 @tasks.coroutine
 def run_shell(cmd, **kwds):

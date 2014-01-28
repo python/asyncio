@@ -1,4 +1,4 @@
-__all__ = ['subprocess_exec', 'subprocess_shell']
+__all__ = ['run_program', 'run_shell']
 
 from . import events
 from . import futures
@@ -27,6 +27,7 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
         if stdin is not None:
             self.stdin = streams.StreamWriter(stdin,
                                               protocol=self,
+                                              reader=None,
                                               loop=transport._loop)
         self.waiter.set_result(None)
 

@@ -154,10 +154,10 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
 
     @tasks.coroutine
     def _make_subprocess_transport(self, protocol, args, shell,
-                                   bufsize, extra=None, **kwargs):
+                                   bufsize, **kwargs):
         with events.get_child_watcher() as watcher:
             transp = _UnixSubprocessTransport(self, protocol, args, shell,
-                                              bufsize, extra=None, **kwargs) # FIXME: extra=extra
+                                              bufsize, **kwargs)
             yield from transp._post_init()
             watcher.add_child_handler(transp.get_pid(),
                                       self._child_watcher_callback, transp)

@@ -170,9 +170,9 @@ class ProactorEventLoop(proactor_events.BaseProactorEventLoop):
 
     @tasks.coroutine
     def _make_subprocess_transport(self, protocol, args, shell,
-                                   bufsize, extra=None, **kwargs):
+                                   bufsize, **kwargs):
         transp = _WindowsSubprocessTransport(self, protocol, args, shell,
-                                             bufsize, extra=None, **kwargs)
+                                             bufsize, **kwargs)
         yield from transp._post_init()
         return transp
 

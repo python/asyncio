@@ -13,9 +13,8 @@ STDERR = 2
 
 class BaseSubprocessTransport(transports.SubprocessTransport):
 
-    def __init__(self, loop, protocol, args, shell,
-                 bufsize, extra=None, **kwargs):
-        super().__init__(extra)
+    def __init__(self, loop, protocol, args, shell, bufsize, **kwargs):
+        super().__init__(None)
         self._protocol = protocol
         self._loop = loop
 

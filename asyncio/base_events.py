@@ -126,7 +126,7 @@ class BaseEventLoop(events.AbstractEventLoop):
 
     @tasks.coroutine
     def _make_subprocess_transport(self, protocol, args, shell,
-                                   bufsize, extra=None, **kwargs):
+                                   bufsize, **kwargs):
         """Create subprocess transport."""
         raise NotImplementedError
 

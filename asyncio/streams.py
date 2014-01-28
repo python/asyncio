@@ -94,8 +94,29 @@ def start_server(client_connected_cb, host=None, port=None, *,
     return (yield from loop.create_server(factory, host, port, **kwds))
 
 
-class StreamReaderProtocol(protocols.Protocol):
-    """Trivial helper class to adapt between Protocol and StreamReader.
+class FlowControlMixin(protocols.Protocol):
+    """XXX"""
+
+    def __init__(self):
+        self._paused = False
+        self._drain_waiter = None
+
+    def pause_writing(self):
+        assert not self._paused
+        self._paused = True
+
+    def resume_writing(self):
+        assert self._paused
+        self._paused = False
+        waiter = self._drain_waiter
+        if waiter is not None:
+            self._drain_waiter = None
+            if not waiter.done():
+                waiter.set_result(None)
+
+
+class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
+    """Helper class to adapt between Protocol and StreamReader.
 
     (This is a helper class instead of making StreamReader itself a
     Protocol subclass, because the StreamReader has other potential
@@ -104,10 +125,9 @@ class StreamReaderProtocol(protocols.Protocol):
     """
 
     def __init__(self, stream_reader, client_connected_cb=None, loop=None):
+        super().__init__()
         self._stream_reader = stream_reader
         self._stream_writer = None
-        self._drain_waiter = None
-        self._paused = False
         self._client_connected_cb = client_connected_cb
         self._loop = loop  # May be None; we may never need it.
 
@@ -143,19 +163,6 @@ class StreamReaderProtocol(protocols.Protocol):
 
     def eof_received(self):
         self._stream_reader.feed_eof()
-
-    def pause_writing(self):
-        assert not self._paused
-        self._paused = True
-
-    def resume_writing(self):
-        assert self._paused
-        self._paused = False
-        waiter = self._drain_waiter
-        if waiter is not None:
-            self._drain_waiter = None
-            if not waiter.done():
-                waiter.set_result(None)
 
 
 class StreamWriter:
@@ -211,11 +218,11 @@ class StreamWriter:
         completed, which will happen when the buffer is (partially)
         drained and the protocol is resumed.
         """
-        if self._reader._exception is not None:
+        if self._reader is not None and self._reader._exception is not None:
             raise self._reader._exception
         if self._transport._conn_lost:  # Uses private variable.
             raise ConnectionResetError('Connection lost')
-        if not self._protocol._paused:
+        if self._protocol is None or not self._protocol._paused:
             return ()
         waiter = self._protocol._drain_waiter
         assert waiter is None or waiter.cancelled()

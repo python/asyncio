@@ -371,7 +371,8 @@ class _UnixWritePipeTransport(selector_events._FlowControlMixin,
 
     def _fatal_error(self, exc):
         # should be called by exception handler only
-        logger.exception('Fatal error for %s', self)
+        if not isinstance(exc, (BrokenPipeError, ConnectionResetError)):
+            logger.exception('Fatal error for %s', self)
         self._close(exc)
 
     def _close(self, exc=None):

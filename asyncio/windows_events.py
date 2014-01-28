@@ -169,10 +169,8 @@ class ProactorEventLoop(proactor_events.BaseProactorEventLoop):
         return [server]
 
     @tasks.coroutine
-    def _make_subprocess_transport(self, protocol, args, shell,
-                                   bufsize, **kwargs):
-        transp = _WindowsSubprocessTransport(self, protocol, args, shell,
-                                             bufsize, **kwargs)
+    def _make_subprocess_transport(self, protocol, args, kwargs):
+        transp = _WindowsSubprocessTransport(self, protocol, args, kwargs)
         yield from transp._post_init()
         return transp
 
@@ -456,9 +454,8 @@ class IocpProactor:
 
 class _WindowsSubprocessTransport(base_subprocess.BaseSubprocessTransport):
 
-    def _start(self, args, shell, bufsize, **kwargs):
-        self._proc = windows_utils.Popen(
-            args, shell=shell, bufsize=bufsize, **kwargs)
+    def _start(self, args, kwargs):
+        self._proc = windows_utils.Popen(args, **kwargs)
 
         def callback(f):
             returncode = self._proc.poll()

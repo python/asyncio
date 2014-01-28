@@ -125,8 +125,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         raise NotImplementedError
 
     @tasks.coroutine
-    def _make_subprocess_transport(self, protocol, args, shell,
-                                   bufsize, **kwargs):
+    def _make_subprocess_transport(self, protocol, args, kwargs):
         """Create subprocess transport."""
         raise NotImplementedError
 
@@ -547,27 +546,32 @@ class BaseEventLoop(events.AbstractEventLoop):
         return transport, protocol
 
     @tasks.coroutine
-    def subprocess_shell(self, protocol_factory, cmd, *,
-                         universal_newlines=False, shell=True, bufsize=0,
-                         **kwargs):
-        assert not universal_newlines, "universal_newlines must be False"
-        assert shell, "shell must be True"
-        assert isinstance(cmd, str), cmd
+    def _subprocess(self, protocol_factory, args, kwargs):
+        if kwargs.get('universal_newlines', False):
+            raise ValueError("universal_newlines must be False")
+        kwargs['universal_newlines'] = False
+        if 'bufsize' not in kwargs:
+            kwargs['bufsize'] = 0
         protocol = protocol_factory()
-        transport = yield from self._make_subprocess_transport(
-            protocol, cmd, True, bufsize, **kwargs)
+        transport = yield from self._make_subprocess_transport(protocol,
+                                                               args,
+                                                               kwargs)
         return transport, protocol
 
     @tasks.coroutine
-    def subprocess_exec(self, protocol_factory, *args,
-                        universal_newlines=False, shell=False, bufsize=0,
-                        **kwargs):
-        assert not universal_newlines, "universal_newlines must be False"
-        assert not shell, "shell must be False"
-        protocol = protocol_factory()
-        transport = yield from self._make_subprocess_transport(
-            protocol, args, False, bufsize, **kwargs)
-        return transport, protocol
+    def subprocess_shell(self, protocol_factory, cmd, **kwargs):
+        assert isinstance(cmd, str), cmd
+        if not kwargs.get('shell', True):
+            raise ValueError("shell must be True")
+        kwargs['shell'] = True
+        return (yield from self._subprocess(protocol_factory, cmd, kwargs))
+
+    @tasks.coroutine
+    def subprocess_exec(self, protocol_factory, *args, **kwargs):
+        if kwargs.get('shell', False):
+            raise ValueError("shell must be False")
+        kwargs['shell'] = False
+        return (yield from self._subprocess(protocol_factory, args, kwargs))
 
     def _add_callback(self, handle):
         """Add a Handle to ready or scheduled."""

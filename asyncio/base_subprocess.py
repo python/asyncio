@@ -13,7 +13,7 @@ STDERR = 2
 
 class BaseSubprocessTransport(transports.SubprocessTransport):
 
-    def __init__(self, loop, protocol, args, shell, bufsize, **kwargs):
+    def __init__(self, loop, protocol, args, kwargs):
         super().__init__(None)
         self._protocol = protocol
         self._loop = loop
@@ -22,10 +22,10 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
         self._pending_calls = collections.deque()
         self._finished = False
         self._returncode = None
-        self._start(args=args, shell=shell, bufsize=bufsize, **kwargs)
+        self._start(args, kwargs)
         self._extra['subprocess'] = self._proc
 
-    def _start(self, args, shell, bufsize, **kwargs):
+    def _start(self, args, kwargs):
         raise NotImplementedError
 
     def _make_write_subprocess_pipe_proto(self, fd):

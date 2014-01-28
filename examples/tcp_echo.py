@@ -110,4 +110,7 @@ if __name__ == '__main__':
         else:
             start_client(loop, args.host, args.port)
 
-        loop.run_forever()
+        try:
+            loop.run_forever()
+        finally:
+            loop.close()

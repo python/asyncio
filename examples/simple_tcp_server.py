@@ -143,8 +143,11 @@ def main():
         yield from asyncio.sleep(0.5)
 
     # creates a client and connects to our server
-    msg = loop.run_until_complete(client())
-    server.stop(loop)
+    try:
+        msg = loop.run_until_complete(client())
+        server.stop(loop)
+    finally:
+        loop.close()
 
 
 if __name__ == '__main__':

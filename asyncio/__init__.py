@@ -24,7 +24,7 @@ from .locks import *
 from .protocols import *
 from .queues import *
 from .streams import *
-from .subprocess_stream import *
+from .subprocess_streams import *
 from .tasks import *
 from .transports import *
 
@@ -40,6 +40,6 @@ __all__ = (events.__all__ +
            protocols.__all__ +
            queues.__all__ +
            streams.__all__ +
-           subprocess_stream.__all__ +
+           subprocess_streams.__all__ +
            tasks.__all__ +
            transports.__all__)

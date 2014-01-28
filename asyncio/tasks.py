@@ -394,7 +394,6 @@ def wait_for(fut, timeout, *, loop=None):
     if loop is None:
         loop = events.get_event_loop()
 
-    fut = async(fut, loop=loop)
     if timeout is None:
         return (yield from fut)
 
@@ -402,6 +401,7 @@ def wait_for(fut, timeout, *, loop=None):
     timeout_handle = loop.call_later(timeout, _release_waiter, waiter, False)
     cb = functools.partial(_release_waiter, waiter, True)
 
+    fut = async(fut, loop=loop)
     fut.add_done_callback(cb)
 
     try:

@@ -222,7 +222,7 @@ class StreamWriter:
             raise self._reader._exception
         if self._transport._conn_lost:  # Uses private variable.
             raise ConnectionResetError('Connection lost')
-        if self._protocol is None or not self._protocol._paused:
+        if not self._protocol._paused:
             return ()
         waiter = self._protocol._drain_waiter
         assert waiter is None or waiter.cancelled()

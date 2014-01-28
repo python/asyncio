@@ -1,5 +1,7 @@
 __all__ = ['run_program', 'run_shell']
 
+import collections
+
 from . import events
 from . import futures
 from . import protocols
@@ -14,7 +16,7 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
         super().__init__()
         self.stdin = self.stdout = self.stderr = None
         self.waiter = futures.Future()
-        self._waiters = []
+        self._waiters = collections.deque()
         self._transport = None
 
     def connection_made(self, transport):
@@ -65,12 +67,12 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
 
     def process_exited(self):
         returncode = self._transport.get_returncode()
-        for waiter in self._waiters:
+        while self._waiters:
+            waiter = self._waiters.popleft()
             waiter.set_result(returncode)
-        self._waiters.clear()
 
     @tasks.coroutine
-    def wait(self):
+    def wait(self, timeout=None):
         """
         Wait until the process exit and return the process return code.
         """
@@ -80,7 +82,14 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
 
         waiter = futures.Future()
         self._waiters.append(waiter)
-        yield from waiter
+        if timeout is not None:
+            try:
+                yield from tasks.wait_for(waiter, timeout)
+            except futures.TimeoutError:
+                self._waiters.remove(waiter)
+                raise
+        else:
+            yield from waiter
         return waiter.result()
 
     def get_pid(self):

@@ -43,12 +43,8 @@ def ls(loop):
 def call(*args, timeout=None):
     proc = yield from asyncio.run_program(*args)
     try:
-        task = proc.wait()
-        if timeout is not None:
-            returncode = yield from asyncio.wait_for(task, timeout=timeout)
-        else:
-            returncode = yield from task
-        return returncode
+        exitcode = yield from proc.wait(timeout=timeout)
+        print("%s: exit code %s" % (' '.join(args), exitcode))
     except asyncio.TimeoutError:
         print("timeout! (%.1f sec)" % timeout)
         proc.close()
@@ -56,4 +52,4 @@ def call(*args, timeout=None):
 loop = asyncio.get_event_loop()
 loop.run_until_complete(cat(loop))
 loop.run_until_complete(ls(loop))
-loop.run_until_complete(call("sync", timeout=1.0))
+loop.run_until_complete(call("bash", "-c", "sleep 3", timeout=1.0))

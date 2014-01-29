@@ -126,7 +126,6 @@ def create_subprocess_exec(*args, stdin=None, stdout=None, stderr=None,
                            loop=None, limit=streams._DEFAULT_LIMIT, **kwds):
     if loop is None:
         loop = events.get_event_loop()
-    kwds['limit'] = limit
     transport, protocol = yield from loop.subprocess_exec(
                                      lambda: SubprocessStreamProtocol(limit),
                                      *args, stdin=stdin, stdout=stdout,

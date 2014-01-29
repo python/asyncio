@@ -102,14 +102,13 @@ class Popen:
         self.stderr = protocol.stderr
         self.pid = transport.get_pid()
         self.returncode = transport.get_returncode()
-        # FIXME: is it possible that returncode is already known?
         if self.returncode is None:
             waiter = futures.Future(loop=loop)
             self._protocol._waiters.append(waiter)
             waiter.add_done_callback(self._set_returncode)
             self._dead = False
         else:
-            self._dead = False
+            self._dead = True
 
     def _set_returncode(self, fut):
         self.returncode = fut.result()

@@ -19,11 +19,12 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
                                protocols.SubprocessProtocol):
     """Like StreamReaderProtocol, but for a subprocess."""
 
-    def __init__(self, limit):
+    def __init__(self, limit, loop):
         super().__init__()
         self._limit = limit
+        self._loop = loop
         self.stdin = self.stdout = self.stderr = None
-        self.waiter = futures.Future()
+        self.waiter = futures.Future(loop=loop)
         self._waiters = collections.deque()
         self._transport = None
 
@@ -38,7 +39,7 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
             self.stdin = streams.StreamWriter(stdin,
                                               protocol=self,
                                               reader=None,
-                                              loop=transport._loop)
+                                              loop=self._loop)
         self.waiter.set_result(None)
 
     def pipe_data_received(self, fd, data):
@@ -71,7 +72,6 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
                 reader.set_exception(exc)
 
     def process_exited(self):
-
         # wake up futures waiting for wait()
         returncode = self._transport.get_returncode()
         while self._waiters:
@@ -91,9 +91,10 @@ def _read_stream(transport, stream):
 
 
 class Popen:
-    def __init__(self, transport, protocol):
+    def __init__(self, transport, protocol, loop):
         self._transport = transport
         self._protocol = protocol
+        self._loop = loop
         self.stdin = protocol.stdin
         self.stdout = protocol.stdout
         self.stderr = protocol.stderr
@@ -101,7 +102,7 @@ class Popen:
         self.returncode = transport.get_returncode()
         # FIXME: is it possible that returncode is already known?
         if self.returncode is None:
-            waiter = futures.Future()
+            waiter = futures.Future(loop=loop)
             self._protocol._waiters.append(waiter)
             waiter.add_done_callback(self._set_returncode)
             self._dead = False
@@ -119,7 +120,7 @@ class Popen:
         if self.returncode is not None:
             return self.returncode
 
-        waiter = futures.Future()
+        waiter = futures.Future(loop=self._loop)
         self._protocol._waiters.append(waiter)
         yield from waiter
         return waiter.result()
@@ -187,11 +188,11 @@ def create_subprocess_shell(cmd, stdin=None, stdout=None, stderr=None,
     if loop is None:
         loop = events.get_event_loop()
     transport, protocol = yield from loop.subprocess_shell(
-                                     lambda: SubprocessStreamProtocol(limit),
-                                     cmd, stdin=stdin, stdout=stdout,
-                                     stderr=stderr, **kwds)
+                                 lambda: SubprocessStreamProtocol(limit, loop),
+                                 cmd, stdin=stdin, stdout=stdout,
+                                 stderr=stderr, **kwds)
     yield from protocol.waiter
-    return Popen(transport, protocol)
+    return Popen(transport, protocol, loop)
 
 @tasks.coroutine
 def create_subprocess_exec(*args, stdin=None, stdout=None, stderr=None,
@@ -199,15 +200,15 @@ def create_subprocess_exec(*args, stdin=None, stdout=None, stderr=None,
     if loop is None:
         loop = events.get_event_loop()
     transport, protocol = yield from loop.subprocess_exec(
-                                     lambda: SubprocessStreamProtocol(limit),
-                                     *args, stdin=stdin, stdout=stdout,
-                                     stderr=stderr, **kwds)
+                                 lambda: SubprocessStreamProtocol(limit, loop),
+                                 *args, stdin=stdin, stdout=stdout,
+                                 stderr=stderr, **kwds)
     yield from protocol.waiter
-    return Popen(transport, protocol)
+    return Popen(transport, protocol, loop)
 
 
 @tasks.coroutine
-def call(*popenargs, timeout=None, **kwargs):
+def call(*popenargs, timeout=None, loop=None, **kwargs):
     """Run command with arguments.  Wait for command to complete or
     timeout, then return the returncode attribute.
 
@@ -215,11 +216,13 @@ def call(*popenargs, timeout=None, **kwargs):
 
     retcode = call(["ls", "-l"])
     """
+    if loop is None:
+        loop = events.get_event_loop()
     # FIXME: raise an error if stdin, stdout or sterr is a pipe?
-    proc = yield from create_subprocess_exec(*popenargs, **kwargs)
+    proc = yield from create_subprocess_exec(*popenargs, loop=loop, **kwargs)
     try:
         try:
-            return (yield from tasks.wait_for(proc.wait(), timeout))
+            return (yield from tasks.wait_for(proc.wait(), timeout, loop=loop))
         except:
             proc.kill()
             # FIXME: should we call wait? yield from proc.wait()

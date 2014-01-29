@@ -31,9 +31,11 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
     def connection_made(self, transport):
         self._transport = transport
         if transport.get_pipe_transport(1):
-            self.stdout = streams.StreamReader(limit=self._limit)
+            self.stdout = streams.StreamReader(limit=self._limit,
+                                               loop=self._loop)
         if transport.get_pipe_transport(2):
-            self.stderr = streams.StreamReader(limit=self._limit)
+            self.stderr = streams.StreamReader(limit=self._limit,
+                                               loop=self._loop)
         stdin = transport.get_pipe_transport(0)
         if stdin is not None:
             self.stdin = streams.StreamWriter(stdin,

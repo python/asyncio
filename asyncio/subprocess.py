@@ -200,29 +200,3 @@ def create_subprocess_exec(*args, stdin=None, stdout=None, stderr=None,
     yield from protocol.waiter
     return Popen(transport, protocol, loop)
 
-
-@tasks.coroutine
-def call(*popenargs, timeout=None, loop=None, **kwargs):
-    """Run command with arguments.  Wait for command to complete or
-    timeout, then return the returncode attribute.
-
-    The arguments are the same as for the Popen constructor.  Example:
-
-    retcode = call(["ls", "-l"])
-    """
-    if loop is None:
-        loop = events.get_event_loop()
-    # FIXME: raise an error if stdin, stdout or sterr is a pipe?
-    proc = yield from create_subprocess_exec(*popenargs, loop=loop, **kwargs)
-    try:
-        try:
-            return (yield from tasks.wait_for(proc.wait(), timeout, loop=loop))
-        except:
-            proc.kill()
-            # FIXME: should we call wait? yield from proc.wait()
-            raise
-    finally:
-        # FIXME: cleanup differently?
-        proc._transport.close()
-
-

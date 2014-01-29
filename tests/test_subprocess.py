@@ -19,16 +19,6 @@ class SubprocessTestCase(unittest.TestCase):
         self.loop.close()
         policy.set_child_watcher(None)
 
-    def test_call(self):
-        args = [sys.executable, '-c', 'pass']
-
-        @asyncio.coroutine
-        def run():
-            return (yield from subprocess.call(*args, loop=self.loop))
-
-        exitcode = self.loop.run_until_complete(run())
-        self.assertEqual(exitcode, 0)
-
     def test_stdin_stdout(self):
         code = '; '.join((
             'import sys',

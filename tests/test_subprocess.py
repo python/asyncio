@@ -1,19 +1,27 @@
 from asyncio import subprocess
 import asyncio
-import os
+import signal
 import sys
 import unittest
-if os.name != 'nt':
+if sys.platform != 'win32':
     from asyncio import unix_events
+
+# Program exiting quickly
+PROGRAM_EXIT_FAST = [sys.executable, '-c', 'pass']
+
+# Program blocking
+PROGRAM_BLOCKED = [sys.executable, '-c', 'import time; time.sleep(3600)']
+
+# Program copying input to output
+PROGRAM_CAT = [
+    sys.executable, '-c',
+    ';'.join(('import sys',
+              'data = sys.stdin.buffer.read()',
+              'sys.stdout.buffer.write(data)'))]
 
 class SubprocessTests:
     def test_stdin_stdout(self):
-        code = '; '.join((
-            'import sys',
-            'data = sys.stdin.buffer.read()',
-            'sys.stdout.buffer.write(data)',
-        ))
-        args = [sys.executable, '-c', code]
+        args = PROGRAM_CAT
 
         @asyncio.coroutine
         def run(data):
@@ -40,12 +48,7 @@ class SubprocessTests:
         self.assertEqual(stdout, b'some data')
 
     def test_communicate(self):
-        code = '; '.join((
-            'import sys',
-            'data = sys.stdin.buffer.read()',
-            'sys.stdout.buffer.write(data)',
-        ))
-        args = [sys.executable, '-c', code]
+        args = PROGRAM_CAT
 
         @asyncio.coroutine
         def run(data):
@@ -63,8 +66,57 @@ class SubprocessTests:
         self.assertEqual(exitcode, 0)
         self.assertEqual(stdout, b'some data')
 
+    def test_shell(self):
+        create = asyncio.create_subprocess_shell('exit 7',
+                                                 loop=self.loop)
+        proc = self.loop.run_until_complete(create)
+        exitcode = self.loop.run_until_complete(proc.wait())
+        self.assertEqual(exitcode, 7)
+
+    def test_start_new_session(self):
+        # start the new process in a new session
+        create = asyncio.create_subprocess_shell('exit 8',
+                                                 start_new_session=True,
+                                                 loop=self.loop)
+        proc = self.loop.run_until_complete(create)
+        exitcode = self.loop.run_until_complete(proc.wait())
+        self.assertEqual(exitcode, 8)
+
+    def test_kill(self):
+        args = PROGRAM_BLOCKED
+        create = asyncio.create_subprocess_exec(*args, loop=self.loop)
+        proc = self.loop.run_until_complete(create)
+        proc.kill()
+        returncode = self.loop.run_until_complete(proc.wait())
+        if sys.platform == 'win32':
+            self.assertIsInstance(returncode, int)
+            # expect 1 but sometimes get 0
+        else:
+            self.assertEqual(-signal.SIGKILL, returncode)
+
+    def test_terminate(self):
+        args = PROGRAM_BLOCKED
+        create = asyncio.create_subprocess_exec(*args, loop=self.loop)
+        proc = self.loop.run_until_complete(create)
+        proc.terminate()
+        returncode = self.loop.run_until_complete(proc.wait())
+        if sys.platform == 'win32':
+            self.assertIsInstance(returncode, int)
+            # expect 1 but sometimes get 0
+        else:
+            self.assertEqual(-signal.SIGTERM, returncode)
+
+    @unittest.skipIf(sys.platform == 'win32', "Don't have SIGHUP")
+    def test_send_signal(self):
+        args = PROGRAM_BLOCKED
+        create = asyncio.create_subprocess_exec(*args, loop=self.loop)
+        proc = self.loop.run_until_complete(create)
+        proc.send_signal(signal.SIGHUP)
+        returncode = self.loop.run_until_complete(proc.wait())
+        self.assertEqual(-signal.SIGHUP, returncode)
+
     def test_get_subprocess(self):
-        args = [sys.executable, '-c', 'pass']
+        args = PROGRAM_EXIT_FAST
 
         @asyncio.coroutine
         def run():
@@ -81,7 +133,7 @@ class SubprocessTests:
         self.assertEqual(popen.pid, proc.pid)
 
 
-if os.name != 'nt':
+if sys.platform != 'win32':
     # Unix
     class SubprocessWatcherTests(SubprocessTests):
         Watcher = None

@@ -175,13 +175,6 @@ class Popen:
         yield from self.wait()
         return (stdout, stderr)
 
-    # FIXME: remove close()?
-    def close(self):
-        self._transport.close()
-
-    # FIXME: add context manager
-
-
 
 @tasks.coroutine
 def create_subprocess_shell(cmd, stdin=None, stdout=None, stderr=None,
@@ -229,6 +222,7 @@ def call(*popenargs, timeout=None, loop=None, **kwargs):
             # FIXME: should we call wait? yield from proc.wait()
             raise
     finally:
-        proc.close()
+        # FIXME: cleanup differently?
+        proc._transport.close()
 
 

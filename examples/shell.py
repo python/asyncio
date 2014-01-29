@@ -34,7 +34,6 @@ def ls(loop):
         proc.send_signal(signal.SIGINT)
     except ProcessLookupError:
         pass
-    proc.close()
 
 @asyncio.coroutine
 def test_call(*args, timeout=None):

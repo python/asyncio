@@ -20,7 +20,6 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
         self.waiter = futures.Future()
         self._waiters = collections.deque()
         self._transport = None
-        self._dead = False
 
     def connection_made(self, transport):
         self._transport = transport
@@ -66,18 +65,12 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
                 reader.set_exception(exc)
 
     def process_exited(self):
-        # operations on the processing will now fail with ProcessLookupError
-        self._dead = True
 
         # wake up futures waiting for wait()
         returncode = self._transport.get_returncode()
         while self._waiters:
             waiter = self._waiters.popleft()
             waiter.set_result(returncode)
-
-    def _check_alive(self):
-        if self._dead:
-            raise ProcessLookupError()
 
 
 @tasks.coroutine
@@ -105,9 +98,14 @@ class Popen:
             waiter = futures.Future()
             self._protocol._waiters.append(waiter)
             waiter.add_done_callback(self._set_returncode)
+            self._dead = False
+        else:
+            self._dead = False
 
     def _set_returncode(self, fut):
         self.returncode = fut.result()
+        # operations on the processing will now fail with ProcessLookupError
+        self._dead = True
 
     @tasks.coroutine
     def wait(self):
@@ -120,20 +118,25 @@ class Popen:
         yield from waiter
         return waiter.result()
 
+    def _check_alive(self):
+        if self._dead:
+            raise ProcessLookupError()
+
     def get_subprocess(self):
+        # FIXME: allow getting the dead subprocess.Popen object?
         self._protocol._check_alive()
         return self._transport.get_extra_info('subprocess')
 
     def send_signal(self, signal):
-        self._protocol._check_alive()
+        self._check_alive()
         self._transport.send_signal(signal)
 
     def terminate(self):
-        self._protocol._check_alive()
+        self._check_alive()
         self._transport.terminate()
 
     def kill(self):
-        self._protocol._check_alive()
+        self._check_alive()
         self._transport.kill()
 
     @tasks.coroutine
@@ -167,6 +170,8 @@ class Popen:
     # FIXME: remove close()?
     def close(self):
         self._transport.close()
+
+    # FIXME: add context manager
 
 
 

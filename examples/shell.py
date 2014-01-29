@@ -4,7 +4,7 @@ import logging; logging.basicConfig()
 import asyncio
 import signal
 import subprocess
-from asyncio.subprocess_streams import call
+from asyncio.subprocess import call
 
 @asyncio.coroutine
 def cat(loop):

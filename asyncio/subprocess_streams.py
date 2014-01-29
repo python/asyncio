@@ -21,7 +21,6 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
         self._waiters = collections.deque()
         self._transport = None
         self._dead = False
-        self._popen = None
 
     def connection_made(self, transport):
         self._transport = transport
@@ -71,10 +70,10 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
         self._dead = True
 
         # wake up futures waiting for wait()
-        self._popen.returncode = self._transport.get_returncode()
+        returncode = self._transport.get_returncode()
         while self._waiters:
             waiter = self._waiters.popleft()
-            waiter.set_result(self.returncode)
+            waiter.set_result(returncode)
 
     def _check_alive(self):
         if self._dead:
@@ -96,13 +95,19 @@ class Popen:
     def __init__(self, transport, protocol):
         self._transport = transport
         self._protocol = protocol
-        # reference cycle :-(
-        self._protocol._popen = self
         self.stdin = protocol.stdin
         self.stdout = protocol.stdout
         self.stderr = protocol.stderr
         self.pid = transport.get_pid()
-        self.returncode = None
+        self.returncode = transport.get_returncode()
+        # FIXME: is it possible that returncode is already known?
+        if self.returncode is None:
+            waiter = futures.Future()
+            self._protocol._waiters.append(waiter)
+            waiter.add_done_callback(self._set_returncode)
+
+    def _set_returncode(self, fut):
+        self.returncode = fut.result()
 
     @tasks.coroutine
     def wait(self):

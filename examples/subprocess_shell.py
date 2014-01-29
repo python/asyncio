@@ -1,4 +1,5 @@
-"""Example writing to *and* reading from a subprocess."""
+"""Example writing to and reading from a subprocess at the same time using
+tasks."""
 
 import asyncio
 import os
@@ -46,7 +47,7 @@ def start(cmd, input=None, **kwds):
         kwds['stdin'] = None
     else:
         kwds['stdin'] = subprocess.PIPE
-    proc = yield from asyncio.run_shell(cmd, **kwds)
+    proc = yield from asyncio.create_subprocess_shell(cmd, **kwds)
 
     tasks = []
     if input is not None:
@@ -61,8 +62,11 @@ def start(cmd, input=None, **kwds):
         tasks.append(read_stdout(proc.stdout))
     else:
         print('No stdout')
-    # feed stdin while consuming stdout to avoid hang when stdin pipe is full
-    yield from asyncio.wait(tasks)
+
+    if tasks:
+        # feed stdin while consuming stdout to avoid hang
+        # when stdin pipe is full
+        yield from asyncio.wait(tasks)
 
     exitcode = yield from proc.wait()
     print("exit code: %s" % exitcode)
@@ -74,21 +78,6 @@ def main():
         asyncio.set_event_loop(loop)
     else:
         loop = asyncio.get_event_loop()
-##     print('-'*20)
-##     loop.run_until_complete(start('cat', [b'one\n', b'two\n', b'three\n']))
-##     print('-'*20)
-##     loop.run_until_complete(start('cat 1>&2', [b'three\n', b'four\n']))
-##     print('-'*20)
-##     loop.run_until_complete(start('echo Foo'))
-##     print('-'*20)
-##     loop.run_until_complete(start('echo Foo; echo Bar 1>&2'))
-##     print('-'*20)
-##     loop.run_until_complete(start('echo Foo; echo Bar 1>&2', stderr=subprocess.STDOUT))
-##     print('-'*20)
-##     loop.run_until_complete(start('echo Foo; echo Bar 1>&2', stderr=None))
-##     print('-'*20)
-##     loop.run_until_complete(start('echo Foo; echo Bar 1>&2', stdout=None))
-    print('-'*20)
     loop.run_until_complete(start('sleep 2; wc', input=[b'foo bar baz\n'*300 for i in range(100)]))
 
 

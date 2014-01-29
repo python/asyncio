@@ -1,4 +1,4 @@
-# Test script for the subproces-stream branch of Tulip
+"""Examples using create_subprocess_exec() and create_subprocess_shell()."""
 
 import asyncio
 import signal
@@ -6,11 +6,10 @@ import subprocess
 
 @asyncio.coroutine
 def cat(loop):
-    proc = yield from asyncio.run_shell("cat",
-                                        stdin=subprocess.PIPE,
-                                        stdout=subprocess.PIPE)
-    # test get_pid()
-    print("pid: %s" % proc.get_pid())
+    proc = yield from asyncio.create_subprocess_shell("cat",
+                                                      stdin=subprocess.PIPE,
+                                                      stdout=subprocess.PIPE)
+    print("pid: %s" % proc.pid)
 
     message = "Hello World!"
     print("cat write: %r" % message)
@@ -26,27 +25,28 @@ def cat(loop):
 
 @asyncio.coroutine
 def ls(loop):
-    proc = yield from asyncio.run_program("ls", stdout=subprocess.PIPE)
+    proc = yield from asyncio.create_subprocess_exec("ls",
+                                                     stdout=subprocess.PIPE)
     while True:
         line = yield from proc.stdout.readline()
         if not line:
             break
         print("ls>>", line.decode('ascii').rstrip())
-    # use the Popen object
     try:
-        proc.get_subprocess().send_signal(signal.SIGINT)
+        proc.send_signal(signal.SIGINT)
     except ProcessLookupError:
         pass
     proc.close()
 
 @asyncio.coroutine
 def call(*args, timeout=None):
-    proc = yield from asyncio.run_program(*args)
+    proc = yield from asyncio.create_subprocess_exec(*args)
     try:
-        exitcode = yield from proc.wait(timeout=timeout)
+        exitcode = yield from asyncio.wait_for(proc.wait(), timeout)
         print("%s: exit code %s" % (' '.join(args), exitcode))
     except asyncio.TimeoutError:
         print("timeout! (%.1f sec)" % timeout)
+    finally:
         proc.close()
 
 loop = asyncio.get_event_loop()

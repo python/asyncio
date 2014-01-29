@@ -13,12 +13,9 @@ def cat(loop):
 
     message = "Hello World!"
     print("cat write: %r" % message)
-    proc.stdin.write(message.encode('ascii'))
-    yield from proc.stdin.drain()
 
-    proc.stdin.close()
-    read = yield from proc.stdout.read()
-    print("cat read: %r" % read.decode('ascii'))
+    stdout, stderr = yield from proc.communicate(message.encode('ascii'))
+    print("cat read: %r" % stdout.decode('ascii'))
 
     exitcode = yield from proc.wait()
     print("(exit code %s)" % exitcode)

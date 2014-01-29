@@ -67,7 +67,10 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
                 reader.set_exception(exc)
 
     def process_exited(self):
+        # operations on the processing will now fail with ProcessLookupError
         self._dead = True
+
+        # wake up futures waiting for wait()
         returncode = self._transport.get_returncode()
         while self._waiters:
             waiter = self._waiters.popleft()
@@ -84,6 +87,44 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
         self._waiters.append(waiter)
         yield from waiter
         return waiter.result()
+
+    @tasks.coroutine
+    def _noop(self):
+        return None
+
+    @tasks.coroutine
+    def _feed_stdin(self, input):
+        self.stdin.write(input)
+        yield from self.stdin.drain()
+        self.stdin.close()
+
+    @tasks.coroutine
+    def _read_stream(self, transport, stream):
+        output = yield from stream.read()
+        transport.close()
+        return output
+
+    @tasks.coroutine
+    def communicate(self, input=None):
+        loop = self._transport._loop
+        if input:
+            stdin = self._feed_stdin(input)
+        else:
+            stdin = self._noop()
+        if self.stdout is not None:
+            stdout = self._read_stream(self._transport.get_pipe_transport(1),
+                                       self.stdout)
+        else:
+            stdout = self._noop()
+        if self.stderr is not None:
+            stderr = self._read_stream(self._transport.get_pipe_transport(2),
+                                       self.stderr)
+        else:
+            stderr = self._noop()
+        stdin, stdout, stderr = yield from tasks.gather(stdin, stdout, stderr,
+                                                        loop=loop)
+        yield from self.wait()
+        return (stdout, stderr)
 
     def close(self):
         self._transport.close()

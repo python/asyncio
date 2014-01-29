@@ -81,17 +81,6 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
             waiter.set_result(returncode)
 
 
-@tasks.coroutine
-def _noop():
-    return None
-
-@tasks.coroutine
-def _read_stream(transport, stream):
-    output = yield from stream.read()
-    transport.close()
-    return output
-
-
 class Popen:
     def __init__(self, transport, protocol, loop):
         self._transport = transport
@@ -152,22 +141,35 @@ class Popen:
         self.stdin.close()
 
     @tasks.coroutine
+    def _noop(self):
+        return None
+
+    @tasks.coroutine
+    def _read_stream(self, fd):
+        transport = self._transport.get_pipe_transport(fd)
+        if fd == 2:
+            stream = self.stderr
+        else:
+            stream = self.stdout
+        output = yield from stream.read()
+        transport.close()
+        return output
+
+    @tasks.coroutine
     def communicate(self, input=None):
         loop = self._transport._loop
         if input:
             stdin = self._feed_stdin(input)
         else:
-            stdin = _noop()
+            stdin = self._noop()
         if self.stdout is not None:
-            stdout = _read_stream(self._transport.get_pipe_transport(1),
-                                  self.stdout)
+            stdout = self._read_stream(1)
         else:
-            stdout = _noop()
+            stdout = self._noop()
         if self.stderr is not None:
-            stderr = _read_stream(self._transport.get_pipe_transport(2),
-                                  self.stderr)
+            stderr = self._read_stream(2)
         else:
-            stderr = _noop()
+            stderr = self._noop()
         stdin, stdout, stderr = yield from tasks.gather(stdin, stdout, stderr,
                                                         loop=loop)
         yield from self.wait()

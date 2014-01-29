@@ -321,7 +321,7 @@ class AbstractEventLoopPolicy:
 
     # Child processes handling (Unix only).
 
-    def get_child_watcher(self):
+    def get_child_watcher(self, loop=None):
         """XXX"""
         raise NotImplementedError
 
@@ -428,9 +428,9 @@ def new_event_loop():
     return get_event_loop_policy().new_event_loop()
 
 
-def get_child_watcher():
+def get_child_watcher(loop=None):
     """XXX"""
-    return get_event_loop_policy().get_child_watcher()
+    return get_event_loop_policy().get_child_watcher(loop=loop)
 
 
 def set_child_watcher(watcher):

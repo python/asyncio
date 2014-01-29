@@ -11,6 +11,8 @@ class SubprocessTestCase(unittest.TestCase):
             self.loop = asyncio.ProactorEventLoop()
         else:
             self.loop = policy.new_event_loop()
+        # ensure that the event loop is passed explicitly in the code
+        policy.set_event_loop(None)
 
     def test_shell(self):
         args = [sys.executable, '-c', 'pass']

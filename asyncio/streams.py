@@ -95,9 +95,19 @@ def start_server(client_connected_cb, host=None, port=None, *,
 
 
 class FlowControlMixin(protocols.Protocol):
-    """XXX"""
+    """Reusable flow control logic for StreamWriter.drain().
 
-    def __init__(self):
+    This implements the protocol methods pause_writing(),
+    resume_reading() and connection_lost().  If the subclass overrides
+    these it must call the super methods.
+
+    StreamWriter.drain() must check for error conditions and then call
+    _make_drain_waiter(), which will return either () or a Future
+    depending on the paused state.
+    """
+
+    def __init__(self, loop=None):
+        self._loop = loop  # May be None; we may never need it.
         self._paused = False
         self._drain_waiter = None
 
@@ -114,8 +124,8 @@ class FlowControlMixin(protocols.Protocol):
             if not waiter.done():
                 waiter.set_result(None)
 
-    def _wakeup_drain_waiter(self, exc):
-        # Also wake up the writing side.
+    def connection_lost(self, exc):
+        # Wake up the writer if currently paused.
         if not self._paused:
             return
         waiter = self._drain_waiter
@@ -129,6 +139,15 @@ class FlowControlMixin(protocols.Protocol):
         else:
             waiter.set_exception(exc)
 
+    def _make_drain_waiter(self):
+        if not self._paused:
+            return ()
+        waiter = self._drain_waiter
+        assert waiter is None or waiter.cancelled()
+        waiter = futures.Future(loop=self._loop)
+        self._drain_waiter = waiter
+        return waiter
+
 
 class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
     """Helper class to adapt between Protocol and StreamReader.
@@ -140,11 +159,10 @@ class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
     """
 
     def __init__(self, stream_reader, client_connected_cb=None, loop=None):
-        super().__init__()
+        super().__init__(loop=loop)
         self._stream_reader = stream_reader
         self._stream_writer = None
         self._client_connected_cb = client_connected_cb
-        self._loop = loop  # May be None; we may never need it.
 
     def connection_made(self, transport):
         self._stream_reader.set_transport(transport)
@@ -162,7 +180,7 @@ class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
             self._stream_reader.feed_eof()
         else:
             self._stream_reader.set_exception(exc)
-        self._wakeup_drain_waiter(exc)
+        super().connection_lost(exc)
 
     def data_received(self, data):
         self._stream_reader.feed_data(data)
@@ -228,13 +246,7 @@ class StreamWriter:
             raise self._reader._exception
         if self._transport._conn_lost:  # Uses private variable.
             raise ConnectionResetError('Connection lost')
-        if not self._protocol._paused:
-            return ()
-        waiter = self._protocol._drain_waiter
-        assert waiter is None or waiter.cancelled()
-        waiter = futures.Future(loop=self._loop)
-        self._protocol._drain_waiter = waiter
-        return waiter
+        return self._protocol._make_drain_waiter()
 
 
 class StreamReader:

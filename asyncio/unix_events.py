@@ -153,9 +153,13 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
         return _UnixWritePipeTransport(self, pipe, protocol, waiter, extra)
 
     @tasks.coroutine
-    def _make_subprocess_transport(self, protocol, args, kwargs):
+    def _make_subprocess_transport(self, protocol, args, shell,
+                                   stdin, stdout, stderr, bufsize,
+                                   extra=None, **kwargs):
         with events.get_child_watcher() as watcher:
-            transp = _UnixSubprocessTransport(self, protocol, args, kwargs)
+            transp = _UnixSubprocessTransport(self, protocol, args, shell,
+                                              stdin, stdout, stderr, bufsize,
+                                              extra=extra, **kwargs)
             yield from transp._post_init()
             watcher.add_child_handler(transp.get_pid(),
                                       self._child_watcher_callback, transp)
@@ -391,20 +395,20 @@ class _UnixWritePipeTransport(selector_events._FlowControlMixin,
 
 class _UnixSubprocessTransport(base_subprocess.BaseSubprocessTransport):
 
-    def _start(self, args, kwargs):
+    def _start(self, args, shell, stdin, stdout, stderr, bufsize, **kwargs):
         stdin_w = None
-        if kwargs.get('stdin') == subprocess.PIPE:
+        if stdin == subprocess.PIPE:
             # Use a socket pair for stdin, since not all platforms
             # support selecting read events on the write end of a
             # socket (which we use in order to detect closing of the
             # other end).  Notably this is needed on AIX, and works
             # just fine on other platforms.
             stdin, stdin_w = self._loop._socketpair()
-            kwargs['stdin'] = stdin
-        self._proc = subprocess.Popen(args, **kwargs)
+        self._proc = subprocess.Popen(
+            args, shell=shell, stdin=stdin, stdout=stdout, stderr=stderr,
+            universal_newlines=False, bufsize=bufsize, **kwargs)
         if stdin_w is not None:
             stdin.close()
-            bufsize = kwargs['bufsize']
             self._proc.stdin = open(stdin_w.detach(), 'rb', buffering=bufsize)
 
 

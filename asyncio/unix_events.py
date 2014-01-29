@@ -156,7 +156,7 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
     def _make_subprocess_transport(self, protocol, args, shell,
                                    stdin, stdout, stderr, bufsize,
                                    extra=None, **kwargs):
-        with events.get_child_watcher(self) as watcher:
+        with events.get_child_watcher() as watcher:
             transp = _UnixSubprocessTransport(self, protocol, args, shell,
                                               stdin, stdout, stderr, bufsize,
                                               extra=extra, **kwargs)
@@ -708,15 +708,13 @@ class _UnixDefaultEventLoopPolicy(events.BaseDefaultEventLoopPolicy):
         super().__init__()
         self._watcher = None
 
-    def _init_watcher(self, loop):
+    def _init_watcher(self):
         with events._lock:
             if self._watcher is None:  # pragma: no branch
                 self._watcher = SafeChildWatcher()
                 if isinstance(threading.current_thread(),
                               threading._MainThread):
-                    if loop is None:
-                        loop = self._local._loop
-                    self._watcher.attach_loop(loop)
+                    self._watcher.attach_loop(self._local._loop)
 
     def set_event_loop(self, loop):
         """Set the event loop.
@@ -732,13 +730,13 @@ class _UnixDefaultEventLoopPolicy(events.BaseDefaultEventLoopPolicy):
             isinstance(threading.current_thread(), threading._MainThread):
             self._watcher.attach_loop(loop)
 
-    def get_child_watcher(self, loop=None):
+    def get_child_watcher(self):
         """Get the child watcher
 
         If not yet set, a SafeChildWatcher object is automatically created.
         """
         if self._watcher is None:
-            self._init_watcher(loop)
+            self._init_watcher()
 
         return self._watcher
 

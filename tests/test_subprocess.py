@@ -61,6 +61,30 @@ class SubprocessTestCase(unittest.TestCase):
         self.assertEqual(exitcode, 0)
         self.assertEqual(stdout, b'some data')
 
+    def test_communicate(self):
+        code = '; '.join((
+            'import sys',
+            'data = sys.stdin.buffer.read()',
+            'sys.stdout.buffer.write(data)',
+        ))
+        args = [sys.executable, '-c', code]
+
+        @asyncio.coroutine
+        def run(data):
+            proc = yield from asyncio.create_subprocess_exec(
+                                          *args,
+                                          stdin=subprocess.PIPE,
+                                          stdout=subprocess.PIPE,
+                                          loop=self.loop)
+            stdout, stderr = yield from proc.communicate(data)
+            return proc.returncode, stdout
+
+        task = run(b'some data')
+        task = asyncio.wait_for(task, 10.0, loop=self.loop)
+        exitcode, stdout = self.loop.run_until_complete(task)
+        self.assertEqual(exitcode, 0)
+        self.assertEqual(stdout, b'some data')
+
 
 if __name__ == '__main__':
     unittest.main()

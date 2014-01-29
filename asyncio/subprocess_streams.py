@@ -21,6 +21,7 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
         self._transport = None
         self._dead = False
         self.pid = None
+        self.returncode = None
 
     def connection_made(self, transport):
         self._transport = transport
@@ -71,17 +72,16 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
         self._dead = True
 
         # wake up futures waiting for wait()
-        returncode = self._transport.get_returncode()
+        self.returncode = self._transport.get_returncode()
         while self._waiters:
             waiter = self._waiters.popleft()
-            waiter.set_result(returncode)
+            waiter.set_result(self.returncode)
 
     @tasks.coroutine
     def wait(self):
         """Wait until the process exit and return the process return code."""
-        returncode = self._transport.get_returncode()
-        if returncode is not None:
-            return returncode
+        if self.returncode is not None:
+            return self.returncode
 
         waiter = futures.Future()
         self._waiters.append(waiter)

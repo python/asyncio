@@ -126,14 +126,12 @@ class Popen:
         yield from waiter
         return waiter.result()
 
+    def get_subprocess(self):
+        return self._transport.get_extra_info('subprocess')
+
     def _check_alive(self):
         if self._dead:
             raise ProcessLookupError()
-
-    def get_subprocess(self):
-        # FIXME: allow getting the dead subprocess.Popen object?
-        self._protocol._check_alive()
-        return self._transport.get_extra_info('subprocess')
 
     def send_signal(self, signal):
         self._check_alive()

@@ -85,6 +85,23 @@ class SubprocessTestCase(unittest.TestCase):
         self.assertEqual(exitcode, 0)
         self.assertEqual(stdout, b'some data')
 
+    def test_get_subprocess(self):
+        args = [sys.executable, '-c', 'pass']
+
+        @asyncio.coroutine
+        def run():
+            proc = yield from asyncio.create_subprocess_exec(*args,
+                                                             loop=self.loop)
+            yield from proc.wait()
+
+            popen = proc.get_subprocess()
+            popen.wait()
+            return (proc, popen)
+
+        proc, popen = self.loop.run_until_complete(run())
+        self.assertEqual(popen.returncode, proc.returncode)
+        self.assertEqual(popen.pid, proc.pid)
+
 
 if __name__ == '__main__':
     unittest.main()

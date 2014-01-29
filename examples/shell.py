@@ -1,4 +1,5 @@
 """Examples using create_subprocess_exec() and create_subprocess_shell()."""
+import logging; logging.basicConfig()
 
 import asyncio
 import signal

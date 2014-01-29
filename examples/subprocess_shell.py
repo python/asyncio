@@ -3,7 +3,7 @@ tasks."""
 
 import asyncio
 import os
-import subprocess
+from asyncio.subprocess import PIPE
 
 
 @asyncio.coroutine
@@ -41,12 +41,12 @@ def read_stdout(stdout):
 
 @asyncio.coroutine
 def start(cmd, input=None, **kwds):
-    kwds['stdout'] = subprocess.PIPE
-    kwds['stderr'] = subprocess.PIPE
+    kwds['stdout'] = PIPE
+    kwds['stderr'] = PIPE
     if input is None and 'stdin' not in kwds:
         kwds['stdin'] = None
     else:
-        kwds['stdin'] = subprocess.PIPE
+        kwds['stdin'] = PIPE
     proc = yield from asyncio.create_subprocess_shell(cmd, **kwds)
 
     tasks = []

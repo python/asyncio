@@ -3,14 +3,13 @@ import logging; logging.basicConfig()
 
 import asyncio
 import signal
-import subprocess
-from asyncio.subprocess import call
+from asyncio.subprocess import call, PIPE
 
 @asyncio.coroutine
 def cat(loop):
     proc = yield from asyncio.create_subprocess_shell("cat",
-                                                      stdin=subprocess.PIPE,
-                                                      stdout=subprocess.PIPE)
+                                                      stdin=PIPE,
+                                                      stdout=PIPE)
     print("pid: %s" % proc.pid)
 
     message = "Hello World!"
@@ -25,7 +24,7 @@ def cat(loop):
 @asyncio.coroutine
 def ls(loop):
     proc = yield from asyncio.create_subprocess_exec("ls",
-                                                     stdout=subprocess.PIPE)
+                                                     stdout=PIPE)
     while True:
         line = yield from proc.stdout.readline()
         if not line:

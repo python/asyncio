@@ -81,7 +81,7 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
             waiter.set_result(returncode)
 
 
-class Popen:
+class Process:
     def __init__(self, transport, protocol, loop):
         self._transport = transport
         self._protocol = protocol
@@ -186,7 +186,7 @@ def create_subprocess_shell(cmd, stdin=None, stdout=None, stderr=None,
                                  cmd, stdin=stdin, stdout=stdout,
                                  stderr=stderr, **kwds)
     yield from protocol.waiter
-    return Popen(transport, protocol, loop)
+    return Process(transport, protocol, loop)
 
 @tasks.coroutine
 def create_subprocess_exec(*args, stdin=None, stdout=None, stderr=None,
@@ -198,5 +198,5 @@ def create_subprocess_exec(*args, stdin=None, stdout=None, stderr=None,
                                  *args, stdin=stdin, stdout=stdout,
                                  stderr=stderr, **kwds)
     yield from protocol.waiter
-    return Popen(transport, protocol, loop)
+    return Process(transport, protocol, loop)
 

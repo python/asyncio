@@ -89,25 +89,17 @@ class Process:
         self.stdout = protocol.stdout
         self.stderr = protocol.stderr
         self.pid = transport.get_pid()
-        self.returncode = transport.get_returncode()
-        if self.returncode is None:
-            waiter = futures.Future(loop=loop)
-            self._protocol._waiters.append(waiter)
-            waiter.add_done_callback(self._set_returncode)
-            self._dead = False
-        else:
-            self._dead = True
 
-    def _set_returncode(self, fut):
-        self.returncode = fut.result()
-        # operations on the processing will now fail with ProcessLookupError
-        self._dead = True
+    @property
+    def returncode(self):
+        return self._transport.get_returncode()
 
     @tasks.coroutine
     def wait(self):
         """Wait until the process exit and return the process return code."""
-        if self.returncode is not None:
-            return self.returncode
+        returncode = self._transport.get_returncode()
+        if returncode is not None:
+            return returncode
 
         waiter = futures.Future(loop=self._loop)
         self._protocol._waiters.append(waiter)
@@ -118,7 +110,7 @@ class Process:
         return self._transport.get_extra_info('subprocess')
 
     def _check_alive(self):
-        if self._dead:
+        if self._transport.get_returncode() is not None:
             raise ProcessLookupError()
 
     def send_signal(self, signal):

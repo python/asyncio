@@ -283,7 +283,7 @@ class _UnixWritePipeTransport(selector_events._FlowControlMixin,
 
     def _read_ready(self):
         # Pipe was closed by peer.
-        self._close()
+        self._close(BrokenPipeError)
 
     def write(self, data):
         assert isinstance(data, (bytes, bytearray, memoryview)), repr(data)

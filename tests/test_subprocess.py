@@ -3,6 +3,7 @@ import asyncio
 import signal
 import sys
 import unittest
+from test import support
 if sys.platform != 'win32':
     from asyncio import unix_events
 
@@ -131,6 +132,18 @@ class SubprocessTests:
         proc, popen = self.loop.run_until_complete(run())
         self.assertEqual(popen.returncode, proc.returncode)
         self.assertEqual(popen.pid, proc.pid)
+
+    def test_broken_pipe(self):
+        large_data = b'x' * support.PIPE_MAX_SIZE
+
+        create = asyncio.create_subprocess_shell(
+                             'sleep 1',
+                             stdin=subprocess.PIPE,
+                             loop=self.loop)
+        proc = self.loop.run_until_complete(create)
+        with self.assertRaises(BrokenPipeError):
+            self.loop.run_until_complete(proc.communicate(large_data))
+        self.loop.run_until_complete(proc.wait())
 
 
 if sys.platform != 'win32':

@@ -190,8 +190,6 @@ class _ProactorReadPipeTransport(_ProactorBasePipeTransport,
                 self._fatal_error(exc)
         except ConnectionResetError as exc:
             self._force_close(exc)
-        except BrokenPipeError as exc:
-            self.close()
         except OSError as exc:
             self._fatal_error(exc)
         except futures.CancelledError:
@@ -302,15 +300,11 @@ class _ProactorWritePipeTransportCheckForHangup(_ProactorWritePipeTransport):
             return
         assert fut is self._read_fut, (fut, self._read_fut)
         self._read_fut = None
-        try:
-            data = fut.result()
-        except BrokenPipeError as exc:
-            if self._write_fut is not None:
-                self._force_close(exc)
-            else:
-                self.close()
+        assert fut.result() == b''
+        if self._write_fut is not None:
+            self._force_close(exc)
         else:
-            logger.warning('write pipe received data: %r', data)
+            self.close()
 
 
 class _ProactorDuplexPipeTransport(_ProactorReadPipeTransport,

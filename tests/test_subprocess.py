@@ -13,6 +13,9 @@ PROGRAM_EXIT_FAST = [sys.executable, '-c', 'pass']
 # Program blocking
 PROGRAM_BLOCKED = [sys.executable, '-c', 'import time; time.sleep(3600)']
 
+# Program sleeping during 1 second
+PROGRAM_SLEEP_1SEC = [sys.executable, '-c', 'import time; time.sleep(1)']
+
 # Program copying input to output
 PROGRAM_CAT = [
     sys.executable, '-c',
@@ -136,8 +139,8 @@ class SubprocessTests:
     def test_broken_pipe(self):
         large_data = b'x' * support.PIPE_MAX_SIZE
 
-        create = asyncio.create_subprocess_shell(
-                             'sleep 1',
+        create = asyncio.create_subprocess_exec(
+                             *PROGRAM_SLEEP_1SEC,
                              stdin=subprocess.PIPE,
                              loop=self.loop)
         proc = self.loop.run_until_complete(create)

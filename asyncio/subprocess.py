@@ -20,9 +20,8 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
     """Like StreamReaderProtocol, but for a subprocess."""
 
     def __init__(self, limit, loop):
-        super().__init__()
+        super().__init__(loop=loop)
         self._limit = limit
-        self._loop = loop
         self.stdin = self.stdout = self.stderr = None
         self.waiter = futures.Future(loop=loop)
         self._waiters = collections.deque()

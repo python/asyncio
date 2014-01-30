@@ -190,6 +190,8 @@ class _ProactorReadPipeTransport(_ProactorBasePipeTransport,
                 self._fatal_error(exc)
         except ConnectionResetError as exc:
             self._force_close(exc)
+        except BrokenPipeError as exc:
+            self.close()
         except OSError as exc:
             self._fatal_error(exc)
         except futures.CancelledError:
@@ -288,6 +290,29 @@ class _ProactorWritePipeTransport(_ProactorBasePipeTransport,
         self._force_close(None)
 
 
+class _ProactorWritePipeTransportCheckForHangup(_ProactorWritePipeTransport):
+    def __init__(self, *args, **kw):
+        super().__init__(*args, **kw)
+        self._read_fut = self._loop._proactor.recv(self._sock, 16)
+        self._read_fut.add_done_callback(self._pipe_closed)
+
+    def _pipe_closed(self, fut):
+        if fut.cancelled():
+            # the transport has been closed
+            return
+        assert fut is self._read_fut, (fut, self._read_fut)
+        self._read_fut = None
+        try:
+            data = fut.result()
+        except BrokenPipeError as exc:
+            if self._write_fut is not None:
+                self._force_close(exc)
+            else:
+                self.close()
+        else:
+            logger.warning('write pipe received data: %r', data)
+
+
 class _ProactorDuplexPipeTransport(_ProactorReadPipeTransport,
                                    _ProactorWritePipeTransport,
                                    transports.Transport):
@@ -358,7 +383,7 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
                                    extra=None, check_for_hangup=True):
         if check_for_hangup:
             # We want connection_lost() to be called when other end closes
-            return _ProactorDuplexPipeTransport(self,
+            return _ProactorWritePipeTransportCheckForHangup(self,
                                                 sock, protocol, waiter, extra)
         else:
             # If other end closes we may not notice for a long time

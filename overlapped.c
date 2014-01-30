@@ -649,10 +649,6 @@ Overlapped_getresult(OverlappedObject *self, PyObject *args)
         case ERROR_SUCCESS:
         case ERROR_MORE_DATA:
             break;
-        case ERROR_BROKEN_PIPE:
-            if ((self->type == TYPE_READ || self->type == TYPE_ACCEPT) && self->read_buffer != NULL)
-                break;
-            /* fall through */
         default:
             return SetFromWindowsErr(err);
     }

@@ -1,7 +1,9 @@
 """
 Example of asynchronous interaction with a child python process.
 
-Note that on Windows we must use the IOCP event loop.
+This example shows how to attach an existing Popen object and use the low level
+transport-protocol API. See shell.py and subprocess_shell.py for higher level
+examples.
 """
 
 import os

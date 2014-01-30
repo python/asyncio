@@ -156,6 +156,12 @@ class WriteSubprocessPipeProto(protocols.BaseProtocol):
     def resume_writing(self):
         self.proc._protocol.resume_writing()
 
+    def eof_received(self):
+        # FIXME: method needed by Windows _ProactorDuplexPipeTransport used for
+        # stdin, see _make_write_pipe_transport(check_for_hangup=True) of
+        # BaseProactorEventLoop
+        pass
+
 
 class ReadSubprocessPipeProto(WriteSubprocessPipeProto,
                               protocols.Protocol):

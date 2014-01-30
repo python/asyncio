@@ -23,7 +23,7 @@ PROGRAM_CAT = [
               'data = sys.stdin.buffer.read()',
               'sys.stdout.buffer.write(data)'))]
 
-class SubprocessTests:
+class SubprocessMixin:
     def test_stdin_stdout(self):
         args = PROGRAM_CAT
 
@@ -151,7 +151,7 @@ class SubprocessTests:
 
 if sys.platform != 'win32':
     # Unix
-    class SubprocessWatcherTests(SubprocessTests):
+    class SubprocessWatcherMixin(SubprocessMixin):
         Watcher = None
 
         def setUp(self):
@@ -171,14 +171,14 @@ if sys.platform != 'win32':
             self.loop.close()
             policy.set_event_loop(None)
 
-    class SubprocessSafeWatcherTestCase(SubprocessWatcherTests, unittest.TestCase):
+    class SubprocessSafeWatcherTests(SubprocessWatcherMixin, unittest.TestCase):
         Watcher = unix_events.SafeChildWatcher
 
-    class SubprocessFastWatcherTestCase(SubprocessWatcherTests, unittest.TestCase):
+    class SubprocessFastWatcherTests(SubprocessWatcherMixin, unittest.TestCase):
         Watcher = unix_events.FastChildWatcher
 else:
     # Windows
-    class SubprocessProactorTestCase(SubprocessTests, unittest.TestCase):
+    class SubprocessProactorTests(SubprocessMixin, unittest.TestCase):
         def setUp(self):
             policy = asyncio.get_event_loop_policy()
             self.loop = asyncio.ProactorEventLoop()

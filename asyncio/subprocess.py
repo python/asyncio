@@ -149,6 +149,7 @@ class Process:
         if fd == 2:
             stream = self.stderr
         else:
+            assert fd == 1
             stream = self.stdout
         output = yield from stream.read()
         transport.close()
@@ -180,10 +181,12 @@ def create_subprocess_shell(cmd, stdin=None, stdout=None, stderr=None,
                             loop=None, limit=streams._DEFAULT_LIMIT, **kwds):
     if loop is None:
         loop = events.get_event_loop()
+    protocol_factory = lambda: SubprocessStreamProtocol(limit=limit,
+                                                        loop=loop)
     transport, protocol = yield from loop.subprocess_shell(
-                                 lambda: SubprocessStreamProtocol(limit, loop),
-                                 cmd, stdin=stdin, stdout=stdout,
-                                 stderr=stderr, **kwds)
+                                            protocol_factory,
+                                            cmd, stdin=stdin, stdout=stdout,
+                                            stderr=stderr, **kwds)
     yield from protocol.waiter
     return Process(transport, protocol, loop)
 
@@ -192,10 +195,12 @@ def create_subprocess_exec(*args, stdin=None, stdout=None, stderr=None,
                            loop=None, limit=streams._DEFAULT_LIMIT, **kwds):
     if loop is None:
         loop = events.get_event_loop()
+    protocol_factory = lambda: SubprocessStreamProtocol(limit=limit,
+                                                        loop=loop)
     transport, protocol = yield from loop.subprocess_exec(
-                                 lambda: SubprocessStreamProtocol(limit, loop),
-                                 *args, stdin=stdin, stdout=stdout,
-                                 stderr=stderr, **kwds)
+                                            protocol_factory,
+                                            *args, stdin=stdin, stdout=stdout,
+                                            stderr=stderr, **kwds)
     yield from protocol.waiter
     return Process(transport, protocol, loop)
 

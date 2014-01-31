@@ -94,9 +94,10 @@ class _ProactorBasePipeTransport(transports.BaseTransport):
     # the base class I am putting it here for now.)
 
     def _maybe_pause_protocol(self):
-        size = self.get_write_buffer_size()
-        if size <= self._high_water:
-            return
+        # FIXME: track the size of the write buffer
+        #size = self.get_write_buffer_size()
+        #if size <= self._high_water:
+        #    return
         if not self._protocol_paused:
             self._protocol_paused = True
             try:
@@ -262,15 +263,16 @@ class _ProactorBaseWritePipeTransport(_ProactorBasePipeTransport,
                     self._loop.call_soon(self._call_connection_lost, None)
                 if self._eof_written:
                     self._sock.shutdown(socket.SHUT_WR)
+                # Now that we've reduced the buffer size, tell the
+                # protocol to resume writing if it was paused.  Note that
+                # we do this last since the callback is called immediately
+                # and it may add more data to the buffer (even causing the
+                # protocol to be paused again).
+                self._maybe_resume_protocol()
             else:
                 self._write_fut = self._loop._proactor.send(self._sock, data)
                 self._write_fut.add_done_callback(self._loop_writing)
-            # Now that we've reduced the buffer size, tell the
-            # protocol to resume writing if it was paused.  Note that
-            # we do this last since the callback is called immediately
-            # and it may add more data to the buffer (even causing the
-            # protocol to be paused again).
-            self._maybe_resume_protocol()
+                self._maybe_pause_protocol()
         except ConnectionResetError as exc:
             self._force_close(exc)
         except OSError as exc:

@@ -208,7 +208,7 @@ class _ProactorReadPipeTransport(_ProactorBasePipeTransport,
 
 
 class _ProactorBaseWritePipeTransport(_ProactorBasePipeTransport,
-                                  transports.WriteTransport):
+                                      transports.WriteTransport):
     """Transport for write pipes."""
 
     def write(self, data):

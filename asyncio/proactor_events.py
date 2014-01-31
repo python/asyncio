@@ -249,13 +249,12 @@ class _ProactorBaseWritePipeTransport(_ProactorBasePipeTransport,
             self._buffer.extend(data)
             self._maybe_pause_protocol()
 
-    def _loop_writing(self, f=None, data=None, pending_write=None):
+    def _loop_writing(self, f=None, data=None):
         try:
             assert f is self._write_fut
             self._write_fut = None
             if f:
-                if pending_write is not None:
-                    self._pending_write -= pending_write
+                self._pending_write = 0
                 f.result()
             if data is None:
                 data = self._buffer
@@ -274,10 +273,9 @@ class _ProactorBaseWritePipeTransport(_ProactorBasePipeTransport,
             else:
                 self._write_fut = self._loop._proactor.send(self._sock, data)
                 if not self._write_fut.done():
-                    size = len(data)
-                    self._pending_write += size
-                    callback = functools.partial(self._loop_writing,
-                                                 pending_write=size)
+                    assert self._pending_write == 0
+                    self._pending_write = len(data)
+                    callback = functools.partial(self._loop_writing)
                     self._write_fut.add_done_callback(callback)
                     self._maybe_pause_protocol()
                 else:

@@ -6,6 +6,7 @@ proactor is only implemented on Windows with IOCP.
 
 __all__ = ['BaseProactorEventLoop']
 
+import functools
 import socket
 
 from . import base_events
@@ -27,6 +28,7 @@ class _ProactorBasePipeTransport(transports.BaseTransport):
         self._protocol = protocol
         self._server = server
         self._buffer = None  # None or bytearray.
+        self._pending_write = 0
         self._read_fut = None
         self._write_fut = None
         self._conn_lost = 0
@@ -94,10 +96,9 @@ class _ProactorBasePipeTransport(transports.BaseTransport):
     # the base class I am putting it here for now.)
 
     def _maybe_pause_protocol(self):
-        # FIXME: track the size of the write buffer
-        #size = self.get_write_buffer_size()
-        #if size <= self._high_water:
-        #    return
+        size = self.get_write_buffer_size()
+        if size <= self._high_water:
+            return
         if not self._protocol_paused:
             self._protocol_paused = True
             try:
@@ -106,9 +107,8 @@ class _ProactorBasePipeTransport(transports.BaseTransport):
                 logger.exception('pause_writing() failed')
 
     def _maybe_resume_protocol(self):
-        if (self._protocol_paused
-            # FIXME: and self.get_write_buffer_size() <= self._low_water
-            ):
+        if (self._protocol_paused and
+            self.get_write_buffer_size() <= self._low_water):
             self._protocol_paused = False
             try:
                 self._protocol.resume_writing()
@@ -130,11 +130,10 @@ class _ProactorBasePipeTransport(transports.BaseTransport):
         self._low_water = low
 
     def get_write_buffer_size(self):
-        # NOTE: This doesn't take into account data already passed to
-        # send() even if send() hasn't finished yet.
-        if not self._buffer:
-            return 0
-        return len(self._buffer)
+        size = self._pending_write
+        if self._buffer is not None:
+            size += len(self._buffer)
+        return size
 
 
 class _ProactorReadPipeTransport(_ProactorBasePipeTransport,
@@ -250,11 +249,13 @@ class _ProactorBaseWritePipeTransport(_ProactorBasePipeTransport,
             self._buffer.extend(data)
             self._maybe_pause_protocol()
 
-    def _loop_writing(self, f=None, data=None):
+    def _loop_writing(self, f=None, data=None, pending_write=None):
         try:
             assert f is self._write_fut
             self._write_fut = None
             if f:
+                if pending_write is not None:
+                    self._pending_write -= pending_write
                 f.result()
             if data is None:
                 data = self._buffer
@@ -272,9 +273,16 @@ class _ProactorBaseWritePipeTransport(_ProactorBasePipeTransport,
                 self._maybe_resume_protocol()
             else:
                 self._write_fut = self._loop._proactor.send(self._sock, data)
-                self._write_fut.add_done_callback(self._loop_writing)
                 if not self._write_fut.done():
+                    size = len(data)
+                    self._pending_write += size
+                    callback = functools.partial(self._loop_writing,
+                                                 pending_write=size)
+                    self._write_fut.add_done_callback(callback)
                     self._maybe_pause_protocol()
+                else:
+                    # May resume the protocol if the buffer is empty
+                    self._write_fut.add_done_callback(self._loop_writing)
         except ConnectionResetError as exc:
             self._force_close(exc)
         except OSError as exc:

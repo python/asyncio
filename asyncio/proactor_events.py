@@ -106,8 +106,9 @@ class _ProactorBasePipeTransport(transports.BaseTransport):
                 logger.exception('pause_writing() failed')
 
     def _maybe_resume_protocol(self):
-        if (self._protocol_paused and
-            self.get_write_buffer_size() <= self._low_water):
+        if (self._protocol_paused
+            # FIXME: and self.get_write_buffer_size() <= self._low_water
+            ):
             self._protocol_paused = False
             try:
                 self._protocol.resume_writing()
@@ -272,7 +273,10 @@ class _ProactorBaseWritePipeTransport(_ProactorBasePipeTransport,
             else:
                 self._write_fut = self._loop._proactor.send(self._sock, data)
                 self._write_fut.add_done_callback(self._loop_writing)
-                self._maybe_pause_protocol()
+                if not self._write_fut.done():
+                    self._maybe_pause_protocol()
+                else:
+                    self._maybe_resume_protocol()
         except ConnectionResetError as exc:
             self._force_close(exc)
         except OSError as exc:

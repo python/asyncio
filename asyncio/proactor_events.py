@@ -275,8 +275,6 @@ class _ProactorBaseWritePipeTransport(_ProactorBasePipeTransport,
                 self._write_fut.add_done_callback(self._loop_writing)
                 if not self._write_fut.done():
                     self._maybe_pause_protocol()
-                else:
-                    self._maybe_resume_protocol()
         except ConnectionResetError as exc:
             self._force_close(exc)
         except OSError as exc:

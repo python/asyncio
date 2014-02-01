@@ -1,5 +1,4 @@
-__all__ = ['create_subprocess_exec', 'create_subprocess_shell',
-           'PIPE', 'STDOUT', 'DEVNULL']
+__all__ = ['create_subprocess_exec', 'create_subprocess_shell']
 
 import collections
 import subprocess

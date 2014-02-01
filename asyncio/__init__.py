@@ -24,7 +24,7 @@ from .locks import *
 from .protocols import *
 from .queues import *
 from .streams import *
-from .subprocess import *
+from .subprocess import create_subprocess_exec, create_subprocess_shell
 from .tasks import *
 from .transports import *
 
@@ -40,6 +40,6 @@ __all__ = (events.__all__ +
            protocols.__all__ +
            queues.__all__ +
            streams.__all__ +
-           subprocess.__all__ +
+           ['create_subprocess_exec', 'create_subprocess_shell'] +
            tasks.__all__ +
            transports.__all__)

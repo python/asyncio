@@ -27,9 +27,9 @@ class _ProactorBasePipeTransport(transports.BaseTransport):
         self._protocol = protocol
         self._server = server
         self._buffer = None  # None or bytearray.
-        self._pending_write = 0
         self._read_fut = None
         self._write_fut = None
+        self._pending_write = 0
         self._conn_lost = 0
         self._closing = False  # Set when close() called.
         self._eof_written = False
@@ -69,6 +69,7 @@ class _ProactorBasePipeTransport(transports.BaseTransport):
         if self._read_fut:
             self._read_fut.cancel()
         self._write_fut = self._read_fut = None
+        self._pending_write = 0
         self._buffer = None
         self._loop.call_soon(self._call_connection_lost, exc)
 
@@ -252,8 +253,8 @@ class _ProactorBaseWritePipeTransport(_ProactorBasePipeTransport,
         try:
             assert f is self._write_fut
             self._write_fut = None
+            self._pending_write = 0
             if f:
-                self._pending_write = 0
                 f.result()
             if data is None:
                 data = self._buffer
@@ -277,7 +278,6 @@ class _ProactorBaseWritePipeTransport(_ProactorBasePipeTransport,
                     self._write_fut.add_done_callback(self._loop_writing)
                     self._maybe_pause_protocol()
                 else:
-                    # May resume the protocol if the buffer is empty
                     self._write_fut.add_done_callback(self._loop_writing)
         except ConnectionResetError as exc:
             self._force_close(exc)

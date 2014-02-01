@@ -6,7 +6,6 @@ proactor is only implemented on Windows with IOCP.
 
 __all__ = ['BaseProactorEventLoop']
 
-import functools
 import socket
 
 from . import base_events
@@ -275,8 +274,7 @@ class _ProactorBaseWritePipeTransport(_ProactorBasePipeTransport,
                 if not self._write_fut.done():
                     assert self._pending_write == 0
                     self._pending_write = len(data)
-                    callback = functools.partial(self._loop_writing)
-                    self._write_fut.add_done_callback(callback)
+                    self._write_fut.add_done_callback(self._loop_writing)
                     self._maybe_pause_protocol()
                 else:
                     # May resume the protocol if the buffer is empty

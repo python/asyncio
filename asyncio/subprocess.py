@@ -196,4 +196,3 @@ def create_subprocess_exec(*args, stdin=None, stdout=None, stderr=None,
                                             stderr=stderr, **kwds)
     yield from protocol.waiter
     return Process(transport, protocol, loop)
-

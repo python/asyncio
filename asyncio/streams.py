@@ -294,6 +294,8 @@ class StreamReader:
                 waiter.set_result(True)
 
     def feed_data(self, data):
+        assert not self._eof, 'feed_data after feed_eof'
+
         if not data:
             return
 

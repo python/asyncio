@@ -96,6 +96,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         self._default_executor = None
         self._internal_fds = 0
         self._running = False
+        self._clock_resolution = time.get_clock_info('monotonic').resolution
 
     def _make_socket_transport(self, sock, protocol, waiter=None, *,
                                extra=None, server=None):
@@ -633,14 +634,20 @@ class BaseEventLoop(events.AbstractEventLoop):
             else:
                 logger.log(level, 'poll took %.3f seconds', t1-t0)
         else:
+            t0 = self.time()
             event_list = self._selector.select(timeout)
+            dt = self.time() - t0
+            if not event_list and timeout and dt < timeout:
+                print("asyncio: selector.select(%.3f ms) took %.3f ms"
+                      % (timeout*1e3, dt*1e3),
+                      file=sys.__stderr__, flush=True)
         self._process_events(event_list)
 
         # Handle 'later' callbacks that are ready.
-        now = self.time()
+        end_time = self.time() + self._clock_resolution
         while self._scheduled:
             handle = self._scheduled[0]
-            if handle._when > now:
+            if handle._when >= end_time:
                 break
             handle = heapq.heappop(self._scheduled)
             self._ready.append(handle)

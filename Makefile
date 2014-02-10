@@ -41,6 +41,7 @@ clean:
 	rm -f MANIFEST
 
 
-# Make distributions for Python 3.3
+# Push a source distribution for Python 3.3 to PyPI.
+# You must update the version in setup.py first.
 pypi: clean
 	python3.3 setup.py sdist upload

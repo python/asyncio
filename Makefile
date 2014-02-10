@@ -43,5 +43,7 @@ clean:
 
 # Push a source distribution for Python 3.3 to PyPI.
 # You must update the version in setup.py first.
+# The corresponding action on Windows is pypi.bat.
+# A PyPI user configuration in ~/.pypirc is required.
 pypi: clean
 	python3.3 setup.py sdist upload

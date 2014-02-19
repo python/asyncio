@@ -78,7 +78,8 @@ def main():
         asyncio.set_event_loop(loop)
     else:
         loop = asyncio.get_event_loop()
-    loop.run_until_complete(start('sleep 2; wc', input=[b'foo bar baz\n'*300 for i in range(100)]))
+    loop.run_until_complete(start(
+        'sleep 2; wc', input=[b'foo bar baz\n'*300 for i in range(100)]))
 
 
 if __name__ == '__main__':

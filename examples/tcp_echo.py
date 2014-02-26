@@ -2,6 +2,7 @@
 """TCP echo server example."""
 import argparse
 import asyncio
+import sys
 try:
     import signal
 except ImportError:
@@ -87,6 +88,9 @@ ARGS.add_argument(
 ARGS.add_argument(
     '--port', action="store", dest='port',
     default=9999, type=int, help='Port number')
+ARGS.add_argument(
+    '--iocp', action="store_true", dest='iocp',
+    default=False, help='Use IOCP event loop')
 
 
 if __name__ == '__main__':
@@ -100,8 +104,15 @@ if __name__ == '__main__':
         print('Please specify --server or --client\n')
         ARGS.print_help()
     else:
-        loop = asyncio.get_event_loop()
-        if signal is not None:
+        if args.iocp:
+            from asyncio import windows_events
+            loop = windows_events.ProactorEventLoop()
+            asyncio.set_event_loop(loop)
+        else:
+            loop = asyncio.get_event_loop()
+        print ('Using backend: {0}'.format(loop.__class__.__name__))
+
+        if signal is not None and sys.platform != 'win32':
             loop.add_signal_handler(signal.SIGINT, loop.stop)
 
         if args.server:

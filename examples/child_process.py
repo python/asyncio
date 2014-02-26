@@ -16,9 +16,6 @@ except ImportError:
     sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
     import asyncio
 
-from asyncio import streams
-from asyncio import protocols
-
 if sys.platform == 'win32':
     from asyncio.windows_utils import Popen, PIPE
     from asyncio.windows_events import ProactorEventLoop
@@ -32,7 +29,6 @@ else:
 @asyncio.coroutine
 def connect_write_pipe(file):
     loop = asyncio.get_event_loop()
-    protocol = protocols.Protocol()
     transport, _ =  yield from loop.connect_write_pipe(asyncio.Protocol, file)
     return transport
 
@@ -43,9 +39,9 @@ def connect_write_pipe(file):
 @asyncio.coroutine
 def connect_read_pipe(file):
     loop = asyncio.get_event_loop()
-    stream_reader = streams.StreamReader(loop=loop)
+    stream_reader = asyncio.StreamReader(loop=loop)
     def factory():
-        return streams.StreamReaderProtocol(stream_reader)
+        return asyncio.StreamReaderProtocol(stream_reader)
     transport, _ = yield from loop.connect_read_pipe(factory, file)
     return stream_reader, transport
 

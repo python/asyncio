@@ -8,7 +8,6 @@ import asyncio
 from asyncio import test_utils
 import json
 import logging
-import sys
 
 ARGS = argparse.ArgumentParser(description='Cache client example.')
 ARGS.add_argument(

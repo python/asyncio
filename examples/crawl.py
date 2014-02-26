@@ -21,7 +21,6 @@ import cgi
 from http.client import BadStatusLine
 import logging
 import re
-import signal
 import sys
 import time
 import urllib.parse
@@ -510,7 +509,6 @@ class Fetcher:
                 self.response = yield from self.request.get_response()
                 self.body = yield from self.response.read()
                 h_conn = self.response.get_header('connection').lower()
-                h_t_enc = self.response.get_header('transfer-encoding').lower()
                 if h_conn != 'close':
                     self.request.close(recycle=True)
                     self.request = None

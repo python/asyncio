@@ -62,7 +62,6 @@ import json
 import logging
 import os
 import random
-import sys
 
 ARGS = argparse.ArgumentParser(description='Cache server example.')
 ARGS.add_argument(

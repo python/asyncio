@@ -158,7 +158,7 @@ def main():
 
     # creates a client and connects to our server
     try:
-        msg = loop.run_until_complete(client())
+        loop.run_until_complete(client())
         server.stop(loop)
     finally:
         loop.close()

@@ -2,7 +2,6 @@
 """Example showing how to attach a read pipe to a subprocess."""
 import asyncio
 import os, sys
-from asyncio import subprocess
 
 code = """
 import os, sys

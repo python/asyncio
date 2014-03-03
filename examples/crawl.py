@@ -599,6 +599,8 @@ class Fetcher:
                   size,
                   '%d/%d' % (len(self.new_urls or ()), len(self.urls or ())),
                   file=file)
+        elif self.response is None:
+            print(self.url, 'no response object')
         else:
             size = len(self.body or b'')
             if self.response.status == 200:

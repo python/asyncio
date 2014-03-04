@@ -1326,6 +1326,26 @@ class EventLoopTestsMixin:
                     self.assertIn('address must be resolved',
                                   str(cm.exception))
 
+    def test_remove_fds_after_closing(self):
+        loop = self.create_event_loop()
+        callback = lambda: None
+        r, w = test_utils.socketpair()
+        loop.add_reader(r, callback)
+        loop.add_writer(w, callback)
+        loop.close()
+        self.assertFalse(loop.remove_reader(r))
+        self.assertFalse(loop.remove_writer(w))
+
+    def test_add_fds_after_closing(self):
+        loop = self.create_event_loop()
+        callback = lambda: None
+        r, w = test_utils.socketpair()
+        loop.close()
+        with self.assertRaises(RuntimeError):
+            loop.add_reader(r, callback)
+        with self.assertRaises(RuntimeError):
+            loop.add_writer(w, callback)
+
 
 class SubprocessTestsMixin:
 

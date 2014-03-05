@@ -1330,6 +1330,8 @@ class EventLoopTestsMixin:
         loop = self.create_event_loop()
         callback = lambda: None
         r, w = test_utils.socketpair()
+        self.addCleanup(r.close)
+        self.addCleanup(w.close)
         loop.add_reader(r, callback)
         loop.add_writer(w, callback)
         loop.close()
@@ -1340,6 +1342,8 @@ class EventLoopTestsMixin:
         loop = self.create_event_loop()
         callback = lambda: None
         r, w = test_utils.socketpair()
+        self.addCleanup(r.close)
+        self.addCleanup(w.close)
         loop.close()
         with self.assertRaises(RuntimeError):
             loop.add_reader(r, callback)

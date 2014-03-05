@@ -1656,6 +1656,9 @@ if sys.platform == 'win32':
         def test_create_datagram_endpoint(self):
             raise unittest.SkipTest(
                 "IocpEventLoop does not have create_datagram_endpoint()")
+
+        def test_remove_fds_after_closing(self):
+            raise unittest.SkipTest("IocpEventLoop does not have add_reader()")
 else:
     from asyncio import selectors
 

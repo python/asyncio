@@ -38,6 +38,7 @@ clean:
 	rm -f .coverage
 	rm -rf htmlcov
 	rm -rf build
+	rm -rf asyncio.egg-info
 	rm -f MANIFEST
 
 

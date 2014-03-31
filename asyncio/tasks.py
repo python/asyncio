@@ -258,8 +258,8 @@ class Task(futures.Future):
         the request using try/except/finally.
 
         Contrary to Future.cancel(), this does not guarantee that the
-        task will cancelled: the exception might be caught and acted
-        upon, delaying cancellation of the task or preventing it
+        task will be cancelled: the exception might be caught and
+        acted upon, delaying cancellation of the task or preventing it
         completely.  The task may also return a value or raise a
         different exception.
 

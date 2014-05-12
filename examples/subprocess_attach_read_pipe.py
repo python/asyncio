@@ -6,7 +6,7 @@ import os, sys
 code = """
 import os, sys
 fd = int(sys.argv[1])
-data = os.write(fd, b'data')
+os.write(fd, b'data')
 os.close(fd)
 """
 

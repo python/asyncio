@@ -23,6 +23,7 @@ import argparse
 import gc
 import logging
 import os
+import random
 import re
 import sys
 import unittest
@@ -55,6 +56,10 @@ ARGS.add_argument(
 ARGS.add_argument(
     '--findleaks', action='store_true', dest='findleaks',
     help='detect tests that leak memory')
+ARGS.add_argument('-r', '--randomize', action='store_true',
+                  help='randomize test execution order.')
+ARGS.add_argument('--seed', type=int,
+                  help='random seed to reproduce a previous random run')
 ARGS.add_argument(
     '-q', action="store_true", dest='quiet', help='quiet')
 ARGS.add_argument(
@@ -110,6 +115,14 @@ def load_modules(basedir, suffix='.py'):
             print("Skipping '{}': {}".format(modname, err), file=sys.stderr)
 
     return mods
+
+
+def randomize_tests(tests, seed):
+    if seed is None:
+        seed = random.randrange(10000000)
+    random.seed(seed)
+    print("Using random seed", seed)
+    random.shuffle(tests._tests)
 
 
 class TestsFinder:
@@ -253,12 +266,16 @@ def runtests():
         if args.forever:
             while True:
                 tests = finder.load_tests()
+                if args.randomize:
+                    randomize_tests(tests, args.seed)
                 result = runner_factory(verbosity=v,
                                         failfast=failfast).run(tests)
                 if not result.wasSuccessful():
                     sys.exit(1)
         else:
             tests = finder.load_tests()
+            if args.randomize:
+                randomize_tests(tests, args.seed)
             result = runner_factory(verbosity=v,
                                     failfast=failfast).run(tests)
             sys.exit(not result.wasSuccessful())

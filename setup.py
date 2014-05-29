@@ -28,6 +28,7 @@ setup(
     ],
 
     packages=["asyncio"],
+    test_suite="runtests.runtests",
 
     ext_modules=extensions,
 )

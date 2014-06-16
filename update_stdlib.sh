@@ -42,7 +42,12 @@ for i in `(cd asyncio && ls *.py)`
 do
     if [ $i == selectors.py ]
     then
-        maybe_copy asyncio/$i Lib/$i
+        if [ "`(cd $CPYTHON; hg branch)`" == "3.4" ]
+        then
+            echo "Destination is 3.4 branch -- ignoring selectors.py"
+        else
+            maybe_copy asyncio/$i Lib/$i
+        fi
     else
         maybe_copy asyncio/$i Lib/asyncio/$i
     fi

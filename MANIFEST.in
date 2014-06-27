@@ -1,6 +1,6 @@
 include AUTHORS COPYING
 include Makefile
-include overlapped.c
+include overlapped.c pypi.bat
 include check.py runtests.py
 include update_stdlib.sh
 

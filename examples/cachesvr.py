@@ -238,7 +238,10 @@ def main():
     svr = loop.run_until_complete(task)
     for sock in svr.sockets:
         logging.info('socket %s', sock.getsockname())
-    loop.run_forever()
+    try:
+        loop.run_forever()
+    finally:
+        loop.close()
 
 
 if __name__ == '__main__':

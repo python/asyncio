@@ -17,3 +17,4 @@ def echo_client():
 
 loop = asyncio.get_event_loop()
 loop.run_until_complete(echo_client())
+loop.close()

@@ -14,4 +14,7 @@ def handle_connection(reader, writer):
 
 loop = asyncio.get_event_loop()
 loop.run_until_complete(echo_server())
-loop.run_forever()
+try:
+    loop.run_forever()
+finally:
+    loop.close()

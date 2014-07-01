@@ -80,6 +80,7 @@ def main():
         loop = asyncio.get_event_loop()
     loop.run_until_complete(start(
         'sleep 2; wc', input=[b'foo bar baz\n'*300 for i in range(100)]))
+    loop.close()
 
 
 if __name__ == '__main__':

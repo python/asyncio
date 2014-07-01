@@ -30,3 +30,4 @@ def task():
     print("read = %r" % data.decode())
 
 loop.run_until_complete(task())
+loop.close()

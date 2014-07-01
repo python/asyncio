@@ -33,6 +33,7 @@ def doit():
     finally:
         for t in Task.all_tasks():
             t.print_stack()
+    l.close()
 
 
 def main():

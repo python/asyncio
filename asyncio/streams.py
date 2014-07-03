@@ -213,7 +213,7 @@ class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
             res = self._client_connected_cb(self._stream_reader,
                                             self._stream_writer)
             if coroutines.iscoroutine(res):
-                tasks.task_factory(res, loop=self._loop)
+                tasks.Task(res, loop=self._loop)
 
     def connection_lost(self, exc):
         if exc is None:

@@ -299,6 +299,9 @@ class Task(futures.Future):
         self = None  # Needed to break cycles when an exception occurs.
 
 
+task_factory = Task
+
+
 # wait() and as_completed() similar to those in PEP 3148.
 
 FIRST_COMPLETED = concurrent.futures.FIRST_COMPLETED
@@ -504,7 +507,7 @@ def async(coro_or_future, *, loop=None):
             raise ValueError('loop argument must agree with Future')
         return coro_or_future
     elif coroutines.iscoroutine(coro_or_future):
-        task = Task(coro_or_future, loop=loop)
+        task = task_factory(coro_or_future, loop=loop)
         if task._source_traceback:
             del task._source_traceback[-1]
         return task

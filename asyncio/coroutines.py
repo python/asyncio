@@ -69,7 +69,7 @@ class CoroWrapper:
 
     def __repr__(self):
         return ('<%s %s>'
-                % (self.__class__.__name__, _format_coroutine(self.gen)))
+                % (self.__class__.__name__, _format_coroutine(self)))
 
     def __iter__(self):
         return self

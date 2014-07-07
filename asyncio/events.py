@@ -200,6 +200,10 @@ class AbstractEventLoop:
         """Return whether the event loop is currently running."""
         raise NotImplementedError
 
+    def is_closed(self):
+        """Returns True if the event loop was closed."""
+        raise NotImplementedError
+
     def close(self):
         """Close the loop.
 

@@ -150,7 +150,7 @@ class TaskTests(test_utils.TestCase):
 
         # test coroutine object
         gen = notmuch()
-        if PY35:
+        if coroutines._DEBUG or PY35:
             coro_qualname = 'TaskTests.test_task_repr.<locals>.notmuch'
         else:
             coro_qualname = 'notmuch'
@@ -205,17 +205,12 @@ class TaskTests(test_utils.TestCase):
 
         # test coroutine object
         gen = notmuch()
-        if PY35:
+        if coroutines._DEBUG or PY35:
             # On Python >= 3.5, generators now inherit the name of the
             # function, as expected, and have a qualified name (__qualname__
             # attribute).
             coro_name = 'notmuch'
             coro_qualname = 'TaskTests.test_task_repr_coro_decorator.<locals>.notmuch'
-        elif coroutines._DEBUG:
-            # In debug mode, @coroutine decorator uses CoroWrapper which gets
-            # its name (__name__ attribute) from the wrapped coroutine
-            # function.
-            coro_name = coro_qualname = 'notmuch'
         else:
             # On Python < 3.5, generators inherit the name of the code, not of
             # the function. See: http://bugs.python.org/issue21205

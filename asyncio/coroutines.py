@@ -119,8 +119,7 @@ class CoroWrapper:
         gen = getattr(self, 'gen', None)
         frame = getattr(gen, 'gi_frame', None)
         if frame is not None and frame.f_lasti == -1:
-            func = events._format_callback(self.func, ())
-            msg = 'Coroutine %s was never yielded from' % func
+            msg = '%r was never yielded from' % self
             tb = getattr(self, '_source_traceback', ())
             if tb:
                 tb = ''.join(traceback.format_list(tb))

@@ -29,8 +29,6 @@ _YIELD_FROM = opcode.opmap['YIELD_FROM']
 _DEBUG = (not sys.flags.ignore_environment
           and bool(os.environ.get('PYTHONASYNCIODEBUG')))
 
-_PY35 = (sys.version_info >= (3, 5))
-
 
 # Check for CPython issue #21209
 def has_yield_from_bug():
@@ -154,7 +152,7 @@ def coroutine(func):
             if w._source_traceback:
                 del w._source_traceback[-1]
             w.__name__ = func.__name__
-            if _PY35:
+            if hasattr(func, '__qualname__'):
                 w.__qualname__ = func.__qualname__
             w.__doc__ = func.__doc__
             return w
@@ -177,10 +175,7 @@ def iscoroutine(obj):
 
 def _format_coroutine(coro):
     assert iscoroutine(coro)
-    if _PY35:
-        coro_name = coro.__qualname__
-    else:
-        coro_name = coro.__name__
+    coro_name = getattr(coro, '__qualname__', coro.__name__)
 
     filename = coro.gi_code.co_filename
     if (isinstance(coro, CoroWrapper)

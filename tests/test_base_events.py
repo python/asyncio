@@ -12,7 +12,6 @@ from test.support import IPV6_ENABLED
 
 import asyncio
 from asyncio import base_events
-from asyncio import events
 from asyncio import constants
 from asyncio import test_utils
 

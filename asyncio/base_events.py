@@ -626,7 +626,7 @@ class BaseEventLoop(events.AbstractEventLoop):
                       reuse_address=None):
         """Create a TCP server bound to host and port.
 
-        Return an AbstractServer object which can be used to stop the service.
+        Return an Server object which can be used to stop the service.
 
         This method is a coroutine.
         """

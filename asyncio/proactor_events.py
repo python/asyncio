@@ -401,7 +401,9 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
         self._ssock.setblocking(False)
         self._csock.setblocking(False)
         self._internal_fds += 1
-        self.call_soon(self._loop_self_reading)
+        # don't check the current loop because _make_self_pipe() is called
+        # from the event loop constructor
+        self._call_soon(self._loop_self_reading, (), check_loop=False)
 
     def _loop_self_reading(self, f=None):
         try:

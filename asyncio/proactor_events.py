@@ -108,7 +108,6 @@ class _ProactorReadPipeTransport(_ProactorBasePipeTransport,
     def __init__(self, loop, sock, protocol, waiter=None,
                  extra=None, server=None):
         super().__init__(loop, sock, protocol, waiter, extra, server)
-        self._read_fut = None
         self._paused = False
         self._loop.call_soon(self._loop_reading)
 

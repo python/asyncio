@@ -50,6 +50,15 @@ def _format_handle(handle):
         return str(handle)
 
 
+def _format_pipe(fd):
+    if fd == subprocess.PIPE:
+        return '<pipe>'
+    elif fd == subprocess.STDOUT:
+        return '<stdout>'
+    else:
+        return repr(fd)
+
+
 class _StopError(BaseException):
     """Raised to stop the event loop."""
 
@@ -759,6 +768,9 @@ class BaseEventLoop(events.AbstractEventLoop):
         waiter = futures.Future(loop=self)
         transport = self._make_read_pipe_transport(pipe, protocol, waiter)
         yield from waiter
+        if self._debug:
+            logger.debug('Read pipe %r connected: (%r, %r)',
+                         pipe.fileno(), transport, protocol)
         return transport, protocol
 
     @coroutine
@@ -767,7 +779,23 @@ class BaseEventLoop(events.AbstractEventLoop):
         waiter = futures.Future(loop=self)
         transport = self._make_write_pipe_transport(pipe, protocol, waiter)
         yield from waiter
+        if self._debug:
+            logger.debug('Write pipe %r connected: (%r, %r)',
+                         pipe.fileno(), transport, protocol)
         return transport, protocol
+
+    def _log_subprocess(self, msg, stdin, stdout, stderr):
+        info = [msg]
+        if stdin is not None:
+            info.append('stdin=%s' % _format_pipe(stdin))
+        if stdout is not None and stderr == subprocess.STDOUT:
+            info.append('stdout=stderr=%s' % _format_pipe(stdout))
+        else:
+            if stdout is not None:
+                info.append('stdout=%s' % _format_pipe(stdout))
+            if stderr is not None:
+                info.append('stderr=%s' % _format_pipe(stderr))
+        logger.debug(' '.join(info))
 
     @coroutine
     def subprocess_shell(self, protocol_factory, cmd, *, stdin=subprocess.PIPE,
@@ -783,8 +811,15 @@ class BaseEventLoop(events.AbstractEventLoop):
         if bufsize != 0:
             raise ValueError("bufsize must be 0")
         protocol = protocol_factory()
+        if self._debug:
+            # don't log parameters: they may contain sensitive information
+            # (password) and may be too long
+            debug_log = 'run shell command %r' % cmd
+            self._log_subprocess(debug_log, stdin, stdout, stderr)
         transport = yield from self._make_subprocess_transport(
             protocol, cmd, True, stdin, stdout, stderr, bufsize, **kwargs)
+        if self._debug:
+            logger.info('%s: %r' % (debug_log, transport))
         return transport, protocol
 
     @coroutine
@@ -805,9 +840,16 @@ class BaseEventLoop(events.AbstractEventLoop):
                                 "a bytes or text string, not %s"
                                 % type(arg).__name__)
         protocol = protocol_factory()
+        if self._debug:
+            # don't log parameters: they may contain sensitive information
+            # (password) and may be too long
+            debug_log = 'execute program %r' % program
+            self._log_subprocess(debug_log, stdin, stdout, stderr)
         transport = yield from self._make_subprocess_transport(
             protocol, popen_args, False, stdin, stdout, stderr,
             bufsize, **kwargs)
+        if self._debug:
+            logger.info('%s: %r' % (debug_log, transport))
         return transport, protocol
 
     def set_exception_handler(self, handler):

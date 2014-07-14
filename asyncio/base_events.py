@@ -569,8 +569,8 @@ class BaseEventLoop(events.AbstractEventLoop):
         transport, protocol = yield from self._create_connection_transport(
             sock, protocol_factory, ssl, server_hostname)
         if self._debug:
-            logger.debug("connected to %s:%r: (%r, %r)",
-                         host, port, transport, protocol)
+            logger.debug("%r connected to %s:%r: (%r, %r)",
+                         sock, host, port, transport, protocol)
         return transport, protocol
 
     @coroutine

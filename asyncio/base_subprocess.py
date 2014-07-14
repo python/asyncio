@@ -14,6 +14,7 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
         super().__init__(extra)
         self._protocol = protocol
         self._loop = loop
+        self._pid = None
 
         self._pipes = {}
         if stdin == subprocess.PIPE:
@@ -27,6 +28,7 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
         self._returncode = None
         self._start(args=args, shell=shell, stdin=stdin, stdout=stdout,
                     stderr=stderr, bufsize=bufsize, **kwargs)
+        self._pid = self._proc.pid
         self._extra['subprocess'] = self._proc
 
     def _start(self, args, shell, stdin, stdout, stderr, bufsize, **kwargs):
@@ -45,7 +47,7 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
             self.terminate()
 
     def get_pid(self):
-        return self._proc.pid
+        return self._pid
 
     def get_returncode(self):
         return self._returncode

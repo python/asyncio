@@ -1089,16 +1089,18 @@ class SelectorSslTransportTests(test_utils.TestCase):
         self.assertIsNone(waiter.result())
 
     def test_on_handshake_reader_retry(self):
+        self.loop.set_debug(False)
         self.sslsock.do_handshake.side_effect = ssl.SSLWantReadError
         transport = _SelectorSslTransport(
             self.loop, self.sock, self.protocol, self.sslcontext)
-        self.loop.assert_reader(1, transport._on_handshake, 0)
+        self.loop.assert_reader(1, transport._on_handshake, None)
 
     def test_on_handshake_writer_retry(self):
+        self.loop.set_debug(False)
         self.sslsock.do_handshake.side_effect = ssl.SSLWantWriteError
         transport = _SelectorSslTransport(
             self.loop, self.sock, self.protocol, self.sslcontext)
-        self.loop.assert_writer(1, transport._on_handshake, 0)
+        self.loop.assert_writer(1, transport._on_handshake, None)
 
     def test_on_handshake_exc(self):
         exc = ValueError()

@@ -248,18 +248,20 @@ def runtests():
                                 )
         cov.start()
 
-    finder = TestsFinder(args.testsdir, includes, excludes)
     logger = logging.getLogger()
     if v == 0:
-        logger.setLevel(logging.CRITICAL)
+        level = logging.CRITICAL
     elif v == 1:
-        logger.setLevel(logging.ERROR)
+        level = logging.ERROR
     elif v == 2:
-        logger.setLevel(logging.WARNING)
+        level = logging.WARNING
     elif v == 3:
-        logger.setLevel(logging.INFO)
+        level = logging.INFO
     elif v >= 4:
-        logger.setLevel(logging.DEBUG)
+        level = logging.DEBUG
+    logging.basicConfig(level=level)
+
+    finder = TestsFinder(args.testsdir, includes, excludes)
     if catchbreak:
         installHandler()
     try:

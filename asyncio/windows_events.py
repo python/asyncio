@@ -75,13 +75,20 @@ class _WaitHandleFuture(futures.Future):
         super().__init__(loop=loop)
         self._wait_handle = wait_handle
 
-    def cancel(self):
-        super().cancel()
+    def _unregister(self):
+        if self._wait_handle is None:
+            return
         try:
             _overlapped.UnregisterWait(self._wait_handle)
         except OSError as e:
             if e.winerror != _overlapped.ERROR_IO_PENDING:
                 raise
+            # ERROR_IO_PENDING is not an error, the wait was unregistered
+        self._wait_handle = None
+
+    def cancel(self):
+        self._unregister()
+        super().cancel()
 
 
 class PipeServer(object):
@@ -366,12 +373,7 @@ class IocpProactor:
         f = _WaitHandleFuture(wh, loop=self._loop)
 
         def finish_wait_for_handle(trans, key, ov):
-            if not f.cancelled():
-                try:
-                    _overlapped.UnregisterWait(wh)
-                except OSError as e:
-                    if e.winerror != _overlapped.ERROR_IO_PENDING:
-                        raise
+            f._unregister()
             # Note that this second wait means that we should only use
             # this with handles types where a successful wait has no
             # effect.  So events or processes are all right, but locks

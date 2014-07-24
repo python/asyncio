@@ -484,6 +484,9 @@ class IocpProactor:
             _winapi.CloseHandle(self._iocp)
             self._iocp = None
 
+    def __del__(self):
+        self.close()
+
 
 class _WindowsSubprocessTransport(base_subprocess.BaseSubprocessTransport):
 

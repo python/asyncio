@@ -114,7 +114,12 @@ class ProactorTests(test_utils.TestCase):
         self.assertTrue(f.result())
         self.assertTrue(0 <= elapsed < 0.3, elapsed)
 
-        _overlapped.ResetEvent(event)
+        # Tulip issue #195: cancelling a done _WaitHandleFuture must not crash
+        f.cancel()
+
+    def test_wait_for_handle_cancel(self):
+        event = _overlapped.CreateEvent(None, True, False, None)
+        self.addCleanup(_winapi.CloseHandle, event)
 
         # Wait for unset event with a cancelled future;
         # CancelledError should be raised immediately
@@ -125,6 +130,11 @@ class ProactorTests(test_utils.TestCase):
             self.loop.run_until_complete(f)
         elapsed = self.loop.time() - start
         self.assertTrue(0 <= elapsed < 0.1, elapsed)
+
+        # Tulip issue #195: cancelling a _WaitHandleFuture twice must not crash
+        f = self.loop._proactor.wait_for_handle(event)
+        f.cancel()
+        f.cancel()
 
 
 if __name__ == '__main__':

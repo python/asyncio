@@ -38,6 +38,8 @@ class _OverlappedFuture(futures.Future):
 
     def __init__(self, ov, *, loop=None):
         super().__init__(loop=loop)
+        if self._source_traceback:
+            del self._source_traceback[-1]
         self.ov = ov
 
     def __repr__(self):

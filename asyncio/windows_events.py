@@ -44,10 +44,8 @@ class _OverlappedFuture(futures.Future):
 
     def __repr__(self):
         info = [self._state.lower()]
-        if self.ov.pending:
-            info.append('overlapped=pending')
-        else:
-            info.append('overlapped=completed')
+        state = 'pending' if self.ov.pending else 'completed'
+        info.append('overlapped=<%s, %#x>' % (state, self.ov.address))
         if self._state == futures._FINISHED:
             info.append(self._format_result())
         if self._callbacks:

@@ -470,7 +470,7 @@ class IocpProactor:
 
     def close(self):
         # Cancel remaining registered operations.
-        for address, (f, ov, obj, callback) in list(self._cache.items()):
+        for address, (fut, ov, obj, callback) in list(self._cache.items()):
             if obj is None:
                 # The operation was started with connect_pipe() which
                 # queues a task to Windows' thread pool.  This cannot
@@ -478,9 +478,17 @@ class IocpProactor:
                 del self._cache[address]
             else:
                 try:
-                    ov.cancel()
-                except OSError:
-                    pass
+                    fut.cancel()
+                except OSError as exc:
+                    if self._loop is not None:
+                        context = {
+                            'message': 'Cancelling a future failed',
+                            'exception': exc,
+                            'future': fut,
+                        }
+                        if fut._source_traceback:
+                            context['source_traceback'] = fut._source_traceback
+                        self._loop.call_exception_handler(context)
 
         while self._cache:
             if not self._poll(1):

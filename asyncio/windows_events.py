@@ -216,6 +216,11 @@ class IocpProactor:
         self._registered = weakref.WeakSet()
         self._stopped_serving = weakref.WeakSet()
 
+    def __repr__(self):
+        return ('<%s overlapped#=%s result#=%s>'
+                % (self.__class__.__name__, len(self._cache),
+                   len(self._results)))
+
     def set_loop(self, loop):
         self._loop = loop
 

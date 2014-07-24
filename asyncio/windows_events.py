@@ -53,10 +53,18 @@ class _OverlappedFuture(futures.Future):
         return '<%s %s>' % (self.__class__.__name__, ' '.join(info))
 
     def cancel(self):
-        try:
-            self.ov.cancel()
-        except OSError:
-            pass
+        if not self.done():
+            try:
+                self.ov.cancel()
+            except OSError as exc:
+                context = {
+                    'message': 'Cancelling an overlapped future failed',
+                    'exception': exc,
+                    'future': self,
+                }
+                if self._source_traceback:
+                    context['source_traceback'] = self._source_traceback
+                self._loop.call_exception_handler(context)
         return super().cancel()
 
 

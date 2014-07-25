@@ -446,11 +446,6 @@ class IocpProactor:
                 f.set_exception(e)
             else:
                 f.set_result(value)
-                # FIXME, tulip issue #196: add _OverlappedFuture.set_result()
-                # method to clear the refrence, don't do it here (f may
-                # by a _WaitHandleFuture). Problem: clearing the reference
-                # in _register() if ov.pedding is False leads to weird bugs.
-                f._ov = None
         return f
 
     def _get_accept_socket(self, family):
@@ -494,6 +489,11 @@ class IocpProactor:
                 else:
                     f.set_result(value)
                     self._results.append(f)
+                    # FIXME, tulip issue #196: add _OverlappedFuture.set_result()
+                    # method to clear the refrence, don't do it here (f may
+                    # by a _WaitHandleFuture). Problem: clearing the reference
+                    # in _register() if ov.pedding is False leads to weird bugs.
+                    f._ov = None
             ms = 0
 
     def _stop_serving(self, obj):

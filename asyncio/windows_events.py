@@ -73,6 +73,10 @@ class _OverlappedFuture(futures.Future):
         self._cancel_overlapped()
         return super().cancel()
 
+    def set_exception(self, exception):
+        super().set_exception(exception)
+        self._cancel_overlapped()
+
 
 class _WaitHandleFuture(futures.Future):
     """Subclass of Future which represents a wait handle."""

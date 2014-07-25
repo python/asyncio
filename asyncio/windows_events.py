@@ -77,9 +77,27 @@ class _OverlappedFuture(futures.Future):
 class _WaitHandleFuture(futures.Future):
     """Subclass of Future which represents a wait handle."""
 
-    def __init__(self, wait_handle, *, loop=None):
+    def __init__(self, handle, wait_handle, *, loop=None):
         super().__init__(loop=loop)
+        self._handle = handle
         self._wait_handle = wait_handle
+
+    def _poll(self):
+        # non-blocking wait: use a timeout of 0 millisecond
+        return (_winapi.WaitForSingleObject(self._handle, 0) ==
+                _winapi.WAIT_OBJECT_0)
+
+    def __repr__(self):
+        info = [self._state.lower()]
+        if self._wait_handle:
+            state = 'pending' if self._poll() else 'completed'
+            info.append('wait_handle=<%s, %#x>' % (state, self._wait_handle))
+        info.append('handle=<%#x>' % self._handle)
+        if self._state == futures._FINISHED:
+            info.append(self._format_result())
+        if self._callbacks:
+            info.append(self._format_callbacks())
+        return '<%s %s>' % (self.__class__.__name__, ' '.join(info))
 
     def _unregister(self):
         if self._wait_handle is None:
@@ -376,18 +394,18 @@ class IocpProactor:
         ov = _overlapped.Overlapped(NULL)
         wh = _overlapped.RegisterWaitWithQueue(
             handle, self._iocp, ov.address, ms)
-        f = _WaitHandleFuture(wh, loop=self._loop)
+        f = _WaitHandleFuture(handle, wh, loop=self._loop)
 
         def finish_wait_for_handle(trans, key, ov):
-            f._unregister()
             # Note that this second wait means that we should only use
             # this with handles types where a successful wait has no
             # effect.  So events or processes are all right, but locks
             # or semaphores are not.  Also note if the handle is
             # signalled and then quickly reset, then we may return
             # False even though we have not timed out.
-            return (_winapi.WaitForSingleObject(handle, 0) ==
-                    _winapi.WAIT_OBJECT_0)
+            done = f._poll()
+            f._unregister()
+            return done
 
         self._cache[ov.address] = (f, ov, None, finish_wait_for_handle)
         return f

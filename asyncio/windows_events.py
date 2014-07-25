@@ -40,31 +40,37 @@ class _OverlappedFuture(futures.Future):
         super().__init__(loop=loop)
         if self._source_traceback:
             del self._source_traceback[-1]
-        self.ov = ov
+        self._ov = ov
 
     def __repr__(self):
         info = [self._state.lower()]
-        state = 'pending' if self.ov.pending else 'completed'
-        info.append('overlapped=<%s, %#x>' % (state, self.ov.address))
+        if self._ov is not None:
+            state = 'pending' if self._ov.pending else 'completed'
+            info.append('overlapped=<%s, %#x>' % (state, self._ov.address))
         if self._state == futures._FINISHED:
             info.append(self._format_result())
         if self._callbacks:
             info.append(self._format_callbacks())
         return '<%s %s>' % (self.__class__.__name__, ' '.join(info))
 
+    def _cancel_overlapped(self):
+        if self._ov is None:
+            return
+        try:
+            self._ov.cancel()
+        except OSError as exc:
+            context = {
+                'message': 'Cancelling an overlapped future failed',
+                'exception': exc,
+                'future': self,
+            }
+            if self._source_traceback:
+                context['source_traceback'] = self._source_traceback
+            self._loop.call_exception_handler(context)
+        self._ov = None
+
     def cancel(self):
-        if not self.done():
-            try:
-                self.ov.cancel()
-            except OSError as exc:
-                context = {
-                    'message': 'Cancelling an overlapped future failed',
-                    'exception': exc,
-                    'future': self,
-                }
-                if self._source_traceback:
-                    context['source_traceback'] = self._source_traceback
-                self._loop.call_exception_handler(context)
+        self._cancel_overlapped()
         return super().cancel()
 
 

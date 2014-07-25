@@ -403,9 +403,10 @@ class IocpProactor:
             # or semaphores are not.  Also note if the handle is
             # signalled and then quickly reset, then we may return
             # False even though we have not timed out.
-            done = f._poll()
-            f._unregister()
-            return done
+            try:
+                return f._poll()
+            finally:
+                f._unregister()
 
         self._cache[ov.address] = (f, ov, None, finish_wait_for_handle)
         return f

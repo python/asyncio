@@ -83,6 +83,8 @@ class _WaitHandleFuture(futures.Future):
 
     def __init__(self, handle, wait_handle, *, loop=None):
         super().__init__(loop=loop)
+        if self._source_traceback:
+            del self._source_traceback[-1]
         self._handle = handle
         self._wait_handle = wait_handle
 
@@ -399,6 +401,8 @@ class IocpProactor:
         wh = _overlapped.RegisterWaitWithQueue(
             handle, self._iocp, ov.address, ms)
         f = _WaitHandleFuture(handle, wh, loop=self._loop)
+        if f._source_traceback:
+            del f._source_traceback[-1]
 
         def finish_wait_for_handle(trans, key, ov):
             # Note that this second wait means that we should only use
@@ -431,6 +435,8 @@ class IocpProactor:
         # operation when it completes.  The future's value is actually
         # the value returned by callback().
         f = _OverlappedFuture(ov, loop=self._loop)
+        if f._source_traceback:
+            del f._source_traceback[-1]
         if not ov.pending and not wait_for_post:
             # The operation has completed, so no need to postpone the
             # work.  We cannot take this short cut if we need the

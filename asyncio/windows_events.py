@@ -81,10 +81,14 @@ class _OverlappedFuture(futures.Future):
 class _WaitHandleFuture(futures.Future):
     """Subclass of Future which represents a wait handle."""
 
-    def __init__(self, handle, wait_handle, *, loop=None):
+    def __init__(self, iocp, ov, handle, wait_handle, *, loop=None):
         super().__init__(loop=loop)
         if self._source_traceback:
             del self._source_traceback[-1]
+        # iocp and ov are only used by cancel() to notify IocpProactor
+        # that the wait was cancelled
+        self._iocp = iocp
+        self._ov = ov
         self._handle = handle
         self._wait_handle = wait_handle
 
@@ -112,9 +116,15 @@ class _WaitHandleFuture(futures.Future):
                 raise
             # ERROR_IO_PENDING is not an error, the wait was unregistered
         self._wait_handle = None
+        self._iocp = None
+        self._ov = None
 
     def cancel(self):
         result = super().cancel()
+        if self._ov is not None:
+            # signal the cancellation to the overlapped object
+            _overlapped.PostQueuedCompletionStatus(self._iocp, True,
+                                                   0, self._ov.address)
         self._unregister_wait()
         return result
 
@@ -409,7 +419,7 @@ class IocpProactor:
         ov = _overlapped.Overlapped(NULL)
         wh = _overlapped.RegisterWaitWithQueue(
             handle, self._iocp, ov.address, ms)
-        f = _WaitHandleFuture(handle, wh, loop=self._loop)
+        f = _WaitHandleFuture(self._iocp, ov, handle, wh, loop=self._loop)
         if f._source_traceback:
             del f._source_traceback[-1]
 
@@ -430,7 +440,7 @@ class IocpProactor:
             else:
                 f.set_result(result)
 
-        self._cache[ov.address] = (f, ov, None, finish_wait_for_handle)
+        self._cache[ov.address] = (f, ov, 0, finish_wait_for_handle)
         return f
 
     def _register_with_iocp(self, obj):

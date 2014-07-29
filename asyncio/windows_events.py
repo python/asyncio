@@ -484,10 +484,13 @@ class IocpProactor:
             ms = math.ceil(timeout * 1e3)
             if ms >= INFINITE:
                 raise ValueError("timeout too big")
+
         while True:
             status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
             if status is None:
                 return
+            ms = 0
+
             err, transferred, key, address = status
             try:
                 f, ov, obj, callback = self._cache.pop(address)
@@ -504,7 +507,6 @@ class IocpProactor:
                 # handle which should be closed to avoid a leak.
                 if key not in (0, _overlapped.INVALID_HANDLE_VALUE):
                     _winapi.CloseHandle(key)
-                ms = 0
                 continue
 
             if obj in self._stopped_serving:
@@ -520,7 +522,6 @@ class IocpProactor:
                 else:
                     f.set_result(value)
                     self._results.append(f)
-            ms = 0
 
     def _stop_serving(self, obj):
         # obj is a socket or pipe handle.  It will be closed in

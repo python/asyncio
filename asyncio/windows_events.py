@@ -97,7 +97,7 @@ class _WaitHandleFuture(futures.Future):
         info = super()._repr_info()
         info.insert(1, 'handle=%#x' % self._handle)
         if self._wait_handle:
-            state = 'pending' if self._poll() else 'completed'
+            state = 'signaled' if self._poll() else 'waiting'
             info.insert(1, 'wait_handle=<%s, %#x>'
                            % (state, self._wait_handle))
         return info

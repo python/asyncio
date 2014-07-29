@@ -102,7 +102,7 @@ class _WaitHandleFuture(futures.Future):
                            % (state, self._wait_handle))
         return info
 
-    def _unregister(self):
+    def _unregister_wait(self):
         if self._wait_handle is None:
             return
         try:
@@ -114,8 +114,17 @@ class _WaitHandleFuture(futures.Future):
         self._wait_handle = None
 
     def cancel(self):
-        self._unregister()
-        return super().cancel()
+        result = super().cancel()
+        self._unregister_wait()
+        return result
+
+    def set_exception(self, exception):
+        super().set_exception(exception)
+        self._unregister_wait()
+
+    def set_result(self, result):
+        super().set_result(result)
+        self._unregister_wait()
 
 
 class PipeServer(object):
@@ -411,10 +420,15 @@ class IocpProactor:
             # or semaphores are not.  Also note if the handle is
             # signalled and then quickly reset, then we may return
             # False even though we have not timed out.
+            return f._poll()
+
+        if f._poll():
             try:
-                return f._poll()
-            finally:
-                f._unregister()
+                result = f._poll()
+            except OSError as exc:
+                f.set_exception(exc)
+            else:
+                f.set_result(result)
 
         self._cache[ov.address] = (f, ov, None, finish_wait_for_handle)
         return f

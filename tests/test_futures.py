@@ -105,6 +105,15 @@ class FutureTests(test_utils.TestCase):
         self.assertEqual(next(g), ('C', 42))  # yield 'C', y.
 
     def test_future_repr(self):
+        self.loop.set_debug(True)
+        f_pending_debug = asyncio.Future(loop=self.loop)
+        frame = f_pending_debug._source_traceback[-1]
+        self.assertEqual(repr(f_pending_debug),
+                         '<Future pending created at %s:%s>'
+                         % (frame[0], frame[1]))
+        f_pending_debug.cancel()
+
+        self.loop.set_debug(False)
         f_pending = asyncio.Future(loop=self.loop)
         self.assertEqual(repr(f_pending), '<Future pending>')
         f_pending.cancel()
@@ -324,7 +333,7 @@ class FutureTests(test_utils.TestCase):
         if sys.version_info >= (3, 4):
             frame = source_traceback[-1]
             regex = (r'^Future exception was never retrieved\n'
-                     r'future: <Future finished exception=MemoryError\(\)>\n'
+                     r'future: <Future finished exception=MemoryError\(\) created at {filename}:{lineno}>\n'
                      r'source_traceback: Object created at \(most recent call last\):\n'
                      r'  File'
                      r'.*\n'

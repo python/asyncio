@@ -42,16 +42,12 @@ class _OverlappedFuture(futures.Future):
             del self._source_traceback[-1]
         self._ov = ov
 
-    def __repr__(self):
-        info = [self._state.lower()]
+    def _repr_info(self):
+        info = super()._repr_info()
         if self._ov is not None:
             state = 'pending' if self._ov.pending else 'completed'
-            info.append('overlapped=<%s, %#x>' % (state, self._ov.address))
-        if self._state == futures._FINISHED:
-            info.append(self._format_result())
-        if self._callbacks:
-            info.append(self._format_callbacks())
-        return '<%s %s>' % (self.__class__.__name__, ' '.join(info))
+            info.insert(1, 'overlapped=<%s, %#x>' % (state, self._ov.address))
+        return info
 
     def _cancel_overlapped(self):
         if self._ov is None:
@@ -95,17 +91,14 @@ class _WaitHandleFuture(futures.Future):
         return (_winapi.WaitForSingleObject(self._handle, 0) ==
                 _winapi.WAIT_OBJECT_0)
 
-    def __repr__(self):
-        info = [self._state.lower()]
+    def _repr_info(self):
+        info = super()._repr_info()
+        info.insert(1, 'handle=%#x' % self._handle)
         if self._wait_handle:
             state = 'pending' if self._poll() else 'completed'
-            info.append('wait_handle=<%s, %#x>' % (state, self._wait_handle))
-        info.append('handle=<%#x>' % self._handle)
-        if self._state == futures._FINISHED:
-            info.append(self._format_result())
-        if self._callbacks:
-            info.append(self._format_callbacks())
-        return '<%s %s>' % (self.__class__.__name__, ' '.join(info))
+            info.insert(1, 'wait_handle=<%s, %#x>'
+                           % (state, self._wait_handle))
+        return info
 
     def _unregister(self):
         if self._wait_handle is None:

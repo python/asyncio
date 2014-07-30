@@ -691,7 +691,6 @@ class _SelectorSslTransport(_SelectorTransport):
 
         self._server_hostname = server_hostname
         self._waiter = waiter
-        self._rawsock = rawsock
         self._sslcontext = sslcontext
         self._paused = False
 

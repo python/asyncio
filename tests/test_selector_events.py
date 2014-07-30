@@ -58,8 +58,9 @@ class BaseSelectorEventLoopTests(test_utils.TestCase):
         self.loop.remove_reader = mock.Mock()
         self.loop.remove_writer = mock.Mock()
         waiter = asyncio.Future(loop=self.loop)
-        transport = self.loop._make_ssl_transport(
-            m, asyncio.Protocol(), m, waiter)
+        with test_utils.disable_logger():
+            transport = self.loop._make_ssl_transport(
+                m, asyncio.Protocol(), m, waiter)
         self.assertIsInstance(transport, _SelectorSslTransport)
 
     @mock.patch('asyncio.selector_events.ssl', None)
@@ -127,7 +128,8 @@ class BaseSelectorEventLoopTests(test_utils.TestCase):
 
     def test_write_to_self_tryagain(self):
         self.loop._csock.send.side_effect = BlockingIOError
-        self.assertIsNone(self.loop._write_to_self())
+        with test_utils.disable_logger():
+            self.assertIsNone(self.loop._write_to_self())
 
     def test_write_to_self_exception(self):
         # _write_to_self() swallows OSError
@@ -782,7 +784,8 @@ class SelectorSocketTransportTests(test_utils.TestCase):
         transport = _SelectorSocketTransport(
             self.loop, self.sock, self.protocol)
         transport._force_close = mock.Mock()
-        transport._read_ready()
+        with test_utils.disable_logger():
+            transport._read_ready()
         transport._force_close.assert_called_with(err)
 
     @mock.patch('logging.exception')
@@ -1219,7 +1222,8 @@ class SelectorSslTransportTests(test_utils.TestCase):
         err = self.sslsock.recv.side_effect = ConnectionResetError()
         transport = self._make_one()
         transport._force_close = mock.Mock()
-        transport._read_ready()
+        with test_utils.disable_logger():
+            transport._read_ready()
         transport._force_close.assert_called_with(err)
 
     def test_read_ready_recv_retry(self):

@@ -135,7 +135,7 @@ class BaseSelectorEventLoopTests(test_utils.TestCase):
         self.assertRaises(RuntimeError, self.loop._write_to_self)
 
     def test_sock_recv(self):
-        sock = mock.Mock()
+        sock = test_utils.mock_nonblocking_socket()
         self.loop._sock_recv = mock.Mock()
 
         f = self.loop.sock_recv(sock, 1024)
@@ -183,7 +183,7 @@ class BaseSelectorEventLoopTests(test_utils.TestCase):
         self.assertIs(err, f.exception())
 
     def test_sock_sendall(self):
-        sock = mock.Mock()
+        sock = test_utils.mock_nonblocking_socket()
         self.loop._sock_sendall = mock.Mock()
 
         f = self.loop.sock_sendall(sock, b'data')
@@ -193,7 +193,7 @@ class BaseSelectorEventLoopTests(test_utils.TestCase):
             self.loop._sock_sendall.call_args[0])
 
     def test_sock_sendall_nodata(self):
-        sock = mock.Mock()
+        sock = test_utils.mock_nonblocking_socket()
         self.loop._sock_sendall = mock.Mock()
 
         f = self.loop.sock_sendall(sock, b'')
@@ -295,7 +295,7 @@ class BaseSelectorEventLoopTests(test_utils.TestCase):
             self.loop.add_writer.call_args[0])
 
     def test_sock_connect(self):
-        sock = mock.Mock()
+        sock = test_utils.mock_nonblocking_socket()
         self.loop._sock_connect = mock.Mock()
 
         f = self.loop.sock_connect(sock, ('127.0.0.1', 8080))
@@ -361,7 +361,7 @@ class BaseSelectorEventLoopTests(test_utils.TestCase):
         self.assertIsInstance(f.exception(), OSError)
 
     def test_sock_accept(self):
-        sock = mock.Mock()
+        sock = test_utils.mock_nonblocking_socket()
         self.loop._sock_accept = mock.Mock()
 
         f = self.loop.sock_accept(sock)

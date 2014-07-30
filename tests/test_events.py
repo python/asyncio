@@ -1231,6 +1231,7 @@ class EventLoopTestsMixin:
                          "Don't support pipes for Windows")
     def test_write_pipe_disconnect_on_close(self):
         rsock, wsock = test_utils.socketpair()
+        rsock.setblocking(False)
         pipeobj = io.open(wsock.detach(), 'wb', 1024)
 
         proto = MyWritePipeProto(loop=self.loop)
@@ -1368,6 +1369,7 @@ class EventLoopTestsMixin:
             for sock_type in (socket.SOCK_STREAM, socket.SOCK_DGRAM):
                 sock = socket.socket(family, sock_type)
                 with sock:
+                    sock.setblocking(False)
                     connect = self.loop.sock_connect(sock, address)
                     with self.assertRaises(ValueError) as cm:
                         self.loop.run_until_complete(connect)

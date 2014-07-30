@@ -145,6 +145,11 @@ class PipeServer(object):
     def __init__(self, address):
         self._address = address
         self._free_instances = weakref.WeakSet()
+        # initialize the pipe attribute before calling _server_pipe_handle()
+        # because this function can raise an exception and the destructor calls
+        # the close() method
+        self._pipe = None
+        self._accept_pipe_future = None
         self._pipe = self._server_pipe_handle(True)
 
     def _get_unconnected_pipe(self):
@@ -174,6 +179,9 @@ class PipeServer(object):
         return pipe
 
     def close(self):
+        if self._accept_pipe_future is not None:
+            self._accept_pipe_future.cancel()
+            self._accept_pipe_future = None
         # Close all instances which have not been connected to by a client.
         if self._address is not None:
             for pipe in self._free_instances:
@@ -216,7 +224,7 @@ class ProactorEventLoop(proactor_events.BaseProactorEventLoop):
     def start_serving_pipe(self, protocol_factory, address):
         server = PipeServer(address)
 
-        def loop(f=None):
+        def loop_accept_pipe(f=None):
             pipe = None
             try:
                 if f:
@@ -241,9 +249,10 @@ class ProactorEventLoop(proactor_events.BaseProactorEventLoop):
                 if pipe:
                     pipe.close()
             else:
-                f.add_done_callback(loop)
+                server._accept_pipe_future = f
+                f.add_done_callback(loop_accept_pipe)
 
-        self.call_soon(loop)
+        self.call_soon(loop_accept_pipe)
         return [server]
 
     @coroutine

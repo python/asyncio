@@ -111,10 +111,17 @@ class _WaitHandleFuture(futures.Future):
             return
         try:
             _overlapped.UnregisterWait(self._wait_handle)
-        except OSError as e:
-            if e.winerror != _overlapped.ERROR_IO_PENDING:
-                raise
+        except OSError as exc:
             # ERROR_IO_PENDING is not an error, the wait was unregistered
+            if exc.winerror != _overlapped.ERROR_IO_PENDING:
+                context = {
+                    'message': 'Failed to unregister the wait handle',
+                    'exception': exc,
+                    'future': self,
+                }
+                if self._source_traceback:
+                    context['source_traceback'] = self._source_traceback
+                self._loop.call_exception_handler(context)
         self._wait_handle = None
         self._iocp = None
         self._ov = None

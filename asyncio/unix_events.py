@@ -756,7 +756,9 @@ class SafeChildWatcher(BaseChildWatcher):
         except KeyError:  # pragma: no cover
             # May happen if .remove_child_handler() is called
             # after os.waitpid() returns.
-            pass
+            if self._loop.get_debug():
+                logger.warning("Child watcher got an unexpected pid: %r",
+                               pid, exc_info=True)
         else:
             callback(pid, returncode, *args)
 

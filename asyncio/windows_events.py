@@ -252,6 +252,9 @@ class ProactorEventLoop(proactor_events.BaseProactorEventLoop):
                         'pipe': pipe,
                     })
                     pipe.close()
+                elif self._debug:
+                    logger.warning("Accept pipe failed on pipe %r",
+                                   pipe, exc_info=True)
             except futures.CancelledError:
                 if pipe:
                     pipe.close()

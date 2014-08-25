@@ -728,6 +728,10 @@ class BaseEventLoop(events.AbstractEventLoop):
                         sock = socket.socket(af, socktype, proto)
                     except socket.error:
                         # Assume it's a bad family/type/protocol combination.
+                        if self._debug:
+                            logger.warning('create_server() failed to create '
+                                           'socket.socket(%r, %r, %r)',
+                                           af, socktype, proto, exc_info=True)
                         continue
                     sockets.append(sock)
                     if reuse_address:

@@ -264,6 +264,11 @@ def runtests():
     finder = TestsFinder(args.testsdir, includes, excludes)
     if catchbreak:
         installHandler()
+    import asyncio.coroutines
+    if asyncio.coroutines._DEBUG:
+        print("Run tests in debug mode")
+    else:
+        print("Run tests in release mode")
     try:
         if args.forever:
             while True:

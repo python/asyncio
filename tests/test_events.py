@@ -1789,8 +1789,9 @@ def noop(*args):
 class HandleTests(test_utils.TestCase):
 
     def setUp(self):
-        self.loop = mock.Mock()
-        self.loop.get_debug.return_value = True
+        self.loop = asyncio.new_event_loop()
+        self.set_event_loop(self.loop)
+        self.loop.set_debug(True)
 
     def test_handle(self):
         def callback(*args):
@@ -1835,7 +1836,7 @@ class HandleTests(test_utils.TestCase):
         wd['h'] = h  # Would fail without __weakref__ slot.
 
     def test_handle_repr(self):
-        self.loop.get_debug.return_value = False
+        self.loop.set_debug(False)
 
         # simple function
         h = asyncio.Handle(noop, (1, 2), self.loop)
@@ -1877,7 +1878,7 @@ class HandleTests(test_utils.TestCase):
             self.assertRegex(repr(h), regex)
 
     def test_handle_repr_debug(self):
-        self.loop.get_debug.return_value = True
+        self.loop.set_debug(True)
 
         # simple function
         create_filename = __file__
@@ -1932,15 +1933,15 @@ class HandleTests(test_utils.TestCase):
         check_source_traceback(h)
 
 
-class TimerTests(unittest.TestCase):
+class TimerTests(test_utils.TestCase):
 
     def setUp(self):
-        self.loop = mock.Mock()
+        self.loop = asyncio.new_event_loop()
+        self.set_event_loop(self.loop)
 
     def test_hash(self):
         when = time.monotonic()
-        h = asyncio.TimerHandle(when, lambda: False, (),
-                                mock.Mock())
+        h = asyncio.TimerHandle(when, lambda: False, (), self.loop)
         self.assertEqual(hash(h), hash(when))
 
     def test_timer(self):
@@ -1949,7 +1950,7 @@ class TimerTests(unittest.TestCase):
 
         args = (1, 2, 3)
         when = time.monotonic()
-        h = asyncio.TimerHandle(when, callback, args, mock.Mock())
+        h = asyncio.TimerHandle(when, callback, args, self.loop)
         self.assertIs(h._callback, callback)
         self.assertIs(h._args, args)
         self.assertFalse(h._cancelled)
@@ -1966,7 +1967,7 @@ class TimerTests(unittest.TestCase):
                           self.loop)
 
     def test_timer_repr(self):
-        self.loop.get_debug.return_value = False
+        self.loop.set_debug(False)
 
         # simple function
         h = asyncio.TimerHandle(123, noop, (), self.loop)
@@ -1980,7 +1981,7 @@ class TimerTests(unittest.TestCase):
                         '<TimerHandle cancelled when=123>')
 
     def test_timer_repr_debug(self):
-        self.loop.get_debug.return_value = True
+        self.loop.set_debug(True)
 
         # simple function
         create_filename = __file__

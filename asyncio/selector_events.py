@@ -501,6 +501,9 @@ class _SelectorTransport(transports._FlowControlMixin,
 
             bufsize = self.get_write_buffer_size()
             info.append('write=<%s, bufsize=%s>' % (state, bufsize))
+        if self._source_traceback:
+            frame = self._source_traceback[-1]
+            info.append('created at %s:%s' % (frame[0], frame[1]))
         return '<%s>' % ' '.join(info)
 
     def abort(self):

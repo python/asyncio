@@ -20,6 +20,7 @@ class ProactorSocketTransportTests(test_utils.TestCase):
         self.loop._proactor = self.proactor
         self.protocol = test_utils.make_test_protocol(asyncio.Protocol)
         self.sock = mock.Mock(socket.socket)
+        self.sock.fileno.return_value = 6
 
     def test_ctor(self):
         fut = asyncio.Future(loop=self.loop)

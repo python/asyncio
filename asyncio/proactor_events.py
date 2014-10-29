@@ -59,6 +59,9 @@ class _ProactorBasePipeTransport(transports._FlowControlMixin,
             info.append('write_bufsize=%s' % bufsize)
         if self._eof_written:
             info.append('EOF written')
+        if self._source_traceback:
+            frame = self._source_traceback[-1]
+            info.append('created at %s:%s' % (frame[0], frame[1]))
         return '<%s>' % ' '.join(info)
 
     def _set_extra(self, sock):

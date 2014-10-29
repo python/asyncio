@@ -317,6 +317,9 @@ class _UnixReadPipeTransport(transports.ReadTransport):
                 info.append('idle')
         else:
             info.append('closed')
+        if self._source_traceback:
+            frame = self._source_traceback[-1]
+            info.append('created at %s:%s' % (frame[0], frame[1]))
         return '<%s>' % ' '.join(info)
 
     def _read_ready(self):
@@ -428,6 +431,9 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
             info.append('bufsize=%s' % bufsize)
         else:
             info.append('closed')
+        if self._source_traceback:
+            frame = self._source_traceback[-1]
+            info.append('created at %s:%s' % (frame[0], frame[1]))
         return '<%s>' % ' '.join(info)
 
     def get_write_buffer_size(self):

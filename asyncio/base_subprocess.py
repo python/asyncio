@@ -31,6 +31,7 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
                     stderr=stderr, bufsize=bufsize, **kwargs)
         self._pid = self._proc.pid
         self._extra['subprocess'] = self._proc
+        self._source_traceback = self._loop._get_traceback()
         if self._loop.get_debug():
             if isinstance(args, (bytes, str)):
                 program = args

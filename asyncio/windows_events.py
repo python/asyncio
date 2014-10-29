@@ -269,11 +269,13 @@ class ProactorEventLoop(proactor_events.BaseProactorEventLoop):
     def _make_subprocess_transport(self, protocol, args, shell,
                                    stdin, stdout, stderr, bufsize,
                                    extra=None, **kwargs):
-        transp = _WindowsSubprocessTransport(self, protocol, args, shell,
-                                             stdin, stdout, stderr, bufsize,
-                                             extra=extra, **kwargs)
-        yield from transp._post_init()
-        return transp
+        transport = _WindowsSubprocessTransport(self, protocol, args, shell,
+                                                stdin, stdout, stderr, bufsize,
+                                                extra=extra, **kwargs)
+        if transport._source_traceback:
+            del transport._source_traceback[-1]
+        yield from transport._post_init()
+        return transport
 
 
 class IocpProactor:

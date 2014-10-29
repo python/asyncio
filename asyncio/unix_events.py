@@ -168,14 +168,18 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
                                    stdin, stdout, stderr, bufsize,
                                    extra=None, **kwargs):
         with events.get_child_watcher() as watcher:
-            transp = _UnixSubprocessTransport(self, protocol, args, shell,
-                                              stdin, stdout, stderr, bufsize,
-                                              extra=extra, **kwargs)
-            yield from transp._post_init()
-            watcher.add_child_handler(transp.get_pid(),
-                                      self._child_watcher_callback, transp)
+            transport = _UnixSubprocessTransport(self, protocol, args, shell,
+                                                 stdin, stdout, stderr,
+                                                 bufsize, extra=extra,
+                                                 **kwargs)
+            if transport._source_traceback:
+                del transport._source_traceback[-1]
+            yield from transport._post_init()
+            watcher.add_child_handler(transport.get_pid(),
+                                      self._child_watcher_callback,
+                                      transport)
 
-        return transp
+        return transport
 
     def _child_watcher_callback(self, pid, returncode, transp):
         self.call_soon_threadsafe(transp._process_exited, returncode)

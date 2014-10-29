@@ -353,12 +353,15 @@ class _UnixReadPipeTransport(transports.ReadTransport):
             if self._loop.get_debug():
                 logger.debug("%r: %s", self, message, exc_info=True)
         else:
-            self._loop.call_exception_handler({
+            context = {
                 'message': message,
                 'exception': exc,
                 'transport': self,
                 'protocol': self._protocol,
-            })
+            }
+            if self._source_traceback:
+                context['source_traceback'] = self._source_traceback
+            self._loop.call_exception_handler(context)
         self._close(exc)
 
     def _close(self, exc):
@@ -529,12 +532,15 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
             if self._loop.get_debug():
                 logger.debug("%r: %s", self, message, exc_info=True)
         else:
-            self._loop.call_exception_handler({
+            context = {
                 'message': message,
                 'exception': exc,
                 'transport': self,
                 'protocol': self._protocol,
-            })
+            }
+            if self._source_traceback:
+                context['source_traceback'] = self._source_traceback
+            self._loop.call_exception_handler(context)
         self._close(exc)
 
     def _close(self, exc=None):

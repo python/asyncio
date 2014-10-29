@@ -82,10 +82,7 @@ class Handle:
         self._args = args
         self._cancelled = False
         self._repr = None
-        if self._loop.get_debug():
-            self._source_traceback = traceback.extract_stack(sys._getframe(1))
-        else:
-            self._source_traceback = None
+        self._source_traceback = self._loop._get_traceback()
 
     def _repr_info(self):
         info = [self.__class__.__name__]

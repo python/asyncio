@@ -152,10 +152,7 @@ class Future:
         else:
             self._loop = loop
         self._callbacks = []
-        if self._loop.get_debug():
-            self._source_traceback = traceback.extract_stack(sys._getframe(1))
-        else:
-            self._source_traceback = None
+        self._source_traceback = self._loop._get_traceback()
 
     def _format_callbacks(self):
         cb = self._callbacks

@@ -1094,3 +1094,8 @@ class BaseEventLoop(events.AbstractEventLoop):
 
     def set_debug(self, enabled):
         self._debug = enabled
+
+    def _get_traceback(self):
+        if not self._debug:
+            return None
+        return traceback.extract_stack(sys._getframe(2))

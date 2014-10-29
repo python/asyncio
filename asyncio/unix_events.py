@@ -157,11 +157,17 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
 
     def _make_read_pipe_transport(self, pipe, protocol, waiter=None,
                                   extra=None):
-        return _UnixReadPipeTransport(self, pipe, protocol, waiter, extra)
+        transport = _UnixReadPipeTransport(self, pipe, protocol, waiter, extra)
+        if transport._source_traceback:
+            del transport._source_traceback[-1]
+        return transport
 
     def _make_write_pipe_transport(self, pipe, protocol, waiter=None,
                                    extra=None):
-        return _UnixWritePipeTransport(self, pipe, protocol, waiter, extra)
+        transport = _UnixWritePipeTransport(self, pipe, protocol, waiter, extra)
+        if transport._source_traceback:
+            del transport._source_traceback[-1]
+        return transport
 
     @coroutine
     def _make_subprocess_transport(self, protocol, args, shell,
@@ -292,6 +298,7 @@ class _UnixReadPipeTransport(transports.ReadTransport):
         _set_nonblocking(self._fileno)
         self._protocol = protocol
         self._closing = False
+        self._source_traceback = self._loop._get_traceback()
         self._loop.add_reader(self._fileno, self._read_ready)
         self._loop.call_soon(self._protocol.connection_made, self)
         if waiter is not None:
@@ -390,6 +397,7 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
         self._buffer = []
         self._conn_lost = 0
         self._closing = False  # Set when close() or write_eof() called.
+        self._source_traceback = self._loop._get_traceback()
 
         # On AIX, the reader trick only works for sockets.
         # On other platforms it works for pipes and sockets.

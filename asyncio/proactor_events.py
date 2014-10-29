@@ -34,6 +34,7 @@ class _ProactorBasePipeTransport(transports._FlowControlMixin,
         self._conn_lost = 0
         self._closing = False  # Set when close() called.
         self._eof_written = False
+        self._source_traceback = self._loop._get_traceback()
         if self._server is not None:
             self._server._attach()
         self._loop.call_soon(self._protocol.connection_made, self)
@@ -130,6 +131,8 @@ class _ProactorReadPipeTransport(_ProactorBasePipeTransport,
     def __init__(self, loop, sock, protocol, waiter=None,
                  extra=None, server=None):
         super().__init__(loop, sock, protocol, waiter, extra, server)
+        if self._source_traceback:
+            del self._source_traceback[-1]
         self._paused = False
         self._loop.call_soon(self._loop_reading)
 
@@ -292,6 +295,8 @@ class _ProactorBaseWritePipeTransport(_ProactorBasePipeTransport,
 class _ProactorWritePipeTransport(_ProactorBaseWritePipeTransport):
     def __init__(self, *args, **kw):
         super().__init__(*args, **kw)
+        if self._source_traceback:
+            del self._source_traceback[-1]
         self._read_fut = self._loop._proactor.recv(self._sock, 16)
         self._read_fut.add_done_callback(self._pipe_closed)
 
@@ -369,23 +374,36 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
 
     def _make_socket_transport(self, sock, protocol, waiter=None,
                                extra=None, server=None):
-        return _ProactorSocketTransport(self, sock, protocol, waiter,
-                                        extra, server)
+        transport = _ProactorSocketTransport(self, sock, protocol, waiter,
+                                             extra, server)
+        if transport._source_traceback:
+            del transport._source_traceback[-1]
+        return transport
 
     def _make_duplex_pipe_transport(self, sock, protocol, waiter=None,
                                     extra=None):
-        return _ProactorDuplexPipeTransport(self,
-                                            sock, protocol, waiter, extra)
+        transport = _ProactorDuplexPipeTransport(self, sock, protocol,
+                                                 waiter, extra)
+        if transport._source_traceback:
+            del transport._source_traceback[-1]
+        return transport
 
     def _make_read_pipe_transport(self, sock, protocol, waiter=None,
                                   extra=None):
-        return _ProactorReadPipeTransport(self, sock, protocol, waiter, extra)
+        transport = _ProactorReadPipeTransport(self, sock, protocol,
+                                               waiter, extra)
+        if transport._source_traceback:
+            del transport._source_traceback[-1]
+        return transport
 
     def _make_write_pipe_transport(self, sock, protocol, waiter=None,
                                    extra=None):
         # We want connection_lost() to be called when other end closes
-        return _ProactorWritePipeTransport(self,
-                                           sock, protocol, waiter, extra)
+        transport = _ProactorWritePipeTransport(self, sock, protocol,
+                                                waiter, extra)
+        if transport._source_traceback:
+            del transport._source_traceback[-1]
+        return transport
 
     def close(self):
         if self.is_closed():

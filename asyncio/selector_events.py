@@ -52,20 +52,29 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
 
     def _make_socket_transport(self, sock, protocol, waiter=None, *,
                                extra=None, server=None):
-        return _SelectorSocketTransport(self, sock, protocol, waiter,
-                                        extra, server)
+        transport = _SelectorSocketTransport(self, sock, protocol, waiter,
+                                             extra, server)
+        if transport._source_traceback:
+            del transport._source_traceback[-1]
+        return transport
 
     def _make_ssl_transport(self, rawsock, protocol, sslcontext, waiter, *,
                             server_side=False, server_hostname=None,
                             extra=None, server=None):
-        return _SelectorSslTransport(
-            self, rawsock, protocol, sslcontext, waiter,
-            server_side, server_hostname, extra, server)
+        transport = _SelectorSslTransport(self, rawsock, protocol, sslcontext,
+                                          waiter, server_side, server_hostname,
+                                          extra, server)
+        if transport._source_traceback:
+            del transport._source_traceback[-1]
+        return transport
 
     def _make_datagram_transport(self, sock, protocol,
                                  address=None, waiter=None, extra=None):
-        return _SelectorDatagramTransport(self, sock, protocol,
-                                          address, waiter, extra)
+        transport = _SelectorDatagramTransport(self, sock, protocol,
+                                               address, waiter, extra)
+        if transport._source_traceback:
+            del transport._source_traceback[-1]
+        return transport
 
     def close(self):
         if self.is_closed():
@@ -463,6 +472,7 @@ class _SelectorTransport(transports._FlowControlMixin,
         self._buffer = self._buffer_factory()
         self._conn_lost = 0  # Set when call to connection_lost scheduled.
         self._closing = False  # Set when close() called.
+        self._source_traceback = self._loop._get_traceback()
         if self._server is not None:
             self._server._attach()
 
@@ -553,6 +563,8 @@ class _SelectorSocketTransport(_SelectorTransport):
     def __init__(self, loop, sock, protocol, waiter=None,
                  extra=None, server=None):
         super().__init__(loop, sock, protocol, extra, server)
+        if self._source_traceback:
+            del self._source_traceback[-1]
         self._eof = False
         self._paused = False
 
@@ -711,6 +723,8 @@ class _SelectorSslTransport(_SelectorTransport):
         sslsock = sslcontext.wrap_socket(rawsock, **wrap_kwargs)
 
         super().__init__(loop, sslsock, protocol, extra, server)
+        if self._source_traceback:
+            del self._source_traceback[-1]
 
         self._server_hostname = server_hostname
         self._waiter = waiter
@@ -914,6 +928,8 @@ class _SelectorDatagramTransport(_SelectorTransport):
     def __init__(self, loop, sock, protocol, address=None,
                  waiter=None, extra=None):
         super().__init__(loop, sock, protocol, extra)
+        if self._source_traceback:
+            del self._source_traceback[-1]
         self._address = address
         self._loop.add_reader(self._sock_fd, self._read_ready)
         self._loop.call_soon(self._protocol.connection_made, self)

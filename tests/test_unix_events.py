@@ -45,8 +45,7 @@ class SelectorEventLoopSignalTests(test_utils.TestCase):
         self.loop._handle_signal(signal.NSIG + 1)
 
     def test_handle_signal_cancelled_handler(self):
-        h = asyncio.Handle(mock.Mock(), (),
-                           loop=mock.Mock())
+        h = asyncio.Handle(mock.Mock(), (), loop=self.loop)
         h.cancel()
         self.loop._signal_handlers[signal.NSIG + 1] = h
         self.loop.remove_signal_handler = mock.Mock()

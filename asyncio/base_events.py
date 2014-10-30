@@ -1098,4 +1098,18 @@ class BaseEventLoop(events.AbstractEventLoop):
     def _get_traceback(self):
         if not self._debug:
             return None
-        return traceback.extract_stack(sys._getframe(2))
+        tb = traceback.extract_stack(sys._getframe(2))
+        task = tasks.Task.current_task(loop=self)
+        if task is not None and task._source_traceback:
+            # Inject task traceback in the current traceback
+            index = len(tb) - 1
+            while 0 <= index:
+                filename, lineno, name, line = tb[index]
+                # Heuristic to find the frame of the current task
+                if filename == tasks.__file__ and name == '_step':
+                    frame = task._source_traceback[-1]
+                    frame = frame[:3] + ('<injected task>',)
+                    tb = task._source_traceback + [frame] + tb[index:]
+                    break
+                index -= 1
+        return tb

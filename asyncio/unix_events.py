@@ -354,7 +354,10 @@ class _UnixReadPipeTransport(transports.ReadTransport):
         # should be called by exception handler only
         if (isinstance(exc, OSError) and exc.errno == errno.EIO):
             if self._loop.get_debug():
-                logger.debug("%r: %s", self, message, exc_info=True)
+                msg = "%r: %s" % (self, message)
+                msg += events._format_source_traceback('Transport',
+                                                       self._source_traceback)
+                logger.debug(msg, exc_info=True)
         else:
             context = {
                 'message': message,
@@ -536,7 +539,10 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
         # should be called by exception handler only
         if isinstance(exc, (BrokenPipeError, ConnectionResetError)):
             if self._loop.get_debug():
-                logger.debug("%r: %s", self, message, exc_info=True)
+                msg = "%r: %s" % (self, message)
+                msg += events._format_source_traceback('Transport',
+                                                       self._source_traceback)
+                logger.debug(msg, exc_info=True)
         else:
             context = {
                 'message': message,

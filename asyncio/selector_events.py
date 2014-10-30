@@ -522,7 +522,10 @@ class _SelectorTransport(transports._FlowControlMixin,
         # Should be called from exception handler only.
         if isinstance(exc, (BrokenPipeError, ConnectionResetError)):
             if self._loop.get_debug():
-                logger.debug("%r: %s", self, message, exc_info=True)
+                msg = "%r: %s" % (self, message)
+                msg += events._format_source_traceback('Transport',
+                                                       self._source_traceback)
+                logger.debug(msg, exc_info=True)
         else:
             context = {
                 'message': message,
@@ -760,8 +763,10 @@ class _SelectorSslTransport(_SelectorTransport):
             return
         except BaseException as exc:
             if self._loop.get_debug():
-                logger.warning("%r: SSL handshake failed",
-                               self, exc_info=True)
+                msg = "%r: SSL handshake failed" % self
+                msg += events._format_source_traceback('Transport',
+                                                       self._source_traceback)
+                logger.warning(msg, exc_info=True)
             self._loop.remove_reader(self._sock_fd)
             self._loop.remove_writer(self._sock_fd)
             self._sock.close()
@@ -785,9 +790,11 @@ class _SelectorSslTransport(_SelectorTransport):
                     ssl.match_hostname(peercert, self._server_hostname)
                 except Exception as exc:
                     if self._loop.get_debug():
-                        logger.warning("%r: SSL handshake failed "
-                                       "on matching the hostname",
-                                       self, exc_info=True)
+                        msg = ("%r: SSL handshake failed "
+                               "on matching the hostname" % self)
+                        msg += events._format_source_traceback('Transport',
+                                                               self._source_traceback)
+                        logger.warning(msg, exc_info=True)
                     self._sock.close()
                     if self._waiter is not None:
                         self._waiter.set_exception(exc)

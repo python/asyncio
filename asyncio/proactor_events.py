@@ -10,6 +10,7 @@ import socket
 
 from . import base_events
 from . import constants
+from . import events
 from . import futures
 from . import transports
 from .log import logger
@@ -80,7 +81,10 @@ class _ProactorBasePipeTransport(transports._FlowControlMixin,
     def _fatal_error(self, exc, message='Fatal error on pipe transport'):
         if isinstance(exc, (BrokenPipeError, ConnectionResetError)):
             if self._loop.get_debug():
-                logger.debug("%r: %s", self, message, exc_info=True)
+                msg = "%r: %s" % (self, message)
+                msg += events._format_source_traceback('Transport',
+                                                       self._source_traceback)
+                logger.debug(msg, exc_info=True)
         else:
             context = {
                 'message': message,
@@ -188,8 +192,10 @@ class _ProactorReadPipeTransport(_ProactorBasePipeTransport,
             if not self._closing:
                 self._fatal_error(exc, 'Fatal read error on pipe transport')
             elif self._loop.get_debug():
-                logger.debug("Read error on pipe transport while closing",
-                             exc_info=True)
+                msg = "Read error on pipe transport while closing"
+                msg += events._format_source_traceback('Transport',
+                                                       self._source_traceback)
+                logger.debug(msg, exc_info=True)
         except ConnectionResetError as exc:
             self._force_close(exc)
         except OSError as exc:
@@ -345,15 +351,19 @@ class _ProactorSocketTransport(_ProactorReadPipeTransport,
             self._extra['sockname'] = sock.getsockname()
         except (socket.error, AttributeError):
             if self._loop.get_debug():
-                logger.warning("getsockname() failed on %r",
-                             sock, exc_info=True)
+                msg = "getsockname() failed on %r" % sock
+                msg += events._format_source_traceback('Transport',
+                                                       self._source_traceback)
+                logger.warning(msg, exc_info=True)
         if 'peername' not in self._extra:
             try:
                 self._extra['peername'] = sock.getpeername()
             except (socket.error, AttributeError):
                 if self._loop.get_debug():
-                    logger.warning("getpeername() failed on %r",
-                                   sock, exc_info=True)
+                    msg = "getpeername() failed on %r" % sock
+                    msg += events._format_source_traceback('Transport',
+                                                       self._source_traceback)
+                    logger.warning(msg, exc_info=True)
 
     def can_write_eof(self):
         return True

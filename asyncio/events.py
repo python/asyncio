@@ -69,6 +69,14 @@ def _format_callback(func, args, suffix=''):
     return func_repr
 
 
+def _format_source_traceback(obj_type, source_traceback):
+    if source_traceback:
+        tb = ''.join(traceback.format_list(source_traceback))
+        return '\n%s created at (most recent call last):\n%s' % (obj_type, tb)
+    else:
+        return ''
+
+
 class Handle:
     """Object returned by callback registration methods."""
 

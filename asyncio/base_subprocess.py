@@ -59,6 +59,9 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
             if stderr is not None:
                 info.append('stderr=%s' % stderr.pipe)
 
+        if self._source_traceback:
+            frame = self._source_traceback[-1]
+            info.append('created at %s:%s' % (frame[0], frame[1]))
         return '<%s>' % ' '.join(info)
 
     def _start(self, args, shell, stdin, stdout, stderr, bufsize, **kwargs):

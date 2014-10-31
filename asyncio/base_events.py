@@ -166,6 +166,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         # In debug mode, if the execution of a callback or a step of a task
         # exceed this duration in seconds, the slow callback/task is logged.
         self.slow_callback_duration = 0.1
+        self._current_handle = None
 
     def __repr__(self):
         return ('<%s running=%s closed=%s debug=%s>'
@@ -1079,12 +1080,16 @@ class BaseEventLoop(events.AbstractEventLoop):
             if handle._cancelled:
                 continue
             if self._debug:
-                t0 = self.time()
-                handle._run()
-                dt = self.time() - t0
-                if dt >= self.slow_callback_duration:
-                    logger.warning('Executing %s took %.3f seconds',
-                                   _format_handle(handle), dt)
+                try:
+                    self._current_handle = handle
+                    t0 = self.time()
+                    handle._run()
+                    dt = self.time() - t0
+                    if dt >= self.slow_callback_duration:
+                        logger.warning('Executing %s took %.3f seconds',
+                                       _format_handle(handle), dt)
+                finally:
+                    self._current_handle = None
             else:
                 handle._run()
         handle = None  # Needed to break cycles when an exception occurs.
@@ -1100,16 +1105,28 @@ class BaseEventLoop(events.AbstractEventLoop):
             return None
         tb = traceback.extract_stack(sys._getframe(2))
         task = tasks.Task.current_task(loop=self)
+        if self._current_handle and self._current_handle._source_traceback:
+            handle_cb = self._current_handle._source_traceback
+        else:
+            handle_cb = None
         if task is not None and task._source_traceback:
-            # Inject task traceback in the current traceback
-            index = len(tb) - 1
-            while 0 <= index:
-                filename, lineno, name, line = tb[index]
-                # Heuristic to find the frame of the current task
-                if filename == tasks.__file__ and name == '_step':
-                    frame = task._source_traceback[-1]
-                    frame = frame[:3] + ('<injected task>',)
-                    tb = task._source_traceback + [frame] + tb[index:]
-                    break
-                index -= 1
+            task_cb = task._source_traceback
+        else:
+            task_cb = None
+        index = len(tb) - 1
+        while 0 <= index:
+            filename, lineno, name, line = tb[index]
+            # Heuristic to find the frame of the current handle
+            if filename == tasks.__file__ and name == '_step' and task_cb:
+                frame = task_cb[-1]
+                frame = frame[:3] + ('<injected task>',)
+                tb = task_cb + [frame] + tb[index:]
+                break
+            # Heuristic to find the frame of the current task
+            if filename == events.__file__ and name == '_run' and handle_cb:
+                frame = handle_cb[-1]
+                frame = frame[:3] + ('<injected handle>',)
+                tb = handle_cb + [frame] + tb[index:]
+                break
+            index -= 1
         return tb

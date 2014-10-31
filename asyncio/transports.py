@@ -252,12 +252,16 @@ class _FlowControlMixin(Transport):
             try:
                 self._protocol.pause_writing()
             except Exception as exc:
-                self._loop.call_exception_handler({
+                context = {
                     'message': 'protocol.pause_writing() failed',
                     'exception': exc,
                     'transport': self,
                     'protocol': self._protocol,
-                })
+                }
+                if (hasattr(self, '_source_traceback')
+                and self._source_traceback):
+                    context['source_traceback'] = self._source_traceback
+                self._loop.call_exception_handler(context)
 
     def _maybe_resume_protocol(self):
         if (self._protocol_paused and
@@ -266,12 +270,16 @@ class _FlowControlMixin(Transport):
             try:
                 self._protocol.resume_writing()
             except Exception as exc:
-                self._loop.call_exception_handler({
+                context = {
                     'message': 'protocol.resume_writing() failed',
                     'exception': exc,
                     'transport': self,
                     'protocol': self._protocol,
-                })
+                }
+                if (hasattr(self, '_source_traceback')
+                and self._source_traceback):
+                    context['source_traceback'] = self._source_traceback
+                self._loop.call_exception_handler(context)
 
     def get_write_buffer_limits(self):
         return (self._low_water, self._high_water)

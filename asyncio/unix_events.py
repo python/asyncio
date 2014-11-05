@@ -8,6 +8,7 @@ import stat
 import subprocess
 import sys
 import threading
+import traceback
 
 
 from . import base_events
@@ -355,8 +356,12 @@ class _UnixReadPipeTransport(transports.ReadTransport):
         if (isinstance(exc, OSError) and exc.errno == errno.EIO):
             if self._loop.get_debug():
                 msg = "%r: %s" % (self, message)
-                msg += events._format_source_traceback('Transport',
-                                                       self._source_traceback)
+                if self._loop._current_handle:
+                    msg += events._format_source_traceback('Handle',
+                                                           self._loop._current_handle._source_traceback)
+                else:
+                    msg += events._format_source_traceback('Transport',
+                                                           self._source_traceback)
                 logger.debug(msg, exc_info=True)
         else:
             context = {

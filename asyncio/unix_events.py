@@ -355,10 +355,10 @@ class _UnixReadPipeTransport(transports.ReadTransport):
         # should be called by exception handler only
         if (isinstance(exc, OSError) and exc.errno == errno.EIO):
             if self._loop.get_debug():
+                source = self._loop._get_source()
                 msg = "%r: %s" % (self, message)
-                if self._loop._current_handle:
-                    msg += events._format_source_traceback('Handle',
-                                                           self._loop._current_handle._source_traceback)
+                if source:
+                    msg += '\n' + source
                 else:
                     msg += events._format_source_traceback('Transport',
                                                            self._source_traceback)

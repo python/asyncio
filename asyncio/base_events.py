@@ -1139,3 +1139,10 @@ class BaseEventLoop(events.AbstractEventLoop):
                 break
             index -= 1
         return tb
+
+    def _get_source(self):
+        handle = self._current_handle
+        if handle is None or not handle._source_traceback:
+            return ''
+        tb = ''.join(traceback.format_list(handle._source_traceback))
+        return 'Handle created at (most recent call last):\n%s' % tb

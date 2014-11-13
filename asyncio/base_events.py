@@ -1113,8 +1113,9 @@ class BaseEventLoop(events.AbstractEventLoop):
             return None
         tb = traceback.extract_stack(sys._getframe(2))
         task = tasks.Task.current_task(loop=self)
-        if self._current_handle and self._current_handle._source_traceback:
-            handle_cb = self._current_handle._source_traceback
+        handle = self._current_handle
+        if handle and handle._source_traceback:
+            handle_cb = handle._source_traceback
         else:
             handle_cb = None
         if task is not None and task._source_traceback:
@@ -1127,13 +1128,13 @@ class BaseEventLoop(events.AbstractEventLoop):
             # Heuristic to find the frame of the current handle
             if filename == tasks.__file__ and name == '_step' and task_cb:
                 frame = task_cb[-1]
-                frame = frame[:3] + ('<injected task>',)
+                frame = frame[:3] + ('<injected task: %r>' % task,)
                 tb = task_cb + [frame] + tb[index:]
                 break
             # Heuristic to find the frame of the current task
             if filename == events.__file__ and name == '_run' and handle_cb:
                 frame = handle_cb[-1]
-                frame = frame[:3] + ('<injected handle>',)
+                frame = frame[:3] + ('<injected handle: %r>' % handle,)
                 tb = handle_cb + [frame] + tb[index:]
                 break
             index -= 1

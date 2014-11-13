@@ -523,8 +523,13 @@ class _SelectorTransport(transports._FlowControlMixin,
         if isinstance(exc, (BrokenPipeError, ConnectionResetError)):
             if self._loop.get_debug():
                 msg = "%r: %s" % (self, message)
-                msg += events._format_source_traceback('Transport',
-                                                       self._source_traceback)
+                h = self._loop._current_handle
+                if h:
+                    msg += events._format_source_traceback('Handle',
+                                                           h._source_traceback)
+                else:
+                    msg += events._format_source_traceback('Transport',
+                                                           self._source_traceback)
                 logger.debug(msg, exc_info=True)
         else:
             context = {
@@ -764,8 +769,10 @@ class _SelectorSslTransport(_SelectorTransport):
         except BaseException as exc:
             if self._loop.get_debug():
                 msg = "%r: SSL handshake failed" % self
-                msg += events._format_source_traceback('Transport',
-                                                       self._source_traceback)
+                h = self._loop._current_handle
+                if h:
+                    msg += events._format_source_traceback('Handle',
+                                                           h._source_traceback)
                 logger.warning(msg, exc_info=True)
             self._loop.remove_reader(self._sock_fd)
             self._loop.remove_writer(self._sock_fd)

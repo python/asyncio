@@ -914,6 +914,10 @@ class BaseEventLoop(events.AbstractEventLoop):
         else:
             exc_info = False
 
+        if (self._current_handle is not None
+        and self._current_handle._source_traceback):
+            context['handle_traceback'] = self._current_handle._source_traceback
+
         log_lines = [message]
         for key in sorted(context):
             if key in {'message', 'exception'}:
@@ -922,6 +926,10 @@ class BaseEventLoop(events.AbstractEventLoop):
             if key == 'source_traceback':
                 tb = ''.join(traceback.format_list(value))
                 value = 'Object created at (most recent call last):\n'
+                value += tb.rstrip()
+            elif key == 'handle_traceback':
+                tb = ''.join(traceback.format_list(value))
+                value = 'Handle created at (most recent call last):\n'
                 value += tb.rstrip()
             else:
                 value = repr(value)

@@ -413,7 +413,6 @@ def disable_logger():
     """
     old_level = logger.level
     try:
-        logger.setLevel(logging.CRITICAL+1)
         yield
     finally:
         logger.setLevel(old_level)

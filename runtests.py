@@ -111,7 +111,7 @@ def load_modules(basedir, suffix='.py'):
             mods.append((loader.load_module(), sourcefile))
         except SyntaxError:
             raise
-        except Exception as err:
+        except unittest.SkipTest as err:
             print("Skipping '{}': {}".format(modname, err), file=sys.stderr)
 
     return mods

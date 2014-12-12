@@ -1,0 +1,4 @@
+[patterns]
+** = native
+.hgignore = native
+.hgeol = native

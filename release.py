@@ -35,6 +35,7 @@ class Release(object):
         self.register = False
         self.sdist = False
         self.dry_run = True
+        self.test = True
         self.aiotest = True
 
     @contextlib.contextmanager
@@ -232,8 +233,9 @@ class Release(object):
         hg_tag = sys.argv[1]
         self.run_command(HG, 'up', hg_tag)
 
-        for pyver, bits in PYTHON_VERSIONS:
-            self.runtests(pyver, bits)
+        if self.test:
+            for pyver, bits in PYTHON_VERSIONS:
+                self.runtests(pyver, bits)
 
         for pyver, bits in PYTHON_VERSIONS:
             self.test_wheel(pyver, bits)

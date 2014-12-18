@@ -1,5 +1,5 @@
-Tulip 3.4.2
-===========
+2014-09-30: Tulip 3.4.2
+=======================
 
 New shiny methods like create_task(), better documentation, much better debug
 mode, better tests.
@@ -155,3 +155,31 @@ Misc changes
 * Close explicitly the event loop in Tulip examples.
 
 * runtests.py now mention if tests are running in release or debug mode.
+
+2014-05-19: Tulip 3.4.1
+=======================
+
+2014-02-24: Tulip 0.4.1
+=======================
+
+2014-02-10: Tulip 0.3.1
+=======================
+
+* Add asyncio.subprocess submodule and the Process class.
+
+2013-11-25: Tulip 0.2.1
+=======================
+
+* Add support of subprocesses using transports and protocols.
+
+2013-10-22: Tulip 0.1.1
+=======================
+
+* First release.
+
+Creation of the project
+=======================
+
+* 2013-10-14: The tulip package was renamed to asyncio.
+* 2012-10-16: Creation of the Tulip project, started as mail threads on the
+  python-ideas mailing list.

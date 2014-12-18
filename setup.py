@@ -1,6 +1,5 @@
 # Release procedure:
-#  - run unit tests with python 3.3 in debug mode
-#  - run unit tests with python dev (3.5) in debug mode
+#  - run tox (to run runtests.py and run_aiotest.py)
 #  - maybe test examples
 #  - update version in setup.py
 #  - hg ci

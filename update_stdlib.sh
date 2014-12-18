@@ -40,6 +40,11 @@ maybe_copy()
 
 for i in `(cd asyncio && ls *.py)`
 do
+    if [ $i == test_support.py ]
+    then
+        continue
+    fi
+
     if [ $i == selectors.py ]
     then
         if [ "`(cd $CPYTHON; hg branch)`" == "3.4" ]

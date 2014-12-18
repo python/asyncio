@@ -1,0 +1,157 @@
+Tulip 3.4.2
+===========
+
+New shiny methods like create_task(), better documentation, much better debug
+mode, better tests.
+
+asyncio API
+-----------
+
+* Add BaseEventLoop.create_task() method: schedule a coroutine object.
+  It allows other asyncio implementations to use their own Task class to
+  change its behaviour.
+
+* New BaseEventLoop methods:
+
+  - create_task(): schedule a coroutine
+  - get_debug()
+  - is_closed()
+  - set_debug()
+
+* Add _FlowControlMixin.get_write_buffer_limits() method
+
+* sock_recv(), sock_sendall(), sock_connect(), sock_accept() methods of
+  SelectorEventLoop now raise an exception if the socket is blocking mode
+
+* Include unix_events/windows_events symbols in asyncio.__all__.
+  Examples: SelectorEventLoop, ProactorEventLoop, DefaultEventLoopPolicy.
+
+* attach(), detach(), loop, active_count and waiters attributes of the Server
+  class are now private
+
+* BaseEventLoop: run_forever(), run_until_complete() now raises an exception if
+  the event loop was closed
+
+* close() now raises an exception if the event loop is running, because pending
+  callbacks would be lost
+
+* Queue now accepts a float for the maximum size.
+
+* Process.communicate() now ignores BrokenPipeError and ConnectionResetError
+  exceptions, as Popen.communicate() of the subprocess module
+
+
+Performances
+------------
+
+* Optimize handling of cancelled timers
+
+
+Debug
+-----
+
+* Future (and Task), CoroWrapper and Handle now remembers where they were
+  created (new _source_traceback object), traceback displayed when errors are
+  logged.
+
+* On Python 3.4 and newer, Task destrutor now logs a warning if the task was
+  destroyed while it was still pending. It occurs if the last reference
+  to the task was removed, while the coroutine didn't finish yet.
+
+* Much more useful events are logged:
+
+  - Event loop closed
+  - Network connection
+  - Creation of a subprocess
+  - Pipe lost
+  - Log many errors previously silently ignored
+  - SSL handshake failure
+  - etc.
+
+* BaseEventLoop._debug is now True if the envrionement variable
+  PYTHONASYNCIODEBUG is set
+
+* Log the duration of DNS resolution and SSL handshake
+
+* Log a warning if a callback blocks the event loop longer than 100 ms
+  (configurable duration)
+
+* repr(CoroWrapper) and repr(Task) now contains the current status of the
+  coroutine (running, done), current filename and line number, and filename and
+  line number where the object was created
+
+* Enhance representation (repr) of transports: add the file descriptor, status
+  (idle, polling, writing, etc.), size of the write buffer, ...
+
+* Add repr(BaseEventLoop)
+
+* run_until_complete() doesn't log a warning anymore when called with a
+  coroutine object which raises an exception.
+
+
+Bugfixes
+--------
+
+* windows_utils.socketpair() now ensures that sockets are closed in case
+  of error.
+
+* Rewrite bricks of the IocpProactor() to make it more reliable
+
+* IocpProactor destructor now closes it.
+
+* _OverlappedFuture.set_exception() now cancels the overlapped operation.
+
+* Rewrite _WaitHandleFuture:
+
+  - cancel() is now able to signal the cancellation to the overlapped object
+  - _unregister_wait() now catchs and logs exceptions
+
+* PipeServer.close() (class used on Windows) now cancels the accept pipe
+  future.
+
+* Rewrite signal handling in the UNIX implementation of SelectorEventLoop:
+  use the self-pipe to store pending signals instead of registering a
+  signal handler calling directly _handle_signal(). The change fixes a
+  race condition.
+
+* create_unix_server(): close the socket on error.
+
+* Fix wait_for()
+
+* Rewrite gather()
+
+* drain() is now a classic coroutine, no more special return value (empty
+  tuple)
+
+* Rewrite SelectorEventLoop.sock_connect() to handle correctly timeout
+
+* Process data of the self-pipe faster to accept more pending events,
+  especially signals written by signal handlers: the callback reads all pending
+  data, not only a single byte
+
+* Don't try to set the result of a Future anymore if it was cancelled
+  (explicitly or by a timeout)
+
+* CoroWrapper now works around CPython issue #21209: yield from & custom
+  generator classes don't work together, issue with the send() method. It only
+  affected asyncio in debug mode on Python older than 3.4.2
+
+
+Misc changes
+------------
+
+* windows_utils.socketpair() now supports IPv6.
+
+* Better documentation (online & docstrings): fill remaining XXX, more examples
+
+* new asyncio.coroutines submodule, to ease maintenance with the trollius
+  project: @coroutine, _DEBUG, iscoroutine() and iscoroutinefunction() have
+  been moved from asyncio.tasks to asyncio.coroutines
+
+* Cleanup code, ex: remove unused attribute (ex: _rawsock)
+
+* Reuse os.set_blocking() of Python 3.5.
+
+* Close explicitly the event loop in Tulip examples.
+
+* runtests.py now mention if tests are running in release or debug mode.

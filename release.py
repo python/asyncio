@@ -156,7 +156,7 @@ class Release(object):
         release_env.pop(DEBUG_ENV_VAR, None)
 
         dbg_env = dict(os.environ)
-        dbg_env = {DEBUG_ENV_VAR: '1'}
+        dbg_env[DEBUG_ENV_VAR] = '1'
 
         args = (python, 'runtests.py', '-r')
         print("Run runtests.py in release mode with %s" % pythonstr)

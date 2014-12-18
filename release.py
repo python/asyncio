@@ -17,6 +17,7 @@ import sys
 import tempfile
 import textwrap
 
+PROJECT = 'asyncio'
 PY3 = (sys.version_info >= (3,))
 HG = 'hg'
 _PYTHON_VERSIONS = [(3, 3)]
@@ -136,7 +137,7 @@ class Release(object):
         self.remove_directory('build')
         self.remove_directory('dist')
         self.remove_file('_overlapped.pyd')
-        self.remove_file(os.path.join('asyncio', '_overlapped.pyd'))
+        self.remove_file(os.path.join(PROJECT, '_overlapped.pyd'))
 
     def sdist_upload(self):
         self.cleanup()
@@ -153,8 +154,8 @@ class Release(object):
         else:
             arch = 'win32'
         build_dir = 'lib.%s-%s.%s' % (arch, pyver[0], pyver[1])
-        src = os.path.join(self.root, 'build', build_dir, 'asyncio', '_overlapped.pyd')
-        dst = os.path.join(self.root, 'asyncio', '_overlapped.pyd')
+        src = os.path.join(self.root, 'build', build_dir, PROJECT, '_overlapped.pyd')
+        dst = os.path.join(self.root, PROJECT, '_overlapped.pyd')
         shutil.copyfile(src, dst)
 
         args = (python, 'runtests.py', '-r')
@@ -182,12 +183,15 @@ class Release(object):
         cmd = [python, 'setup.py'] + list(cmds)
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".bat", delete=False) as temp:
-            print("CD %s" % self.quote(self.root), file=temp)
+            print("SETLOCAL EnableDelayedExpansion", file=temp)
             print(self.quote_args(setenv), file=temp)
             print(BATCH_FAIL_ON_ERROR, file=temp)
+            # Restore console colors: lightgrey on black
+            print("COLOR 07", file=temp)
             print("", file=temp)
             print("SET DISTUTILS_USE_SDK=1", file=temp)
             print("SET MSSDK=1", file=temp)
+            print("CD %s" % self.quote(self.root), file=temp)
             print(self.quote_args(cmd), file=temp)
             print(BATCH_FAIL_ON_ERROR, file=temp)
 

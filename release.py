@@ -4,7 +4,9 @@ Script to upload 32 bits and 64 bits wheel packages for Python 3.3 on Windows.
 Usage: "python release.py HG_TAG" where HG_TAG is a Mercurial tag, usually
 a version number like "3.4.2".
 
-It requires the Windows SDK 7.1 on Windows 64 bits.
+Modify manually the dry_run attribute to upload files.
+
+It requires the Windows SDK 7.1 on Windows 64 bits and the aiotest module.
 """
 import contextlib
 import os
@@ -32,6 +34,8 @@ class Release(object):
         # Set these attributes to True to run also register sdist upload
         self.register = False
         self.sdist = False
+        self.dry_run = True
+        self.aiotest = True
 
     @contextlib.contextmanager
     def _popen(self, args, **kw):
@@ -140,15 +144,34 @@ class Release(object):
     def runtests(self, pyver, bits):
         pythonstr = "%s.%s (%s bits)" % (pyver[0], pyver[1], bits)
         python = self.get_python(pyver, bits)
-        args = python, 'runtests.py', '-r'
+        dbg_env = {'PYTHONASYNCIODEBUG': '1'}
 
-        print("Run tests in release mode with %s" % pythonstr)
+        self.build(pyver, bits, 'build')
+        if bits == 64:
+            arch = 'win-amd64'
+        else:
+            arch = 'win32'
+        build_dir = 'lib.%s-%s.%s' % (arch, pyver[0], pyver[1])
+        src = os.path.join(self.root, 'build', build_dir, 'asyncio', '_overlapped.pyd')
+        dst = os.path.join(self.root, 'asyncio', '_overlapped.pyd')
+        shutil.copyfile(src, dst)
+
+        args = (python, 'runtests.py', '-r')
+        print("Run runtests.py in release mode with %s" % pythonstr)
         self.run_command(*args)
 
-        print("Run tests in debug mode with %s" % pythonstr)
-        self.run_command(*args, env={'PYTHONASYNCIODEBUG': 1})
+        print("Run runtests.py in debug mode with %s" % pythonstr)
+        self.run_command(*args, env=dbg_env)
 
-    def wheel_command(self, pyver, bits, *cmds):
+        if self.aiotest:
+            args = (python, 'run_aiotest.py')
+            print("Run aiotest in release mode with %s" % pythonstr)
+            self.run_command(*args)
+
+            print("Run aiotest in debug mode with %s" % pythonstr)
+            self.run_command(*args, env=dbg_env)
+
+    def build(self, pyver, bits, *cmds):
         self.cleanup()
 
         setenv = self.windows_sdk_setenv(pyver, bits)
@@ -173,10 +196,10 @@ class Release(object):
             os.unlink(temp.name)
 
     def test_wheel(self, pyver, bits):
-        self.wheel_command(pyver, bits, 'bdist_wheel')
+        self.build(pyver, bits, 'bdist_wheel')
 
     def publish_wheel(self, pyver, bits):
-        self.wheel_command(pyver, bits, 'bdist_wheel', 'upload')
+        self.build(pyver, bits, 'bdist_wheel', 'upload')
 
     def main(self):
         try:
@@ -209,15 +232,14 @@ class Release(object):
         hg_tag = sys.argv[1]
         self.run_command(HG, 'up', hg_tag)
 
-        # FIXME: enable running tests
-        # On Windows, installing Python with the MSI doesn't install the test module,
-        # so asyncio tests cannot run because test.script_helper is not found.
-        #for pyver in PYTHON_VERSIONS:
-        #    self.runtests(pyver, 32)
-        #    self.runtests(pyver, 64)
+        for pyver, bits in PYTHON_VERSIONS:
+            self.runtests(pyver, bits)
 
         for pyver, bits in PYTHON_VERSIONS:
             self.test_wheel(pyver, bits)
+
+        if self.dry_run:
+            sys.exit(0)
 
         if self.register:
             self.run_command(sys.executable, 'setup.py', 'register')

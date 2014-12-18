@@ -40,7 +40,7 @@ def _assert_python(expected_success, *args, **env_vars):
     else:
         isolated = not env_vars
     cmd_line = [sys.executable, '-X', 'faulthandler']
-    if isolated:
+    if isolated and sys.version_info >= (3, 4):
         # isolated mode: ignore Python environment variables, ignore user
         # site-packages, and don't add the current directory to sys.path
         cmd_line.append('-I')

@@ -1,3 +1,15 @@
+# Release procedure:
+#  - run unit tests with python 3.3 in debug mode
+#  - run unit tests with python dev (3.5) in debug mode
+#  - maybe test examples
+#  - update version in setup.py
+#  - hg ci
+#  - hg tag VERSION
+#  - hg push
+#  - python setup.py register sdist bdist_wheel upload
+#  - increment version in setup.py
+#  - hg ci && hg push
+
 import os
 try:
     from setuptools import setup, Extension
@@ -15,7 +27,7 @@ if os.name == 'nt':
 
 setup(
     name="asyncio",
-    version="3.4.1",
+    version="3.4.3",
 
     description="reference implementation of PEP 3156",
     long_description=open("README").read(),

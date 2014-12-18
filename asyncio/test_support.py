@@ -12,6 +12,8 @@ import re
 import socket
 import subprocess
 import sys
+import time
+
 
 # A constant likely larger than the underlying OS pipe buffer size, to
 # make writes blocking.

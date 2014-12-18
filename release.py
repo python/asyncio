@@ -18,13 +18,13 @@ import tempfile
 import textwrap
 
 PROJECT = 'asyncio'
+DEBUG_ENV_VAR = 'PYTHONASYNCIODEBUG'
+PYTHON_VERSIONS = (
+    ((3, 3), 32),
+    ((3, 3), 64),
+)
 PY3 = (sys.version_info >= (3,))
 HG = 'hg'
-_PYTHON_VERSIONS = [(3, 3)]
-PYTHON_VERSIONS = []
-for pyver in _PYTHON_VERSIONS:
-    PYTHON_VERSIONS.append((pyver, 32))
-    PYTHON_VERSIONS.append((pyver, 64))
 SDK_ROOT = r"C:\Program Files\Microsoft SDKs\Windows"
 BATCH_FAIL_ON_ERROR = "@IF %errorlevel% neq 0 exit /b %errorlevel%"
 
@@ -41,15 +41,10 @@ class Release(object):
 
     @contextlib.contextmanager
     def _popen(self, args, **kw):
-        env2 = kw.pop('env', {})
-        env = dict(os.environ)
-        # Force the POSIX locale
-        env['LC_ALL'] = 'C'
-        env.update(env2)
         print('+ ' + ' '.join(args))
         if PY3:
             kw['universal_newlines'] = True
-        proc = subprocess.Popen(args, env=env, **kw)
+        proc = subprocess.Popen(args, **kw)
         with proc:
             yield proc
 
@@ -146,7 +141,6 @@ class Release(object):
     def runtests(self, pyver, bits):
         pythonstr = "%s.%s (%s bits)" % (pyver[0], pyver[1], bits)
         python = self.get_python(pyver, bits)
-        dbg_env = {'PYTHONASYNCIODEBUG': '1'}
 
         self.build(pyver, bits, 'build')
         if bits == 64:
@@ -158,9 +152,15 @@ class Release(object):
         dst = os.path.join(self.root, PROJECT, '_overlapped.pyd')
         shutil.copyfile(src, dst)
 
+        release_env = dict(os.environ)
+        release_env.pop(DEBUG_ENV_VAR, None)
+
+        dbg_env = dict(os.environ)
+        dbg_env = {DEBUG_ENV_VAR: '1'}
+
         args = (python, 'runtests.py', '-r')
         print("Run runtests.py in release mode with %s" % pythonstr)
-        self.run_command(*args)
+        self.run_command(*args, env=release_env)
 
         print("Run runtests.py in debug mode with %s" % pythonstr)
         self.run_command(*args, env=dbg_env)
@@ -168,7 +168,7 @@ class Release(object):
         if self.aiotest:
             args = (python, 'run_aiotest.py')
             print("Run aiotest in release mode with %s" % pythonstr)
-            self.run_command(*args)
+            self.run_command(*args, env=release_env)
 
             print("Run aiotest in debug mode with %s" % pythonstr)
             self.run_command(*args, env=dbg_env)

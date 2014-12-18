@@ -1,3 +1,11 @@
+"""
+Script to upload 32 bits and 64 bits wheel packages for Python 3.3 on Windows.
+
+Usage: "python release.py HG_TAG" where HG_TAG is a Mercurial tag, usually
+a version number like "3.4.2".
+
+It requires the Windows SDK 7.1 on Windows 64 bits.
+"""
 import contextlib
 import os
 import re
@@ -21,6 +29,9 @@ class Release(object):
     def __init__(self):
         root = os.path.dirname(__file__)
         self.root = os.path.realpath(root)
+        # Set these attributes to True to run also register sdist upload
+        self.register = False
+        self.sdist = False
 
     @contextlib.contextmanager
     def _popen(self, args, **kw):
@@ -208,17 +219,21 @@ class Release(object):
         for pyver, bits in PYTHON_VERSIONS:
             self.test_wheel(pyver, bits)
 
-        self.run_command(sys.executable, 'setup.py', 'register')
+        if self.register:
+            self.run_command(sys.executable, 'setup.py', 'register')
 
-        self.sdist_upload()
+        if self.sdist:
+            self.sdist_upload()
 
         for pyver, bits in PYTHON_VERSIONS:
             self.publish_wheel(pyver, bits)
 
         print("")
-        print("Publish version %s" % hg_tag)
+        if self.register:
+            print("Publish version %s" % hg_tag)
         print("Uploaded:")
-        print("- sdist")
+        if self.sdist:
+            print("- sdist")
         for pyver, bits in PYTHON_VERSIONS:
             print("- Windows wheel %s bits package for Python %s.%s"
                   % (bits, pyver[0], pyver[1]))

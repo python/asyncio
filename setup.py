@@ -6,7 +6,8 @@
 #  - hg ci
 #  - hg tag VERSION
 #  - hg push
-#  - python setup.py register sdist bdist_wheel upload
+#  - run on Linux: python setup.py register sdist upload
+#  - run on Windows: python release.py VERSION
 #  - increment version in setup.py
 #  - hg ci && hg push
 

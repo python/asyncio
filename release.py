@@ -24,13 +24,18 @@ import textwrap
 PROJECT = 'asyncio'
 DEBUG_ENV_VAR = 'PYTHONASYNCIODEBUG'
 PYTHON_VERSIONS = (
-    ((3, 3), 32),
-    ((3, 3), 64),
+    (3, 3),
 )
 PY3 = (sys.version_info >= (3,))
 HG = 'hg'
 SDK_ROOT = r"C:\Program Files\Microsoft SDKs\Windows"
 BATCH_FAIL_ON_ERROR = "@IF %errorlevel% neq 0 exit /b %errorlevel%"
+WINDOWS = (sys.platform == 'win32')
+
+
+def get_archiecture_bits():
+    arch = platform.architecture()[0]
+    return int(arch[:2])
 
 
 class PythonVersion:
@@ -42,42 +47,62 @@ class PythonVersion:
 
     @staticmethod
     def running():
-        arch = platform.architecture()[0]
-        bits = int(arch[:2])
+        bits = get_archiecture_bits()
         pyver = PythonVersion(sys.version_info.major,
                               sys.version_info.minor,
                               bits)
         pyver._executable = sys.executable
         return pyver
 
+    def _get_executable_windows(self, app):
+        if self.bits == 32:
+            executable = 'c:\\Python%s%s_32bit\\python.exe'
+        else:
+            executable = 'c:\\Python%s%s\\python.exe'
+        executable = executable % (self.major, self.minor)
+        if not os.path.exists(executable):
+            print("Unable to find python %s" % self)
+            print("%s does not exists" % executable)
+            sys.exit(1)
+        return executable
+
+    def _get_executable_unix(self, app):
+        return 'python%s.%s' % (self.major, self.minor)
+
     def get_executable(self, app):
         if self._executable:
             return self._executable
 
-        if self.bits == 32:
-            python = 'c:\\Python%s%s_32bit\\python.exe' % (self.major, self.minor)
+        if WINDOWS:
+            executable = self._get_executable_windows(app)
         else:
-            python = 'c:\\Python%s%s\\python.exe' % (self.major, self.minor)
-        if not os.path.exists(python):
-            print("Unable to find python %s" % self)
-            print("%s does not exists" % python)
-            sys.exit(1)
+            executable = self._get_executable_unix(app)
+
         code = (
             'import platform, sys; '
             'print("{ver.major}.{ver.minor} {bits}".format('
             'ver=sys.version_info, '
             'bits=platform.architecture()[0]))'
         )
-        exitcode, stdout = app.get_output(python, '-c', code)
-        stdout = stdout.rstrip()
-        expected = "%s.%s %sbit" % (self.major, self.minor, self.bits)
-        if stdout != expected:
-            print("Python version or architecture doesn't match")
-            print("got %r, expected %r" % (stdout, expected))
-            print(python)
+        try:
+            exitcode, stdout = app.get_output(executable, '-c', code,
+                                              ignore_stderr=True)
+        except OSError as exc:
+            print("Error while checking %s:" % self)
+            print(str(exc))
+            print("Executable: %s" % executable)
             sys.exit(1)
-        self._executable = python
-        return python
+        else:
+            stdout = stdout.rstrip()
+            expected = "%s.%s %sbit" % (self.major, self.minor, self.bits)
+            if stdout != expected:
+                print("Python version or architecture doesn't match")
+                print("got %r, expected %r" % (stdout, expected))
+                print("Executable: %s" % executable)
+                sys.exit(1)
+
+        self._executable = executable
+        return executable
 
     def __str__(self):
         return 'Python %s.%s (%s bits)' % (self.major, self.minor, self.bits)
@@ -97,9 +122,16 @@ class Release(object):
         self.upload = False
         # Release mode: enable more tests
         self.release = False
-        self.python_versions = [
-            PythonVersion(pyver[0], pyver[1], bits)
-            for pyver, bits in PYTHON_VERSIONS]
+        self.python_versions = []
+        if WINDOWS:
+            supported_archs = (32, 64)
+        else:
+            bits = get_archiecture_bits()
+            supported_archs = (bits,)
+        for major, minor in PYTHON_VERSIONS:
+            for bits in supported_archs:
+                pyver = PythonVersion(major, minor, bits)
+                self.python_versions.append(pyver)
 
     @contextlib.contextmanager
     def _popen(self, args, **kw):
@@ -109,15 +141,28 @@ class Release(object):
         if PY3:
             kw['universal_newlines'] = True
         proc = subprocess.Popen(args, **kw)
-        with proc:
+        try:
             yield proc
+        except:
+            proc.kill()
+            proc.wait()
+            raise
 
     def get_output(self, *args, **kw):
         kw['stdout'] = subprocess.PIPE
-        kw['stderr'] = subprocess.STDOUT
-        with self._popen(args, **kw) as proc:
-            stdout, stderr = proc.communicate()
-            return proc.returncode, stdout
+        ignore_stderr = kw.pop('ignore_stderr', False)
+        if ignore_stderr:
+            devnull = open(os.path.devnull, 'wb')
+            kw['stderr'] = devnull
+        else:
+            kw['stderr'] = subprocess.STDOUT
+        try:
+            with self._popen(args, **kw) as proc:
+                stdout, stderr = proc.communicate()
+                return proc.returncode, stdout
+        finally:
+            if ignore_stderr:
+                devnull.close()
 
     def check_output(self, *args, **kw):
         exitcode, output = self.get_output(*args, **kw)
@@ -195,21 +240,23 @@ class Release(object):
         self.run_command(sys.executable, 'setup.py', 'sdist', 'upload')
 
     def build_inplace(self, pyver):
-        print("Build _overlapped.pyd for %s" % pyver)
+        print("Build for %s" % pyver)
         self.build(pyver, 'build')
-        if pyver.bits == 64:
-            arch = 'win-amd64'
-        else:
-            arch = 'win32'
-        build_dir = 'lib.%s-%s.%s' % (arch, pyver.major, pyver.minor)
-        src = os.path.join(self.root, 'build', build_dir, PROJECT, '_overlapped.pyd')
-        dst = os.path.join(self.root, PROJECT, '_overlapped.pyd')
-        shutil.copyfile(src, dst)
+
+        if WINDOWS:
+            if pyver.bits == 64:
+                arch = 'win-amd64'
+            else:
+                arch = 'win32'
+            build_dir = 'lib.%s-%s.%s' % (arch, pyver.major, pyver.minor)
+            src = os.path.join(self.root, 'build', build_dir, PROJECT, '_overlapped.pyd')
+            dst = os.path.join(self.root, PROJECT, '_overlapped.pyd')
+            shutil.copyfile(src, dst)
 
     def runtests(self, pyver):
         print("Run tests on %s" % pyver)
 
-        if not self.options.no_compile:
+        if WINDOWS and not self.options.no_compile:
             self.build_inplace(pyver)
 
         release_env = dict(os.environ)
@@ -239,27 +286,21 @@ class Release(object):
             self.run_command(*args, env=dbg_env)
         print("")
 
-    def build(self, pyver, *cmds):
-        self.cleanup()
-
+    def _build_windows(self, pyver, cmd):
         setenv, sdkver = self.windows_sdk_setenv(pyver)
 
-        python = pyver.get_executable(self)
-
-        cmd = [python, 'setup.py'] + list(cmds)
-
         with tempfile.NamedTemporaryFile(mode="w", suffix=".bat", delete=False) as temp:
-            print("SETLOCAL EnableDelayedExpansion", file=temp)
-            print(self.quote_args(setenv), file=temp)
-            print(BATCH_FAIL_ON_ERROR, file=temp)
+            temp.write("SETLOCAL EnableDelayedExpansion\n")
+            temp.write(self.quote_args(setenv) + "\n")
+            temp.write(BATCH_FAIL_ON_ERROR + "\n")
             # Restore console colors: lightgrey on black
-            print("COLOR 07", file=temp)
-            print("", file=temp)
-            print("SET DISTUTILS_USE_SDK=1", file=temp)
-            print("SET MSSDK=1", file=temp)
-            print("CD %s" % self.quote(self.root), file=temp)
-            print(self.quote_args(cmd), file=temp)
-            print(BATCH_FAIL_ON_ERROR, file=temp)
+            temp.write("COLOR 07\n")
+            temp.write("\n")
+            temp.write("SET DISTUTILS_USE_SDK=1\n")
+            temp.write("SET MSSDK=1\n")
+            temp.write("CD %s\n" % self.quote(self.root))
+            temp.write(self.quote_args(cmd) + "\n")
+            temp.write(BATCH_FAIL_ON_ERROR + "\n")
 
         try:
             if self.verbose:
@@ -274,12 +315,28 @@ class Release(object):
         finally:
             os.unlink(temp.name)
 
+    def _build_unix(self, pyver, cmd):
+        self.check_output(*cmd)
+
+    def build(self, pyver, *cmds):
+        self.cleanup()
+
+        python = pyver.get_executable(self)
+        cmd = [python, 'setup.py'] + list(cmds)
+
+        if WINDOWS:
+            self._build_windows(pyver, cmd)
+        else:
+            self._build_unix(pyver, cmd)
+
     def test_wheel(self, pyver):
         print("Test building wheel package for %s" % pyver)
         self.build(pyver, 'bdist_wheel')
 
     def publish_wheel(self, pyver):
-        self.build(pyver, 'bdist_wheel', 'upload')
+        # FIXME: really upload
+        #self.build(pyver, 'bdist_wheel', 'upload')
+        self.build(pyver, 'bdist_wheel')
 
     def parse_options(self):
         parser = optparse.OptionParser(
@@ -331,7 +388,7 @@ class Release(object):
             self.release = True
             self.wheel = True
             self.test = True
-            #self.upload = True
+            self.upload = True
         else:
             if command:
                 print("Invalid command: %s" % command)

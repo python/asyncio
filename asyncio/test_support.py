@@ -290,3 +290,15 @@ def requires_freebsd_version(*min_version):
     version is less than 7.2.
     """
     return _requires_unix_version('FreeBSD', min_version)
+
+# Use test.support if available
+try:
+    from test.support import *
+except ImportError:
+    pass
+
+# Use test.script_helper if available
+try:
+    from test.script_helper import assert_python_ok
+except ImportError:
+    pass

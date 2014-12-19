@@ -334,9 +334,8 @@ class Release(object):
         self.build(pyver, 'bdist_wheel')
 
     def publish_wheel(self, pyver):
-        # FIXME: really upload
-        #self.build(pyver, 'bdist_wheel', 'upload')
-        self.build(pyver, 'bdist_wheel')
+        print("Build wheel package for %s" % pyver)
+        self.build(pyver, 'bdist_wheel', 'upload')
 
     def parse_options(self):
         parser = optparse.OptionParser(

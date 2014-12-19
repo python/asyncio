@@ -129,13 +129,15 @@ class Release(object):
 
     def windows_sdk_setenv(self, pyver):
         if (pyver.major, pyver.minor) >= (3, 3):
-            sdkver = "v7.1"
+            path = "v7.1"
+            sdkver = (7, 1)
         else:
-            sdkver = "v7.0"
-        setenv = os.path.join(SDK_ROOT, sdkver, 'Bin', 'SetEnv.cmd')
+            path = "v7.0"
+            sdkver = (7, 0)
+        setenv = os.path.join(SDK_ROOT, path, 'Bin', 'SetEnv.cmd')
         if not os.path.exists(setenv):
-            print("Unable to find Windows SDK %s for %s"
-                  % (sdkver, pyver))
+            print("Unable to find Windows SDK %s.%s for %s"
+                  % (sdkver[0], sdkver[1], pyver))
             print("Please download and install it")
             print("%s does not exists" % setenv)
             sys.exit(1)
@@ -143,7 +145,8 @@ class Release(object):
             arch = '/x64'
         else:
             arch = '/x86'
-        return ["CALL", setenv, "/release", arch]
+        cmd = ["CALL", setenv, "/release", arch]
+        return (cmd, sdkver)
 
     def quote(self, arg):
         if not re.search("[ '\"]", arg):
@@ -207,7 +210,7 @@ class Release(object):
     def build(self, pyver, *cmds):
         self.cleanup()
 
-        setenv = self.windows_sdk_setenv(pyver)
+        setenv, sdkver = self.windows_sdk_setenv(pyver)
 
         python = pyver.get_executable(self)
 
@@ -230,7 +233,9 @@ class Release(object):
             if self.verbose:
                 print("Setup Windows SDK")
                 print("+ " + ' '.join(cmd))
-            if self.verbose:
+            # SDK 7.1 uses the COLOR command which makes SetEnv.cmd failing
+            # if the stdout is not a TTY (if we redirect stdout into a file)
+            if self.verbose or sdkver >= (7, 1):
                 self.run_command(temp.name, verbose=False)
             else:
                 exitcode, stdout = self.get_output(temp.name, verbose=False)

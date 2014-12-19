@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Run Tulip unittests.
 
 Usage:
@@ -205,6 +206,17 @@ class TestRunner(unittest.TextTestRunner):
         return result
 
 
+def _runtests(args, tests):
+    v = 0 if args.quiet else args.verbose + 1
+    runner_factory = TestRunner if args.findleaks else unittest.TextTestRunner
+    if args.randomize:
+        randomize_tests(tests, args.seed)
+    runner = runner_factory(verbosity=v, failfast=args.failfast)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    return runner.run(tests)
+
+
 def runtests():
     args = ARGS.parse_args()
 
@@ -238,9 +250,6 @@ def runtests():
 
     v = 0 if args.quiet else args.verbose + 1
     failfast = args.failfast
-    catchbreak = args.catchbreak
-    findleaks = args.findleaks
-    runner_factory = TestRunner if findleaks else unittest.TextTestRunner
 
     if args.coverage:
         cov = coverage.coverage(branch=True,
@@ -262,7 +271,7 @@ def runtests():
     logging.basicConfig(level=level)
 
     finder = TestsFinder(args.testsdir, includes, excludes)
-    if catchbreak:
+    if args.catchbreak:
         installHandler()
     import asyncio.coroutines
     if asyncio.coroutines._DEBUG:
@@ -270,21 +279,14 @@ def runtests():
     else:
         print("Run tests in release mode")
     try:
+        tests = finder.load_tests()
         if args.forever:
             while True:
-                tests = finder.load_tests()
-                if args.randomize:
-                    randomize_tests(tests, args.seed)
-                result = runner_factory(verbosity=v,
-                                        failfast=failfast).run(tests)
+                result = _runtests(args, tests)
                 if not result.wasSuccessful():
                     sys.exit(1)
         else:
-            tests = finder.load_tests()
-            if args.randomize:
-                randomize_tests(tests, args.seed)
-            result = runner_factory(verbosity=v,
-                                    failfast=failfast).run(tests)
+            result = _runtests(args, tests)
             sys.exit(not result.wasSuccessful())
     finally:
         if args.coverage:

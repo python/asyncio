@@ -12,13 +12,8 @@ from unittest import mock
 import asyncio
 from asyncio import base_events
 from asyncio import constants
+from asyncio import test_support as support
 from asyncio import test_utils
-try:
-    from test.script_helper import assert_python_ok
-    from test import support
-except ImportError:
-    from asyncio import test_support as support
-    from asyncio.test_support import assert_python_ok
 
 
 MOCK_ANY = mock.ANY
@@ -584,19 +579,19 @@ class BaseEventLoopTests(test_utils.TestCase):
 
         # Test with -E to not fail if the unit test was run with
         # PYTHONASYNCIODEBUG set to a non-empty string
-        sts, stdout, stderr = assert_python_ok('-E', '-c', code)
+        sts, stdout, stderr = support.assert_python_ok('-E', '-c', code)
         self.assertEqual(stdout.rstrip(), b'False')
 
-        sts, stdout, stderr = assert_python_ok('-c', code,
-                                               PYTHONASYNCIODEBUG='')
+        sts, stdout, stderr = support.assert_python_ok('-c', code,
+                                                       PYTHONASYNCIODEBUG='')
         self.assertEqual(stdout.rstrip(), b'False')
 
-        sts, stdout, stderr = assert_python_ok('-c', code,
-                                               PYTHONASYNCIODEBUG='1')
+        sts, stdout, stderr = support.assert_python_ok('-c', code,
+                                                       PYTHONASYNCIODEBUG='1')
         self.assertEqual(stdout.rstrip(), b'True')
 
-        sts, stdout, stderr = assert_python_ok('-E', '-c', code,
-                                               PYTHONASYNCIODEBUG='1')
+        sts, stdout, stderr = support.assert_python_ok('-E', '-c', code,
+                                                       PYTHONASYNCIODEBUG='1')
         self.assertEqual(stdout.rstrip(), b'False')
 
     def test_create_task(self):

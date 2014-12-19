@@ -7,15 +7,10 @@ import types
 import unittest
 import weakref
 from unittest import mock
-try:
-    from test import support   # gc_collect
-    from test.script_helper import assert_python_ok
-except ImportError:
-    from asyncio import test_support as support
-    from asyncio.test_support import assert_python_ok
 
 import asyncio
 from asyncio import coroutines
+from asyncio import test_support as support
 from asyncio import test_utils
 
 
@@ -1781,23 +1776,23 @@ class GatherTestsBase:
 
         # Test with -E to not fail if the unit test was run with
         # PYTHONASYNCIODEBUG set to a non-empty string
-        sts, stdout, stderr = assert_python_ok('-E', '-c', code,
-                                               PYTHONPATH=aio_path)
+        sts, stdout, stderr = support.assert_python_ok('-E', '-c', code,
+                                                       PYTHONPATH=aio_path)
         self.assertEqual(stdout.rstrip(), b'False')
 
-        sts, stdout, stderr = assert_python_ok('-c', code,
-                                               PYTHONASYNCIODEBUG='',
-                                               PYTHONPATH=aio_path)
+        sts, stdout, stderr = support.assert_python_ok('-c', code,
+                                                       PYTHONASYNCIODEBUG='',
+                                                       PYTHONPATH=aio_path)
         self.assertEqual(stdout.rstrip(), b'False')
 
-        sts, stdout, stderr = assert_python_ok('-c', code,
-                                               PYTHONASYNCIODEBUG='1',
-                                               PYTHONPATH=aio_path)
+        sts, stdout, stderr = support.assert_python_ok('-c', code,
+                                                       PYTHONASYNCIODEBUG='1',
+                                                       PYTHONPATH=aio_path)
         self.assertEqual(stdout.rstrip(), b'True')
 
-        sts, stdout, stderr = assert_python_ok('-E', '-c', code,
-                                               PYTHONASYNCIODEBUG='1',
-                                               PYTHONPATH=aio_path)
+        sts, stdout, stderr = support.assert_python_ok('-E', '-c', code,
+                                                       PYTHONASYNCIODEBUG='1',
+                                                       PYTHONPATH=aio_path)
         self.assertEqual(stdout.rstrip(), b'False')
 
 

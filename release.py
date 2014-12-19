@@ -4,12 +4,16 @@ Script to upload 32 bits and 64 bits wheel packages for Python 3.3 on Windows.
 Usage: "python release.py HG_TAG" where HG_TAG is a Mercurial tag, usually
 a version number like "3.4.2".
 
-Modify manually the dry_run attribute to upload files.
+Requirements:
 
-It requires the Windows SDK 7.1 on Windows 64 bits and the aiotest module.
+- Python 3.3 and newer requires the Windows SDK 7.1 to build wheel packages
+- Python 2.7 requires the Windows SDK 7.0
+- the aiotest module is required to run aiotest tests
 """
 import contextlib
+import optparse
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -35,6 +39,16 @@ class PythonVersion:
         self.minor = minor
         self.bits = bits
         self._executable = None
+
+    @staticmethod
+    def running():
+        arch = platform.architecture()[0]
+        bits = int(arch[:2])
+        pyver = PythonVersion(sys.version_info.major,
+                              sys.version_info.minor,
+                              bits)
+        pyver._executable = sys.executable
+        return pyver
 
     def get_executable(self, app):
         if self._executable:
@@ -74,12 +88,15 @@ class Release(object):
         root = os.path.dirname(__file__)
         self.root = os.path.realpath(root)
         # Set these attributes to True to run also register sdist upload
+        self.wheel = False
+        self.test = False
         self.register = False
         self.sdist = False
-        self.dry_run = True
-        self.test = True
         self.aiotest = False
         self.verbose = False
+        self.upload = False
+        # Release mode: enable more tests
+        self.release = False
         self.python_versions = [
             PythonVersion(pyver[0], pyver[1], bits)
             for pyver, bits in PYTHON_VERSIONS]
@@ -102,6 +119,14 @@ class Release(object):
             stdout, stderr = proc.communicate()
             return proc.returncode, stdout
 
+    def check_output(self, *args, **kw):
+        exitcode, output = self.get_output(*args, **kw)
+        if exitcode:
+            sys.stdout.write(output)
+            sys.stdout.flush()
+            sys.exit(1)
+        return output
+
     def run_command(self, *args, **kw):
         with self._popen(args, **kw) as proc:
             exitcode = proc.wait()
@@ -109,7 +134,7 @@ class Release(object):
             sys.exit(exitcode)
 
     def get_local_changes(self):
-        exitcode, status = self.get_output(HG, 'status')
+        status = self.check_output(HG, 'status')
         return [line for line in status.splitlines()
                 if not line.startswith("?")]
 
@@ -169,11 +194,7 @@ class Release(object):
         self.cleanup()
         self.run_command(sys.executable, 'setup.py', 'sdist', 'upload')
 
-    def runtests(self, pyver):
-        print("Run tests on %s" % pyver)
-
-        python = pyver.get_executable(self)
-
+    def build_inplace(self, pyver):
         print("Build _overlapped.pyd for %s" % pyver)
         self.build(pyver, 'build')
         if pyver.bits == 64:
@@ -185,23 +206,34 @@ class Release(object):
         dst = os.path.join(self.root, PROJECT, '_overlapped.pyd')
         shutil.copyfile(src, dst)
 
+    def runtests(self, pyver):
+        print("Run tests on %s" % pyver)
+
+        if not self.options.no_compile:
+            self.build_inplace(pyver)
+
         release_env = dict(os.environ)
         release_env.pop(DEBUG_ENV_VAR, None)
 
         dbg_env = dict(os.environ)
         dbg_env[DEBUG_ENV_VAR] = '1'
 
+        python = pyver.get_executable(self)
         args = (python, 'runtests.py', '-r')
-        print("Run runtests.py in release mode on %s" % pyver)
-        self.run_command(*args, env=release_env)
+
+        if self.release:
+            print("Run runtests.py in release mode on %s" % pyver)
+            self.run_command(*args, env=release_env)
 
         print("Run runtests.py in debug mode on %s" % pyver)
         self.run_command(*args, env=dbg_env)
 
         if self.aiotest:
             args = (python, 'run_aiotest.py')
-            print("Run aiotest in release mode on %s" % pyver)
-            self.run_command(*args, env=release_env)
+
+            if self.release:
+                print("Run aiotest in release mode on %s" % pyver)
+                self.run_command(*args, env=release_env)
 
             print("Run aiotest in debug mode on %s" % pyver)
             self.run_command(*args, env=dbg_env)
@@ -231,17 +263,14 @@ class Release(object):
 
         try:
             if self.verbose:
-                print("Setup Windows SDK")
+                print("Setup Windows SDK %s.%s" % sdkver)
                 print("+ " + ' '.join(cmd))
             # SDK 7.1 uses the COLOR command which makes SetEnv.cmd failing
             # if the stdout is not a TTY (if we redirect stdout into a file)
             if self.verbose or sdkver >= (7, 1):
                 self.run_command(temp.name, verbose=False)
             else:
-                exitcode, stdout = self.get_output(temp.name, verbose=False)
-                if exitcode:
-                    sys.stdout.write(stdout)
-                    sys.stdout.flush()
+                self.check_output(temp.name, verbose=False)
         finally:
             os.unlink(temp.name)
 
@@ -252,22 +281,114 @@ class Release(object):
     def publish_wheel(self, pyver):
         self.build(pyver, 'bdist_wheel', 'upload')
 
-    def main(self):
-        try:
-            pos = sys.argv[1:].index('--ignore')
-        except ValueError:
-            ignore = False
+    def parse_options(self):
+        parser = optparse.OptionParser(
+            description="Run all unittests.",
+            usage="%prog [options] command")
+        parser.add_option(
+            '-v', '--verbose', action="store_true", dest='verbose',
+            default=0, help='verbose')
+        parser.add_option(
+            '-t', '--tag', type="str",
+            help='Mercurial tag or revision, required to release')
+        parser.add_option(
+            '-p', '--python', type="str",
+            help='Only build/test one specific Python version, ex: "2.7:32"')
+        parser.add_option(
+            '-C', "--no-compile", action="store_true",
+            help="Don't compile the module, this options implies --running",
+            default=False)
+        parser.add_option(
+            '-r', "--running", action="store_true",
+            help='Only use the running Python version',
+            default=False)
+        parser.add_option(
+            '--ignore', action="store_true",
+            help='Ignore local changes',
+            default=False)
+        self.options, args = parser.parse_args()
+        if len(args) == 1:
+            command = args[0]
         else:
-            ignore = True
-            del sys.argv[1+pos]
-        if len(sys.argv) != 2:
-            print("usage: %s hg_tag" % sys.argv[0])
+            command = None
+
+        if self.options.no_compile:
+            self.options.running = True
+
+        if command == 'clean':
+            self.options.verbose = True
+        elif command == 'build':
+            self.options.running = True
+        elif command == 'test_wheel':
+            self.wheel = True
+        elif command == 'test':
+            self.test = True
+        elif command == 'release':
+            if not self.options.tag:
+                print("The release command requires the --tag option")
+                sys.exit(1)
+
+            self.release = True
+            self.wheel = True
+            self.test = True
+            #self.upload = True
+        else:
+            if command:
+                print("Invalid command: %s" % command)
+            else:
+                parser.print_usage()
+
+            print("Available commands:")
+            print("- build: build asyncio in place, imply --running")
+            print("- test: run tests")
+            print("- test_wheel: test building wheel packages")
+            print("- release: run tests and publish wheel packages,")
+            print("  require the --tag option")
+            print("- clean: cleanup the project")
             sys.exit(1)
+
+        if self.options.python and self.options.running:
+            print("--python and --running options are exclusive")
+            sys.exit(1)
+
+        python = self.options.python
+        if python:
+            match = re.match("^([23])\.([0-9])/(32|64)$", python)
+            if not match:
+                print("Invalid Python version: %s" % python)
+                print('Format of a Python version: "x.y/bits"')
+                print("Example: 2.7/32")
+                sys.exit(1)
+            major = int(match.group(1))
+            minor = int(match.group(2))
+            bits = int(match.group(3))
+            self.python_versions = [PythonVersion(major, minor, bits)]
+
+        if self.options.running:
+            self.python_versions = [PythonVersion.running()]
+
+        self.verbose = self.options.verbose
+        self.command = command
+
+    def main(self):
+        self.parse_options()
 
         print("Directory: %s" % self.root)
         os.chdir(self.root)
 
-        if not ignore:
+        if self.command == "clean":
+            self.cleanup()
+            sys.exit(1)
+
+        if self.command == "build":
+            if len(self.python_versions) != 1:
+                print("build command requires one specific Python version")
+                print("Use the --python command line option")
+                sys.exit(1)
+            pyver = self.python_versions[0]
+            self.build_inplace(pyver)
+
+        if (self.register or self.upload) and (not self.options.ignore):
             lines = self.get_local_changes()
         else:
             lines = ()
@@ -280,23 +401,20 @@ class Release(object):
             print("or use the --ignore command line option")
             sys.exit(1)
 
-        hg_tag = sys.argv[1]
-        print("Update repository to revision %s" % hg_tag)
-        exitcode, output = self.get_output(HG, 'update', hg_tag)
-        if exitcode:
-            sys.stdout.write(output)
-            sys.stdout.flush()
-            sys.exit(exitcode)
+        hg_tag = self.options.tag
+        if hg_tag:
+            print("Update repository to revision %s" % hg_tag)
+            self.check_output(HG, 'update', hg_tag)
+
+        hg_rev = self.check_output(HG, 'id').rstrip()
+
+        if self.wheel:
+            for pyver in self.python_versions:
+                self.test_wheel(pyver)
 
         if self.test:
             for pyver in self.python_versions:
                 self.runtests(pyver)
-
-        for pyver in self.python_versions:
-            self.test_wheel(pyver)
-
-        if self.dry_run:
-            sys.exit(0)
 
         if self.register:
             self.run_command(sys.executable, 'setup.py', 'register')
@@ -304,17 +422,34 @@ class Release(object):
         if self.sdist:
             self.sdist_upload()
 
-        for pyver in self.python_versions:
-            self.publish_wheel(pyver)
+        if self.upload:
+            for pyver in self.python_versions:
+                self.publish_wheel(pyver)
+
+        hg_rev2 = self.check_output(HG, 'id').rstrip()
+        if hg_rev != hg_rev2:
+            print("ERROR: The Mercurial revision changed")
+            print("Before: %s" % hg_rev)
+            print("After: %s" % hg_rev2)
+            sys.exit(1)
 
         print("")
+        print("Mercurial revision: %s" % hg_rev)
+        if self.command == 'build':
+            print("Inplace compilation done")
+        if self.wheel:
+            print("Compilation of wheel packages succeeded")
+        if self.test:
+            print("Tests succeeded")
         if self.register:
-            print("Publish version %s" % hg_tag)
-        print("Uploaded:")
+            print("Project registered on the Python cheeseshop (PyPI)")
         if self.sdist:
-            print("- sdist")
+            print("Project source code uploaded to the Python cheeseshop (PyPI)")
+        if self.upload:
+            print("Wheel packages uploaded to the Python cheeseshop (PyPI)")
         for pyver in self.python_versions:
-            print("- Windows wheel package for %s" % pyver)
+            print("- %s" % pyver)
+
 
 if __name__ == "__main__":
     Release().main()

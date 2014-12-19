@@ -25,12 +25,15 @@ if os.name == 'nt':
     )
     extensions.append(ext)
 
+with open("README") as fp:
+    long_description = fp.read()
+
 setup(
     name="asyncio",
     version="3.4.3",
 
     description="reference implementation of PEP 3156",
-    long_description=open("README").read(),
+    long_description=long_description,
     url="http://www.python.org/dev/peps/pep-3156/",
 
     classifiers=[

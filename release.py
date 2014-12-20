@@ -334,7 +334,7 @@ class Release(object):
         self.build(pyver, 'bdist_wheel')
 
     def publish_wheel(self, pyver):
-        print("Build wheel package for %s" % pyver)
+        print("Build and publish wheel package for %s" % pyver)
         self.build(pyver, 'bdist_wheel', 'upload')
 
     def parse_options(self):

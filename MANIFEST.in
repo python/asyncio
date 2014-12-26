@@ -1,7 +1,7 @@
 include AUTHORS COPYING
 include Makefile
 include overlapped.c pypi.bat
-include check.py runtests.py release.py
+include check.py runtests.py run_aiotest.py release.py
 include update_stdlib.sh
 
 recursive-include examples *.py

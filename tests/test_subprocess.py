@@ -5,8 +5,11 @@ from unittest import mock
 
 import asyncio
 from asyncio import subprocess
-from asyncio import test_support as support
 from asyncio import test_utils
+try:
+    from test import support
+except ImportError:
+    from asyncio import test_support as support
 if sys.platform != 'win32':
     from asyncio import unix_events
 

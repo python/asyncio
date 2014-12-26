@@ -25,8 +25,11 @@ import weakref
 import asyncio
 from asyncio import proactor_events
 from asyncio import selector_events
-from asyncio import test_support as support
 from asyncio import test_utils
+try:
+    from test import support
+except ImportError:
+    from asyncio import test_support as support
 
 
 def data_file(filename):

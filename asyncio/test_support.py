@@ -1,5 +1,5 @@
 # Subset of test.support from CPython 3.5, just what we need to run asyncio
-# test suite. The cde is copied from CPython 3.5 to not depend on the test
+# test suite. The code is copied from CPython 3.5 to not depend on the test
 # module because it is rarely installed.
 
 # Ignore symbol TEST_HOME_DIR: test_events works without it

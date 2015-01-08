@@ -249,7 +249,8 @@ class Release(object):
             else:
                 arch = 'win32'
             build_dir = 'lib.%s-%s.%s' % (arch, pyver.major, pyver.minor)
-            src = os.path.join(self.root, 'build', build_dir, PROJECT, '_overlapped.pyd')
+            src = os.path.join(self.root, 'build', build_dir,
+                               PROJECT, '_overlapped.pyd')
             dst = os.path.join(self.root, PROJECT, '_overlapped.pyd')
             shutil.copyfile(src, dst)
 
@@ -289,7 +290,9 @@ class Release(object):
     def _build_windows(self, pyver, cmd):
         setenv, sdkver = self.windows_sdk_setenv(pyver)
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".bat", delete=False) as temp:
+        temp = tempfile.NamedTemporaryFile(mode="w", suffix=".bat",
+                                           delete=False)
+        with temp:
             temp.write("SETLOCAL EnableDelayedExpansion\n")
             temp.write(self.quote_args(setenv) + "\n")
             temp.write(BATCH_FAIL_ON_ERROR + "\n")
@@ -500,7 +503,8 @@ class Release(object):
         if self.register:
             print("Project registered on the Python cheeseshop (PyPI)")
         if self.sdist:
-            print("Project source code uploaded to the Python cheeseshop (PyPI)")
+            print("Project source code uploaded to the Python "
+                  "cheeseshop (PyPI)")
         if self.upload:
             print("Wheel packages uploaded to the Python cheeseshop (PyPI)")
         for pyver in self.python_versions:

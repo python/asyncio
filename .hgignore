@@ -12,3 +12,4 @@ distribute-\d+.\d+.\d+.tar.gz$
 build$
 dist$
 .*\.egg-info$
+.tox

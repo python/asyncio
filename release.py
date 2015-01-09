@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Script to upload 32 bits and 64 bits wheel packages for Python 3.3 on Windows.
 

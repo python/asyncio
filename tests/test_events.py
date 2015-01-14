@@ -1585,6 +1585,7 @@ class SubprocessTestsMixin:
         self.assertTrue(all(f.done() for f in proto.disconnects.values()))
         self.assertEqual(proto.data[1].rstrip(b'\r\n'), b'Python')
         self.assertEqual(proto.data[2], b'')
+        transp.close()
 
     def test_subprocess_exitcode(self):
         connect = self.loop.subprocess_shell(
@@ -1594,6 +1595,7 @@ class SubprocessTestsMixin:
         self.assertIsInstance(proto, MySubprocessProtocol)
         self.loop.run_until_complete(proto.completed)
         self.assertEqual(7, proto.returncode)
+        transp.close()
 
     def test_subprocess_close_after_finish(self):
         connect = self.loop.subprocess_shell(
@@ -1621,6 +1623,7 @@ class SubprocessTestsMixin:
         transp.kill()
         self.loop.run_until_complete(proto.completed)
         self.check_killed(proto.returncode)
+        transp.close()
 
     def test_subprocess_terminate(self):
         prog = os.path.join(os.path.dirname(__file__), 'echo.py')
@@ -1635,6 +1638,7 @@ class SubprocessTestsMixin:
         transp.terminate()
         self.loop.run_until_complete(proto.completed)
         self.check_terminated(proto.returncode)
+        transp.close()
 
     @unittest.skipIf(sys.platform == 'win32', "Don't have SIGHUP")
     def test_subprocess_send_signal(self):
@@ -1650,6 +1654,7 @@ class SubprocessTestsMixin:
         transp.send_signal(signal.SIGHUP)
         self.loop.run_until_complete(proto.completed)
         self.assertEqual(-signal.SIGHUP, proto.returncode)
+        transp.close()
 
     def test_subprocess_stderr(self):
         prog = os.path.join(os.path.dirname(__file__), 'echo2.py')

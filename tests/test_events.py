@@ -25,6 +25,7 @@ import weakref
 import asyncio
 from asyncio import proactor_events
 from asyncio import selector_events
+from asyncio import sslproto
 from asyncio import test_utils
 try:
     from test import support
@@ -1788,6 +1789,22 @@ if sys.platform == 'win32':
 
         def create_event_loop(self):
             return asyncio.ProactorEventLoop()
+
+        if not sslproto._is_sslproto_available():
+            def test_create_ssl_connection(self):
+                raise unittest.SkipTest("need python 3.5 (ssl.MemoryBIO)")
+
+            def test_create_server_ssl(self):
+                raise unittest.SkipTest("need python 3.5 (ssl.MemoryBIO)")
+
+            def test_create_server_ssl_verify_failed(self):
+                raise unittest.SkipTest("need python 3.5 (ssl.MemoryBIO)")
+
+            def test_create_server_ssl_match_failed(self):
+                raise unittest.SkipTest("need python 3.5 (ssl.MemoryBIO)")
+
+            def test_create_server_ssl_verified(self):
+                raise unittest.SkipTest("need python 3.5 (ssl.MemoryBIO)")
 
         def test_legacy_create_ssl_connection(self):
             raise unittest.SkipTest("IocpEventLoop incompatible with legacy SSL")

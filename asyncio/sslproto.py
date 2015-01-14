@@ -552,7 +552,7 @@ class SSLProtocol(protocols.Protocol):
                                    self, exc_info=True)
             self._transport.close()
             if isinstance(exc, Exception):
-                if self._waiter is not None:
+                if self._waiter is not None and not self._waiter.cancelled():
                     self._waiter.set_exception(exc)
                 return
             else:

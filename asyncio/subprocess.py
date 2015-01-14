@@ -60,7 +60,9 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
                                               protocol=self,
                                               reader=None,
                                               loop=self._loop)
-        self.waiter.set_result(None)
+
+        if not self.waiter.cancelled():
+            self.waiter.set_result(None)
 
     def pipe_data_received(self, fd, data):
         if fd == 1:

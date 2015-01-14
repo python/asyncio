@@ -71,6 +71,8 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
 
     def close(self):
         for proto in self._pipes.values():
+            if proto is None:
+                continue
             proto.pipe.close()
         if self._returncode is None:
             self.terminate()

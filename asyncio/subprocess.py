@@ -216,7 +216,11 @@ def create_subprocess_shell(cmd, stdin=None, stdout=None, stderr=None,
                                             protocol_factory,
                                             cmd, stdin=stdin, stdout=stdout,
                                             stderr=stderr, **kwds)
-    yield from protocol.waiter
+    try:
+        yield from protocol.waiter
+    except:
+        transport._kill_wait()
+        raise
     return Process(transport, protocol, loop)
 
 @coroutine
@@ -232,5 +236,9 @@ def create_subprocess_exec(program, *args, stdin=None, stdout=None,
                                             program, *args,
                                             stdin=stdin, stdout=stdout,
                                             stderr=stderr, **kwds)
-    yield from protocol.waiter
+    try:
+        yield from protocol.waiter
+    except:
+        transport._kill_wait()
+        raise
     return Process(transport, protocol, loop)

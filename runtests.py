@@ -122,7 +122,7 @@ def randomize_tests(tests, seed):
     if seed is None:
         seed = random.randrange(10000000)
     random.seed(seed)
-    print("Using random seed", seed)
+    print("Randomize test execution order (seed: %s)" % seed)
     random.shuffle(tests._tests)
 
 

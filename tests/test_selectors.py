@@ -3,10 +3,13 @@ import os
 import random
 import signal
 import sys
-from test import support
 from time import sleep
 import unittest
 import unittest.mock
+try:
+    from test import support
+except ImportError:
+    from asyncio import test_support as support
 try:
     from time import monotonic as time
 except ImportError:

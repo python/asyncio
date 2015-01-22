@@ -396,7 +396,8 @@ class Release(object):
             if command:
                 print("Invalid command: %s" % command)
             else:
-                parser.print_usage()
+                parser.print_help()
+                print("")
 
             print("Available commands:")
             print("- build: build asyncio in place, imply --running")

@@ -4,7 +4,7 @@ style and uses asyncio.streams.start_server() and
 asyncio.streams.open_connection().
 
 Note that running this example starts both the TCP server and client
-in the same process.  It listens on port 1234 on 127.0.0.1, so it will
+in the same process.  It listens on port 12345 on 127.0.0.1, so it will
 fail if this port is currently in use.
 """
 
@@ -83,7 +83,7 @@ class MyServer:
 
     def start(self, loop):
         """
-        Starts the TCP server, so that it listens on port 1234.
+        Starts the TCP server, so that it listens on port 12345.
 
         For each client that connects, the accept_client method gets
         called.  This method runs the loop until the server sockets

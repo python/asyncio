@@ -1,0 +1,11 @@
+include AUTHORS COPYING
+include Makefile
+include overlapped.c pypi.bat
+include check.py runtests.py run_aiotest.py release.py
+include update_stdlib.sh
+
+recursive-include examples *.py
+recursive-include tests *.crt
+recursive-include tests *.key
+recursive-include tests *.pem
+recursive-include tests *.py

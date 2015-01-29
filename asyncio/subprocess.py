@@ -117,20 +117,13 @@ class Process:
         This method is a coroutine."""
         return (yield from self._transport.wait())
 
-    def _check_alive(self):
-        if self._transport.get_returncode() is not None:
-            raise ProcessLookupError()
-
     def send_signal(self, signal):
-        self._check_alive()
         self._transport.send_signal(signal)
 
     def terminate(self):
-        self._check_alive()
         self._transport.terminate()
 
     def kill(self):
-        self._check_alive()
         self._transport.kill()
 
     @coroutine

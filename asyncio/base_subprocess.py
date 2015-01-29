@@ -124,13 +124,22 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
         else:
             return None
 
+    def _check_proc(self):
+        if self._closed:
+            raise ValueError("operation on closed transport")
+        if self._proc is None:
+            raise ProcessLookupError()
+
     def send_signal(self, signal):
+        self._check_proc()
         self._proc.send_signal(signal)
 
     def terminate(self):
+        self._check_proc()
         self._proc.terminate()
 
     def kill(self):
+        self._check_proc()
         self._proc.kill()
 
     @coroutine

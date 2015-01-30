@@ -36,12 +36,14 @@ def ls(loop):
 
 @asyncio.coroutine
 def test_call(*args, timeout=None):
+    proc = yield from asyncio.create_subprocess_exec(*args)
     try:
-        proc = yield from asyncio.create_subprocess_exec(*args)
         exitcode = yield from asyncio.wait_for(proc.wait(), timeout)
         print("%s: exit code %s" % (' '.join(args), exitcode))
     except asyncio.TimeoutError:
         print("timeout! (%.1f sec)" % timeout)
+        proc.kill()
+        yield from proc.wait()
 
 loop = asyncio.get_event_loop()
 loop.run_until_complete(cat(loop))

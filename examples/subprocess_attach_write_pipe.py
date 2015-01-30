@@ -29,7 +29,7 @@ def task():
 
     stdout, stderr = yield from proc.communicate()
     print("stdout = %r" % stdout.decode())
-    pipe.close()
+    transport.close()
 
 loop.run_until_complete(task())
 loop.close()

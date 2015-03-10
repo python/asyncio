@@ -30,7 +30,7 @@ with open("README") as fp:
 
 setup(
     name="asyncio",
-    version="3.4.3",
+    version="3.4.4",
 
     description="reference implementation of PEP 3156",
     long_description=long_description,

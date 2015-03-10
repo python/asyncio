@@ -1,3 +1,149 @@
+2015-02-04: Tulip 3.4.3
+=======================
+
+Major changes
+-------------
+
+* New SSL implementation using ssl.MemoryBIO. The new implementation requires
+  Python 3.5 and newer, otherwise the legacy implementation is used.
+* On Python 3.5 and newer usable, the ProactorEventLoop now supports SSL
+  thanks to the new SSL implementation.
+* Fix multiple resource leaks: close sockets on error, explicitly clear
+  references, emit ResourceWarning when event loops and transports are not
+  closed explicitly, etc.
+* The proactor event loop is now much more reliable (no more known race
+  condition).
+* Enhance handling of task cancellation.
+
+Changes of the asyncio API
+--------------------------
+
+* Export BaseEventLoop symbol in the asyncio namespace
+* create_task(), call_soon(), call_soon_threadsafe(), call_later(),
+  call_at() and run_in_executor() methods of BaseEventLoop now raise an
+  exception if the event loop is closed.
+* call_soon(), call_soon_threadsafe(), call_later(), call_at() and
+  run_in_executor() methods of BaseEventLoop now raise an exception if the
+  callback is a coroutine object.
+* BaseEventLoopPolicy.get_event_loop() now always raises a RuntimeError
+  if there is no event loop in the curren thread, instead of using an
+  assertion (which can be disabld at runtime) and so raises an AssertionError.
+* selectors: Selector.get_key() now raises an exception if the selector is
+  closed.
+* If wait_for() is cancelled, the waited task is also cancelled.
+* _UnixSelectorEventLoop.add_signal_handler() now raises an exception if
+  the callback is a coroutine object or a coroutine function. It also raises
+  an exception if the event loop is closed.
+
+Performances
+------------
+
+* sock_connect() doesn't check if the address is already resolved anymore.
+  The check is only done in debug mode. Moreover, the check uses inet_pton()
+  instead of getaddrinfo(), if inet_pton() is available, because getaddrinfo()
+  is slow (around 10 us per call).
+
+Debug
+-----
+
+* Better repr() of _ProactorBasePipeTransport, _SelectorTransport,
+  _UnixReadPipeTransport and _UnixWritePipeTransport: add closed/closing
+  status and the file descriptor
+* Add repr(PipeHandle)
+* PipeHandle destructor now emits a ResourceWarning is the pipe is not closed
+  explicitly.
+* In debug mode, call_at() method of BaseEventLoop now raises an exception
+  if called from the wrong thread (not from the thread running the event
+  loop). Before, it only raised an exception if current thread had an event
+  loop.
+* A ResourceWarning is now emitted when event loops and transports are
+  destroyed before being closed.
+* BaseEventLoop.call_exception_handler() now logs the traceback where
+  the current handle was created (if no source_traceback was specified).
+* BaseSubprocessTransport.close() now logs a warning when the child process is
+  still running and the method kills it.
+
+Bug fixes
+---------
+
+* windows_utils.socketpair() now reuses socket.socketpair() if available
+  (Python 3.5 or newer).
+* Fix IocpProactor.accept_pipe(): handle ERROR_PIPE_CONNECTED, it means
+  that the pipe is connected. _overlapped.Overlapped.ConnectNamedPipe() now
+  returns True on ERROR_PIPE_CONNECTED.
+* Rewrite IocpProactor.connect_pipe() using polling to avoid tricky bugs
+  if the connection is cancelled, instead of using QueueUserWorkItem() to run
+  blocking code.
+* Fix IocpProactor.recv(): handle BrokenPipeError, set the result to an empty
+  string.
+* Fix ProactorEventLoop.start_serving_pipe(): if a client connected while the
+  server is closing, drop the client connection.
+* Fix a tricky race condition when IocpProactor.wait_for_handle() is
+  cancelled: wait until the wait is really cancelled before destroying the
+  overlapped object. Unregister also the overlapped operation to not block
+  in IocpProactor.close() before the wait will never complete.
+* Fix _UnixSubprocessTransport._start(): make the write end of the stdin pipe
+  non-inheritable.
+* Set more attributes in the body of classes to avoid attribute errors in
+  destructors if an error occurred in the constructor.
+* Fix SubprocessStreamProtocol.process_exited(): close the transport
+  and clear its reference to the transport.
+* Fix SubprocessStreamProtocol.connection_made(): set the transport of
+  stdout and stderr streams to respect reader buffer limits (stop reading when
+  the buffer is full).
+* Fix FlowControlMixin constructor: if the loop parameter is None, get the
+  current event loop.
+* Fix selectors.EpollSelector.select(): don't fail anymore if no file
+  descriptor is registered.
+* Fix _SelectorTransport: don't wakeup the waiter if it was cancelled
+* Fix _SelectorTransport._call_connection_lost(): only call connection_lost()
+  if connection_made() was already called.
+* Fix BaseSelectorEventLoop._accept_connection(): close the transport on
+  error. In debug mode, log errors (ex: SSL handshake failure) on the creation
+  of the transport for incoming connection.
+* Fix BaseProactorEventLoop.close(): stop the proactor before closing the
+  event loop because stopping the proactor may schedule new callbacks, which
+  is now forbidden when the event loop is closed.
+* Fix wrap_future() to not use a free variable and so not keep a frame alive
+  too long.
+* Fix formatting of the "Future/Task exception was never retrieved" log: add
+  a newline before the traceback.
+* WriteSubprocessPipeProto.connection_lost() now clears its reference to the
+  subprocess.Popen object.
+* If the creation of a subprocess transport fails, the child process is killed
+  and the event loop waits asynchronously for its completion.
+* BaseEventLoop.run_until_complete() now consumes the exception to not log a
+  warning when a BaseException like KeyboardInterrupt is raised and
+  run_until_complete() is not a future (but a coroutine object).
+* create_connection(), create_datagram_endpoint(), connect_read_pipe() and
+  connect_write_pipe() methods of BaseEventLoop now close the transport on
+  error.
+
+Other changes
+-------------
+
+* Add tox.ini to run tests using tox.
+* _FlowControlMixin constructor now requires an event loop.
+* Embed asyncio/test_support.py to not depend on test.support of the system
+  Python. For example, test.support is not installed by default on Windows.
+* selectors.Selector.close() now clears its reference to the mapping object.
+* _SelectorTransport and _UnixWritePipeTransport now only starts listening for
+  read events after protocol.connection_made() has been called
+* _SelectorTransport._fatal_error() now only logs ConnectionAbortedError
+  in debug mode.
+* BaseProactorEventLoop._loop_self_reading() now handles correctly
+  CancelledError (just exit) and logs an error for other exceptions.
+* _ProactorBasePipeTransport now clears explicitly references to read and
+  write future and to the socket
+* BaseSubprocessTransport constructor now calls the internal _connect_pipes()
+  method (previously called _post_init()). The constructor now accepts an
+  optional waiter parameter to notify when the transport is ready.
+* send_signal(), terminate() and kill() methods of BaseSubprocessTransport now
+  raise a ProcessLookupError if the process already exited.
+* Add run_aiotest.py to run the aiotest test suite
+* Add release.py script to build wheel packages on Windows and run unit tests
+
+
 2014-09-30: Tulip 3.4.2
 =======================
 
@@ -155,6 +301,7 @@ Misc changes
 * Close explicitly the event loop in Tulip examples.
 
 * runtests.py now mention if tests are running in release or debug mode.
+
 
 2014-05-19: Tulip 3.4.1
 =======================

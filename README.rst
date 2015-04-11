@@ -2,7 +2,7 @@ Tulip is the codename for my reference implementation of PEP 3156.
 
 PEP 3156: http://www.python.org/dev/peps/pep-3156/
 
-*** This requires Python 3.3 or later! ***
+**This requires Python 3.3 or later!**
 
 Copyright/license: Open source, Apache 2.0. Enjoy.
 

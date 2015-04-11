@@ -25,7 +25,7 @@ if os.name == 'nt':
     )
     extensions.append(ext)
 
-with open("README") as fp:
+with open("README.rst") as fp:
     long_description = fp.read()
 
 setup(

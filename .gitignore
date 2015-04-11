@@ -7,9 +7,12 @@
 htmlcov
 .DS_Store
 venv
+pyvenv
 distribute_setup.py
 distribute-*.tar.gz
 build
 dist
 *.egg-info
 .tox
+.idea/
+*.iml

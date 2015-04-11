@@ -2,7 +2,7 @@
 
 __all__ = ['Task',
            'FIRST_COMPLETED', 'FIRST_EXCEPTION', 'ALL_COMPLETED',
-           'wait', 'wait_for', 'as_completed', 'sleep', 'async',
+           'wait', 'wait_for', 'as_completed', 'sleep', 'create_task',
            'gather', 'shield',
            ]
 
@@ -327,7 +327,7 @@ def wait(fs, *, loop=None, timeout=None, return_when=ALL_COMPLETED):
     if loop is None:
         loop = events.get_event_loop()
 
-    fs = {async(f, loop=loop) for f in set(fs)}
+    fs = {create_task(f, loop=loop) for f in set(fs)}
 
     return (yield from _wait(fs, timeout, return_when, loop))
 
@@ -361,7 +361,7 @@ def wait_for(fut, timeout, *, loop=None):
     timeout_handle = loop.call_later(timeout, _release_waiter, waiter)
     cb = functools.partial(_release_waiter, waiter)
 
-    fut = async(fut, loop=loop)
+    fut = create_task(fut, loop=loop)
     fut.add_done_callback(cb)
 
     try:
@@ -449,7 +449,7 @@ def as_completed(fs, *, loop=None, timeout=None):
     if isinstance(fs, futures.Future) or coroutines.iscoroutine(fs):
         raise TypeError("expect a list of futures, not %s" % type(fs).__name__)
     loop = loop if loop is not None else events.get_event_loop()
-    todo = {async(f, loop=loop) for f in set(fs)}
+    todo = {create_task(f, loop=loop) for f in set(fs)}
     from .queues import Queue  # Import here to avoid circular import problem.
     done = Queue(loop=loop)
     timeout_handle = None
@@ -496,7 +496,7 @@ def sleep(delay, result=None, *, loop=None):
         h.cancel()
 
 
-def async(coro_or_future, *, loop=None):
+def create_task(coro_or_future, *, loop=None):
     """Wrap a coroutine in a future.
 
     If the argument is a Future, it is returned directly.
@@ -564,7 +564,7 @@ def gather(*coros_or_futures, loop=None, return_exceptions=False):
     arg_to_fut = {}
     for arg in set(coros_or_futures):
         if not isinstance(arg, futures.Future):
-            fut = async(arg, loop=loop)
+            fut = create_task(arg, loop=loop)
             if loop is None:
                 loop = fut._loop
             # The caller cannot control this future, the "destroy pending task"
@@ -640,7 +640,7 @@ def shield(arg, *, loop=None):
         except CancelledError:
             res = None
     """
-    inner = async(arg, loop=loop)
+    inner = create_task(arg, loop=loop)
     if inner.done():
         # Shortcut.
         return inner

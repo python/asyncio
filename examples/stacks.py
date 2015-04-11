@@ -18,7 +18,7 @@ def doit():
     l = get_event_loop()
     lr = l.run_until_complete
     r, w = lr(open_connection('python.org', 80))
-    t1 = async(helper(r))
+    t1 = create_task(helper(r))
     for t in Task.all_tasks(): t.print_stack()
     print('---')
     l._run_once()

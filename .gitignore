@@ -1,0 +1,15 @@
+*\.py[co]
+*~
+*\.orig
+*\#.*
+*@.*
+.coverage
+htmlcov
+.DS_Store
+venv
+distribute_setup.py
+distribute-*.tar.gz
+build
+dist
+*.egg-info
+.tox

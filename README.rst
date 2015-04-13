@@ -6,7 +6,7 @@ PEP 3156: http://www.python.org/dev/peps/pep-3156/
 
 Copyright/license: Open source, Apache 2.0. Enjoy.
 
-Master Mercurial repo: http://code.google.com/p/tulip/
+Master GitHub repo: https://github.com/python/tulip
 
 The actual code lives in the 'asyncio' subdirectory.
 Tests are in the 'tests' subdirectory.

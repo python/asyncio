@@ -408,7 +408,7 @@ class PriorityQueueTests(_QueueTestBase):
         self.assertEqual([1, 2, 3], items)
 
 
-class _QueueJoinTestBase(_QueueTestBase):
+class _QueueJoinTestMixin:
 
     q_class = None
 
@@ -474,15 +474,15 @@ class _QueueJoinTestBase(_QueueTestBase):
         self.assertEqual(q._format(), 'maxsize=0 tasks=2')
 
 
-class QueueJoinTests(_QueueJoinTestBase):
+class QueueJoinTests(_QueueJoinTestMixin, _QueueTestBase):
     q_class = asyncio.Queue
 
 
-class LifoQueueJoinTests(_QueueJoinTestBase):
+class LifoQueueJoinTests(_QueueJoinTestMixin, _QueueTestBase):
     q_class = asyncio.LifoQueue
 
 
-class PriorityQueueJoinTests(_QueueJoinTestBase):
+class PriorityQueueJoinTests(_QueueJoinTestMixin, _QueueTestBase):
     q_class = asyncio.PriorityQueue
 
 

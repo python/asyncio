@@ -465,25 +465,25 @@ class BaseEventLoop(events.AbstractEventLoop):
         self._write_to_self()
         return handle
 
-    def run_in_executor(self, executor, callback, *args):
-        if (coroutines.iscoroutine(callback)
-        or coroutines.iscoroutinefunction(callback)):
+    def run_in_executor(self, executor, func, *args):
+        if (coroutines.iscoroutine(func)
+        or coroutines.iscoroutinefunction(func)):
             raise TypeError("coroutines cannot be used with run_in_executor()")
         self._check_closed()
-        if isinstance(callback, events.Handle):
+        if isinstance(func, events.Handle):
             assert not args
-            assert not isinstance(callback, events.TimerHandle)
-            if callback._cancelled:
+            assert not isinstance(func, events.TimerHandle)
+            if func._cancelled:
                 f = futures.Future(loop=self)
                 f.set_result(None)
                 return f
-            callback, args = callback._callback, callback._args
+            func, args = func._callback, func._args
         if executor is None:
             executor = self._default_executor
             if executor is None:
                 executor = concurrent.futures.ThreadPoolExecutor(_MAX_WORKERS)
                 self._default_executor = executor
-        return futures.wrap_future(executor.submit(callback, *args), loop=self)
+        return futures.wrap_future(executor.submit(func, *args), loop=self)
 
     def set_default_executor(self, executor):
         self._default_executor = executor

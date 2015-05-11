@@ -438,6 +438,14 @@ class AbstractEventLoop:
     def remove_signal_handler(self, sig):
         raise NotImplementedError
 
+    # Task factory.
+
+    def set_task_factory(self, factory):
+        raise NotImplementedError
+
+    def get_task_factory(self):
+        raise NotImplementedError
+
     # Error handlers.
 
     def set_exception_handler(self, handler):

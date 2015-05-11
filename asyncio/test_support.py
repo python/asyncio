@@ -300,6 +300,6 @@ except ImportError:
 
 # Use test.script_helper if available
 try:
-    from test.script_helper import assert_python_ok
+    from test.support.script_helper import assert_python_ok
 except ImportError:
     pass

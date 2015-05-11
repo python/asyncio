@@ -302,4 +302,7 @@ except ImportError:
 try:
     from test.support.script_helper import assert_python_ok
 except ImportError:
-    pass
+    try:
+        from test.script_helper import assert_python_ok
+    except ImportError:
+        pass

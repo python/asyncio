@@ -506,7 +506,7 @@ def async(coro_or_future, *, loop=None):
     """
 
     warnings.warn("asyncio.async() function is deprecated, use ensure_future()",
-                  RuntimeWarning)
+                  DeprecationWarning)
 
     return ensure_future(coro_or_future, loop=loop)
 

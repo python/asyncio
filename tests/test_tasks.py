@@ -158,7 +158,7 @@ class TaskTests(test_utils.TestCase):
 
     def test_async_warning(self):
         f = asyncio.Future(loop=self.loop)
-        with self.assertWarnsRegex(RuntimeWarning,
+        with self.assertWarnsRegex(DeprecationWarning,
                                    'function is deprecated, use ensure_'):
             self.assertIs(f, asyncio.async(f))
 

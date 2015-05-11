@@ -1,0 +1,17 @@
+language: python
+
+os:
+  - linux
+  - osx
+
+python:
+    - 3.3
+    - 3.4
+
+install:
+    - pip install asyncio
+    - python setup.py install
+
+script:
+    - python runtests.py
+    - PYTHONASYNCIODEBUG=1 python runtests.py

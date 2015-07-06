@@ -3,8 +3,8 @@
 import unittest
 from unittest import mock
 
-import asyncio
-from asyncio import transports
+import trollius as asyncio
+from trollius import transports
 
 
 class TransportTests(unittest.TestCase):

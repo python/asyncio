@@ -1,6 +1,6 @@
 """Print 'Hello World' every two seconds, using a coroutine."""
 
-import asyncio
+import trollius as asyncio
 
 
 @asyncio.coroutine

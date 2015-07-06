@@ -442,5 +442,5 @@ def mock_nonblocking_socket():
 
 
 def force_legacy_ssl_support():
-    return mock.patch('asyncio.sslproto._is_sslproto_available',
+    return mock.patch('trollius.sslproto._is_sslproto_available',
                       return_value=False)

@@ -12,7 +12,7 @@ import sys
 import time
 import random
 
-import asyncio
+import trollius as asyncio
 import asyncio.streams
 
 

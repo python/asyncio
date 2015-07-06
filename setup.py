@@ -21,7 +21,7 @@ except ImportError:
 extensions = []
 if os.name == 'nt':
     ext = Extension(
-        'asyncio._overlapped', ['overlapped.c'], libraries=['ws2_32'],
+        'trollius._overlapped', ['overlapped.c'], libraries=['ws2_32'],
     )
     extensions.append(ext)
 
@@ -29,7 +29,7 @@ with open("README.rst") as fp:
     long_description = fp.read()
 
 setup(
-    name="asyncio",
+    name="trollius",
     version="3.4.4",
 
     description="reference implementation of PEP 3156",
@@ -42,7 +42,7 @@ setup(
         "Programming Language :: Python :: 3.3",
     ],
 
-    packages=["asyncio"],
+    packages=["trollius"],
     test_suite="runtests.runtests",
 
     ext_modules=extensions,

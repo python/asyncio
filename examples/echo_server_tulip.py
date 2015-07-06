@@ -1,4 +1,4 @@
-import asyncio
+import trollius as asyncio
 
 @asyncio.coroutine
 def echo_server():

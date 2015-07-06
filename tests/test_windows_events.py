@@ -8,10 +8,10 @@ if sys.platform != 'win32':
 
 import _winapi
 
-import asyncio
-from asyncio import _overlapped
-from asyncio import test_utils
-from asyncio import windows_events
+import trollius as asyncio
+from trollius import _overlapped
+from trollius import test_utils
+from trollius import windows_events
 
 
 class UpperProto(asyncio.Protocol):

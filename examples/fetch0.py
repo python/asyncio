@@ -2,7 +2,7 @@
 
 import sys
 
-from asyncio import *
+from trollius import *
 
 
 @coroutine

@@ -10,20 +10,20 @@ import unittest
 import weakref
 from unittest import mock
 
-import asyncio
-from asyncio import coroutines
-from asyncio import test_utils
+import trollius as asyncio
+from trollius import coroutines
+from trollius import test_utils
 try:
     from test import support
 except ImportError:
-    from asyncio import test_support as support
+    from trollius import test_support as support
 try:
     from test.support.script_helper import assert_python_ok
 except ImportError:
     try:
         from test.script_helper import assert_python_ok
     except ImportError:
-        from asyncio.test_support import assert_python_ok
+        from trollius.test_support import assert_python_ok
 
 
 PY34 = (sys.version_info >= (3, 4))
@@ -1699,7 +1699,7 @@ class TaskTests(test_utils.TestCase):
         })
         mock_handler.reset_mock()
 
-    @mock.patch('asyncio.coroutines.logger')
+    @mock.patch('trollius.coroutines.logger')
     def test_coroutine_never_yielded(self, m_log):
         with set_coroutine_debug(True):
             @asyncio.coroutine

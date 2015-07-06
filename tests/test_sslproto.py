@@ -7,9 +7,9 @@ try:
 except ImportError:
     ssl = None
 
-import asyncio
-from asyncio import sslproto
-from asyncio import test_utils
+import trollius as asyncio
+from trollius import sslproto
+from trollius import test_utils
 
 
 @unittest.skipIf(ssl is None, 'No ssl module')
@@ -36,7 +36,7 @@ class SslProtoHandshakeTests(test_utils.TestCase):
             def mock_handshake(callback):
                 return []
             sslpipe.do_handshake.side_effect = mock_handshake
-        with mock.patch('asyncio.sslproto._SSLPipe', return_value=sslpipe):
+        with mock.patch('trollius.sslproto._SSLPipe', return_value=sslpipe):
             ssl_proto.connection_made(transport)
 
     def test_cancel_handshake(self):

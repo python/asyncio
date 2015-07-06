@@ -7,12 +7,12 @@ import threading
 import unittest
 from unittest import mock
 
-import asyncio
-from asyncio import test_utils
+import trollius as asyncio
+from trollius import test_utils
 try:
     from test import support
 except ImportError:
-    from asyncio import test_support as support
+    from trollius import test_support as support
 
 
 def _fakefunc(f):
@@ -211,20 +211,20 @@ class FutureTests(test_utils.TestCase):
         self.assertRaises(AssertionError, test)
         fut.cancel()
 
-    @mock.patch('asyncio.base_events.logger')
+    @mock.patch('trollius.base_events.logger')
     def test_tb_logger_abandoned(self, m_log):
         fut = asyncio.Future(loop=self.loop)
         del fut
         self.assertFalse(m_log.error.called)
 
-    @mock.patch('asyncio.base_events.logger')
+    @mock.patch('trollius.base_events.logger')
     def test_tb_logger_result_unretrieved(self, m_log):
         fut = asyncio.Future(loop=self.loop)
         fut.set_result(42)
         del fut
         self.assertFalse(m_log.error.called)
 
-    @mock.patch('asyncio.base_events.logger')
+    @mock.patch('trollius.base_events.logger')
     def test_tb_logger_result_retrieved(self, m_log):
         fut = asyncio.Future(loop=self.loop)
         fut.set_result(42)
@@ -232,7 +232,7 @@ class FutureTests(test_utils.TestCase):
         del fut
         self.assertFalse(m_log.error.called)
 
-    @mock.patch('asyncio.base_events.logger')
+    @mock.patch('trollius.base_events.logger')
     def test_tb_logger_exception_unretrieved(self, m_log):
         fut = asyncio.Future(loop=self.loop)
         fut.set_exception(RuntimeError('boom'))
@@ -240,7 +240,7 @@ class FutureTests(test_utils.TestCase):
         test_utils.run_briefly(self.loop)
         self.assertTrue(m_log.error.called)
 
-    @mock.patch('asyncio.base_events.logger')
+    @mock.patch('trollius.base_events.logger')
     def test_tb_logger_exception_retrieved(self, m_log):
         fut = asyncio.Future(loop=self.loop)
         fut.set_exception(RuntimeError('boom'))
@@ -248,7 +248,7 @@ class FutureTests(test_utils.TestCase):
         del fut
         self.assertFalse(m_log.error.called)
 
-    @mock.patch('asyncio.base_events.logger')
+    @mock.patch('trollius.base_events.logger')
     def test_tb_logger_exception_result_retrieved(self, m_log):
         fut = asyncio.Future(loop=self.loop)
         fut.set_exception(RuntimeError('boom'))
@@ -273,7 +273,7 @@ class FutureTests(test_utils.TestCase):
         f2 = asyncio.wrap_future(f1)
         self.assertIs(f1, f2)
 
-    @mock.patch('asyncio.futures.events')
+    @mock.patch('trollius.futures.events')
     def test_wrap_future_use_global_loop(self, m_events):
         def run(arg):
             return (arg, threading.get_ident())
@@ -311,7 +311,7 @@ class FutureTests(test_utils.TestCase):
                           lineno,
                           'test_future_source_traceback'))
 
-    @mock.patch('asyncio.base_events.logger')
+    @mock.patch('trollius.base_events.logger')
     def check_future_exception_never_retrieved(self, debug, m_log):
         self.loop.set_debug(debug)
 

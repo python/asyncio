@@ -9,7 +9,7 @@ fail if this port is currently in use.
 """
 
 import sys
-import asyncio
+import trollius as asyncio
 import asyncio.streams
 
 

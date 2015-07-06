@@ -2,7 +2,7 @@
 
 """Fuzz tester for as_completed(), by Glenn Langford."""
 
-import asyncio
+import trollius as asyncio
 import itertools
 import random
 import sys

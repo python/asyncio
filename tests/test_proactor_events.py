@@ -4,12 +4,12 @@ import socket
 import unittest
 from unittest import mock
 
-import asyncio
-from asyncio.proactor_events import BaseProactorEventLoop
-from asyncio.proactor_events import _ProactorSocketTransport
-from asyncio.proactor_events import _ProactorWritePipeTransport
-from asyncio.proactor_events import _ProactorDuplexPipeTransport
-from asyncio import test_utils
+import trollius as asyncio
+from trollius.proactor_events import BaseProactorEventLoop
+from trollius.proactor_events import _ProactorSocketTransport
+from trollius.proactor_events import _ProactorWritePipeTransport
+from trollius.proactor_events import _ProactorDuplexPipeTransport
+from trollius import test_utils
 
 
 def close_transport(transport):
@@ -152,7 +152,7 @@ class ProactorSocketTransportTests(test_utils.TestCase):
         self.loop._proactor.send.return_value.add_done_callback.\
             assert_called_with(tr._loop_writing)
 
-    @mock.patch('asyncio.proactor_events.logger')
+    @mock.patch('trollius.proactor_events.logger')
     def test_loop_writing_err(self, m_log):
         err = self.loop._proactor.send.side_effect = OSError()
         tr = self.socket_transport()
@@ -226,7 +226,7 @@ class ProactorSocketTransportTests(test_utils.TestCase):
         test_utils.run_briefly(self.loop)
         self.assertFalse(self.protocol.connection_lost.called)
 
-    @mock.patch('asyncio.base_events.logger')
+    @mock.patch('trollius.base_events.logger')
     def test_fatal_error(self, m_logging):
         tr = self.socket_transport()
         tr._force_close = mock.Mock()
@@ -539,7 +539,7 @@ class BaseProactorEventLoopTests(test_utils.TestCase):
     def test_process_events(self):
         self.loop._process_events([])
 
-    @mock.patch('asyncio.base_events.logger')
+    @mock.patch('trollius.base_events.logger')
     def test_create_server(self, m_log):
         pf = mock.Mock()
         call_soon = self.loop.call_soon = mock.Mock()

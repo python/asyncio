@@ -11,12 +11,12 @@ if sys.platform != 'win32':
 
 import _winapi
 
-from asyncio import _overlapped
-from asyncio import windows_utils
+from trollius import _overlapped
+from trollius import windows_utils
 try:
     from test import support
 except ImportError:
-    from asyncio import test_support as support
+    from trollius import test_support as support
 
 
 class WinsocketpairTests(unittest.TestCase):
@@ -38,7 +38,7 @@ class WinsocketpairTests(unittest.TestCase):
 
     @unittest.skipIf(hasattr(socket, 'socketpair'),
                      'socket.socketpair is available')
-    @mock.patch('asyncio.windows_utils.socket')
+    @mock.patch('trollius.windows_utils.socket')
     def test_winsocketpair_exc(self, m_socket):
         m_socket.AF_INET = socket.AF_INET
         m_socket.SOCK_STREAM = socket.SOCK_STREAM
@@ -58,7 +58,7 @@ class WinsocketpairTests(unittest.TestCase):
 
     @unittest.skipIf(hasattr(socket, 'socketpair'),
                      'socket.socketpair is available')
-    @mock.patch('asyncio.windows_utils.socket')
+    @mock.patch('trollius.windows_utils.socket')
     def test_winsocketpair_close(self, m_socket):
         m_socket.AF_INET = socket.AF_INET
         m_socket.SOCK_STREAM = socket.SOCK_STREAM

@@ -1,6 +1,6 @@
 """Print 'Hello World' every two seconds, using a callback."""
 
-import asyncio
+import trollius as asyncio
 
 
 def print_and_repeat(loop):

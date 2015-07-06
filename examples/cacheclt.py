@@ -4,8 +4,8 @@ See cachesvr.py for protocol description.
 """
 
 import argparse
-import asyncio
-from asyncio import test_utils
+import trollius as asyncio
+from trollius import test_utils
 import json
 import logging
 
@@ -166,7 +166,7 @@ class CacheClient:
 def main():
     asyncio.set_event_loop(None)
     if args.iocp:
-        from asyncio.windows_events import ProactorEventLoop
+        from trollius.windows_events import ProactorEventLoop
         loop = ProactorEventLoop()
     else:
         loop = asyncio.new_event_loop()

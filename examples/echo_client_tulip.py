@@ -1,4 +1,4 @@
-import asyncio
+import trollius as asyncio
 
 END = b'Bye-bye!\n'
 

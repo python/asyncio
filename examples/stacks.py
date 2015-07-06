@@ -1,7 +1,7 @@
 """Crude demo for print_stack()."""
 
 
-from asyncio import *
+from trollius import *
 
 
 @coroutine

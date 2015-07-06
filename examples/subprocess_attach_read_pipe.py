@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Example showing how to attach a read pipe to a subprocess."""
-import asyncio
+import trollius as asyncio
 import os, sys
 
 code = """

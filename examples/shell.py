@@ -1,8 +1,8 @@
 """Examples using create_subprocess_exec() and create_subprocess_shell()."""
 
-import asyncio
+import trollius as asyncio
 import signal
-from asyncio.subprocess import PIPE
+from trollius.subprocess import PIPE
 
 @asyncio.coroutine
 def cat(loop):

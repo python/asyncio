@@ -7,7 +7,7 @@ import sys
 import urllib.parse
 from http.client import BadStatusLine
 
-from asyncio import *
+from trollius import *
 
 
 class Request:

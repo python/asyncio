@@ -9,7 +9,7 @@ import unittest.mock
 try:
     from test import support
 except ImportError:
-    from asyncio import test_support as support
+    from trollius import test_support as support
 try:
     from time import monotonic as time
 except ImportError:
@@ -18,8 +18,8 @@ try:
     import resource
 except ImportError:
     resource = None
-from asyncio import selectors
-from asyncio.test_utils import socketpair
+from trollius import selectors
+from trollius.test_utils import socketpair
 
 
 def find_ready_matching(ready, flag):

@@ -22,15 +22,15 @@ from unittest import mock
 import weakref
 
 
-import asyncio
-from asyncio import proactor_events
-from asyncio import selector_events
-from asyncio import sslproto
-from asyncio import test_utils
+import trollius as asyncio
+from trollius import proactor_events
+from trollius import selector_events
+from trollius import sslproto
+from trollius import test_utils
 try:
     from test import support
 except ImportError:
-    from asyncio import test_support as support
+    from trollius import test_support as support
 
 
 def data_file(filename):
@@ -1856,7 +1856,7 @@ if sys.platform == 'win32':
         def test_remove_fds_after_closing(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_reader()")
 else:
-    from asyncio import selectors
+    from trollius import selectors
 
     class UnixEventLoopTestsMixin(EventLoopTestsMixin):
         def setUp(self):
@@ -2333,7 +2333,7 @@ class PolicyTests(unittest.TestCase):
         policy.set_event_loop(None)
         self.assertRaises(RuntimeError, policy.get_event_loop)
 
-    @mock.patch('asyncio.events.threading.current_thread')
+    @mock.patch('trollius.events.threading.current_thread')
     def test_get_event_loop_thread(self, m_current_thread):
 
         def f():

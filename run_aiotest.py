@@ -1,14 +1,14 @@
 import aiotest.run
-import asyncio
+import trollius
 import sys
 if sys.platform == 'win32':
-    from asyncio.windows_utils import socketpair
+    from trollius.windows_utils import socketpair
 else:
     from socket import socketpair
 
 config = aiotest.TestConfig()
-config.asyncio = asyncio
+config.asyncio = trollius
 config.socketpair = socketpair
-config.new_event_pool_policy = asyncio.DefaultEventLoopPolicy
+config.new_event_pool_policy = trollius.DefaultEventLoopPolicy
 config.call_soon_check_closed = True
 aiotest.run.main(config)

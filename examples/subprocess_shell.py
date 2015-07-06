@@ -1,9 +1,9 @@
 """Example writing to and reading from a subprocess at the same time using
 tasks."""
 
-import asyncio
+import trollius as asyncio
 import os
-from asyncio.subprocess import PIPE
+from trollius.subprocess import PIPE
 
 
 @asyncio.coroutine

@@ -17,10 +17,10 @@ if sys.platform == 'win32':
     raise unittest.SkipTest('UNIX only')
 
 
-import asyncio
-from asyncio import log
-from asyncio import test_utils
-from asyncio import unix_events
+import trollius as asyncio
+from trollius import log
+from trollius import test_utils
+from trollius import unix_events
 
 
 MOCK_ANY = mock.ANY
@@ -60,7 +60,7 @@ class SelectorEventLoopSignalTests(test_utils.TestCase):
         self.loop._handle_signal(signal.NSIG + 1)
         self.loop.remove_signal_handler.assert_called_with(signal.NSIG + 1)
 
-    @mock.patch('asyncio.unix_events.signal')
+    @mock.patch('trollius.unix_events.signal')
     def test_add_signal_handler_setup_error(self, m_signal):
         m_signal.NSIG = signal.NSIG
         m_signal.set_wakeup_fd.side_effect = ValueError
@@ -70,7 +70,7 @@ class SelectorEventLoopSignalTests(test_utils.TestCase):
             self.loop.add_signal_handler,
             signal.SIGINT, lambda: True)
 
-    @mock.patch('asyncio.unix_events.signal')
+    @mock.patch('trollius.unix_events.signal')
     def test_add_signal_handler_coroutine_error(self, m_signal):
         m_signal.NSIG = signal.NSIG
 
@@ -88,7 +88,7 @@ class SelectorEventLoopSignalTests(test_utils.TestCase):
                 self.loop.add_signal_handler,
                 signal.SIGINT, func)
 
-    @mock.patch('asyncio.unix_events.signal')
+    @mock.patch('trollius.unix_events.signal')
     def test_add_signal_handler(self, m_signal):
         m_signal.NSIG = signal.NSIG
 
@@ -98,7 +98,7 @@ class SelectorEventLoopSignalTests(test_utils.TestCase):
         self.assertIsInstance(h, asyncio.Handle)
         self.assertEqual(h._callback, cb)
 
-    @mock.patch('asyncio.unix_events.signal')
+    @mock.patch('trollius.unix_events.signal')
     def test_add_signal_handler_install_error(self, m_signal):
         m_signal.NSIG = signal.NSIG
 
@@ -116,8 +116,8 @@ class SelectorEventLoopSignalTests(test_utils.TestCase):
             self.loop.add_signal_handler,
             signal.SIGINT, lambda: True)
 
-    @mock.patch('asyncio.unix_events.signal')
-    @mock.patch('asyncio.base_events.logger')
+    @mock.patch('trollius.unix_events.signal')
+    @mock.patch('trollius.base_events.logger')
     def test_add_signal_handler_install_error2(self, m_logging, m_signal):
         m_signal.NSIG = signal.NSIG
 
@@ -133,8 +133,8 @@ class SelectorEventLoopSignalTests(test_utils.TestCase):
         self.assertFalse(m_logging.info.called)
         self.assertEqual(1, m_signal.set_wakeup_fd.call_count)
 
-    @mock.patch('asyncio.unix_events.signal')
-    @mock.patch('asyncio.base_events.logger')
+    @mock.patch('trollius.unix_events.signal')
+    @mock.patch('trollius.base_events.logger')
     def test_add_signal_handler_install_error3(self, m_logging, m_signal):
         class Err(OSError):
             errno = errno.EINVAL
@@ -148,7 +148,7 @@ class SelectorEventLoopSignalTests(test_utils.TestCase):
         self.assertFalse(m_logging.info.called)
         self.assertEqual(2, m_signal.set_wakeup_fd.call_count)
 
-    @mock.patch('asyncio.unix_events.signal')
+    @mock.patch('trollius.unix_events.signal')
     def test_remove_signal_handler(self, m_signal):
         m_signal.NSIG = signal.NSIG
 
@@ -161,7 +161,7 @@ class SelectorEventLoopSignalTests(test_utils.TestCase):
         self.assertEqual(
             (signal.SIGHUP, m_signal.SIG_DFL), m_signal.signal.call_args[0])
 
-    @mock.patch('asyncio.unix_events.signal')
+    @mock.patch('trollius.unix_events.signal')
     def test_remove_signal_handler_2(self, m_signal):
         m_signal.NSIG = signal.NSIG
         m_signal.SIGINT = signal.SIGINT
@@ -178,8 +178,8 @@ class SelectorEventLoopSignalTests(test_utils.TestCase):
             (signal.SIGINT, m_signal.default_int_handler),
             m_signal.signal.call_args[0])
 
-    @mock.patch('asyncio.unix_events.signal')
-    @mock.patch('asyncio.base_events.logger')
+    @mock.patch('trollius.unix_events.signal')
+    @mock.patch('trollius.base_events.logger')
     def test_remove_signal_handler_cleanup_error(self, m_logging, m_signal):
         m_signal.NSIG = signal.NSIG
         self.loop.add_signal_handler(signal.SIGHUP, lambda: True)
@@ -189,7 +189,7 @@ class SelectorEventLoopSignalTests(test_utils.TestCase):
         self.loop.remove_signal_handler(signal.SIGHUP)
         self.assertTrue(m_logging.info)
 
-    @mock.patch('asyncio.unix_events.signal')
+    @mock.patch('trollius.unix_events.signal')
     def test_remove_signal_handler_error(self, m_signal):
         m_signal.NSIG = signal.NSIG
         self.loop.add_signal_handler(signal.SIGHUP, lambda: True)
@@ -199,7 +199,7 @@ class SelectorEventLoopSignalTests(test_utils.TestCase):
         self.assertRaises(
             OSError, self.loop.remove_signal_handler, signal.SIGHUP)
 
-    @mock.patch('asyncio.unix_events.signal')
+    @mock.patch('trollius.unix_events.signal')
     def test_remove_signal_handler_error2(self, m_signal):
         m_signal.NSIG = signal.NSIG
         self.loop.add_signal_handler(signal.SIGHUP, lambda: True)
@@ -211,7 +211,7 @@ class SelectorEventLoopSignalTests(test_utils.TestCase):
         self.assertRaises(
             RuntimeError, self.loop.remove_signal_handler, signal.SIGHUP)
 
-    @mock.patch('asyncio.unix_events.signal')
+    @mock.patch('trollius.unix_events.signal')
     def test_close(self, m_signal):
         m_signal.NSIG = signal.NSIG
 
@@ -275,7 +275,7 @@ class SelectorEventLoopUnixSocketTests(test_utils.TestCase):
                                         'A UNIX Domain Socket was expected'):
                 self.loop.run_until_complete(coro)
 
-    @mock.patch('asyncio.unix_events.socket')
+    @mock.patch('trollius.unix_events.socket')
     def test_create_unix_server_bind_error(self, m_socket):
         # Ensure that the socket is closed on any bind error
         sock = mock.Mock()
@@ -331,7 +331,7 @@ class UnixReadPipeTransportTests(test_utils.TestCase):
         self.pipe = mock.Mock(spec_set=io.RawIOBase)
         self.pipe.fileno.return_value = 5
 
-        blocking_patcher = mock.patch('asyncio.unix_events._set_nonblocking')
+        blocking_patcher = mock.patch('trollius.unix_events._set_nonblocking')
         blocking_patcher.start()
         self.addCleanup(blocking_patcher.stop)
 
@@ -389,7 +389,7 @@ class UnixReadPipeTransportTests(test_utils.TestCase):
         test_utils.run_briefly(self.loop)
         self.assertFalse(self.protocol.data_received.called)
 
-    @mock.patch('asyncio.log.logger.error')
+    @mock.patch('trollius.log.logger.error')
     @mock.patch('os.read')
     def test__read_ready_error(self, m_read, m_logexc):
         tr = self.read_pipe_transport()
@@ -480,7 +480,7 @@ class UnixWritePipeTransportTests(test_utils.TestCase):
         self.pipe = mock.Mock(spec_set=io.RawIOBase)
         self.pipe.fileno.return_value = 5
 
-        blocking_patcher = mock.patch('asyncio.unix_events._set_nonblocking')
+        blocking_patcher = mock.patch('trollius.unix_events._set_nonblocking')
         blocking_patcher.start()
         self.addCleanup(blocking_patcher.stop)
 
@@ -556,7 +556,7 @@ class UnixWritePipeTransportTests(test_utils.TestCase):
         self.loop.assert_writer(5, tr._write_ready)
         self.assertEqual([b'data'], tr._buffer)
 
-    @mock.patch('asyncio.unix_events.logger')
+    @mock.patch('trollius.unix_events.logger')
     @mock.patch('os.write')
     def test_write_err(self, m_write, m_log):
         tr = self.write_pipe_transport()
@@ -646,7 +646,7 @@ class UnixWritePipeTransportTests(test_utils.TestCase):
         self.loop.assert_writer(5, tr._write_ready)
         self.assertEqual([b'data'], tr._buffer)
 
-    @mock.patch('asyncio.log.logger.error')
+    @mock.patch('trollius.log.logger.error')
     @mock.patch('os.write')
     def test__write_ready_err(self, m_write, m_logexc):
         tr = self.write_pipe_transport()

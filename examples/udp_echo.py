@@ -2,7 +2,7 @@
 """UDP echo example."""
 import argparse
 import sys
-import asyncio
+import trollius as asyncio
 try:
     import signal
 except ImportError:

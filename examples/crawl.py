@@ -15,7 +15,7 @@
 # - Handle out of file descriptors directly?  (How?)
 
 import argparse
-import asyncio
+import trollius as asyncio
 import asyncio.locks
 import cgi
 from http.client import BadStatusLine
@@ -828,7 +828,7 @@ def main():
     log = Logger(args.level)
 
     if args.iocp:
-        from asyncio.windows_events import ProactorEventLoop
+        from trollius.windows_events import ProactorEventLoop
         loop = ProactorEventLoop()
         asyncio.set_event_loop(loop)
     elif args.select:

@@ -1,6 +1,6 @@
 # Some simple testing tasks (sorry, UNIX only).
 
-PYTHON=python3
+PYTHON=python
 VERBOSE=$(V)
 V=	0
 FLAGS=
@@ -40,6 +40,8 @@ clean:
 	rm -rf build
 	rm -rf asyncio.egg-info
 	rm -f MANIFEST
+	rm -rf trollius.egg-info
+	rm -rf .tox
 
 
 # For distribution builders only!

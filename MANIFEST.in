@@ -1,11 +1,13 @@
-include AUTHORS COPYING
+include AUTHORS COPYING TODO tox.ini
 include Makefile
 include overlapped.c pypi.bat
 include check.py runtests.py run_aiotest.py release.py
-include update_stdlib.sh
+include update-tulip*.sh
 
-recursive-include examples *.py
-recursive-include tests *.crt
-recursive-include tests *.key
-recursive-include tests *.pem
-recursive-include tests *.py
+include doc/conf.py doc/make.bat doc/Makefile
+include doc/*.rst doc/*.jpg
+
+include examples/*.py
+
+include tests/*.crt tests/*.pem tests/*.key
+include tests/*.py

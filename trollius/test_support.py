@@ -4,6 +4,7 @@
 
 # Ignore symbol TEST_HOME_DIR: test_events works without it
 
+from __future__ import absolute_import
 import functools
 import gc
 import os
@@ -14,6 +15,7 @@ import subprocess
 import sys
 import time
 
+from trollius import test_utils
 
 # A constant likely larger than the underlying OS pipe buffer size, to
 # make writes blocking.
@@ -39,7 +41,9 @@ def _assert_python(expected_success, *args, **env_vars):
         isolated = env_vars.pop('__isolated')
     else:
         isolated = not env_vars
-    cmd_line = [sys.executable, '-X', 'faulthandler']
+    cmd_line = [sys.executable]
+    if sys.version_info >= (3, 3):
+        cmd_line.extend(('-X', 'faulthandler'))
     if isolated and sys.version_info >= (3, 4):
         # isolated mode: ignore Python environment variables, ignore user
         # site-packages, and don't add the current directory to sys.path
@@ -248,7 +252,7 @@ def requires_mac_ver(*min_version):
                 else:
                     if version < min_version:
                         min_version_txt = '.'.join(map(str, min_version))
-                        raise unittest.SkipTest(
+                        raise test_utils.SkipTest(
                             "Mac OS X %s or higher required, not %s"
                             % (min_version_txt, version_txt))
             return func(*args, **kw)
@@ -275,7 +279,7 @@ def _requires_unix_version(sysname, min_version):
                 else:
                     if version < min_version:
                         min_version_txt = '.'.join(map(str, min_version))
-                        raise unittest.SkipTest(
+                        raise test_utils.SkipTest(
                             "%s version %s or higher required, not %s"
                             % (sysname, min_version_txt, version_txt))
             return func(*args, **kw)
@@ -300,9 +304,6 @@ except ImportError:
 
 # Use test.script_helper if available
 try:
-    from test.support.script_helper import assert_python_ok
+    from test.script_helper import assert_python_ok
 except ImportError:
-    try:
-        from test.script_helper import assert_python_ok
-    except ImportError:
-        pass
+    pass

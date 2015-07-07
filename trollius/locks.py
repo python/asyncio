@@ -7,7 +7,7 @@ import sys
 
 from . import events
 from . import futures
-from .coroutines import coroutine
+from .coroutines import coroutine, From, Return
 
 
 _PY35 = sys.version_info >= (3, 5)
@@ -19,7 +19,7 @@ class _ContextManager:
     This enables the following idiom for acquiring and releasing a
     lock around a block:
 
-        with (yield from lock):
+        with (yield From(lock)):
             <block>
 
     while failing loudly when accidentally using:
@@ -43,7 +43,7 @@ class _ContextManager:
             self._lock = None  # Crudely prevent reuse.
 
 
-class _ContextManagerMixin:
+class _ContextManagerMixin(object):
     def __enter__(self):
         raise RuntimeError(
             '"yield from" should be used as context manager expression')
@@ -111,16 +111,16 @@ class Lock(_ContextManagerMixin):
     release() call resets the state to unlocked; first coroutine which
     is blocked in acquire() is being processed.
 
-    acquire() is a coroutine and should be called with 'yield from'.
+    acquire() is a coroutine and should be called with 'yield From'.
 
-    Locks also support the context management protocol.  '(yield from lock)'
+    Locks also support the context management protocol.  '(yield From(lock))'
     should be used as context manager expression.
 
     Usage:
 
         lock = Lock()
         ...
-        yield from lock
+        yield From(lock)
         try:
             ...
         finally:
@@ -130,20 +130,20 @@ class Lock(_ContextManagerMixin):
 
         lock = Lock()
         ...
-        with (yield from lock):
+        with (yield From(lock)):
              ...
 
     Lock objects can be tested for locking state:
 
         if not lock.locked():
-           yield from lock
+           yield From(lock)
         else:
            # lock is acquired
            ...
 
     """
 
-    def __init__(self, *, loop=None):
+    def __init__(self, loop=None):
         self._waiters = collections.deque()
         self._locked = False
         if loop is not None:
@@ -152,11 +152,11 @@ class Lock(_ContextManagerMixin):
             self._loop = events.get_event_loop()
 
     def __repr__(self):
-        res = super().__repr__()
+        res = super(Lock, self).__repr__()
         extra = 'locked' if self._locked else 'unlocked'
         if self._waiters:
-            extra = '{},waiters:{}'.format(extra, len(self._waiters))
-        return '<{} [{}]>'.format(res[1:-1], extra)
+            extra = '{0},waiters:{1}'.format(extra, len(self._waiters))
+        return '<{0} [{1}]>'.format(res[1:-1], extra)
 
     def locked(self):
         """Return True if lock is acquired."""
@@ -171,14 +171,14 @@ class Lock(_ContextManagerMixin):
         """
         if not self._waiters and not self._locked:
             self._locked = True
-            return True
+            raise Return(True)
 
         fut = futures.Future(loop=self._loop)
         self._waiters.append(fut)
         try:
-            yield from fut
+            yield From(fut)
             self._locked = True
-            return True
+            raise Return(True)
         finally:
             self._waiters.remove(fut)
 
@@ -204,7 +204,7 @@ class Lock(_ContextManagerMixin):
             raise RuntimeError('Lock is not acquired.')
 
 
-class Event:
+class Event(object):
     """Asynchronous equivalent to threading.Event.
 
     Class implementing event objects. An event manages a flag that can be set
@@ -213,7 +213,7 @@ class Event:
     false.
     """
 
-    def __init__(self, *, loop=None):
+    def __init__(self, loop=None):
         self._waiters = collections.deque()
         self._value = False
         if loop is not None:
@@ -222,11 +222,11 @@ class Event:
             self._loop = events.get_event_loop()
 
     def __repr__(self):
-        res = super().__repr__()
+        res = super(Event, self).__repr__()
         extra = 'set' if self._value else 'unset'
         if self._waiters:
-            extra = '{},waiters:{}'.format(extra, len(self._waiters))
-        return '<{} [{}]>'.format(res[1:-1], extra)
+            extra = '{0},waiters:{1}'.format(extra, len(self._waiters))
+        return '<{0} [{1}]>'.format(res[1:-1], extra)
 
     def is_set(self):
         """Return True if and only if the internal flag is true."""
@@ -259,13 +259,13 @@ class Event:
         set() to set the flag to true, then return True.
         """
         if self._value:
-            return True
+            raise Return(True)
 
         fut = futures.Future(loop=self._loop)
         self._waiters.append(fut)
         try:
-            yield from fut
-            return True
+            yield From(fut)
+            raise Return(True)
         finally:
             self._waiters.remove(fut)
 
@@ -280,7 +280,7 @@ class Condition(_ContextManagerMixin):
     A new Lock object is created and used as the underlying lock.
     """
 
-    def __init__(self, lock=None, *, loop=None):
+    def __init__(self, lock=None, loop=None):
         if loop is not None:
             self._loop = loop
         else:
@@ -300,11 +300,11 @@ class Condition(_ContextManagerMixin):
         self._waiters = collections.deque()
 
     def __repr__(self):
-        res = super().__repr__()
+        res = super(Condition, self).__repr__()
         extra = 'locked' if self.locked() else 'unlocked'
         if self._waiters:
-            extra = '{},waiters:{}'.format(extra, len(self._waiters))
-        return '<{} [{}]>'.format(res[1:-1], extra)
+            extra = '{0},waiters:{1}'.format(extra, len(self._waiters))
+        return '<{0} [{1}]>'.format(res[1:-1], extra)
 
     @coroutine
     def wait(self):
@@ -326,13 +326,13 @@ class Condition(_ContextManagerMixin):
             fut = futures.Future(loop=self._loop)
             self._waiters.append(fut)
             try:
-                yield from fut
-                return True
+                yield From(fut)
+                raise Return(True)
             finally:
                 self._waiters.remove(fut)
 
         finally:
-            yield from self.acquire()
+            yield From(self.acquire())
 
     @coroutine
     def wait_for(self, predicate):
@@ -344,9 +344,9 @@ class Condition(_ContextManagerMixin):
         """
         result = predicate()
         while not result:
-            yield from self.wait()
+            yield From(self.wait())
             result = predicate()
-        return result
+        raise Return(result)
 
     def notify(self, n=1):
         """By default, wake up one coroutine waiting on this condition, if any.
@@ -396,7 +396,7 @@ class Semaphore(_ContextManagerMixin):
     ValueError is raised.
     """
 
-    def __init__(self, value=1, *, loop=None):
+    def __init__(self, value=1, loop=None):
         if value < 0:
             raise ValueError("Semaphore initial value must be >= 0")
         self._value = value
@@ -407,12 +407,12 @@ class Semaphore(_ContextManagerMixin):
             self._loop = events.get_event_loop()
 
     def __repr__(self):
-        res = super().__repr__()
-        extra = 'locked' if self.locked() else 'unlocked,value:{}'.format(
+        res = super(Semaphore, self).__repr__()
+        extra = 'locked' if self.locked() else 'unlocked,value:{0}'.format(
             self._value)
         if self._waiters:
-            extra = '{},waiters:{}'.format(extra, len(self._waiters))
-        return '<{} [{}]>'.format(res[1:-1], extra)
+            extra = '{0},waiters:{1}'.format(extra, len(self._waiters))
+        return '<{0} [{1}]>'.format(res[1:-1], extra)
 
     def locked(self):
         """Returns True if semaphore can not be acquired immediately."""
@@ -430,14 +430,14 @@ class Semaphore(_ContextManagerMixin):
         """
         if not self._waiters and self._value > 0:
             self._value -= 1
-            return True
+            raise Return(True)
 
         fut = futures.Future(loop=self._loop)
         self._waiters.append(fut)
         try:
-            yield from fut
+            yield From(fut)
             self._value -= 1
-            return True
+            raise Return(True)
         finally:
             self._waiters.remove(fut)
 
@@ -460,11 +460,11 @@ class BoundedSemaphore(Semaphore):
     above the initial value.
     """
 
-    def __init__(self, value=1, *, loop=None):
+    def __init__(self, value=1, loop=None):
         self._bound_value = value
-        super().__init__(value, loop=loop)
+        super(BoundedSemaphore, self).__init__(value, loop=loop)
 
     def release(self):
         if self._value >= self._bound_value:
             raise ValueError('BoundedSemaphore released too many times')
-        super().release()
+        super(BoundedSemaphore, self).release()

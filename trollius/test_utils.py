@@ -7,20 +7,32 @@ import logging
 import os
 import re
 import socket
-import socketserver
 import sys
 import tempfile
 import threading
 import time
-import unittest
-from unittest import mock
 
-from http.server import HTTPServer
 from wsgiref.simple_server import WSGIRequestHandler, WSGIServer
 
 try:
+    import socketserver
+    from http.server import HTTPServer
+except ImportError:
+    # Python 2
+    import SocketServer as socketserver
+    from BaseHTTPServer import HTTPServer
+
+try:
+    from unittest import mock
+except ImportError:
+    # Python < 3.3
+    import mock
+
+try:
     import ssl
+    from .py3_ssl import SSLContext, wrap_socket
 except ImportError:  # pragma: no cover
+    # SSL support disabled in Python
     ssl = None
 
 from . import base_events
@@ -37,27 +49,116 @@ if sys.platform == 'win32':  # pragma: no cover
 else:
     from socket import socketpair  # pragma: no cover
 
+try:
+    import unittest
+    skipIf = unittest.skipIf
+    skipUnless = unittest.skipUnless
+    SkipTest = unittest.SkipTest
+    _TestCase = unittest.TestCase
+except AttributeError:
+    # Python 2.6: use the backported unittest module called "unittest2"
+    import unittest2
+    skipIf = unittest2.skipIf
+    skipUnless = unittest2.skipUnless
+    SkipTest = unittest2.SkipTest
+    _TestCase = unittest2.TestCase
+
+
+if not hasattr(_TestCase, 'assertRaisesRegex'):
+    class _BaseTestCaseContext:
+
+        def __init__(self, test_case):
+            self.test_case = test_case
+
+        def _raiseFailure(self, standardMsg):
+            msg = self.test_case._formatMessage(self.msg, standardMsg)
+            raise self.test_case.failureException(msg)
+
+
+    class _AssertRaisesBaseContext(_BaseTestCaseContext):
+
+        def __init__(self, expected, test_case, callable_obj=None,
+                     expected_regex=None):
+            _BaseTestCaseContext.__init__(self, test_case)
+            self.expected = expected
+            self.test_case = test_case
+            if callable_obj is not None:
+                try:
+                    self.obj_name = callable_obj.__name__
+                except AttributeError:
+                    self.obj_name = str(callable_obj)
+            else:
+                self.obj_name = None
+            if isinstance(expected_regex, (bytes, str)):
+                expected_regex = re.compile(expected_regex)
+            self.expected_regex = expected_regex
+            self.msg = None
+
+        def handle(self, name, callable_obj, args, kwargs):
+            """
+            If callable_obj is None, assertRaises/Warns is being used as a
+            context manager, so check for a 'msg' kwarg and return self.
+            If callable_obj is not None, call it passing args and kwargs.
+            """
+            if callable_obj is None:
+                self.msg = kwargs.pop('msg', None)
+                return self
+            with self:
+                callable_obj(*args, **kwargs)
+
+
+    class _AssertRaisesContext(_AssertRaisesBaseContext):
+        """A context manager used to implement TestCase.assertRaises* methods."""
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, tb):
+            if exc_type is None:
+                try:
+                    exc_name = self.expected.__name__
+                except AttributeError:
+                    exc_name = str(self.expected)
+                if self.obj_name:
+                    self._raiseFailure("{0} not raised by {1}".format(exc_name,
+                                                                    self.obj_name))
+                else:
+                    self._raiseFailure("{0} not raised".format(exc_name))
+            if not issubclass(exc_type, self.expected):
+                # let unexpected exceptions pass through
+                return False
+            self.exception = exc_value
+            if self.expected_regex is None:
+                return True
+
+            expected_regex = self.expected_regex
+            if not expected_regex.search(str(exc_value)):
+                self._raiseFailure('"{0}" does not match "{1}"'.format(
+                         expected_regex.pattern, str(exc_value)))
+            return True
+
 
 def dummy_ssl_context():
     if ssl is None:
         return None
     else:
-        return ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+        return SSLContext(ssl.PROTOCOL_SSLv23)
 
 
-def run_briefly(loop):
+def run_briefly(loop, steps=1):
     @coroutine
     def once():
         pass
-    gen = once()
-    t = loop.create_task(gen)
-    # Don't log a warning if the task is not done after run_until_complete().
-    # It occurs if the loop is stopped or if a task raises a BaseException.
-    t._log_destroy_pending = False
-    try:
-        loop.run_until_complete(t)
-    finally:
-        gen.close()
+    for step in range(steps):
+        gen = once()
+        t = loop.create_task(gen)
+        # Don't log a warning if the task is not done after run_until_complete().
+        # It occurs if the loop is stopped or if a task raises a BaseException.
+        t._log_destroy_pending = False
+        try:
+            loop.run_until_complete(t)
+        finally:
+            gen.close()
 
 
 def run_until(loop, pred, timeout=30):
@@ -89,12 +190,12 @@ class SilentWSGIRequestHandler(WSGIRequestHandler):
         pass
 
 
-class SilentWSGIServer(WSGIServer):
+class SilentWSGIServer(WSGIServer, object):
 
     request_timeout = 2
 
     def get_request(self):
-        request, client_addr = super().get_request()
+        request, client_addr = super(SilentWSGIServer, self).get_request()
         request.settimeout(self.request_timeout)
         return request, client_addr
 
@@ -115,10 +216,10 @@ class SSLWSGIServerMixin:
                                 'test', 'test_asyncio')
         keyfile = os.path.join(here, 'ssl_key.pem')
         certfile = os.path.join(here, 'ssl_cert.pem')
-        ssock = ssl.wrap_socket(request,
-                                keyfile=keyfile,
-                                certfile=certfile,
-                                server_side=True)
+        ssock = wrap_socket(request,
+                            keyfile=keyfile,
+                            certfile=certfile,
+                            server_side=True)
         try:
             self.RequestHandlerClass(ssock, client_address, self)
             ssock.close()
@@ -131,7 +232,7 @@ class SSLWSGIServer(SSLWSGIServerMixin, SilentWSGIServer):
     pass
 
 
-def _run_test_server(*, address, use_ssl=False, server_cls, server_ssl_cls):
+def _run_test_server(address, use_ssl, server_cls, server_ssl_cls):
 
     def app(environ, start_response):
         status = '200 OK'
@@ -158,7 +259,7 @@ def _run_test_server(*, address, use_ssl=False, server_cls, server_ssl_cls):
 
 if hasattr(socket, 'AF_UNIX'):
 
-    class UnixHTTPServer(socketserver.UnixStreamServer, HTTPServer):
+    class UnixHTTPServer(socketserver.UnixStreamServer, HTTPServer, object):
 
         def server_bind(self):
             socketserver.UnixStreamServer.server_bind(self)
@@ -166,7 +267,7 @@ if hasattr(socket, 'AF_UNIX'):
             self.server_port = 80
 
 
-    class UnixWSGIServer(UnixHTTPServer, WSGIServer):
+    class UnixWSGIServer(UnixHTTPServer, WSGIServer, object):
 
         request_timeout = 2
 
@@ -175,7 +276,7 @@ if hasattr(socket, 'AF_UNIX'):
             self.setup_environ()
 
         def get_request(self):
-            request, client_addr = super().get_request()
+            request, client_addr = super(UnixWSGIServer, self).get_request()
             request.settimeout(self.request_timeout)
             # Code in the stdlib expects that get_request
             # will return a socket and a tuple (host, port).
@@ -214,18 +315,20 @@ if hasattr(socket, 'AF_UNIX'):
 
 
     @contextlib.contextmanager
-    def run_test_unix_server(*, use_ssl=False):
+    def run_test_unix_server(use_ssl=False):
         with unix_socket_path() as path:
-            yield from _run_test_server(address=path, use_ssl=use_ssl,
-                                        server_cls=SilentUnixWSGIServer,
-                                        server_ssl_cls=UnixSSLWSGIServer)
+            for item in _run_test_server(address=path, use_ssl=use_ssl,
+                                         server_cls=SilentUnixWSGIServer,
+                                         server_ssl_cls=UnixSSLWSGIServer):
+                yield item
 
 
 @contextlib.contextmanager
-def run_test_server(*, host='127.0.0.1', port=0, use_ssl=False):
-    yield from _run_test_server(address=(host, port), use_ssl=use_ssl,
-                                server_cls=SilentWSGIServer,
-                                server_ssl_cls=SSLWSGIServer)
+def run_test_server(host='127.0.0.1', port=0, use_ssl=False):
+    for item in _run_test_server(address=(host, port), use_ssl=use_ssl,
+                                 server_cls=SilentWSGIServer,
+                                 server_ssl_cls=SSLWSGIServer):
+        yield item
 
 
 def make_test_protocol(base):
@@ -278,7 +381,7 @@ class TestLoop(base_events.BaseEventLoop):
     """
 
     def __init__(self, gen=None):
-        super().__init__()
+        super(TestLoop, self).__init__()
 
         if gen is None:
             def gen():
@@ -307,7 +410,7 @@ class TestLoop(base_events.BaseEventLoop):
             self._time += advance
 
     def close(self):
-        super().close()
+        super(TestLoop, self).close()
         if self._check_on_close:
             try:
                 self._gen.send(0)
@@ -328,11 +431,11 @@ class TestLoop(base_events.BaseEventLoop):
             return False
 
     def assert_reader(self, fd, callback, *args):
-        assert fd in self.readers, 'fd {} is not registered'.format(fd)
+        assert fd in self.readers, 'fd {0} is not registered'.format(fd)
         handle = self.readers[fd]
-        assert handle._callback == callback, '{!r} != {!r}'.format(
+        assert handle._callback == callback, '{0!r} != {1!r}'.format(
             handle._callback, callback)
-        assert handle._args == args, '{!r} != {!r}'.format(
+        assert handle._args == args, '{0!r} != {1!r}'.format(
             handle._args, args)
 
     def add_writer(self, fd, callback, *args):
@@ -347,11 +450,11 @@ class TestLoop(base_events.BaseEventLoop):
             return False
 
     def assert_writer(self, fd, callback, *args):
-        assert fd in self.writers, 'fd {} is not registered'.format(fd)
+        assert fd in self.writers, 'fd {0} is not registered'.format(fd)
         handle = self.writers[fd]
-        assert handle._callback == callback, '{!r} != {!r}'.format(
+        assert handle._callback == callback, '{0!r} != {1!r}'.format(
             handle._callback, callback)
-        assert handle._args == args, '{!r} != {!r}'.format(
+        assert handle._args == args, '{0!r} != {1!r}'.format(
             handle._args, args)
 
     def reset_counters(self):
@@ -359,7 +462,7 @@ class TestLoop(base_events.BaseEventLoop):
         self.remove_writer_count = collections.defaultdict(int)
 
     def _run_once(self):
-        super()._run_once()
+        super(TestLoop, self)._run_once()
         for when in self._timers:
             advance = self._gen.send(when)
             self.advance_time(advance)
@@ -367,7 +470,7 @@ class TestLoop(base_events.BaseEventLoop):
 
     def call_at(self, when, callback, *args):
         self._timers.append(when)
-        return super().call_at(when, callback, *args)
+        return super(TestLoop, self).call_at(when, callback, *args)
 
     def _process_events(self, event_list):
         return
@@ -400,8 +503,8 @@ def get_function_source(func):
     return source
 
 
-class TestCase(unittest.TestCase):
-    def set_event_loop(self, loop, *, cleanup=True):
+class TestCase(_TestCase):
+    def set_event_loop(self, loop, cleanup=True):
         assert loop is not None
         # ensure that the event loop is passed explicitly in asyncio
         events.set_event_loop(None)
@@ -419,6 +522,48 @@ class TestCase(unittest.TestCase):
         # Detect CPython bug #23353: ensure that yield/yield-from is not used
         # in an except block of a generator
         self.assertEqual(sys.exc_info(), (None, None, None))
+
+    if not hasattr(_TestCase, 'assertRaisesRegex'):
+        def assertRaisesRegex(self, expected_exception, expected_regex,
+                              callable_obj=None, *args, **kwargs):
+            """Asserts that the message in a raised exception matches a regex.
+
+            Args:
+                expected_exception: Exception class expected to be raised.
+                expected_regex: Regex (re pattern object or string) expected
+                        to be found in error message.
+                callable_obj: Function to be called.
+                msg: Optional message used in case of failure. Can only be used
+                        when assertRaisesRegex is used as a context manager.
+                args: Extra args.
+                kwargs: Extra kwargs.
+            """
+            context = _AssertRaisesContext(expected_exception, self, callable_obj,
+                                           expected_regex)
+
+            return context.handle('assertRaisesRegex', callable_obj, args, kwargs)
+
+    if not hasattr(_TestCase, 'assertRegex'):
+        def assertRegex(self, text, expected_regex, msg=None):
+            """Fail the test unless the text matches the regular expression."""
+            if isinstance(expected_regex, (str, bytes)):
+                assert expected_regex, "expected_regex must not be empty."
+                expected_regex = re.compile(expected_regex)
+            if not expected_regex.search(text):
+                msg = msg or "Regex didn't match"
+                msg = '%s: %r not found in %r' % (msg, expected_regex.pattern, text)
+                raise self.failureException(msg)
+
+    def check_soure_traceback(self, source_traceback, lineno_delta):
+        frame = sys._getframe(1)
+        filename = frame.f_code.co_filename
+        lineno = frame.f_lineno + lineno_delta
+        name = frame.f_code.co_name
+        self.assertIsInstance(source_traceback, list)
+        self.assertEqual(source_traceback[-1][:3],
+                         (filename,
+                          lineno,
+                          name))
 
 
 @contextlib.contextmanager

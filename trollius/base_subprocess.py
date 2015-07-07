@@ -6,7 +6,7 @@ import warnings
 from . import futures
 from . import protocols
 from . import transports
-from .coroutines import coroutine
+from .coroutines import coroutine, From
 from .log import logger
 
 
@@ -15,7 +15,7 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
     def __init__(self, loop, protocol, args, shell,
                  stdin, stdout, stderr, bufsize,
                  waiter=None, extra=None, **kwargs):
-        super().__init__(extra)
+        super(BaseSubprocessTransport, self).__init__(extra)
         self._closed = False
         self._protocol = protocol
         self._loop = loop
@@ -221,7 +221,8 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
 
         waiter = futures.Future(loop=self._loop)
         self._exit_waiters.append(waiter)
-        return (yield from waiter)
+        returncode = yield From(waiter)
+        return returncode
 
     def _try_finish(self):
         assert not self._finished

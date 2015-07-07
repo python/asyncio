@@ -5,13 +5,17 @@ __all__ = ['CancelledError', 'TimeoutError',
            'Future', 'wrap_future',
            ]
 
-import concurrent.futures._base
 import logging
-import reprlib
 import sys
 import traceback
+try:
+    import reprlib   # Python 3
+except ImportError:
+    import repr as reprlib   # Python 2
 
+from . import compat
 from . import events
+from . import executor
 
 # States for Future.
 _PENDING = 'PENDING'
@@ -21,9 +25,9 @@ _FINISHED = 'FINISHED'
 _PY34 = sys.version_info >= (3, 4)
 _PY35 = sys.version_info >= (3, 5)
 
-Error = concurrent.futures._base.Error
-CancelledError = concurrent.futures.CancelledError
-TimeoutError = concurrent.futures.TimeoutError
+Error = executor.Error
+CancelledError = executor.CancelledError
+TimeoutError = executor.TimeoutError
 
 STACK_DEBUG = logging.DEBUG - 1  # heavy-duty debugging
 
@@ -32,7 +36,7 @@ class InvalidStateError(Error):
     """The operation is not allowed in this state."""
 
 
-class _TracebackLogger:
+class _TracebackLogger(object):
     """Helper to log a traceback upon destruction if not cleared.
 
     This solves a nasty problem with Futures and Tasks that have an
@@ -112,7 +116,7 @@ class _TracebackLogger:
             self.loop.call_exception_handler({'message': msg})
 
 
-class Future:
+class Future(object):
     """This class is *almost* compatible with concurrent.futures.Future.
 
     Differences:
@@ -138,10 +142,14 @@ class Future:
 
     _blocking = False  # proper use of future (yield vs yield from)
 
+    # Used by Python 2 to raise the exception with the original traceback
+    # in the exception() method in debug mode
+    _exception_tb = None
+
     _log_traceback = False   # Used for Python 3.4 and later
     _tb_logger = None        # Used for Python 3.3 only
 
-    def __init__(self, *, loop=None):
+    def __init__(self, loop=None):
         """Initialize the future.
 
         The optional event_loop argument allows to explicitly set the event
@@ -168,23 +176,23 @@ class Future:
         if size == 1:
             cb = format_cb(cb[0])
         elif size == 2:
-            cb = '{}, {}'.format(format_cb(cb[0]), format_cb(cb[1]))
+            cb = '{0}, {1}'.format(format_cb(cb[0]), format_cb(cb[1]))
         elif size > 2:
-            cb = '{}, <{} more>, {}'.format(format_cb(cb[0]),
-                                            size-2,
-                                            format_cb(cb[-1]))
+            cb = '{0}, <{1} more>, {2}'.format(format_cb(cb[0]),
+                                               size-2,
+                                               format_cb(cb[-1]))
         return 'cb=[%s]' % cb
 
     def _repr_info(self):
         info = [self._state.lower()]
         if self._state == _FINISHED:
             if self._exception is not None:
-                info.append('exception={!r}'.format(self._exception))
+                info.append('exception={0!r}'.format(self._exception))
             else:
                 # use reprlib to limit the length of the output, especially
                 # for very long strings
                 result = reprlib.repr(self._result)
-                info.append('result={}'.format(result))
+                info.append('result={0}'.format(result))
         if self._callbacks:
             info.append(self._format_callbacks())
         if self._source_traceback:
@@ -272,8 +280,13 @@ class Future:
         if self._tb_logger is not None:
             self._tb_logger.clear()
             self._tb_logger = None
+        exc_tb = self._exception_tb
+        self._exception_tb = None
         if self._exception is not None:
-            raise self._exception
+            if exc_tb is not None:
+                compat.reraise(type(self._exception), self._exception, exc_tb)
+            else:
+                raise self._exception
         return self._result
 
     def exception(self):
@@ -292,6 +305,7 @@ class Future:
         if self._tb_logger is not None:
             self._tb_logger.clear()
             self._tb_logger = None
+        self._exception_tb = None
         return self._exception
 
     def add_done_callback(self, fn):
@@ -334,31 +348,61 @@ class Future:
         InvalidStateError.
         """
         if self._state != _PENDING:
-            raise InvalidStateError('{}: {!r}'.format(self._state, self))
+            raise InvalidStateError('{0}: {1!r}'.format(self._state, self))
         self._result = result
         self._state = _FINISHED
         self._schedule_callbacks()
 
+    def _get_exception_tb(self):
+        return self._exception_tb
+
     def set_exception(self, exception):
+        self._set_exception_with_tb(exception, None)
+
+    def _set_exception_with_tb(self, exception, exc_tb):
         """Mark the future done and set an exception.
 
         If the future is already done when this method is called, raises
         InvalidStateError.
         """
         if self._state != _PENDING:
-            raise InvalidStateError('{}: {!r}'.format(self._state, self))
+            raise InvalidStateError('{0}: {1!r}'.format(self._state, self))
         if isinstance(exception, type):
             exception = exception()
         self._exception = exception
+        if exc_tb is not None:
+            self._exception_tb = exc_tb
+            exc_tb = None
+        elif self._loop.get_debug() and not compat.PY3:
+            self._exception_tb = sys.exc_info()[2]
         self._state = _FINISHED
         self._schedule_callbacks()
         if _PY34:
             self._log_traceback = True
         else:
             self._tb_logger = _TracebackLogger(self, exception)
-            # Arrange for the logger to be activated after all callbacks
-            # have had a chance to call result() or exception().
-            self._loop.call_soon(self._tb_logger.activate)
+            if hasattr(exception, '__traceback__'):
+                # Python 3: exception contains a link to the traceback
+
+                # Arrange for the logger to be activated after all callbacks
+                # have had a chance to call result() or exception().
+                self._loop.call_soon(self._tb_logger.activate)
+            else:
+                if self._loop.get_debug():
+                    frame = sys._getframe(1)
+                    tb = ['Traceback (most recent call last):\n']
+                    if self._exception_tb is not None:
+                        tb += traceback.format_tb(self._exception_tb)
+                    else:
+                        tb += traceback.format_stack(frame)
+                    tb += traceback.format_exception_only(type(exception), exception)
+                    self._tb_logger.tb = tb
+                else:
+                    self._tb_logger.tb = traceback.format_exception_only(
+                                                        type(exception),
+                                                        exception)
+
+                self._tb_logger.exc = None
 
     # Truly internal methods.
 
@@ -392,12 +436,18 @@ class Future:
         __await__ = __iter__ # make compatible with 'await' expression
 
 
-def wrap_future(fut, *, loop=None):
+if events.asyncio is not None:
+    # Accept also asyncio Future objects for interoperability
+    _FUTURE_CLASSES = (Future, events.asyncio.Future)
+else:
+    _FUTURE_CLASSES = Future
+
+def wrap_future(fut, loop=None):
     """Wrap concurrent.futures.Future object."""
-    if isinstance(fut, Future):
+    if isinstance(fut, _FUTURE_CLASSES):
         return fut
-    assert isinstance(fut, concurrent.futures.Future), \
-        'concurrent.futures.Future is expected, got {!r}'.format(fut)
+    assert isinstance(fut, executor.Future), \
+        'concurrent.futures.Future is expected, got {0!r}'.format(fut)
     if loop is None:
         loop = events.get_event_loop()
     new_future = Future(loop=loop)

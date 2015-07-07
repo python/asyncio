@@ -11,12 +11,15 @@ from . import events
 from . import base_subprocess
 from . import futures
 from . import proactor_events
+from . import py33_winapi as _winapi
 from . import selector_events
 from . import tasks
 from . import windows_utils
 from . import _overlapped
-from .coroutines import coroutine
+from .coroutines import coroutine, From, Return
 from .log import logger
+from .py33_exceptions import (wrap_error, get_error_class,
+    ConnectionRefusedError, BrokenPipeError)
 
 
 __all__ = ['SelectorEventLoop', 'ProactorEventLoop', 'IocpProactor',
@@ -42,14 +45,14 @@ class _OverlappedFuture(futures.Future):
     Cancelling it will immediately cancel the overlapped operation.
     """
 
-    def __init__(self, ov, *, loop=None):
-        super().__init__(loop=loop)
+    def __init__(self, ov, loop=None):
+        super(_OverlappedFuture, self).__init__(loop=loop)
         if self._source_traceback:
             del self._source_traceback[-1]
         self._ov = ov
 
     def _repr_info(self):
-        info = super()._repr_info()
+        info = super(_OverlappedFuture, self)._repr_info()
         if self._ov is not None:
             state = 'pending' if self._ov.pending else 'completed'
             info.insert(1, 'overlapped=<%s, %#x>' % (state, self._ov.address))
@@ -73,22 +76,22 @@ class _OverlappedFuture(futures.Future):
 
     def cancel(self):
         self._cancel_overlapped()
-        return super().cancel()
+        return super(_OverlappedFuture, self).cancel()
 
     def set_exception(self, exception):
-        super().set_exception(exception)
+        super(_OverlappedFuture, self).set_exception(exception)
         self._cancel_overlapped()
 
     def set_result(self, result):
-        super().set_result(result)
+        super(_OverlappedFuture, self).set_result(result)
         self._ov = None
 
 
 class _BaseWaitHandleFuture(futures.Future):
     """Subclass of Future which represents a wait handle."""
 
-    def __init__(self, ov, handle, wait_handle, *, loop=None):
-        super().__init__(loop=loop)
+    def __init__(self, ov, handle, wait_handle, loop=None):
+        super(_BaseWaitHandleFuture, self).__init__(loop=loop)
         if self._source_traceback:
             del self._source_traceback[-1]
         # Keep a reference to the Overlapped object to keep it alive until the
@@ -107,7 +110,7 @@ class _BaseWaitHandleFuture(futures.Future):
                 _winapi.WAIT_OBJECT_0)
 
     def _repr_info(self):
-        info = super()._repr_info()
+        info = super(_BaseWaitHandleFuture, self)._repr_info()
         info.append('handle=%#x' % self._handle)
         if self._handle is not None:
             state = 'signaled' if self._poll() else 'waiting'
@@ -147,15 +150,15 @@ class _BaseWaitHandleFuture(futures.Future):
 
     def cancel(self):
         self._unregister_wait()
-        return super().cancel()
+        return super(_BaseWaitHandleFuture, self).cancel()
 
     def set_exception(self, exception):
         self._unregister_wait()
-        super().set_exception(exception)
+        super(_BaseWaitHandleFuture, self).set_exception(exception)
 
     def set_result(self, result):
         self._unregister_wait()
-        super().set_result(result)
+        super(_BaseWaitHandleFuture, self).set_result(result)
 
 
 class _WaitCancelFuture(_BaseWaitHandleFuture):
@@ -163,8 +166,9 @@ class _WaitCancelFuture(_BaseWaitHandleFuture):
     _WaitHandleFuture using an event.
     """
 
-    def __init__(self, ov, event, wait_handle, *, loop=None):
-        super().__init__(ov, event, wait_handle, loop=loop)
+    def __init__(self, ov, event, wait_handle, loop=None):
+        super(_WaitCancelFuture, self).__init__(ov, event, wait_handle,
+                                                loop=loop)
 
         self._done_callback = None
 
@@ -178,8 +182,9 @@ class _WaitCancelFuture(_BaseWaitHandleFuture):
 
 
 class _WaitHandleFuture(_BaseWaitHandleFuture):
-    def __init__(self, ov, handle, wait_handle, proactor, *, loop=None):
-        super().__init__(ov, handle, wait_handle, loop=loop)
+    def __init__(self, ov, handle, wait_handle, proactor, loop=None):
+        super(_WaitHandleFuture, self).__init__(ov, handle, wait_handle,
+                                                loop=loop)
         self._proactor = proactor
         self._unregister_proactor = True
         self._event = _overlapped.CreateEvent(None, True, False, None)
@@ -201,7 +206,7 @@ class _WaitHandleFuture(_BaseWaitHandleFuture):
         self._proactor._unregister(self._ov)
         self._proactor = None
 
-        super()._unregister_wait_cb(fut)
+        super(_WaitHandleFuture, self)._unregister_wait_cb(fut)
 
     def _unregister_wait(self):
         if not self._registered:
@@ -259,7 +264,7 @@ class PipeServer(object):
         flags = _winapi.PIPE_ACCESS_DUPLEX | _winapi.FILE_FLAG_OVERLAPPED
         if first:
             flags |= _winapi.FILE_FLAG_FIRST_PIPE_INSTANCE
-        h = _winapi.CreateNamedPipe(
+        h = wrap_error(_winapi.CreateNamedPipe,
             self._address, flags,
             _winapi.PIPE_TYPE_MESSAGE | _winapi.PIPE_READMODE_MESSAGE |
             _winapi.PIPE_WAIT,
@@ -301,7 +306,7 @@ class ProactorEventLoop(proactor_events.BaseProactorEventLoop):
     def __init__(self, proactor=None):
         if proactor is None:
             proactor = IocpProactor()
-        super().__init__(proactor)
+        super(ProactorEventLoop, self).__init__(proactor)
 
     def _socketpair(self):
         return windows_utils.socketpair()
@@ -309,11 +314,11 @@ class ProactorEventLoop(proactor_events.BaseProactorEventLoop):
     @coroutine
     def create_pipe_connection(self, protocol_factory, address):
         f = self._proactor.connect_pipe(address)
-        pipe = yield from f
+        pipe = yield From(f)
         protocol = protocol_factory()
         trans = self._make_duplex_pipe_transport(pipe, protocol,
                                                  extra={'addr': address})
-        return trans, protocol
+        raise Return(trans, protocol)
 
     @coroutine
     def start_serving_pipe(self, protocol_factory, address):
@@ -372,7 +377,7 @@ class ProactorEventLoop(proactor_events.BaseProactorEventLoop):
                                              waiter=waiter, extra=extra,
                                              **kwargs)
         try:
-            yield from waiter
+            yield From(waiter)
         except Exception as exc:
             # Workaround CPython bug #23353: using yield/yield-from in an
             # except block of a generator doesn't clear properly sys.exc_info()
@@ -382,13 +387,13 @@ class ProactorEventLoop(proactor_events.BaseProactorEventLoop):
 
         if err is not None:
             transp.close()
-            yield from transp._wait()
+            yield From(transp._wait())
             raise err
 
-        return transp
+        raise Return(transp)
 
 
-class IocpProactor:
+class IocpProactor(object):
     """Proactor implementation using IOCP."""
 
     def __init__(self, concurrency=0xffffffff):
@@ -426,16 +431,16 @@ class IocpProactor:
         ov = _overlapped.Overlapped(NULL)
         try:
             if isinstance(conn, socket.socket):
-                ov.WSARecv(conn.fileno(), nbytes, flags)
+                wrap_error(ov.WSARecv, conn.fileno(), nbytes, flags)
             else:
-                ov.ReadFile(conn.fileno(), nbytes)
+                wrap_error(ov.ReadFile, conn.fileno(), nbytes)
         except BrokenPipeError:
             return self._result(b'')
 
         def finish_recv(trans, key, ov):
             try:
-                return ov.getresult()
-            except OSError as exc:
+                return wrap_error(ov.getresult)
+            except WindowsError as exc:
                 if exc.winerror == _overlapped.ERROR_NETNAME_DELETED:
                     raise ConnectionResetError(*exc.args)
                 else:
@@ -453,8 +458,8 @@ class IocpProactor:
 
         def finish_send(trans, key, ov):
             try:
-                return ov.getresult()
-            except OSError as exc:
+                return wrap_error(ov.getresult)
+            except WindowsError as exc:
                 if exc.winerror == _overlapped.ERROR_NETNAME_DELETED:
                     raise ConnectionResetError(*exc.args)
                 else:
@@ -469,7 +474,7 @@ class IocpProactor:
         ov.AcceptEx(listener.fileno(), conn.fileno())
 
         def finish_accept(trans, key, ov):
-            ov.getresult()
+            wrap_error(ov.getresult)
             # Use SO_UPDATE_ACCEPT_CONTEXT so getsockname() etc work.
             buf = struct.pack('@P', listener.fileno())
             conn.setsockopt(socket.SOL_SOCKET,
@@ -481,7 +486,7 @@ class IocpProactor:
         def accept_coro(future, conn):
             # Coroutine closing the accept socket if the future is cancelled
             try:
-                yield from future
+                yield From(future)
             except futures.CancelledError:
                 conn.close()
                 raise
@@ -496,7 +501,7 @@ class IocpProactor:
         # The socket needs to be locally bound before we call ConnectEx().
         try:
             _overlapped.BindLocal(conn.fileno(), conn.family)
-        except OSError as e:
+        except WindowsError as e:
             if e.winerror != errno.WSAEINVAL:
                 raise
             # Probably already locally bound; check using getsockname().
@@ -506,7 +511,7 @@ class IocpProactor:
         ov.ConnectEx(conn.fileno(), address)
 
         def finish_connect(trans, key, ov):
-            ov.getresult()
+            wrap_error(ov.getresult)
             # Use SO_UPDATE_CONNECT_CONTEXT so getsockname() etc work.
             conn.setsockopt(socket.SOL_SOCKET,
                             _overlapped.SO_UPDATE_CONNECT_CONTEXT, 0)
@@ -526,7 +531,7 @@ class IocpProactor:
             return self._result(pipe)
 
         def finish_accept_pipe(trans, key, ov):
-            ov.getresult()
+            wrap_error(ov.getresult)
             return pipe
 
         return self._register(ov, pipe, finish_accept_pipe)
@@ -539,17 +544,17 @@ class IocpProactor:
             # Call CreateFile() in a loop until it doesn't fail with
             # ERROR_PIPE_BUSY
             try:
-                handle = _overlapped.ConnectPipe(address)
+                handle = wrap_error(_overlapped.ConnectPipe, address)
                 break
-            except OSError as exc:
+            except WindowsError as exc:
                 if exc.winerror != _overlapped.ERROR_PIPE_BUSY:
                     raise
 
             # ConnectPipe() failed with ERROR_PIPE_BUSY: retry later
             delay = min(delay * 2, CONNECT_PIPE_MAX_DELAY)
-            yield from tasks.sleep(delay, loop=self._loop)
+            yield From(tasks.sleep(delay, loop=self._loop))
 
-        return windows_utils.PipeHandle(handle)
+        raise Return(windows_utils.PipeHandle(handle))
 
     def wait_for_handle(self, handle, timeout=None):
         """Wait for a handle.
@@ -572,7 +577,7 @@ class IocpProactor:
         else:
             # RegisterWaitForSingleObject() has a resolution of 1 millisecond,
             # round away from zero to wait *at least* timeout seconds.
-            ms = math.ceil(timeout * 1e3)
+            ms = int(math.ceil(timeout * 1e3))
 
         # We only create ov so we can use ov.address as a key for the cache.
         ov = _overlapped.Overlapped(NULL)
@@ -660,7 +665,7 @@ class IocpProactor:
         else:
             # GetQueuedCompletionStatus() has a resolution of 1 millisecond,
             # round away from zero to wait *at least* timeout seconds.
-            ms = math.ceil(timeout * 1e3)
+            ms = int(math.ceil(timeout * 1e3))
             if ms >= INFINITE:
                 raise ValueError("timeout too big")
 
@@ -705,7 +710,7 @@ class IocpProactor:
         # Remove unregisted futures
         for ov in self._unregistered:
             self._cache.pop(ov.address, None)
-        self._unregistered.clear()
+        del self._unregistered[:]
 
     def _stop_serving(self, obj):
         # obj is a socket or pipe handle.  It will be closed in

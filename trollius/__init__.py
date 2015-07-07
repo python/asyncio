@@ -1,4 +1,4 @@
-"""The asyncio package, tracking PEP 3156."""
+"""The trollius package, tracking PEP 3156."""
 
 import sys
 
@@ -24,6 +24,7 @@ from .events import *
 from .futures import *
 from .locks import *
 from .protocols import *
+from .py33_exceptions import *
 from .queues import *
 from .streams import *
 from .subprocess import *
@@ -33,6 +34,7 @@ from .transports import *
 __all__ = (base_events.__all__ +
            coroutines.__all__ +
            events.__all__ +
+           py33_exceptions.__all__ +
            futures.__all__ +
            locks.__all__ +
            protocols.__all__ +
@@ -48,3 +50,10 @@ if sys.platform == 'win32':  # pragma: no cover
 else:
     from .unix_events import *  # pragma: no cover
     __all__ += unix_events.__all__
+
+try:
+    from .py3_ssl import *
+    __all__ += py3_ssl.__all__
+except ImportError:
+    # SSL support is optionnal
+    pass

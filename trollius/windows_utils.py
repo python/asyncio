@@ -1,6 +1,7 @@
 """
 Various Windows specific bits and pieces
 """
+from __future__ import absolute_import
 
 import sys
 
@@ -15,6 +16,9 @@ import socket
 import subprocess
 import tempfile
 import warnings
+
+from . import py33_winapi as _winapi
+from .py33_exceptions import wrap_error, BlockingIOError, InterruptedError
 
 
 __all__ = ['socketpair', 'pipe', 'Popen', 'PIPE', 'PipeHandle']
@@ -64,7 +68,7 @@ else:
             try:
                 csock.setblocking(False)
                 try:
-                    csock.connect((addr, port))
+                    wrap_error(csock.connect, (addr, port))
                 except (BlockingIOError, InterruptedError):
                     pass
                 csock.setblocking(True)
@@ -80,7 +84,7 @@ else:
 # Replacement for os.pipe() using handles instead of fds
 
 
-def pipe(*, duplex=False, overlapped=(True, True), bufsize=BUFSIZE):
+def pipe(duplex=False, overlapped=(True, True), bufsize=BUFSIZE):
     """Like os.pipe() but with overlapped support and using handles not fds."""
     address = tempfile.mktemp(prefix=r'\\.\pipe\python-pipe-%d-%d-' %
                               (os.getpid(), next(_mmap_counter)))
@@ -115,7 +119,12 @@ def pipe(*, duplex=False, overlapped=(True, True), bufsize=BUFSIZE):
             flags_and_attribs, _winapi.NULL)
 
         ov = _winapi.ConnectNamedPipe(h1, overlapped=True)
-        ov.GetOverlappedResult(True)
+        if hasattr(ov, 'GetOverlappedResult'):
+            # _winapi module of Python 3.3
+            ov.GetOverlappedResult(True)
+        else:
+            # _overlapped module
+            wrap_error(ov.getresult, True)
         return h1, h2
     except:
         if h1 is not None:
@@ -128,7 +137,7 @@ def pipe(*, duplex=False, overlapped=(True, True), bufsize=BUFSIZE):
 # Wrapper for a pipe handle
 
 
-class PipeHandle:
+class PipeHandle(object):
     """Wrapper for an overlapped pipe handle which is vaguely file-object like.
 
     The IOCP event loop can use these instead of socket objects.
@@ -152,7 +161,7 @@ class PipeHandle:
             raise ValueError("I/O operatioon on closed pipe")
         return self._handle
 
-    def close(self, *, CloseHandle=_winapi.CloseHandle):
+    def close(self, CloseHandle=_winapi.CloseHandle):
         if self._handle is not None:
             CloseHandle(self._handle)
             self._handle = None
@@ -200,8 +209,11 @@ class Popen(subprocess.Popen):
         else:
             stderr_wfd = stderr
         try:
-            super().__init__(args, stdin=stdin_rfd, stdout=stdout_wfd,
-                             stderr=stderr_wfd, **kwds)
+            super(Popen, self).__init__(args,
+                                        stdin=stdin_rfd,
+                                        stdout=stdout_wfd,
+                                        stderr=stderr_wfd,
+                                        **kwds)
         except:
             for h in (stdin_wh, stdout_rh, stderr_rh):
                 if h is not None:

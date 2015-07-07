@@ -8,13 +8,16 @@ from . import futures
 from . import protocols
 from . import streams
 from . import tasks
-from .coroutines import coroutine
+from .coroutines import coroutine, From, Return
+from .py33_exceptions import (BrokenPipeError, ConnectionResetError,
+                              ProcessLookupError)
 from .log import logger
 
 
 PIPE = subprocess.PIPE
 STDOUT = subprocess.STDOUT
-DEVNULL = subprocess.DEVNULL
+if hasattr(subprocess, 'DEVNULL'):
+    DEVNULL = subprocess.DEVNULL
 
 
 class SubprocessStreamProtocol(streams.FlowControlMixin,
@@ -22,7 +25,7 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
     """Like StreamReaderProtocol, but for a subprocess."""
 
     def __init__(self, limit, loop):
-        super().__init__(loop=loop)
+        super(SubprocessStreamProtocol, self).__init__(loop=loop)
         self._limit = limit
         self.stdin = self.stdout = self.stderr = None
         self._transport = None
@@ -115,7 +118,8 @@ class Process:
         """Wait until the process exit and return the process return code.
 
         This method is a coroutine."""
-        return (yield from self._transport._wait())
+        return_code = yield From(self._transport._wait())
+        raise Return(return_code)
 
     def send_signal(self, signal):
         self._transport.send_signal(signal)
@@ -134,7 +138,7 @@ class Process:
             logger.debug('%r communicate: feed stdin (%s bytes)',
                         self, len(input))
         try:
-            yield from self.stdin.drain()
+            yield From(self.stdin.drain())
         except (BrokenPipeError, ConnectionResetError) as exc:
             # communicate() ignores BrokenPipeError and ConnectionResetError
             if debug:
@@ -159,12 +163,12 @@ class Process:
         if self._loop.get_debug():
             name = 'stdout' if fd == 1 else 'stderr'
             logger.debug('%r communicate: read %s', self, name)
-        output = yield from stream.read()
+        output = yield From(stream.read())
         if self._loop.get_debug():
             name = 'stdout' if fd == 1 else 'stderr'
             logger.debug('%r communicate: close %s', self, name)
         transport.close()
-        return output
+        raise Return(output)
 
     @coroutine
     def communicate(self, input=None):
@@ -180,36 +184,43 @@ class Process:
             stderr = self._read_stream(2)
         else:
             stderr = self._noop()
-        stdin, stdout, stderr = yield from tasks.gather(stdin, stdout, stderr,
-                                                        loop=self._loop)
-        yield from self.wait()
-        return (stdout, stderr)
+        stdin, stdout, stderr = yield From(tasks.gather(stdin, stdout, stderr,
+                                                        loop=self._loop))
+        yield From(self.wait())
+        raise Return(stdout, stderr)
 
 
 @coroutine
-def create_subprocess_shell(cmd, stdin=None, stdout=None, stderr=None,
-                            loop=None, limit=streams._DEFAULT_LIMIT, **kwds):
+def create_subprocess_shell(cmd, **kwds):
+    stdin = kwds.pop('stdin', None)
+    stdout = kwds.pop('stdout', None)
+    stderr = kwds.pop('stderr', None)
+    loop = kwds.pop('loop', None)
+    limit = kwds.pop('limit', streams._DEFAULT_LIMIT)
     if loop is None:
         loop = events.get_event_loop()
     protocol_factory = lambda: SubprocessStreamProtocol(limit=limit,
                                                         loop=loop)
-    transport, protocol = yield from loop.subprocess_shell(
+    transport, protocol = yield From(loop.subprocess_shell(
                                             protocol_factory,
                                             cmd, stdin=stdin, stdout=stdout,
-                                            stderr=stderr, **kwds)
-    return Process(transport, protocol, loop)
+                                            stderr=stderr, **kwds))
+    raise Return(Process(transport, protocol, loop))
 
 @coroutine
-def create_subprocess_exec(program, *args, stdin=None, stdout=None,
-                           stderr=None, loop=None,
-                           limit=streams._DEFAULT_LIMIT, **kwds):
+def create_subprocess_exec(program, *args, **kwds):
+    stdin = kwds.pop('stdin', None)
+    stdout = kwds.pop('stdout', None)
+    stderr = kwds.pop('stderr', None)
+    loop = kwds.pop('loop', None)
+    limit = kwds.pop('limit', streams._DEFAULT_LIMIT)
     if loop is None:
         loop = events.get_event_loop()
     protocol_factory = lambda: SubprocessStreamProtocol(limit=limit,
                                                         loop=loop)
-    transport, protocol = yield from loop.subprocess_exec(
+    transport, protocol = yield From(loop.subprocess_exec(
                                             protocol_factory,
                                             program, *args,
                                             stdin=stdin, stdout=stdout,
-                                            stderr=stderr, **kwds)
-    return Process(transport, protocol, loop)
+                                            stderr=stderr, **kwds))
+    raise Return(Process(transport, protocol, loop))

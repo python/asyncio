@@ -1,4 +1,5 @@
 """Selector event loop for Unix with signal handling."""
+from __future__ import absolute_import
 
 import errno
 import os
@@ -13,6 +14,7 @@ import warnings
 
 from . import base_events
 from . import base_subprocess
+from . import compat
 from . import constants
 from . import coroutines
 from . import events
@@ -20,8 +22,13 @@ from . import futures
 from . import selector_events
 from . import selectors
 from . import transports
-from .coroutines import coroutine
+from .compat import flatten_bytes
+from .coroutines import coroutine, From, Return
 from .log import logger
+from .py33_exceptions import (
+    reraise, wrap_error,
+    BlockingIOError, BrokenPipeError, ConnectionResetError,
+    InterruptedError, ChildProcessError)
 
 
 __all__ = ['SelectorEventLoop',
@@ -33,9 +40,10 @@ if sys.platform == 'win32':  # pragma: no cover
     raise ImportError('Signals are not really supported on Windows')
 
 
-def _sighandler_noop(signum, frame):
-    """Dummy signal handler."""
-    pass
+if compat.PY33:
+    def _sighandler_noop(signum, frame):
+        """Dummy signal handler."""
+        pass
 
 
 class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
@@ -45,23 +53,27 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
     """
 
     def __init__(self, selector=None):
-        super().__init__(selector)
+        super(_UnixSelectorEventLoop, self).__init__(selector)
         self._signal_handlers = {}
 
     def _socketpair(self):
         return socket.socketpair()
 
     def close(self):
-        super().close()
+        super(_UnixSelectorEventLoop, self).close()
         for sig in list(self._signal_handlers):
             self.remove_signal_handler(sig)
 
-    def _process_self_data(self, data):
-        for signum in data:
-            if not signum:
-                # ignore null bytes written by _write_to_self()
-                continue
-            self._handle_signal(signum)
+    # On Python <= 3.2, the C signal handler of Python writes a null byte into
+    # the wakeup file descriptor. We cannot retrieve the signal numbers from
+    # the file descriptor.
+    if compat.PY33:
+        def _process_self_data(self, data):
+            for signum in data:
+                if not signum:
+                    # ignore null bytes written by _write_to_self()
+                    continue
+                self._handle_signal(signum)
 
     def add_signal_handler(self, sig, callback, *args):
         """Add a handler for a signal.  UNIX only.
@@ -88,14 +100,30 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
         self._signal_handlers[sig] = handle
 
         try:
-            # Register a dummy signal handler to ask Python to write the signal
-            # number in the wakup file descriptor. _process_self_data() will
-            # read signal numbers from this file descriptor to handle signals.
-            signal.signal(sig, _sighandler_noop)
+            if compat.PY33:
+                # On Python 3.3 and newer, the C signal handler writes the
+                # signal number into the wakeup file descriptor and then calls
+                # Py_AddPendingCall() to schedule the Python signal handler.
+                #
+                # Register a dummy signal handler to ask Python to write the
+                # signal number into the wakup file descriptor.
+                # _process_self_data() will read signal numbers from this file
+                # descriptor to handle signals.
+                signal.signal(sig, _sighandler_noop)
+            else:
+                # On Python 3.2 and older, the C signal handler first calls
+                # Py_AddPendingCall() to schedule the Python signal handler,
+                # and then write a null byte into the wakeup file descriptor.
+                signal.signal(sig, self._handle_signal)
 
             # Set SA_RESTART to limit EINTR occurrences.
             signal.siginterrupt(sig, False)
-        except OSError as exc:
+        except (RuntimeError, OSError) as exc:
+            # On Python 2, signal.signal(signal.SIGKILL, signal.SIG_IGN) raises
+            # RuntimeError(22, 'Invalid argument'). On Python 3,
+            # OSError(22, 'Invalid argument') is raised instead.
+            exc_type, exc_value, tb = sys.exc_info()
+
             del self._signal_handlers[sig]
             if not self._signal_handlers:
                 try:
@@ -103,12 +131,12 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
                 except (ValueError, OSError) as nexc:
                     logger.info('set_wakeup_fd(-1) failed: %s', nexc)
 
-            if exc.errno == errno.EINVAL:
-                raise RuntimeError('sig {} cannot be caught'.format(sig))
+            if isinstance(exc, RuntimeError) or exc.errno == errno.EINVAL:
+                raise RuntimeError('sig {0} cannot be caught'.format(sig))
             else:
-                raise
+                reraise(exc_type, exc_value, tb)
 
-    def _handle_signal(self, sig):
+    def _handle_signal(self, sig, frame=None):
         """Internal helper that is the actual signal handler."""
         handle = self._signal_handlers.get(sig)
         if handle is None:
@@ -138,7 +166,7 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
             signal.signal(sig, handler)
         except OSError as exc:
             if exc.errno == errno.EINVAL:
-                raise RuntimeError('sig {} cannot be caught'.format(sig))
+                raise RuntimeError('sig {0} cannot be caught'.format(sig))
             else:
                 raise
 
@@ -157,11 +185,11 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
         Raise RuntimeError if there is a problem setting up the handler.
         """
         if not isinstance(sig, int):
-            raise TypeError('sig must be an int, not {!r}'.format(sig))
+            raise TypeError('sig must be an int, not {0!r}'.format(sig))
 
         if not (1 <= sig < signal.NSIG):
             raise ValueError(
-                'sig {} out of range(1, {})'.format(sig, signal.NSIG))
+                'sig {0} out of range(1, {1})'.format(sig, signal.NSIG))
 
     def _make_read_pipe_transport(self, pipe, protocol, waiter=None,
                                   extra=None):
@@ -185,7 +213,7 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
             watcher.add_child_handler(transp.get_pid(),
                                       self._child_watcher_callback, transp)
             try:
-                yield from waiter
+                yield From(waiter)
             except Exception as exc:
                 # Workaround CPython bug #23353: using yield/yield-from in an
                 # except block of a generator doesn't clear properly
@@ -196,16 +224,16 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
 
             if err is not None:
                 transp.close()
-                yield from transp._wait()
+                yield From(transp._wait())
                 raise err
 
-        return transp
+        raise Return(transp)
 
     def _child_watcher_callback(self, pid, returncode, transp):
         self.call_soon_threadsafe(transp._process_exited, returncode)
 
     @coroutine
-    def create_unix_connection(self, protocol_factory, path, *,
+    def create_unix_connection(self, protocol_factory, path,
                                ssl=None, sock=None,
                                server_hostname=None):
         assert server_hostname is None or isinstance(server_hostname, str)
@@ -225,7 +253,7 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
             sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM, 0)
             try:
                 sock.setblocking(False)
-                yield from self.sock_connect(sock, path)
+                yield From(self.sock_connect(sock, path))
             except:
                 sock.close()
                 raise
@@ -235,12 +263,12 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
                 raise ValueError('no path and sock were specified')
             sock.setblocking(False)
 
-        transport, protocol = yield from self._create_connection_transport(
-            sock, protocol_factory, ssl, server_hostname)
-        return transport, protocol
+        transport, protocol = yield From(self._create_connection_transport(
+            sock, protocol_factory, ssl, server_hostname))
+        raise Return(transport, protocol)
 
     @coroutine
-    def create_unix_server(self, protocol_factory, path=None, *,
+    def create_unix_server(self, protocol_factory, path=None,
                            sock=None, backlog=100, ssl=None):
         if isinstance(ssl, bool):
             raise TypeError('ssl argument must be an SSLContext or None')
@@ -254,13 +282,13 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
 
             try:
                 sock.bind(path)
-            except OSError as exc:
+            except socket.error as exc:
                 sock.close()
                 if exc.errno == errno.EADDRINUSE:
                     # Let's improve the error message by adding
                     # with what exact address it occurs.
-                    msg = 'Address {!r} is already in use'.format(path)
-                    raise OSError(errno.EADDRINUSE, msg) from None
+                    msg = 'Address {0!r} is already in use'.format(path)
+                    raise OSError(errno.EADDRINUSE, msg)
                 else:
                     raise
             except:
@@ -273,7 +301,7 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
 
             if sock.family != socket.AF_UNIX:
                 raise ValueError(
-                    'A UNIX Domain Socket was expected, got {!r}'.format(sock))
+                    'A UNIX Domain Socket was expected, got {0!r}'.format(sock))
 
         server = base_events.Server(self, [sock])
         sock.listen(backlog)
@@ -283,6 +311,7 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
 
 
 if hasattr(os, 'set_blocking'):
+    # Python 3.5 and newer
     def _set_nonblocking(fd):
         os.set_blocking(fd, False)
 else:
@@ -299,7 +328,7 @@ class _UnixReadPipeTransport(transports.ReadTransport):
     max_size = 256 * 1024  # max bytes we read in one event loop iteration
 
     def __init__(self, loop, pipe, protocol, waiter=None, extra=None):
-        super().__init__(extra)
+        super(_UnixReadPipeTransport, self).__init__(extra)
         self._extra['pipe'] = pipe
         self._loop = loop
         self._pipe = pipe
@@ -341,7 +370,7 @@ class _UnixReadPipeTransport(transports.ReadTransport):
 
     def _read_ready(self):
         try:
-            data = os.read(self._fileno, self.max_size)
+            data = wrap_error(os.read, self._fileno, self.max_size)
         except (BlockingIOError, InterruptedError):
             pass
         except OSError as exc:
@@ -409,7 +438,7 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
                               transports.WriteTransport):
 
     def __init__(self, loop, pipe, protocol, waiter=None, extra=None):
-        super().__init__(extra, loop)
+        super(_UnixWritePipeTransport, self).__init__(extra, loop)
         self._extra['pipe'] = pipe
         self._pipe = pipe
         self._fileno = pipe.fileno()
@@ -475,9 +504,7 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
             self._close()
 
     def write(self, data):
-        assert isinstance(data, (bytes, bytearray, memoryview)), repr(data)
-        if isinstance(data, bytearray):
-            data = memoryview(data)
+        data = flatten_bytes(data)
         if not data:
             return
 
@@ -491,7 +518,7 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
         if not self._buffer:
             # Attempt to send it right away first.
             try:
-                n = os.write(self._fileno, data)
+                n = wrap_error(os.write, self._fileno, data)
             except (BlockingIOError, InterruptedError):
                 n = 0
             except Exception as exc:
@@ -511,9 +538,9 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
         data = b''.join(self._buffer)
         assert data, 'Data should not be empty'
 
-        self._buffer.clear()
+        del self._buffer[:]
         try:
-            n = os.write(self._fileno, data)
+            n = wrap_error(os.write, self._fileno, data)
         except (BlockingIOError, InterruptedError):
             self._buffer.append(data)
         except Exception as exc:
@@ -582,7 +609,7 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
         self._closing = True
         if self._buffer:
             self._loop.remove_writer(self._fileno)
-        self._buffer.clear()
+        del self._buffer[:]
         self._loop.remove_reader(self._fileno)
         self._loop.call_soon(self._call_connection_lost, exc)
 
@@ -633,11 +660,20 @@ class _UnixSubprocessTransport(base_subprocess.BaseSubprocessTransport):
             args, shell=shell, stdin=stdin, stdout=stdout, stderr=stderr,
             universal_newlines=False, bufsize=bufsize, **kwargs)
         if stdin_w is not None:
+            # Retrieve the file descriptor from stdin_w, stdin_w should not
+            # "own" the file descriptor anymore: closing stdin_fd file
+            # descriptor must close immediatly the file
             stdin.close()
-            self._proc.stdin = open(stdin_w.detach(), 'wb', buffering=bufsize)
+            if hasattr(stdin_w, 'detach'):
+                stdin_fd = stdin_w.detach()
+                self._proc.stdin = os.fdopen(stdin_fd, 'wb', bufsize)
+            else:
+                stdin_dup = os.dup(stdin_w.fileno())
+                stdin_w.close()
+                self._proc.stdin = os.fdopen(stdin_dup, 'wb', bufsize)
 
 
-class AbstractChildWatcher:
+class AbstractChildWatcher(object):
     """Abstract base class for monitoring child processes.
 
     Objects derived from this class monitor a collection of subprocesses and
@@ -773,12 +809,12 @@ class SafeChildWatcher(BaseChildWatcher):
     """
 
     def __init__(self):
-        super().__init__()
+        super(SafeChildWatcher, self).__init__()
         self._callbacks = {}
 
     def close(self):
         self._callbacks.clear()
-        super().close()
+        super(SafeChildWatcher, self).close()
 
     def __enter__(self):
         return self
@@ -850,7 +886,7 @@ class FastChildWatcher(BaseChildWatcher):
     (O(1) each time a child terminates).
     """
     def __init__(self):
-        super().__init__()
+        super(FastChildWatcher, self).__init__()
         self._callbacks = {}
         self._lock = threading.Lock()
         self._zombies = {}
@@ -859,7 +895,7 @@ class FastChildWatcher(BaseChildWatcher):
     def close(self):
         self._callbacks.clear()
         self._zombies.clear()
-        super().close()
+        super(FastChildWatcher, self).close()
 
     def __enter__(self):
         with self._lock:
@@ -906,7 +942,7 @@ class FastChildWatcher(BaseChildWatcher):
         # long as we're able to reap a child.
         while True:
             try:
-                pid, status = os.waitpid(-1, os.WNOHANG)
+                pid, status = wrap_error(os.waitpid, -1, os.WNOHANG)
             except ChildProcessError:
                 # No more child processes exist.
                 return
@@ -949,7 +985,7 @@ class _UnixDefaultEventLoopPolicy(events.BaseDefaultEventLoopPolicy):
     _loop_factory = _UnixSelectorEventLoop
 
     def __init__(self):
-        super().__init__()
+        super(_UnixDefaultEventLoopPolicy, self).__init__()
         self._watcher = None
 
     def _init_watcher(self):
@@ -968,7 +1004,7 @@ class _UnixDefaultEventLoopPolicy(events.BaseDefaultEventLoopPolicy):
         the child watcher.
         """
 
-        super().set_event_loop(loop)
+        super(_UnixDefaultEventLoopPolicy, self).set_event_loop(loop)
 
         if self._watcher is not None and \
             isinstance(threading.current_thread(), threading._MainThread):

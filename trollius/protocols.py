@@ -4,7 +4,7 @@ __all__ = ['BaseProtocol', 'Protocol', 'DatagramProtocol',
            'SubprocessProtocol']
 
 
-class BaseProtocol:
+class BaseProtocol(object):
     """Common base class for protocol interfaces.
 
     Usually user implements protocols that derived from BaseProtocol

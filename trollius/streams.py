@@ -15,7 +15,8 @@ from . import coroutines
 from . import events
 from . import futures
 from . import protocols
-from .coroutines import coroutine
+from .coroutines import coroutine, From, Return
+from .py33_exceptions import ConnectionResetError
 from .log import logger
 
 
@@ -38,7 +39,7 @@ class IncompleteReadError(EOFError):
 
 
 @coroutine
-def open_connection(host=None, port=None, *,
+def open_connection(host=None, port=None,
                     loop=None, limit=_DEFAULT_LIMIT, **kwds):
     """A wrapper for create_connection() returning a (reader, writer) pair.
 
@@ -61,14 +62,14 @@ def open_connection(host=None, port=None, *,
         loop = events.get_event_loop()
     reader = StreamReader(limit=limit, loop=loop)
     protocol = StreamReaderProtocol(reader, loop=loop)
-    transport, _ = yield from loop.create_connection(
-        lambda: protocol, host, port, **kwds)
+    transport, _ = yield From(loop.create_connection(
+        lambda: protocol, host, port, **kwds))
     writer = StreamWriter(transport, protocol, reader, loop)
-    return reader, writer
+    raise Return(reader, writer)
 
 
 @coroutine
-def start_server(client_connected_cb, host=None, port=None, *,
+def start_server(client_connected_cb, host=None, port=None,
                  loop=None, limit=_DEFAULT_LIMIT, **kwds):
     """Start a socket server, call back for each client connected.
 
@@ -100,28 +101,29 @@ def start_server(client_connected_cb, host=None, port=None, *,
                                         loop=loop)
         return protocol
 
-    return (yield from loop.create_server(factory, host, port, **kwds))
+    server = yield From(loop.create_server(factory, host, port, **kwds))
+    raise Return(server)
 
 
 if hasattr(socket, 'AF_UNIX'):
     # UNIX Domain Sockets are supported on this platform
 
     @coroutine
-    def open_unix_connection(path=None, *,
+    def open_unix_connection(path=None,
                              loop=None, limit=_DEFAULT_LIMIT, **kwds):
         """Similar to `open_connection` but works with UNIX Domain Sockets."""
         if loop is None:
             loop = events.get_event_loop()
         reader = StreamReader(limit=limit, loop=loop)
         protocol = StreamReaderProtocol(reader, loop=loop)
-        transport, _ = yield from loop.create_unix_connection(
-            lambda: protocol, path, **kwds)
+        transport, _ = yield From(loop.create_unix_connection(
+            lambda: protocol, path, **kwds))
         writer = StreamWriter(transport, protocol, reader, loop)
-        return reader, writer
+        raise Return(reader, writer)
 
 
     @coroutine
-    def start_unix_server(client_connected_cb, path=None, *,
+    def start_unix_server(client_connected_cb, path=None,
                           loop=None, limit=_DEFAULT_LIMIT, **kwds):
         """Similar to `start_server` but works with UNIX Domain Sockets."""
         if loop is None:
@@ -133,7 +135,8 @@ if hasattr(socket, 'AF_UNIX'):
                                             loop=loop)
             return protocol
 
-        return (yield from loop.create_unix_server(factory, path, **kwds))
+        server = (yield From(loop.create_unix_server(factory, path, **kwds)))
+        raise Return(server)
 
 
 class FlowControlMixin(protocols.Protocol):
@@ -199,7 +202,7 @@ class FlowControlMixin(protocols.Protocol):
         assert waiter is None or waiter.cancelled()
         waiter = futures.Future(loop=self._loop)
         self._drain_waiter = waiter
-        yield from waiter
+        yield From(waiter)
 
 
 class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
@@ -212,7 +215,7 @@ class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
     """
 
     def __init__(self, stream_reader, client_connected_cb=None, loop=None):
-        super().__init__(loop=loop)
+        super(StreamReaderProtocol, self).__init__(loop=loop)
         self._stream_reader = stream_reader
         self._stream_writer = None
         self._client_connected_cb = client_connected_cb
@@ -233,7 +236,7 @@ class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
             self._stream_reader.feed_eof()
         else:
             self._stream_reader.set_exception(exc)
-        super().connection_lost(exc)
+        super(StreamReaderProtocol, self).connection_lost(exc)
 
     def data_received(self, data):
         self._stream_reader.feed_data(data)
@@ -242,7 +245,7 @@ class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
         self._stream_reader.feed_eof()
 
 
-class StreamWriter:
+class StreamWriter(object):
     """Wraps a Transport.
 
     This exposes write(), writelines(), [can_]write_eof(),
@@ -295,16 +298,16 @@ class StreamWriter:
         The intended use is to write
 
           w.write(data)
-          yield from w.drain()
+          yield From(w.drain())
         """
         if self._reader is not None:
             exc = self._reader.exception()
             if exc is not None:
                 raise exc
-        yield from self._protocol._drain_helper()
+        yield From(self._protocol._drain_helper())
 
 
-class StreamReader:
+class StreamReader(object):
 
     def __init__(self, limit=_DEFAULT_LIMIT, loop=None):
         # The line length limit is  a security feature;
@@ -391,9 +394,16 @@ class StreamReader:
             raise RuntimeError('%s() called while another coroutine is '
                                'already waiting for incoming data' % func_name)
 
+        # In asyncio, there is no need to recheck if we got data or EOF thanks
+        # to "yield from". In trollius, a StreamReader method can be called
+        # after the _wait_for_data() coroutine is scheduled and before it is
+        # really executed.
+        if self._buffer or self._eof:
+            return
+
         self._waiter = futures.Future(loop=self._loop)
         try:
-            yield from self._waiter
+            yield From(self._waiter)
         finally:
             self._waiter = None
 
@@ -410,7 +420,7 @@ class StreamReader:
                 ichar = self._buffer.find(b'\n')
                 if ichar < 0:
                     line.extend(self._buffer)
-                    self._buffer.clear()
+                    del self._buffer[:]
                 else:
                     ichar += 1
                     line.extend(self._buffer[:ichar])
@@ -425,10 +435,10 @@ class StreamReader:
                 break
 
             if not_enough:
-                yield from self._wait_for_data('readline')
+                yield From(self._wait_for_data('readline'))
 
         self._maybe_resume_transport()
-        return bytes(line)
+        raise Return(bytes(line))
 
     @coroutine
     def read(self, n=-1):
@@ -436,7 +446,7 @@ class StreamReader:
             raise self._exception
 
         if not n:
-            return b''
+            raise Return(b'')
 
         if n < 0:
             # This used to just loop creating a new waiter hoping to
@@ -445,25 +455,25 @@ class StreamReader:
             # bytes.  So just call self.read(self._limit) until EOF.
             blocks = []
             while True:
-                block = yield from self.read(self._limit)
+                block = yield From(self.read(self._limit))
                 if not block:
                     break
                 blocks.append(block)
-            return b''.join(blocks)
+            raise Return(b''.join(blocks))
         else:
             if not self._buffer and not self._eof:
-                yield from self._wait_for_data('read')
+                yield From(self._wait_for_data('read'))
 
         if n < 0 or len(self._buffer) <= n:
             data = bytes(self._buffer)
-            self._buffer.clear()
+            del self._buffer[:]
         else:
             # n > 0 and len(self._buffer) > n
             data = bytes(self._buffer[:n])
             del self._buffer[:n]
 
         self._maybe_resume_transport()
-        return data
+        raise Return(data)
 
     @coroutine
     def readexactly(self, n):
@@ -479,14 +489,14 @@ class StreamReader:
 
         blocks = []
         while n > 0:
-            block = yield from self.read(n)
+            block = yield From(self.read(n))
             if not block:
                 partial = b''.join(blocks)
                 raise IncompleteReadError(partial, len(partial) + n)
             blocks.append(block)
             n -= len(block)
 
-        return b''.join(blocks)
+        raise Return(b''.join(blocks))
 
     if _PY35:
         @coroutine

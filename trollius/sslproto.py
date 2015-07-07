@@ -9,6 +9,7 @@ except ImportError:  # pragma: no cover
 from . import protocols
 from . import transports
 from .log import logger
+from .py3_ssl import BACKPORT_SSL_CONTEXT
 
 
 def _create_transport_context(server_side, server_hostname):
@@ -26,10 +27,11 @@ def _create_transport_context(server_side, server_hostname):
     else:
         # Fallback for Python 3.3.
         sslcontext = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-        sslcontext.options |= ssl.OP_NO_SSLv2
-        sslcontext.options |= ssl.OP_NO_SSLv3
-        sslcontext.set_default_verify_paths()
-        sslcontext.verify_mode = ssl.CERT_REQUIRED
+        if not BACKPORT_SSL_CONTEXT:
+            sslcontext.options |= ssl.OP_NO_SSLv2
+            sslcontext.options |= ssl.OP_NO_SSLv3
+            sslcontext.set_default_verify_paths()
+            sslcontext.verify_mode = ssl.CERT_REQUIRED
     return sslcontext
 
 
@@ -42,6 +44,11 @@ _UNWRAPPED = "UNWRAPPED"
 _DO_HANDSHAKE = "DO_HANDSHAKE"
 _WRAPPED = "WRAPPED"
 _SHUTDOWN = "SHUTDOWN"
+
+if hasattr(ssl, 'CertificateError'):
+    _SSL_ERRORS = (ssl.SSLError, ssl.CertificateError)
+else:
+    _SSL_ERRORS = ssl.SSLError
 
 
 class _SSLPipe(object):
@@ -224,7 +231,7 @@ class _SSLPipe(object):
             elif self._state == _UNWRAPPED:
                 # Drain possible plaintext data after close_notify.
                 appdata.append(self._incoming.read())
-        except (ssl.SSLError, ssl.CertificateError) as exc:
+        except _SSL_ERRORS as exc:
             if getattr(exc, 'errno', None) not in (
                     ssl.SSL_ERROR_WANT_READ, ssl.SSL_ERROR_WANT_WRITE,
                     ssl.SSL_ERROR_SYSCALL):
@@ -569,7 +576,8 @@ class SSLProtocol(protocols.Protocol):
                     ssl.match_hostname(peercert, self._server_hostname)
         except BaseException as exc:
             if self._loop.get_debug():
-                if isinstance(exc, ssl.CertificateError):
+                if (hasattr(ssl, 'CertificateError')
+                and isinstance(exc, ssl.CertificateError)):
                     logger.warning("%r: SSL handshake failed "
                                    "on verifying the certificate",
                                    self, exc_info=True)

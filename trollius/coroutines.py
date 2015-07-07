@@ -9,6 +9,7 @@ import sys
 import traceback
 import types
 
+from . import compat
 from . import events
 from . import futures
 from .log import logger
@@ -18,7 +19,7 @@ _PY35 = sys.version_info >= (3, 5)
 
 
 # Opcode of "yield from" instruction
-_YIELD_FROM = opcode.opmap['YIELD_FROM']
+_YIELD_FROM = opcode.opmap.get('YIELD_FROM', None)
 
 # If you set _DEBUG to true, @coroutine will wrap the resulting
 # generator objects in a CoroWrapper instance (defined below).  That
@@ -29,8 +30,7 @@ _YIELD_FROM = opcode.opmap['YIELD_FROM']
 # before you define your coroutines.  A downside of using this feature
 # is that tracebacks show entries for the CoroWrapper.__next__ method
 # when _DEBUG is true.
-_DEBUG = (not sys.flags.ignore_environment
-          and bool(os.environ.get('PYTHONASYNCIODEBUG')))
+_DEBUG = bool(os.environ.get('TROLLIUSDEBUG'))
 
 
 try:
@@ -74,6 +74,53 @@ _YIELD_FROM_BUG = has_yield_from_bug()
 del has_yield_from_bug
 
 
+if compat.PY33:
+    # Don't use the Return class on Python 3.3 and later to support asyncio
+    # coroutines (to avoid the warning emited in Return destructor).
+    #
+    # The problem is that Return inherits from StopIteration.  "yield from
+    # trollius_coroutine". Task._step() does not receive the Return exception,
+    # because "yield from" handles it internally. So it's not possible to set
+    # the raised attribute to True to avoid the warning in Return destructor.
+    def Return(*args):
+        if not args:
+            value = None
+        elif len(args) == 1:
+            value = args[0]
+        else:
+            value = args
+        return StopIteration(value)
+else:
+    class Return(StopIteration):
+        def __init__(self, *args):
+            StopIteration.__init__(self)
+            if not args:
+                self.value = None
+            elif len(args) == 1:
+                self.value = args[0]
+            else:
+                self.value = args
+            self.raised = False
+            if _DEBUG:
+                frame = sys._getframe(1)
+                self._source_traceback = traceback.extract_stack(frame)
+                # explicitly clear the reference to avoid reference cycles
+                frame = None
+            else:
+                self._source_traceback = None
+
+        def __del__(self):
+            if self.raised:
+                return
+
+            fmt = 'Return(%r) used without raise'
+            if self._source_traceback:
+                fmt += '\nReturn created at (most recent call last):\n'
+                tb = ''.join(traceback.format_list(self._source_traceback))
+                fmt += tb.rstrip()
+            logger.error(fmt, self.value)
+
+
 def debug_wrapper(gen):
     # This function is called from 'sys.set_coroutine_wrapper'.
     # We only wrap here coroutines defined via 'async def' syntax.
@@ -104,7 +151,8 @@ class CoroWrapper:
         return self
 
     def __next__(self):
-        return self.gen.send(None)
+        return next(self.gen)
+    next = __next__
 
     if _YIELD_FROM_BUG:
         # For for CPython issue #21209: using "yield from" and a custom
@@ -180,6 +228,56 @@ class CoroWrapper:
                 msg += tb.rstrip()
             logger.error(msg)
 
+if not compat.PY34:
+    # Backport functools.update_wrapper() from Python 3.4:
+    # - Python 2.7 fails if assigned attributes don't exist
+    # - Python 2.7 and 3.1 don't set the __wrapped__ attribute
+    # - Python 3.2 and 3.3 set __wrapped__ before updating __dict__
+    def _update_wrapper(wrapper,
+                       wrapped,
+                       assigned = functools.WRAPPER_ASSIGNMENTS,
+                       updated = functools.WRAPPER_UPDATES):
+        """Update a wrapper function to look like the wrapped function
+
+           wrapper is the function to be updated
+           wrapped is the original function
+           assigned is a tuple naming the attributes assigned directly
+           from the wrapped function to the wrapper function (defaults to
+           functools.WRAPPER_ASSIGNMENTS)
+           updated is a tuple naming the attributes of the wrapper that
+           are updated with the corresponding attribute from the wrapped
+           function (defaults to functools.WRAPPER_UPDATES)
+        """
+        for attr in assigned:
+            try:
+                value = getattr(wrapped, attr)
+            except AttributeError:
+                pass
+            else:
+                setattr(wrapper, attr, value)
+        for attr in updated:
+            getattr(wrapper, attr).update(getattr(wrapped, attr, {}))
+        # Issue #17482: set __wrapped__ last so we don't inadvertently copy it
+        # from the wrapped function when updating __dict__
+        wrapper.__wrapped__ = wrapped
+        # Return the wrapper so this can be used as a decorator via partial()
+        return wrapper
+
+    def _wraps(wrapped,
+              assigned = functools.WRAPPER_ASSIGNMENTS,
+              updated = functools.WRAPPER_UPDATES):
+        """Decorator factory to apply update_wrapper() to a wrapper function
+
+           Returns a decorator that invokes update_wrapper() with the decorated
+           function as the wrapper argument and the arguments to wraps() as the
+           remaining arguments. Default arguments are as for update_wrapper().
+           This is a convenience function to simplify applying partial() to
+           update_wrapper().
+        """
+        return functools.partial(_update_wrapper, wrapped=wrapped,
+                                 assigned=assigned, updated=updated)
+else:
+    _wraps = functools.wraps
 
 def coroutine(func):
     """Decorator to mark coroutines.
@@ -197,7 +295,7 @@ def coroutine(func):
     if inspect.isgeneratorfunction(func):
         coro = func
     else:
-        @functools.wraps(func)
+        @_wraps(func)
         def coro(*args, **kw):
             res = func(*args, **kw)
             if isinstance(res, futures.Future) or inspect.isgenerator(res):
@@ -220,7 +318,7 @@ def coroutine(func):
         else:
             wrapper = _types_coroutine(coro)
     else:
-        @functools.wraps(func)
+        @_wraps(func)
         def wrapper(*args, **kwds):
             w = CoroWrapper(coro(*args, **kwds), func=func)
             if w._source_traceback:
@@ -246,7 +344,13 @@ def iscoroutinefunction(func):
 _COROUTINE_TYPES = (types.GeneratorType, CoroWrapper)
 if _CoroutineABC is not None:
     _COROUTINE_TYPES += (_CoroutineABC,)
-
+if events.asyncio is not None:
+    # Accept also asyncio CoroWrapper for interoperability
+    if hasattr(events.asyncio, 'coroutines'):
+        _COROUTINE_TYPES += (events.asyncio.coroutines.CoroWrapper,)
+    else:
+        # old Tulip/Python versions
+        _COROUTINE_TYPES += (events.asyncio.tasks.CoroWrapper,)
 
 def iscoroutine(obj):
     """Return True if obj is a coroutine object."""
@@ -299,3 +403,19 @@ def _format_coroutine(coro):
                      % (coro_name, filename, lineno))
 
     return coro_repr
+
+
+class FromWrapper(object):
+    __slots__ = ('obj',)
+
+    def __init__(self, obj):
+        if isinstance(obj, FromWrapper):
+            obj = obj.obj
+            assert not isinstance(obj, FromWrapper)
+        self.obj = obj
+
+def From(obj):
+    if not _DEBUG:
+        return obj
+    else:
+        return FromWrapper(obj)

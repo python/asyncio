@@ -9,6 +9,7 @@ import heapq
 from . import events
 from . import futures
 from . import locks
+from .coroutines import From, Return
 from .tasks import coroutine
 
 
@@ -26,7 +27,7 @@ class QueueFull(Exception):
     pass
 
 
-class Queue:
+class Queue(object):
     """A queue, useful for coordinating producer and consumer coroutines.
 
     If maxsize is less than or equal to zero, the queue size is infinite. If it
@@ -38,7 +39,7 @@ class Queue:
     interrupted between calling qsize() and doing an operation on the Queue.
     """
 
-    def __init__(self, maxsize=0, *, loop=None):
+    def __init__(self, maxsize=0, loop=None):
         if loop is None:
             self._loop = events.get_event_loop()
         else:
@@ -73,22 +74,22 @@ class Queue:
         self._finished.clear()
 
     def __repr__(self):
-        return '<{} at {:#x} {}>'.format(
+        return '<{0} at {1:#x} {2}>'.format(
             type(self).__name__, id(self), self._format())
 
     def __str__(self):
-        return '<{} {}>'.format(type(self).__name__, self._format())
+        return '<{0} {1}>'.format(type(self).__name__, self._format())
 
     def _format(self):
-        result = 'maxsize={!r}'.format(self._maxsize)
+        result = 'maxsize={0!r}'.format(self._maxsize)
         if getattr(self, '_queue', None):
-            result += ' _queue={!r}'.format(list(self._queue))
+            result += ' _queue={0!r}'.format(list(self._queue))
         if self._getters:
-            result += ' _getters[{}]'.format(len(self._getters))
+            result += ' _getters[{0}]'.format(len(self._getters))
         if self._putters:
-            result += ' _putters[{}]'.format(len(self._putters))
+            result += ' _putters[{0}]'.format(len(self._putters))
         if self._unfinished_tasks:
-            result += ' tasks={}'.format(self._unfinished_tasks)
+            result += ' tasks={0}'.format(self._unfinished_tasks)
         return result
 
     def _consume_done_getters(self):
@@ -149,7 +150,7 @@ class Queue:
             waiter = futures.Future(loop=self._loop)
 
             self._putters.append((item, waiter))
-            yield from waiter
+            yield From(waiter)
 
         else:
             self.__put_internal(item)
@@ -195,15 +196,16 @@ class Queue:
             # ChannelTest.test_wait.
             self._loop.call_soon(putter._set_result_unless_cancelled, None)
 
-            return self._get()
+            raise Return(self._get())
 
         elif self.qsize():
-            return self._get()
+            raise Return(self._get())
         else:
             waiter = futures.Future(loop=self._loop)
 
             self._getters.append(waiter)
-            return (yield from waiter)
+            result = yield From(waiter)
+            raise Return(result)
 
     def get_nowait(self):
         """Remove and return an item from the queue.
@@ -257,7 +259,7 @@ class Queue:
         When the count of unfinished tasks drops to zero, join() unblocks.
         """
         if self._unfinished_tasks > 0:
-            yield from self._finished.wait()
+            yield From(self._finished.wait())
 
 
 class PriorityQueue(Queue):

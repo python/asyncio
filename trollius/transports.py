@@ -1,6 +1,7 @@
 """Abstract Transport class."""
 
 import sys
+from .compat import flatten_bytes
 
 _PY34 = sys.version_info >= (3, 4)
 
@@ -9,7 +10,7 @@ __all__ = ['BaseTransport', 'ReadTransport', 'WriteTransport',
            ]
 
 
-class BaseTransport:
+class BaseTransport(object):
     """Base class for transports."""
 
     def __init__(self, extra=None):
@@ -94,12 +95,8 @@ class WriteTransport(BaseTransport):
         The default implementation concatenates the arguments and
         calls write() on the result.
         """
-        if not _PY34:
-            # In Python 3.3, bytes.join() doesn't handle memoryview.
-            list_of_data = (
-                bytes(data) if isinstance(data, memoryview) else data
-                for data in list_of_data)
-        self.write(b''.join(list_of_data))
+        data = map(flatten_bytes, list_of_data)
+        self.write(b''.join(data))
 
     def write_eof(self):
         """Close the write end after flushing buffered data.
@@ -230,7 +227,7 @@ class _FlowControlMixin(Transport):
     override set_write_buffer_limits() (e.g. to specify different
     defaults).
 
-    The subclass constructor must call super().__init__(extra).  This
+    The subclass constructor must call super(Class, self).__init__(extra).  This
     will call set_write_buffer_limits().
 
     The user may call set_write_buffer_limits() and
@@ -239,7 +236,7 @@ class _FlowControlMixin(Transport):
     """
 
     def __init__(self, extra=None, loop=None):
-        super().__init__(extra)
+        super(_FlowControlMixin, self).__init__(extra)
         assert loop is not None
         self._loop = loop
         self._protocol_paused = False

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Run Tulip unittests.
 
 Usage:
@@ -20,86 +20,100 @@ runtests.py --coverage is equivalent of:
 
 # Originally written by Beech Horn (for NDB).
 
-import argparse
+from __future__ import print_function
+import optparse
 import gc
 import logging
 import os
 import random
 import re
 import sys
-import unittest
 import textwrap
-import importlib.machinery
+from trollius.compat import PY33
+if PY33:
+    import importlib.machinery
+else:
+    import imp
 try:
     import coverage
 except ImportError:
     coverage = None
+if sys.version_info < (3,):
+    sys.exc_clear()
 
-from unittest.signals import installHandler
+try:
+    import unittest
+    from unittest.signals import installHandler
+except ImportError:
+    import unittest2 as unittest
+    from unittest2.signals import installHandler
 
-assert sys.version >= '3.3', 'Please use Python 3.3 or higher.'
-
-ARGS = argparse.ArgumentParser(description="Run all unittests.")
-ARGS.add_argument(
-    '-v', action="store", dest='verbose',
-    nargs='?', const=1, type=int, default=0, help='verbose')
-ARGS.add_argument(
+ARGS = optparse.OptionParser(description="Run all unittests.", usage="%prog [options] [pattern] [pattern2 ...]")
+ARGS.add_option(
+    '-v', '--verbose', action="store_true", dest='verbose',
+    default=0, help='verbose')
+ARGS.add_option(
     '-x', action="store_true", dest='exclude', help='exclude tests')
-ARGS.add_argument(
+ARGS.add_option(
     '-f', '--failfast', action="store_true", default=False,
     dest='failfast', help='Stop on first fail or error')
-ARGS.add_argument(
+ARGS.add_option(
     '-c', '--catch', action="store_true", default=False,
     dest='catchbreak', help='Catch control-C and display results')
-ARGS.add_argument(
+ARGS.add_option(
     '--forever', action="store_true", dest='forever', default=False,
     help='run tests forever to catch sporadic errors')
-ARGS.add_argument(
+ARGS.add_option(
     '--findleaks', action='store_true', dest='findleaks',
     help='detect tests that leak memory')
-ARGS.add_argument('-r', '--randomize', action='store_true',
-                  help='randomize test execution order.')
-ARGS.add_argument('--seed', type=int,
-                  help='random seed to reproduce a previous random run')
-ARGS.add_argument(
+ARGS.add_option(
+    '-r', '--randomize', action='store_true',
+    help='randomize test execution order.')
+ARGS.add_option(
+    '--seed', type=int,
+    help='random seed to reproduce a previous random run')
+ARGS.add_option(
     '-q', action="store_true", dest='quiet', help='quiet')
-ARGS.add_argument(
+ARGS.add_option(
     '--tests', action="store", dest='testsdir', default='tests',
     help='tests directory')
-ARGS.add_argument(
+ARGS.add_option(
     '--coverage', action="store_true", dest='coverage',
     help='enable html coverage report')
-ARGS.add_argument(
-    'pattern', action="store", nargs="*",
-    help='optional regex patterns to match test ids (default all tests)')
 
-COV_ARGS = argparse.ArgumentParser(description="Run all unittests.")
-COV_ARGS.add_argument(
-    '--coverage', action="store", dest='coverage', nargs='?', const='',
-    help='enable coverage report and provide python files directory')
+
+if PY33:
+    def load_module(modname, sourcefile):
+        loader = importlib.machinery.SourceFileLoader(modname, sourcefile)
+        return loader.load_module()
+else:
+    def load_module(modname, sourcefile):
+        return imp.load_source(modname, sourcefile)
 
 
 def load_modules(basedir, suffix='.py'):
+    import trollius.test_utils
+
     def list_dir(prefix, dir):
         files = []
 
         modpath = os.path.join(dir, '__init__.py')
         if os.path.isfile(modpath):
             mod = os.path.split(dir)[-1]
-            files.append(('{}{}'.format(prefix, mod), modpath))
+            files.append(('{0}{1}'.format(prefix, mod), modpath))
 
-            prefix = '{}{}.'.format(prefix, mod)
+            prefix = '{0}{1}.'.format(prefix, mod)
 
         for name in os.listdir(dir):
             path = os.path.join(dir, name)
 
             if os.path.isdir(path):
-                files.extend(list_dir('{}{}.'.format(prefix, name), path))
+                files.extend(list_dir('{0}{1}.'.format(prefix, name), path))
             else:
                 if (name != '__init__.py' and
                     name.endswith(suffix) and
                     not name.startswith(('.', '_'))):
-                    files.append(('{}{}'.format(prefix, name[:-3]), path))
+                    files.append(('{0}{1}'.format(prefix, name[:-3]), path))
 
         return files
 
@@ -107,13 +121,17 @@ def load_modules(basedir, suffix='.py'):
     for modname, sourcefile in list_dir('', basedir):
         if modname == 'runtests':
             continue
+        if modname == 'test_asyncio' and sys.version_info <= (3, 3):
+            print("Skipping '{0}': need at least Python 3.3".format(modname),
+                  file=sys.stderr)
+            continue
         try:
-            loader = importlib.machinery.SourceFileLoader(modname, sourcefile)
-            mods.append((loader.load_module(), sourcefile))
+            mod = load_module(modname, sourcefile)
+            mods.append((mod, sourcefile))
         except SyntaxError:
             raise
-        except unittest.SkipTest as err:
-            print("Skipping '{}': {}".format(modname, err), file=sys.stderr)
+        except trollius.test_utils.SkipTest as err:
+            print("Skipping '{0}': {1}".format(modname, err), file=sys.stderr)
 
     return mods
 
@@ -198,7 +216,7 @@ class TestRunner(unittest.TextTestRunner):
     def run(self, test):
         result = super().run(test)
         if result.leaks:
-            self.stream.writeln("{} tests leaks:".format(len(result.leaks)))
+            self.stream.writeln("{0} tests leaks:".format(len(result.leaks)))
             for name, leaks in result.leaks:
                 self.stream.writeln(' '*4 + name + ':')
                 for leak in leaks:
@@ -218,7 +236,7 @@ def _runtests(args, tests):
 
 
 def runtests():
-    args = ARGS.parse_args()
+    args, pattern = ARGS.parse_args()
 
     if args.coverage and coverage is None:
         URL = "bitbucket.org/pypa/setuptools/raw/bootstrap/ez_setup.py"
@@ -238,15 +256,15 @@ def runtests():
 
     testsdir = os.path.abspath(args.testsdir)
     if not os.path.isdir(testsdir):
-        print("Tests directory is not found: {}\n".format(testsdir))
+        print("Tests directory is not found: {0}\n".format(testsdir))
         ARGS.print_help()
         return
 
     excludes = includes = []
     if args.exclude:
-        excludes = args.pattern
+        excludes = pattern
     else:
-        includes = args.pattern
+        includes = pattern
 
     v = 0 if args.quiet else args.verbose + 1
     failfast = args.failfast
@@ -273,8 +291,8 @@ def runtests():
     finder = TestsFinder(args.testsdir, includes, excludes)
     if args.catchbreak:
         installHandler()
-    import asyncio.coroutines
-    if asyncio.coroutines._DEBUG:
+    import trollius.coroutines
+    if trollius.coroutines._DEBUG:
         print("Run tests in debug mode")
     else:
         print("Run tests in release mode")
@@ -297,7 +315,7 @@ def runtests():
             cov.report(show_missing=False)
             here = os.path.dirname(os.path.abspath(__file__))
             print("\nFor html report:")
-            print("open file://{}/htmlcov/index.html".format(here))
+            print("open file://{0}/htmlcov/index.html".format(here))
 
 
 if __name__ == '__main__':

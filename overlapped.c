@@ -31,6 +31,18 @@
 
 #define T_HANDLE T_POINTER
 
+#if PY_MAJOR_VERSION >= 3
+#  define PYTHON3
+#endif
+
+#ifndef Py_MIN
+#  define Py_MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
+#endif
+
+#ifndef Py_MAX
+#  define Py_MAX(X, Y) (((X) > (Y)) ? (X) : (Y))
+#endif
+
 enum {TYPE_NONE, TYPE_NOT_STARTED, TYPE_READ, TYPE_WRITE, TYPE_ACCEPT,
       TYPE_CONNECT, TYPE_DISCONNECT, TYPE_CONNECT_NAMED_PIPE,
       TYPE_WAIT_NAMED_PIPE_AND_CONNECT};
@@ -63,6 +75,7 @@ SetFromWindowsErr(DWORD err)
 
     if (err == 0)
         err = GetLastError();
+#if (PY_MAJOR_VERSION == 3 && PY_MINOR_VERSION >= 3) || PY_MAJOR_VERSION > 3
     switch (err) {
         case ERROR_CONNECTION_REFUSED:
             exception_type = PyExc_ConnectionRefusedError;
@@ -73,6 +86,9 @@ SetFromWindowsErr(DWORD err)
         default:
             exception_type = PyExc_OSError;
     }
+#else
+    exception_type = PyExc_WindowsError;
+#endif
     return PyErr_SetExcFromWindowsErr(exception_type, err);
 }
 
@@ -345,7 +361,11 @@ overlapped_CreateEvent(PyObject *self, PyObject *args)
     Py_UNICODE *Name;
     HANDLE Event;
 
+#ifdef PYTHON3
     if (!PyArg_ParseTuple(args, "O" F_BOOL F_BOOL "Z",
+#else
+    if (!PyArg_ParseTuple(args, "O" F_BOOL F_BOOL "z",
+#endif
                           &EventAttributes, &ManualReset,
                           &InitialState, &Name))
         return NULL;
@@ -822,7 +842,11 @@ Overlapped_WriteFile(OverlappedObject *self, PyObject *args)
         return NULL;
     }
 
+#ifdef PYTHON3
     if (!PyArg_Parse(bufobj, "y*", &self->write_buffer))
+#else
+    if (!PyArg_Parse(bufobj, "s*", &self->write_buffer))
+#endif
         return NULL;
 
 #if SIZEOF_SIZE_T > SIZEOF_LONG
@@ -878,7 +902,11 @@ Overlapped_WSASend(OverlappedObject *self, PyObject *args)
         return NULL;
     }
 
+#ifdef PYTHON3
     if (!PyArg_Parse(bufobj, "y*", &self->write_buffer))
+#else
+    if (!PyArg_Parse(bufobj, "s*", &self->write_buffer))
+#endif
         return NULL;
 
 #if SIZEOF_SIZE_T > SIZEOF_LONG
@@ -1136,8 +1164,9 @@ static PyObject *
 ConnectPipe(OverlappedObject *self, PyObject *args)
 {
     PyObject *AddressObj;
-    wchar_t *Address;
     HANDLE PipeHandle;
+#ifdef PYTHON3
+    wchar_t *Address;
 
     if (!PyArg_ParseTuple(args, "U",  &AddressObj))
         return NULL;
@@ -1146,14 +1175,26 @@ ConnectPipe(OverlappedObject *self, PyObject *args)
     if (Address == NULL)
         return NULL;
 
+#   define CREATE_FILE CreateFileW
+#else
+    char *Address;
+
+    if (!PyArg_ParseTuple(args, "s",  &Address))
+        return NULL;
+
+#   define CREATE_FILE CreateFileA
+#endif
+
     Py_BEGIN_ALLOW_THREADS
-    PipeHandle = CreateFileW(Address,
+    PipeHandle = CREATE_FILE(Address,
                              GENERIC_READ | GENERIC_WRITE,
                              0, NULL, OPEN_EXISTING,
                              FILE_FLAG_OVERLAPPED, NULL);
     Py_END_ALLOW_THREADS
 
+#ifdef PYTHON3
     PyMem_Free(Address);
+#endif
     if (PipeHandle == INVALID_HANDLE_VALUE)
         return SetFromWindowsErr(0);
     return Py_BuildValue(F_HANDLE, PipeHandle);
@@ -1284,6 +1325,7 @@ static PyMethodDef overlapped_functions[] = {
     {NULL}
 };
 
+#ifdef PYTHON3
 static struct PyModuleDef overlapped_module = {
     PyModuleDef_HEAD_INIT,
     "_overlapped",
@@ -1295,12 +1337,13 @@ static struct PyModuleDef overlapped_module = {
     NULL,
     NULL
 };
+#endif
 
 #define WINAPI_CONSTANT(fmt, con) \
     PyDict_SetItemString(d, #con, Py_BuildValue(fmt, con))
 
-PyMODINIT_FUNC
-PyInit__overlapped(void)
+PyObject*
+_init_overlapped(void)
 {
     PyObject *m, *d;
 
@@ -1316,7 +1359,11 @@ PyInit__overlapped(void)
     if (PyType_Ready(&OverlappedType) < 0)
         return NULL;
 
+#ifdef PYTHON3
     m = PyModule_Create(&overlapped_module);
+#else
+    m = Py_InitModule("_overlapped", overlapped_functions);
+#endif
     if (PyModule_AddObject(m, "Overlapped", (PyObject *)&OverlappedType) < 0)
         return NULL;
 
@@ -1332,6 +1379,22 @@ PyInit__overlapped(void)
     WINAPI_CONSTANT(F_DWORD,  SO_UPDATE_ACCEPT_CONTEXT);
     WINAPI_CONSTANT(F_DWORD,  SO_UPDATE_CONNECT_CONTEXT);
     WINAPI_CONSTANT(F_DWORD,  TF_REUSE_SOCKET);
+    WINAPI_CONSTANT(F_DWORD,  ERROR_CONNECTION_REFUSED);
+    WINAPI_CONSTANT(F_DWORD,  ERROR_CONNECTION_ABORTED);
 
     return m;
 }
+
+#ifdef PYTHON3
+PyMODINIT_FUNC
+PyInit__overlapped(void)
+{
+    return _init_overlapped();
+}
+#else
+PyMODINIT_FUNC
+init_overlapped(void)
+{
+    _init_overlapped();
+}
+#endif

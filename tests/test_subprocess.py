@@ -1,28 +1,32 @@
+from trollius import subprocess
+from trollius import test_utils
+import trollius as asyncio
+import os
 import signal
 import sys
 import unittest
-from unittest import mock
+from trollius import From, Return
+from trollius import test_support as support
+from trollius.test_utils import mock
+from trollius.py33_exceptions import BrokenPipeError, ConnectionResetError
 
-import trollius as asyncio
-from trollius import base_subprocess
-from trollius import subprocess
-from trollius import test_utils
-try:
-    from test import support
-except ImportError:
-    from trollius import test_support as support
 if sys.platform != 'win32':
     from trollius import unix_events
+
 
 # Program blocking
 PROGRAM_BLOCKED = [sys.executable, '-c', 'import time; time.sleep(3600)']
 
 # Program copying input to output
-PROGRAM_CAT = [
-    sys.executable, '-c',
-    ';'.join(('import sys',
-              'data = sys.stdin.buffer.read()',
-              'sys.stdout.buffer.write(data)'))]
+if sys.version_info >= (3,):
+    PROGRAM_CAT = ';'.join(('import sys',
+                            'data = sys.stdin.buffer.read()',
+                            'sys.stdout.buffer.write(data)'))
+else:
+    PROGRAM_CAT = ';'.join(('import sys',
+                            'data = sys.stdin.read()',
+                            'sys.stdout.write(data)'))
+PROGRAM_CAT = [sys.executable, '-c', PROGRAM_CAT]
 
 class TestSubprocessTransport(base_subprocess.BaseSubprocessTransport):
     def _start(self, *args, **kwargs):
@@ -81,21 +85,21 @@ class SubprocessMixin:
 
         @asyncio.coroutine
         def run(data):
-            proc = yield from asyncio.create_subprocess_exec(
-                                          *args,
-                                          stdin=subprocess.PIPE,
-                                          stdout=subprocess.PIPE,
-                                          loop=self.loop)
+            proc = yield From(asyncio.create_subprocess_exec(
+                                     *args,
+                                     stdin=subprocess.PIPE,
+                                     stdout=subprocess.PIPE,
+                                     loop=self.loop))
 
             # feed data
             proc.stdin.write(data)
-            yield from proc.stdin.drain()
+            yield From(proc.stdin.drain())
             proc.stdin.close()
 
             # get output and exitcode
-            data = yield from proc.stdout.read()
-            exitcode = yield from proc.wait()
-            return (exitcode, data)
+            data = yield From(proc.stdout.read())
+            exitcode = yield From(proc.wait())
+            raise Return(exitcode, data)
 
         task = run(b'some data')
         task = asyncio.wait_for(task, 60.0, loop=self.loop)
@@ -108,13 +112,13 @@ class SubprocessMixin:
 
         @asyncio.coroutine
         def run(data):
-            proc = yield from asyncio.create_subprocess_exec(
+            proc = yield From(asyncio.create_subprocess_exec(
                                           *args,
                                           stdin=subprocess.PIPE,
                                           stdout=subprocess.PIPE,
-                                          loop=self.loop)
-            stdout, stderr = yield from proc.communicate(data)
-            return proc.returncode, stdout
+                                          loop=self.loop))
+            stdout, stderr = yield From(proc.communicate(data))
+            raise Return(proc.returncode, stdout)
 
         task = run(b'some data')
         task = asyncio.wait_for(task, 60.0, loop=self.loop)
@@ -129,10 +133,14 @@ class SubprocessMixin:
         exitcode = self.loop.run_until_complete(proc.wait())
         self.assertEqual(exitcode, 7)
 
+    @test_utils.skipUnless(hasattr(os, 'setsid'), "need os.setsid()")
     def test_start_new_session(self):
+        def start_new_session():
+            os.setsid()
+
         # start the new process in a new session
         create = asyncio.create_subprocess_shell('exit 8',
-                                                 start_new_session=True,
+                                                 preexec_fn=start_new_session,
                                                  loop=self.loop)
         proc = self.loop.run_until_complete(create)
         exitcode = self.loop.run_until_complete(proc.wait())
@@ -162,9 +170,13 @@ class SubprocessMixin:
         else:
             self.assertEqual(-signal.SIGTERM, returncode)
 
-    @unittest.skipIf(sys.platform == 'win32', "Don't have SIGHUP")
+    @test_utils.skipIf(sys.platform == 'win32', "Don't have SIGHUP")
     def test_send_signal(self):
-        code = 'import time; print("sleeping", flush=True); time.sleep(3600)'
+        code = '; '.join((
+            'import sys, time',
+            'print("sleeping")',
+            'sys.stdout.flush()',
+            'time.sleep(3600)'))
         args = [sys.executable, '-c', code]
         create = asyncio.create_subprocess_exec(*args,
                                                 stdout=subprocess.PIPE,
@@ -174,12 +186,12 @@ class SubprocessMixin:
         @asyncio.coroutine
         def send_signal(proc):
             # basic synchronization to wait until the program is sleeping
-            line = yield from proc.stdout.readline()
+            line = yield From(proc.stdout.readline())
             self.assertEqual(line, b'sleeping\n')
 
             proc.send_signal(signal.SIGHUP)
-            returncode = (yield from proc.wait())
-            return returncode
+            returncode = yield From(proc.wait())
+            raise Return(returncode)
 
         returncode = self.loop.run_until_complete(send_signal(proc))
         self.assertEqual(-signal.SIGHUP, returncode)
@@ -202,7 +214,7 @@ class SubprocessMixin:
         @asyncio.coroutine
         def write_stdin(proc, data):
             proc.stdin.write(data)
-            yield from proc.stdin.drain()
+            yield From(proc.stdin.drain())
 
         coro = write_stdin(proc, large_data)
         # drain() must raise BrokenPipeError or ConnectionResetError
@@ -235,27 +247,28 @@ class SubprocessMixin:
 
             @asyncio.coroutine
             def connect_read_pipe_mock(*args, **kw):
-                transport, protocol = yield from connect_read_pipe(*args, **kw)
+                connect = connect_read_pipe(*args, **kw)
+                transport, protocol = yield From(connect)
                 transport.pause_reading = mock.Mock()
                 transport.resume_reading = mock.Mock()
-                return (transport, protocol)
+                raise Return(transport, protocol)
 
             self.loop.connect_read_pipe = connect_read_pipe_mock
 
-            proc = yield from asyncio.create_subprocess_exec(
+            proc = yield From(asyncio.create_subprocess_exec(
                                          sys.executable, '-c', code,
                                          stdin=asyncio.subprocess.PIPE,
                                          stdout=asyncio.subprocess.PIPE,
                                          limit=limit,
-                                         loop=self.loop)
+                                         loop=self.loop))
             stdout_transport = proc._transport.get_pipe_transport(1)
 
-            stdout, stderr = yield from proc.communicate()
+            stdout, stderr = yield From(proc.communicate())
 
             # The child process produced more than limit bytes of output,
             # the stream reader transport should pause the protocol to not
             # allocate too much memory.
-            return (stdout, stdout_transport)
+            raise Return(stdout, stdout_transport)
 
         # Issue #22685: Ensure that the stream reader pauses the protocol
         # when the child process produces too much data
@@ -271,16 +284,16 @@ class SubprocessMixin:
         @asyncio.coroutine
         def len_message(message):
             code = 'import sys; data = sys.stdin.read(); print(len(data))'
-            proc = yield from asyncio.create_subprocess_exec(
+            proc = yield From(asyncio.create_subprocess_exec(
                                           sys.executable, '-c', code,
                                           stdin=asyncio.subprocess.PIPE,
                                           stdout=asyncio.subprocess.PIPE,
                                           stderr=asyncio.subprocess.PIPE,
                                           close_fds=False,
-                                          loop=self.loop)
-            stdout, stderr = yield from proc.communicate(message)
-            exitcode = yield from proc.wait()
-            return (stdout, exitcode)
+                                          loop=self.loop))
+            stdout, stderr = yield From(proc.communicate(message))
+            exitcode = yield From(proc.wait())
+            raise Return(stdout, exitcode)
 
         output, exitcode = self.loop.run_until_complete(len_message(b'abc'))
         self.assertEqual(output.rstrip(), b'3')
@@ -308,7 +321,7 @@ class SubprocessMixin:
 
             # Kill the process and wait until it is done
             proc.kill()
-            yield from proc.wait()
+            yield From(proc.wait())
 
         self.loop.run_until_complete(cancel_wait())
 
@@ -321,7 +334,7 @@ class SubprocessMixin:
 
             self.loop.call_soon(task.cancel)
             try:
-                yield from task
+                yield From(task)
             except asyncio.CancelledError:
                 pass
 
@@ -339,7 +352,7 @@ class SubprocessMixin:
 
             self.loop.call_soon(task.cancel)
             try:
-                yield from task
+                yield From(task)
             except asyncio.CancelledError:
                 pass
 

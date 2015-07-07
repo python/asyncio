@@ -1,13 +1,20 @@
 """Tests for transports.py."""
 
 import unittest
-from unittest import mock
 
 import trollius as asyncio
+from trollius import test_utils
 from trollius import transports
+from trollius.test_utils import mock
+
+try:
+    memoryview
+except NameError:
+    # Python 2.6
+    memoryview = buffer
 
 
-class TransportTests(unittest.TestCase):
+class TransportTests(test_utils.TestCase):
 
     def test_ctor_extra_is_none(self):
         transport = asyncio.Transport()

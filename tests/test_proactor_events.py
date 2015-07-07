@@ -2,14 +2,15 @@
 
 import socket
 import unittest
-from unittest import mock
 
-import trollius as asyncio
+from trollius import test_utils
 from trollius.proactor_events import BaseProactorEventLoop
+from trollius.proactor_events import _ProactorDuplexPipeTransport
 from trollius.proactor_events import _ProactorSocketTransport
 from trollius.proactor_events import _ProactorWritePipeTransport
-from trollius.proactor_events import _ProactorDuplexPipeTransport
-from trollius import test_utils
+from trollius.py33_exceptions import ConnectionAbortedError, ConnectionResetError
+from trollius.test_utils import mock
+import trollius as asyncio
 
 
 def close_transport(transport):

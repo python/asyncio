@@ -1,31 +1,22 @@
 """Tests for tasks.py."""
 
 import contextlib
-import functools
 import os
 import re
 import sys
 import types
 import unittest
 import weakref
-from unittest import mock
 
 import trollius as asyncio
+from trollius import From, Return
 from trollius import coroutines
+from trollius import test_support as support
 from trollius import test_utils
-try:
-    from test import support
-except ImportError:
-    from trollius import test_support as support
-try:
-    from test.support.script_helper import assert_python_ok
-except ImportError:
-    try:
-        from test.script_helper import assert_python_ok
-    except ImportError:
-        from trollius.test_support import assert_python_ok
+from trollius.test_utils import mock
 
 
+PY33 = (sys.version_info >= (3, 3))
 PY34 = (sys.version_info >= (3, 4))
 PY35 = (sys.version_info >= (3, 5))
 
@@ -167,8 +158,8 @@ class TaskTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def notmuch():
-            yield from []
-            return 'abc'
+            yield From(None)
+            raise Return('abc')
 
         # test coroutine function
         self.assertEqual(notmuch.__name__, 'notmuch')
@@ -182,7 +173,7 @@ class TaskTests(test_utils.TestCase):
 
         # test coroutine object
         gen = notmuch()
-        if coroutines._DEBUG or PY35:
+        if PY35 or (coroutines._DEBUG and PY33):
             coro_qualname = 'TaskTests.test_task_repr.<locals>.notmuch'
         else:
             coro_qualname = 'notmuch'
@@ -226,7 +217,7 @@ class TaskTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def notmuch():
-            # notmuch() function doesn't use yield from: it will be wrapped by
+            # notmuch() function doesn't use yield: it will be wrapped by
             # @coroutine decorator
             return 123
 
@@ -240,13 +231,16 @@ class TaskTests(test_utils.TestCase):
 
         # test coroutine object
         gen = notmuch()
-        if coroutines._DEBUG or PY35:
+        if PY35 or coroutines._DEBUG:
             # On Python >= 3.5, generators now inherit the name of the
             # function, as expected, and have a qualified name (__qualname__
             # attribute).
             coro_name = 'notmuch'
-            coro_qualname = ('TaskTests.test_task_repr_coro_decorator'
-                             '.<locals>.notmuch')
+            if PY35 or (coroutines._DEBUG and PY33):
+                coro_qualname = ('TaskTests.test_task_repr_coro_decorator'
+                                 '.<locals>.notmuch')
+            else:
+                coro_qualname = 'notmuch'
         else:
             # On Python < 3.5, generators inherit the name of the code, not of
             # the function. See: http://bugs.python.org/issue21205
@@ -294,7 +288,8 @@ class TaskTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def wait_for(fut):
-            return (yield from fut)
+            res = yield From(fut)
+            raise Return(res)
 
         fut = asyncio.Future(loop=self.loop)
         task = asyncio.Task(wait_for(fut), loop=self.loop)
@@ -331,9 +326,9 @@ class TaskTests(test_utils.TestCase):
     def test_task_basics(self):
         @asyncio.coroutine
         def outer():
-            a = yield from inner1()
-            b = yield from inner2()
-            return a+b
+            a = yield From(inner1())
+            b = yield From(inner2())
+            raise Return(a+b)
 
         @asyncio.coroutine
         def inner1():
@@ -357,8 +352,8 @@ class TaskTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def task():
-            yield from asyncio.sleep(10.0, loop=loop)
-            return 12
+            yield From(asyncio.sleep(10.0, loop=loop))
+            raise Return(12)
 
         t = asyncio.Task(task(), loop=loop)
         loop.call_soon(t.cancel)
@@ -371,9 +366,9 @@ class TaskTests(test_utils.TestCase):
     def test_cancel_yield(self):
         @asyncio.coroutine
         def task():
-            yield
-            yield
-            return 12
+            yield From(None)
+            yield From(None)
+            raise Return(12)
 
         t = asyncio.Task(task(), loop=self.loop)
         test_utils.run_briefly(self.loop)  # start coro
@@ -389,8 +384,8 @@ class TaskTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def task():
-            yield from f
-            return 12
+            yield From(f)
+            raise Return(12)
 
         t = asyncio.Task(task(), loop=self.loop)
         test_utils.run_briefly(self.loop)  # start task
@@ -405,8 +400,8 @@ class TaskTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def task():
-            yield from f
-            return 12
+            yield From(f)
+            raise Return(12)
 
         t = asyncio.Task(task(), loop=self.loop)
         test_utils.run_briefly(self.loop)
@@ -431,7 +426,7 @@ class TaskTests(test_utils.TestCase):
             try:
                 yield from fut2
             except asyncio.CancelledError:
-                return 42
+                raise Return(42)
 
         t = asyncio.Task(task(), loop=self.loop)
         test_utils.run_briefly(self.loop)
@@ -452,13 +447,13 @@ class TaskTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def task():
-            yield from fut1
+            yield From(fut1)
             try:
-                yield from fut2
+                yield From(fut2)
             except asyncio.CancelledError:
                 pass
-            res = yield from fut3
-            return res
+            res = yield From(fut3)
+            raise Return(res)
 
         t = asyncio.Task(task(), loop=self.loop)
         test_utils.run_briefly(self.loop)
@@ -485,8 +480,8 @@ class TaskTests(test_utils.TestCase):
             t.cancel()
             self.assertTrue(t._must_cancel)  # White-box test.
             # The sleep should be cancelled immediately.
-            yield from asyncio.sleep(100, loop=loop)
-            return 12
+            yield From(asyncio.sleep(100, loop=loop))
+            raise Return(12)
 
         t = asyncio.Task(task(), loop=loop)
         self.assertRaises(
@@ -508,17 +503,16 @@ class TaskTests(test_utils.TestCase):
 
         loop = self.new_test_loop(gen)
 
-        x = 0
+        non_local = {'x': 0}
         waiters = []
 
         @asyncio.coroutine
         def task():
-            nonlocal x
-            while x < 10:
+            while non_local['x'] < 10:
                 waiters.append(asyncio.sleep(0.1, loop=loop))
-                yield from waiters[-1]
-                x += 1
-                if x == 2:
+                yield From(waiters[-1])
+                non_local['x'] += 1
+                if non_local['x'] == 3:
                     loop.stop()
 
         t = asyncio.Task(task(), loop=loop)
@@ -527,7 +521,7 @@ class TaskTests(test_utils.TestCase):
         self.assertEqual(str(cm.exception),
                          'Event loop stopped before Future completed.')
         self.assertFalse(t.done())
-        self.assertEqual(x, 2)
+        self.assertEqual(non_local['x'], 3)
         self.assertAlmostEqual(0.3, loop.time())
 
         # close generators
@@ -538,6 +532,7 @@ class TaskTests(test_utils.TestCase):
 
     def test_wait_for(self):
 
+        @asyncio.coroutine
         def gen():
             when = yield
             self.assertAlmostEqual(0.2, when)
@@ -547,27 +542,34 @@ class TaskTests(test_utils.TestCase):
 
         loop = self.new_test_loop(gen)
 
-        foo_running = None
+        non_local = {'foo_running': None}
 
         @asyncio.coroutine
         def foo():
-            nonlocal foo_running
-            foo_running = True
+            non_local['foo_running'] = True
             try:
-                yield from asyncio.sleep(0.2, loop=loop)
+                yield From(asyncio.sleep(0.2, loop=loop))
             finally:
-                foo_running = False
-            return 'done'
+                non_local['foo_running'] = False
+            raise Return('done')
 
         fut = asyncio.Task(foo(), loop=loop)
+        test_utils.run_briefly(loop)
 
         with self.assertRaises(asyncio.TimeoutError):
             loop.run_until_complete(asyncio.wait_for(fut, 0.1, loop=loop))
+
+        # Trollius issue #2: need to run the loop briefly to ensure that the
+        # cancellation is propagated to all tasks
+        waiter = asyncio.Future(loop=loop)
+        fut.add_done_callback(lambda f: waiter.set_result(True))
+        loop.run_until_complete(waiter)
+
         self.assertTrue(fut.done())
         # it should have been cancelled due to the timeout
         self.assertTrue(fut.cancelled())
         self.assertAlmostEqual(0.1, loop.time())
-        self.assertEqual(foo_running, False)
+        self.assertEqual(non_local['foo_running'], False)
 
     def test_wait_for_blocking(self):
         loop = self.new_test_loop()
@@ -594,16 +596,23 @@ class TaskTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def foo():
-            yield from asyncio.sleep(0.2, loop=loop)
-            return 'done'
+            yield From(asyncio.sleep(0.2, loop=loop))
+            raise Return('done')
 
         asyncio.set_event_loop(loop)
         try:
             fut = asyncio.Task(foo(), loop=loop)
+            test_utils.run_briefly(loop)
             with self.assertRaises(asyncio.TimeoutError):
                 loop.run_until_complete(asyncio.wait_for(fut, 0.01))
         finally:
             asyncio.set_event_loop(None)
+
+        # Trollius issue #2: need to run the loop briefly to ensure that the
+        # cancellation is propagated to all tasks
+        waiter = asyncio.Future(loop=loop)
+        fut.add_done_callback(lambda f: waiter.set_result(True))
+        loop.run_until_complete(waiter)
 
         self.assertAlmostEqual(0.01, loop.time())
         self.assertTrue(fut.done())
@@ -640,10 +649,10 @@ class TaskTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def foo():
-            done, pending = yield from asyncio.wait([b, a], loop=loop)
+            done, pending = yield From(asyncio.wait([b, a], loop=loop))
             self.assertEqual(done, set([a, b]))
             self.assertEqual(pending, set())
-            return 42
+            raise Return(42)
 
         res = loop.run_until_complete(asyncio.Task(foo(), loop=loop))
         self.assertEqual(res, 42)
@@ -670,10 +679,10 @@ class TaskTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def foo():
-            done, pending = yield from asyncio.wait([b, a])
+            done, pending = yield From(asyncio.wait([b, a]))
             self.assertEqual(done, set([a, b]))
             self.assertEqual(pending, set())
-            return 42
+            raise Return(42)
 
         asyncio.set_event_loop(loop)
         res = loop.run_until_complete(
@@ -694,7 +703,7 @@ class TaskTests(test_utils.TestCase):
         done, pending = self.loop.run_until_complete(task)
 
         self.assertFalse(pending)
-        self.assertEqual(set(f.result() for f in done), {'test', 'spam'})
+        self.assertEqual(set(f.result() for f in done), set(('test', 'spam')))
 
     def test_wait_errors(self):
         self.assertRaises(
@@ -728,8 +737,8 @@ class TaskTests(test_utils.TestCase):
             loop=loop)
 
         done, pending = loop.run_until_complete(task)
-        self.assertEqual({b}, done)
-        self.assertEqual({a}, pending)
+        self.assertEqual(set((b,)), done)
+        self.assertEqual(set((a,)), pending)
         self.assertFalse(a.done())
         self.assertTrue(b.done())
         self.assertIsNone(b.result())
@@ -745,12 +754,12 @@ class TaskTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def coro1():
-            yield
+            yield From(None)
 
         @asyncio.coroutine
         def coro2():
-            yield
-            yield
+            yield From(None)
+            yield From(None)
 
         a = asyncio.Task(coro1(), loop=self.loop)
         b = asyncio.Task(coro2(), loop=self.loop)
@@ -760,7 +769,7 @@ class TaskTests(test_utils.TestCase):
             loop=self.loop)
 
         done, pending = self.loop.run_until_complete(task)
-        self.assertEqual({a, b}, done)
+        self.assertEqual(set((a, b)), done)
         self.assertTrue(a.done())
         self.assertIsNone(a.result())
         self.assertTrue(b.done())
@@ -789,8 +798,8 @@ class TaskTests(test_utils.TestCase):
             loop=loop)
 
         done, pending = loop.run_until_complete(task)
-        self.assertEqual({b}, done)
-        self.assertEqual({a}, pending)
+        self.assertEqual(set((b,)), done)
+        self.assertEqual(set((a,)), pending)
         self.assertAlmostEqual(0, loop.time())
 
         # move forward to close generator
@@ -813,7 +822,7 @@ class TaskTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def exc():
-            yield from asyncio.sleep(0.01, loop=loop)
+            yield From(asyncio.sleep(0.01, loop=loop))
             raise ZeroDivisionError('err')
 
         b = asyncio.Task(exc(), loop=loop)
@@ -821,8 +830,8 @@ class TaskTests(test_utils.TestCase):
                             loop=loop)
 
         done, pending = loop.run_until_complete(task)
-        self.assertEqual({b}, done)
-        self.assertEqual({a}, pending)
+        self.assertEqual(set((b,)), done)
+        self.assertEqual(set((a,)), pending)
         self.assertAlmostEqual(0.01, loop.time())
 
         # move forward to close generator
@@ -844,14 +853,14 @@ class TaskTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def sleeper():
-            yield from asyncio.sleep(0.15, loop=loop)
+            yield From(asyncio.sleep(0.15, loop=loop))
             raise ZeroDivisionError('really')
 
         b = asyncio.Task(sleeper(), loop=loop)
 
         @asyncio.coroutine
         def foo():
-            done, pending = yield from asyncio.wait([b, a], loop=loop)
+            done, pending = yield From(asyncio.wait([b, a], loop=loop))
             self.assertEqual(len(done), 2)
             self.assertEqual(pending, set())
             errors = set(f for f in done if f.exception() is not None)
@@ -881,8 +890,8 @@ class TaskTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def foo():
-            done, pending = yield from asyncio.wait([b, a], timeout=0.11,
-                                                    loop=loop)
+            done, pending = yield From(asyncio.wait([b, a], timeout=0.11,
+                                               loop=loop))
             self.assertEqual(done, set([a]))
             self.assertEqual(pending, set([b]))
 
@@ -932,17 +941,16 @@ class TaskTests(test_utils.TestCase):
         # disable "slow callback" warning
         loop.slow_callback_duration = 1.0
         completed = set()
-        time_shifted = False
+        non_local = {'time_shifted': False}
 
         @asyncio.coroutine
         def sleeper(dt, x):
-            nonlocal time_shifted
-            yield from asyncio.sleep(dt, loop=loop)
+            yield From(asyncio.sleep(dt, loop=loop))
             completed.add(x)
-            if not time_shifted and 'a' in completed and 'b' in completed:
-                time_shifted = True
+            if not non_local['time_shifted'] and 'a' in completed and 'b' in completed:
+                non_local['time_shifted'] = True
                 loop.advance_time(0.14)
-            return x
+            raise Return(x)
 
         a = sleeper(0.01, 'a')
         b = sleeper(0.01, 'b')
@@ -952,8 +960,8 @@ class TaskTests(test_utils.TestCase):
         def foo():
             values = []
             for f in asyncio.as_completed([b, c, a], loop=loop):
-                values.append((yield from f))
-            return values
+                values.append((yield From(f)))
+            raise Return(values)
 
         res = loop.run_until_complete(asyncio.Task(foo(), loop=loop))
         self.assertAlmostEqual(0.15, loop.time())
@@ -985,11 +993,11 @@ class TaskTests(test_utils.TestCase):
                 if values:
                     loop.advance_time(0.02)
                 try:
-                    v = yield from f
+                    v = yield From(f)
                     values.append((1, v))
                 except asyncio.TimeoutError as exc:
                     values.append((2, exc))
-            return values
+            raise Return(values)
 
         res = loop.run_until_complete(asyncio.Task(foo(), loop=loop))
         self.assertEqual(len(res), 2, res)
@@ -1016,7 +1024,7 @@ class TaskTests(test_utils.TestCase):
         @asyncio.coroutine
         def foo():
             for f in asyncio.as_completed([a], timeout=1, loop=loop):
-                v = yield from f
+                v = yield From(f)
                 self.assertEqual(v, 'a')
 
         loop.run_until_complete(asyncio.Task(foo(), loop=loop))
@@ -1032,7 +1040,7 @@ class TaskTests(test_utils.TestCase):
 
         a = asyncio.sleep(0.05, 'a', loop=loop)
         b = asyncio.sleep(0.10, 'b', loop=loop)
-        fs = {a, b}
+        fs = set((a, b))
         futs = list(asyncio.as_completed(fs, loop=loop))
         self.assertEqual(len(futs), 2)
 
@@ -1057,12 +1065,12 @@ class TaskTests(test_utils.TestCase):
 
         a = asyncio.sleep(0.05, 'a', loop=loop)
         b = asyncio.sleep(0.05, 'b', loop=loop)
-        fs = {a, b}
+        fs = set((a, b))
         futs = list(asyncio.as_completed(fs, loop=loop))
         self.assertEqual(len(futs), 2)
         waiter = asyncio.wait(futs, loop=loop)
         done, pending = loop.run_until_complete(waiter)
-        self.assertEqual(set(f.result() for f in done), {'a', 'b'})
+        self.assertEqual(set(f.result() for f in done), set(('a', 'b')))
 
     def test_as_completed_duplicate_coroutines(self):
 
@@ -1076,13 +1084,13 @@ class TaskTests(test_utils.TestCase):
             c = coro('ham')
             for f in asyncio.as_completed([c, c, coro('spam')],
                                           loop=self.loop):
-                result.append((yield from f))
-            return result
+                result.append((yield From(f)))
+            raise Return(result)
 
         fut = asyncio.Task(runner(), loop=self.loop)
         self.loop.run_until_complete(fut)
         result = fut.result()
-        self.assertEqual(set(result), {'ham', 'spam'})
+        self.assertEqual(set(result), set(('ham', 'spam')))
         self.assertEqual(len(result), 2)
 
     def test_sleep(self):
@@ -1098,9 +1106,9 @@ class TaskTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def sleeper(dt, arg):
-            yield from asyncio.sleep(dt/2, loop=loop)
-            res = yield from asyncio.sleep(dt/2, arg, loop=loop)
-            return res
+            yield From(asyncio.sleep(dt/2, loop=loop))
+            res = yield From(asyncio.sleep(dt/2, arg, loop=loop))
+            raise Return(res)
 
         t = asyncio.Task(sleeper(0.1, 'yeah'), loop=loop)
         loop.run_until_complete(t)
@@ -1120,22 +1128,21 @@ class TaskTests(test_utils.TestCase):
         t = asyncio.Task(asyncio.sleep(10.0, 'yeah', loop=loop),
                          loop=loop)
 
-        handle = None
+        non_local = {'handle': None}
         orig_call_later = loop.call_later
 
         def call_later(delay, callback, *args):
-            nonlocal handle
-            handle = orig_call_later(delay, callback, *args)
-            return handle
+            non_local['handle'] = orig_call_later(delay, callback, *args)
+            return non_local['handle']
 
         loop.call_later = call_later
         test_utils.run_briefly(loop)
 
-        self.assertFalse(handle._cancelled)
+        self.assertFalse(non_local['handle']._cancelled)
 
         t.cancel()
         test_utils.run_briefly(loop)
-        self.assertTrue(handle._cancelled)
+        self.assertTrue(non_local['handle']._cancelled)
 
     def test_task_cancel_sleeping_task(self):
 
@@ -1150,18 +1157,18 @@ class TaskTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def sleep(dt):
-            yield from asyncio.sleep(dt, loop=loop)
+            yield From(asyncio.sleep(dt, loop=loop))
 
         @asyncio.coroutine
         def doit():
             sleeper = asyncio.Task(sleep(5000), loop=loop)
             loop.call_later(0.1, sleeper.cancel)
             try:
-                yield from sleeper
+                yield From(sleeper)
             except asyncio.CancelledError:
-                return 'cancelled'
+                raise Return('cancelled')
             else:
-                return 'slept in'
+                raise Return('slept in')
 
         doer = doit()
         self.assertEqual(loop.run_until_complete(doer), 'cancelled')
@@ -1172,7 +1179,7 @@ class TaskTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def coro():
-            yield from fut
+            yield From(fut)
 
         task = asyncio.Task(coro(), loop=self.loop)
         test_utils.run_briefly(self.loop)
@@ -1200,9 +1207,9 @@ class TaskTests(test_utils.TestCase):
     def test_step_result(self):
         @asyncio.coroutine
         def notmuch():
-            yield None
-            yield 1
-            return 'ko'
+            yield From(None)
+            yield From(1)
+            raise Return('ko')
 
         self.assertRaises(
             RuntimeError, self.loop.run_until_complete, notmuch())
@@ -1213,19 +1220,18 @@ class TaskTests(test_utils.TestCase):
         class Fut(asyncio.Future):
             def __init__(self, *args, **kwds):
                 self.cb_added = False
-                super().__init__(*args, **kwds)
+                super(Fut, self).__init__(*args, **kwds)
 
             def add_done_callback(self, fn):
                 self.cb_added = True
-                super().add_done_callback(fn)
+                super(Fut, self).add_done_callback(fn)
 
         fut = Fut(loop=self.loop)
-        result = None
+        non_local = {'result': None}
 
         @asyncio.coroutine
         def wait_for_future():
-            nonlocal result
-            result = yield from fut
+            non_local['result'] = yield From(fut)
 
         t = asyncio.Task(wait_for_future(), loop=self.loop)
         test_utils.run_briefly(self.loop)
@@ -1234,7 +1240,7 @@ class TaskTests(test_utils.TestCase):
         res = object()
         fut.set_result(res)
         test_utils.run_briefly(self.loop)
-        self.assertIs(res, result)
+        self.assertIs(res, non_local['result'])
         self.assertTrue(t.done())
         self.assertIsNone(t.result())
 
@@ -1260,24 +1266,24 @@ class TaskTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def sleeper():
-            yield from asyncio.sleep(10, loop=loop)
+            yield From(asyncio.sleep(10, loop=loop))
 
         base_exc = BaseException()
 
         @asyncio.coroutine
         def notmutch():
             try:
-                yield from sleeper()
+                yield From(sleeper())
             except asyncio.CancelledError:
                 raise base_exc
 
         task = asyncio.Task(notmutch(), loop=loop)
-        test_utils.run_briefly(loop)
+        test_utils.run_briefly(loop, 2)
 
         task.cancel()
         self.assertFalse(task.done())
 
-        self.assertRaises(BaseException, test_utils.run_briefly, loop)
+        self.assertRaises(BaseException, test_utils.run_briefly, loop, 2)
 
         self.assertTrue(task.done())
         self.assertFalse(task.cancelled())
@@ -1379,7 +1385,7 @@ class TaskTests(test_utils.TestCase):
         @asyncio.coroutine
         def coro1(loop):
             self.assertTrue(asyncio.Task.current_task(loop=loop) is task1)
-            yield from fut1
+            yield From(fut1)
             self.assertTrue(asyncio.Task.current_task(loop=loop) is task1)
             fut2.set_result(True)
 
@@ -1387,7 +1393,7 @@ class TaskTests(test_utils.TestCase):
         def coro2(loop):
             self.assertTrue(asyncio.Task.current_task(loop=loop) is task2)
             fut1.set_result(True)
-            yield from fut2
+            yield From(fut2)
             self.assertTrue(asyncio.Task.current_task(loop=loop) is task2)
 
         task1 = asyncio.Task(coro1(self.loop), loop=self.loop)
@@ -1402,54 +1408,50 @@ class TaskTests(test_utils.TestCase):
 
     def test_yield_future_passes_cancel(self):
         # Cancelling outer() cancels inner() cancels waiter.
-        proof = 0
+        non_local = {'proof': 0}
         waiter = asyncio.Future(loop=self.loop)
 
         @asyncio.coroutine
         def inner():
-            nonlocal proof
             try:
-                yield from waiter
+                yield From(waiter)
             except asyncio.CancelledError:
-                proof += 1
+                non_local['proof'] += 1
                 raise
             else:
                 self.fail('got past sleep() in inner()')
 
         @asyncio.coroutine
         def outer():
-            nonlocal proof
             try:
-                yield from inner()
+                yield From(inner())
             except asyncio.CancelledError:
-                proof += 100  # Expect this path.
+                non_local['proof'] += 100  # Expect this path.
             else:
-                proof += 10
+                non_local['proof'] += 10
 
         f = asyncio.ensure_future(outer(), loop=self.loop)
         test_utils.run_briefly(self.loop)
         f.cancel()
         self.loop.run_until_complete(f)
-        self.assertEqual(proof, 101)
+        self.assertEqual(non_local['proof'], 101)
         self.assertTrue(waiter.cancelled())
 
     def test_yield_wait_does_not_shield_cancel(self):
         # Cancelling outer() makes wait() return early, leaves inner()
         # running.
-        proof = 0
+        non_local = {'proof': 0}
         waiter = asyncio.Future(loop=self.loop)
 
         @asyncio.coroutine
         def inner():
-            nonlocal proof
-            yield from waiter
-            proof += 1
+            yield From(waiter)
+            non_local['proof'] += 1
 
         @asyncio.coroutine
         def outer():
-            nonlocal proof
-            d, p = yield from asyncio.wait([inner()], loop=self.loop)
-            proof += 100
+            d, p = yield From(asyncio.wait([inner()], loop=self.loop))
+            non_local['proof'] += 100
 
         f = asyncio.ensure_future(outer(), loop=self.loop)
         test_utils.run_briefly(self.loop)
@@ -1458,7 +1460,7 @@ class TaskTests(test_utils.TestCase):
             asyncio.CancelledError, self.loop.run_until_complete, f)
         waiter.set_result(None)
         test_utils.run_briefly(self.loop)
-        self.assertEqual(proof, 1)
+        self.assertEqual(non_local['proof'], 1)
 
     def test_shield_result(self):
         inner = asyncio.Future(loop=self.loop)
@@ -1492,20 +1494,18 @@ class TaskTests(test_utils.TestCase):
 
     def test_shield_effect(self):
         # Cancelling outer() does not affect inner().
-        proof = 0
+        non_local = {'proof': 0}
         waiter = asyncio.Future(loop=self.loop)
 
         @asyncio.coroutine
         def inner():
-            nonlocal proof
-            yield from waiter
-            proof += 1
+            yield From(waiter)
+            non_local['proof'] += 1
 
         @asyncio.coroutine
         def outer():
-            nonlocal proof
-            yield from asyncio.shield(inner(), loop=self.loop)
-            proof += 100
+            yield From(asyncio.shield(inner(), loop=self.loop))
+            non_local['proof'] += 100
 
         f = asyncio.ensure_future(outer(), loop=self.loop)
         test_utils.run_briefly(self.loop)
@@ -1514,7 +1514,7 @@ class TaskTests(test_utils.TestCase):
             self.loop.run_until_complete(f)
         waiter.set_result(None)
         test_utils.run_briefly(self.loop)
-        self.assertEqual(proof, 1)
+        self.assertEqual(non_local['proof'], 1)
 
     def test_shield_gather(self):
         child1 = asyncio.Future(loop=self.loop)
@@ -1583,7 +1583,7 @@ class TaskTests(test_utils.TestCase):
             def coro():
                 # The actual coroutine.
                 self.assertTrue(gen.gi_running)
-                yield from fut
+                yield From(fut)
 
             # A completed Future used to run the coroutine.
             fut = asyncio.Future(loop=self.loop)
@@ -1622,7 +1622,8 @@ class TaskTests(test_utils.TestCase):
             def t2():
                 f = asyncio.Future(loop=self.loop)
                 asyncio.Task(t3(f), loop=self.loop)
-                return (yield from f)
+                res = yield From(f)
+                raise Return(res)
 
             @asyncio.coroutine
             def t3(f):
@@ -1635,15 +1636,16 @@ class TaskTests(test_utils.TestCase):
     def test_yield_from_corowrapper_send(self):
         def foo():
             a = yield
-            return a
+            raise Return(a)
 
         def call(arg):
-            cw = asyncio.coroutines.CoroWrapper(foo())
+            cw = asyncio.coroutines.CoroWrapper(foo(), foo)
             cw.send(None)
             try:
                 cw.send(arg)
             except StopIteration as ex:
-                return ex.args[0]
+                ex.raised = True
+                return ex.value
             else:
                 raise AssertionError('StopIteration was expected')
 
@@ -1652,18 +1654,19 @@ class TaskTests(test_utils.TestCase):
 
     def test_corowrapper_weakref(self):
         wd = weakref.WeakValueDictionary()
-        def foo(): yield from []
-        cw = asyncio.coroutines.CoroWrapper(foo())
+        def foo():
+            yield From(None)
+        cw = asyncio.coroutines.CoroWrapper(foo(), foo)
         wd['cw'] = cw  # Would fail without __weakref__ slot.
         cw.gen = None  # Suppress warning from __del__.
 
-    @unittest.skipUnless(PY34,
-                         'need python 3.4 or later')
+    @test_utils.skipUnless(PY34,
+                           'need python 3.4 or later')
     def test_log_destroyed_pending_task(self):
         @asyncio.coroutine
         def kill_me(loop):
             future = asyncio.Future(loop=loop)
-            yield from future
+            yield From(future)
             # at this point, the only reference to kill_me() task is
             # the Task._wakeup() method in future._callbacks
             raise Exception("code never reached")
@@ -1675,7 +1678,7 @@ class TaskTests(test_utils.TestCase):
         # schedule the task
         coro = kill_me(self.loop)
         task = asyncio.ensure_future(coro, loop=self.loop)
-        self.assertEqual(asyncio.Task.all_tasks(loop=self.loop), {task})
+        self.assertEqual(asyncio.Task.all_tasks(loop=self.loop), set((task,)))
 
         # execute the task so it waits for future
         self.loop._run_once()
@@ -1706,7 +1709,7 @@ class TaskTests(test_utils.TestCase):
             def coro_noop():
                 pass
 
-        tb_filename = __file__
+        tb_filename = sys._getframe().f_code.co_filename
         tb_lineno = sys._getframe().f_lineno + 2
         # create a coroutine object but don't use it
         coro_noop()
@@ -1715,14 +1718,14 @@ class TaskTests(test_utils.TestCase):
         self.assertTrue(m_log.error.called)
         message = m_log.error.call_args[0][0]
         func_filename, func_lineno = test_utils.get_function_source(coro_noop)
-
-        regex = (r'^<CoroWrapper %s\(?\)? .* at %s:%s, .*> '
+        coro_name = getattr(coro_noop, '__qualname__', coro_noop.__name__)
+        regex = (r'^<CoroWrapper %s\(\) .* at %s:%s, .*> '
                     r'was never yielded from\n'
                  r'Coroutine object created at \(most recent call last\):\n'
                  r'.*\n'
                  r'  File "%s", line %s, in test_coroutine_never_yielded\n'
                  r'    coro_noop\(\)$'
-                 % (re.escape(coro_noop.__qualname__),
+                 % (re.escape(coro_name),
                     re.escape(func_filename), func_lineno,
                     re.escape(tb_filename), tb_lineno))
 
@@ -1748,7 +1751,7 @@ class TaskTests(test_utils.TestCase):
         def blocking_coroutine():
             fut = asyncio.Future(loop=loop)
             # Block: fut result is never set
-            yield from fut
+            yield From(fut)
 
         task = loop.create_task(blocking_coroutine())
 
@@ -1842,29 +1845,18 @@ class GatherTestsBase:
         aio_path = os.path.dirname(os.path.dirname(asyncio.__file__))
 
         code = '\n'.join((
-            'import asyncio.coroutines',
-            'print(asyncio.coroutines._DEBUG)'))
+            'import trollius.coroutines',
+            'print(trollius.coroutines._DEBUG)'))
 
-        # Test with -E to not fail if the unit test was run with
-        # PYTHONASYNCIODEBUG set to a non-empty string
-        sts, stdout, stderr = assert_python_ok('-E', '-c', code,
-                                               PYTHONPATH=aio_path)
+        sts, stdout, stderr = support.assert_python_ok('-c', code,
+                                                       TROLLIUSDEBUG='',
+                                                       PYTHONPATH=aio_path)
         self.assertEqual(stdout.rstrip(), b'False')
 
-        sts, stdout, stderr = assert_python_ok('-c', code,
-                                               PYTHONASYNCIODEBUG='',
-                                               PYTHONPATH=aio_path)
-        self.assertEqual(stdout.rstrip(), b'False')
-
-        sts, stdout, stderr = assert_python_ok('-c', code,
-                                               PYTHONASYNCIODEBUG='1',
-                                               PYTHONPATH=aio_path)
+        sts, stdout, stderr = support.assert_python_ok('-c', code,
+                                                       TROLLIUSDEBUG='1',
+                                                       PYTHONPATH=aio_path)
         self.assertEqual(stdout.rstrip(), b'True')
-
-        sts, stdout, stderr = assert_python_ok('-E', '-c', code,
-                                               PYTHONASYNCIODEBUG='1',
-                                               PYTHONPATH=aio_path)
-        self.assertEqual(stdout.rstrip(), b'False')
 
 
 class FutureGatherTests(GatherTestsBase, test_utils.TestCase):
@@ -1954,7 +1946,7 @@ class FutureGatherTests(GatherTestsBase, test_utils.TestCase):
 class CoroutineGatherTests(GatherTestsBase, test_utils.TestCase):
 
     def setUp(self):
-        super().setUp()
+        super(CoroutineGatherTests, self).setUp()
         asyncio.set_event_loop(self.one_loop)
 
     def wrap_futures(self, *futures):
@@ -1962,7 +1954,8 @@ class CoroutineGatherTests(GatherTestsBase, test_utils.TestCase):
         for fut in futures:
             @asyncio.coroutine
             def coro(fut=fut):
-                return (yield from fut)
+                result = (yield From(fut))
+                raise Return(result)
             coros.append(coro())
         return coros
 
@@ -1994,37 +1987,35 @@ class CoroutineGatherTests(GatherTestsBase, test_utils.TestCase):
 
     def test_cancellation_broadcast(self):
         # Cancelling outer() cancels all children.
-        proof = 0
+        non_local = {'proof': 0}
         waiter = asyncio.Future(loop=self.one_loop)
 
         @asyncio.coroutine
         def inner():
-            nonlocal proof
-            yield from waiter
-            proof += 1
+            yield From(waiter)
+            non_local['proof'] += 1
 
         child1 = asyncio.ensure_future(inner(), loop=self.one_loop)
         child2 = asyncio.ensure_future(inner(), loop=self.one_loop)
-        gatherer = None
+        non_local['gatherer'] = None
 
         @asyncio.coroutine
         def outer():
-            nonlocal proof, gatherer
-            gatherer = asyncio.gather(child1, child2, loop=self.one_loop)
-            yield from gatherer
-            proof += 100
+            non_local['gatherer'] = asyncio.gather(child1, child2, loop=self.one_loop)
+            yield From(non_local['gatherer'])
+            non_local['proof'] += 100
 
         f = asyncio.ensure_future(outer(), loop=self.one_loop)
         test_utils.run_briefly(self.one_loop)
         self.assertTrue(f.cancel())
         with self.assertRaises(asyncio.CancelledError):
             self.one_loop.run_until_complete(f)
-        self.assertFalse(gatherer.cancel())
+        self.assertFalse(non_local['gatherer'].cancel())
         self.assertTrue(waiter.cancelled())
         self.assertTrue(child1.cancelled())
         self.assertTrue(child2.cancelled())
         test_utils.run_briefly(self.one_loop)
-        self.assertEqual(proof, 0)
+        self.assertEqual(non_local['proof'], 0)
 
     def test_exception_marking(self):
         # Test for the first line marked "Mark exception retrieved."
@@ -2039,7 +2030,7 @@ class CoroutineGatherTests(GatherTestsBase, test_utils.TestCase):
 
         @asyncio.coroutine
         def outer():
-            yield from asyncio.gather(inner(a), inner(b), loop=self.one_loop)
+            yield From(asyncio.gather(inner(a), inner(b), loop=self.one_loop))
 
         f = asyncio.ensure_future(outer(), loop=self.one_loop)
         test_utils.run_briefly(self.one_loop)

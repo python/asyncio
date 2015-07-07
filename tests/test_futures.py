@@ -1,19 +1,23 @@
 """Tests for futures.py."""
 
-import concurrent.futures
+try:
+    import concurrent.futures
+except ImportError:
+    concurrent = None
 import re
 import sys
 import threading
 import unittest
-from unittest import mock
 
 import trollius as asyncio
+from trollius import compat
+from trollius import test_support as support
 from trollius import test_utils
-try:
-    from test import support
-except ImportError:
-    from trollius import test_support as support
+from trollius.test_utils import mock
 
+
+def get_thread_ident():
+    return threading.current_thread().ident
 
 def _fakefunc(f):
     return f
@@ -42,10 +46,6 @@ class FutureTests(test_utils.TestCase):
         asyncio.set_event_loop(self.loop)
         f = asyncio.Future()
         self.assertIs(f._loop, self.loop)
-
-    def test_constructor_positional(self):
-        # Make sure Future doesn't accept a positional argument
-        self.assertRaises(TypeError, asyncio.Future, 42)
 
     def test_cancel(self):
         f = asyncio.Future(loop=self.loop)
@@ -90,24 +90,6 @@ class FutureTests(test_utils.TestCase):
         f.set_exception(RuntimeError)
         self.assertIsInstance(f.exception(), RuntimeError)
 
-    def test_yield_from_twice(self):
-        f = asyncio.Future(loop=self.loop)
-
-        def fixture():
-            yield 'A'
-            x = yield from f
-            yield 'B', x
-            y = yield from f
-            yield 'C', y
-
-        g = fixture()
-        self.assertEqual(next(g), 'A')  # yield 'A'.
-        self.assertEqual(next(g), f)  # First yield from f.
-        f.set_result(42)
-        self.assertEqual(next(g), ('B', 42))  # yield 'B', x.
-        # The second "yield from f" does not yield f.
-        self.assertEqual(next(g), ('C', 42))  # yield 'C', y.
-
     def test_future_repr(self):
         self.loop.set_debug(True)
         f_pending_debug = asyncio.Future(loop=self.loop)
@@ -140,7 +122,8 @@ class FutureTests(test_utils.TestCase):
 
         def func_repr(func):
             filename, lineno = test_utils.get_function_source(func)
-            text = '%s() at %s:%s' % (func.__qualname__, filename, lineno)
+            func_name = getattr(func, '__qualname__', func.__name__)
+            text = '%s() at %s:%s' % (func_name, filename, lineno)
             return re.escape(text)
 
         f_one_callbacks = asyncio.Future(loop=self.loop)
@@ -234,10 +217,13 @@ class FutureTests(test_utils.TestCase):
 
     @mock.patch('trollius.base_events.logger')
     def test_tb_logger_exception_unretrieved(self, m_log):
+        self.loop.set_debug(True)
+        asyncio.set_event_loop(self.loop)
         fut = asyncio.Future(loop=self.loop)
         fut.set_exception(RuntimeError('boom'))
         del fut
         test_utils.run_briefly(self.loop)
+        support.gc_collect()
         self.assertTrue(m_log.error.called)
 
     @mock.patch('trollius.base_events.logger')
@@ -256,32 +242,35 @@ class FutureTests(test_utils.TestCase):
         del fut
         self.assertFalse(m_log.error.called)
 
+    @test_utils.skipIf(concurrent is None, 'need concurrent.futures')
     def test_wrap_future(self):
 
         def run(arg):
-            return (arg, threading.get_ident())
+            return (arg, get_thread_ident())
         ex = concurrent.futures.ThreadPoolExecutor(1)
         f1 = ex.submit(run, 'oi')
         f2 = asyncio.wrap_future(f1, loop=self.loop)
         res, ident = self.loop.run_until_complete(f2)
         self.assertIsInstance(f2, asyncio.Future)
         self.assertEqual(res, 'oi')
-        self.assertNotEqual(ident, threading.get_ident())
+        self.assertNotEqual(ident, get_thread_ident())
 
     def test_wrap_future_future(self):
         f1 = asyncio.Future(loop=self.loop)
         f2 = asyncio.wrap_future(f1)
         self.assertIs(f1, f2)
 
+    @test_utils.skipIf(concurrent is None, 'need concurrent.futures')
     @mock.patch('trollius.futures.events')
     def test_wrap_future_use_global_loop(self, m_events):
         def run(arg):
-            return (arg, threading.get_ident())
+            return (arg, get_thread_ident())
         ex = concurrent.futures.ThreadPoolExecutor(1)
         f1 = ex.submit(run, 'oi')
         f2 = asyncio.wrap_future(f1)
         self.assertIs(m_events.get_event_loop.return_value, f2._loop)
 
+    @test_utils.skipIf(concurrent is None, 'need concurrent.futures')
     def test_wrap_future_cancel(self):
         f1 = concurrent.futures.Future()
         f2 = asyncio.wrap_future(f1, loop=self.loop)
@@ -290,6 +279,7 @@ class FutureTests(test_utils.TestCase):
         self.assertTrue(f1.cancelled())
         self.assertTrue(f2.cancelled())
 
+    @test_utils.skipIf(concurrent is None, 'need concurrent.futures')
     def test_wrap_future_cancel2(self):
         f1 = concurrent.futures.Future()
         f2 = asyncio.wrap_future(f1, loop=self.loop)
@@ -367,10 +357,14 @@ class FutureTests(test_utils.TestCase):
                          r'MemoryError$'
                          ).format(filename=re.escape(frame[0]),
                                   lineno=frame[1])
-            else:
+            elif compat.PY3:
                 regex = (r'^Future/Task exception was never retrieved\n'
                          r'Traceback \(most recent call last\):\n'
                          r'.*\n'
+                         r'MemoryError$'
+                         )
+            else:
+                regex = (r'^Future/Task exception was never retrieved\n'
                          r'MemoryError$'
                          )
             m_log.error.assert_called_once_with(mock.ANY, exc_info=False)

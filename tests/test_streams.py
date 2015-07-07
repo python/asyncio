@@ -1,18 +1,21 @@
 """Tests for streams.py."""
 
 import gc
+import io
 import os
 import socket
 import sys
 import unittest
-from unittest import mock
 try:
     import ssl
 except ImportError:
     ssl = None
 
 import trollius as asyncio
+from trollius import Return, From
+from trollius import compat
 from trollius import test_utils
+from trollius.test_utils import mock
 
 
 class StreamReaderTests(test_utils.TestCase):
@@ -29,7 +32,7 @@ class StreamReaderTests(test_utils.TestCase):
 
         self.loop.close()
         gc.collect()
-        super().tearDown()
+        super(StreamReaderTests, self).tearDown()
 
     @mock.patch('trollius.streams.events')
     def test_ctor_global_loop(self, m_events):
@@ -53,7 +56,7 @@ class StreamReaderTests(test_utils.TestCase):
                                                loop=self.loop)
             self._basetest_open_connection(conn_fut)
 
-    @unittest.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
+    @test_utils.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
     def test_open_unix_connection(self):
         with test_utils.run_test_unix_server() as httpd:
             conn_fut = asyncio.open_unix_connection(httpd.address,
@@ -72,7 +75,7 @@ class StreamReaderTests(test_utils.TestCase):
 
         writer.close()
 
-    @unittest.skipIf(ssl is None, 'No ssl module')
+    @test_utils.skipIf(ssl is None, 'No ssl module')
     def test_open_connection_no_loop_ssl(self):
         with test_utils.run_test_server(use_ssl=True) as httpd:
             conn_fut = asyncio.open_connection(
@@ -82,8 +85,8 @@ class StreamReaderTests(test_utils.TestCase):
 
             self._basetest_open_connection_no_loop_ssl(conn_fut)
 
-    @unittest.skipIf(ssl is None, 'No ssl module')
-    @unittest.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
+    @test_utils.skipIf(ssl is None, 'No ssl module')
+    @test_utils.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
     def test_open_unix_connection_no_loop_ssl(self):
         with test_utils.run_test_unix_server(use_ssl=True) as httpd:
             conn_fut = asyncio.open_unix_connection(
@@ -109,7 +112,7 @@ class StreamReaderTests(test_utils.TestCase):
                                                loop=self.loop)
             self._basetest_open_connection_error(conn_fut)
 
-    @unittest.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
+    @test_utils.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
     def test_open_unix_connection_error(self):
         with test_utils.run_test_unix_server() as httpd:
             conn_fut = asyncio.open_unix_connection(httpd.address,
@@ -413,7 +416,7 @@ class StreamReaderTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def set_err():
-            stream.set_exception(ValueError())
+            self.loop.call_soon(stream.set_exception, ValueError())
 
         t1 = asyncio.Task(stream.readline(), loop=self.loop)
         t2 = asyncio.Task(set_err(), loop=self.loop)
@@ -444,7 +447,7 @@ class StreamReaderTests(test_utils.TestCase):
 
             @asyncio.coroutine
             def handle_client(self, client_reader, client_writer):
-                data = yield from client_reader.readline()
+                data = yield From(client_reader.readline())
                 client_writer.write(data)
 
             def start(self):
@@ -483,14 +486,14 @@ class StreamReaderTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def client(addr):
-            reader, writer = yield from asyncio.open_connection(
-                *addr, loop=self.loop)
+            reader, writer = yield From(asyncio.open_connection(
+                *addr, loop=self.loop))
             # send a line
             writer.write(b"hello world!\n")
             # read it back
-            msgback = yield from reader.readline()
+            msgback = yield From(reader.readline())
             writer.close()
-            return msgback
+            raise Return(msgback)
 
         # test the server variant with a coroutine as client handler
         server = MyServer(self.loop)
@@ -508,7 +511,7 @@ class StreamReaderTests(test_utils.TestCase):
         server.stop()
         self.assertEqual(msg, b"hello world!\n")
 
-    @unittest.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
+    @test_utils.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
     def test_start_unix_server(self):
 
         class MyServer:
@@ -520,7 +523,7 @@ class StreamReaderTests(test_utils.TestCase):
 
             @asyncio.coroutine
             def handle_client(self, client_reader, client_writer):
-                data = yield from client_reader.readline()
+                data = yield From(client_reader.readline())
                 client_writer.write(data)
 
             def start(self):
@@ -551,14 +554,14 @@ class StreamReaderTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def client(path):
-            reader, writer = yield from asyncio.open_unix_connection(
-                path, loop=self.loop)
+            reader, writer = yield From(asyncio.open_unix_connection(
+                path, loop=self.loop))
             # send a line
             writer.write(b"hello world!\n")
             # read it back
-            msgback = yield from reader.readline()
+            msgback = yield From(reader.readline())
             writer.close()
-            return msgback
+            raise Return(msgback)
 
         # test the server variant with a coroutine as client handler
         with test_utils.unix_socket_path() as path:
@@ -578,7 +581,7 @@ class StreamReaderTests(test_utils.TestCase):
             server.stop()
             self.assertEqual(msg, b"hello world!\n")
 
-    @unittest.skipIf(sys.platform == 'win32', "Don't have pipes")
+    @test_utils.skipIf(sys.platform == 'win32', "Don't have pipes")
     def test_read_all_from_pipe_reader(self):
         # See Tulip issue 168.  This test is derived from the example
         # subprocess_attach_read_pipe.py, but we configure the
@@ -595,7 +598,7 @@ os.close(fd)
         rfd, wfd = os.pipe()
         args = [sys.executable, '-c', code, str(wfd)]
 
-        pipe = open(rfd, 'rb', 0)
+        pipe = io.open(rfd, 'rb', 0)
         reader = asyncio.StreamReader(loop=self.loop, limit=1)
         protocol = asyncio.StreamReaderProtocol(reader, loop=self.loop)
         transport, _ = self.loop.run_until_complete(
@@ -605,9 +608,10 @@ os.close(fd)
         watcher.attach_loop(self.loop)
         try:
             asyncio.set_child_watcher(watcher)
-            create = asyncio.create_subprocess_exec(*args,
-                                                    pass_fds={wfd},
-                                                    loop=self.loop)
+            kw = {'loop': self.loop}
+            if compat.PY3:
+                kw['pass_fds'] = set((wfd,))
+            create = asyncio.create_subprocess_exec(*args, **kw)
             proc = self.loop.run_until_complete(create)
             self.loop.run_until_complete(proc.wait())
         finally:

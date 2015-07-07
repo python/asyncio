@@ -4,19 +4,17 @@ import socket
 import sys
 import unittest
 import warnings
-from unittest import mock
 
 if sys.platform != 'win32':
-    raise unittest.SkipTest('Windows only')
-
-import _winapi
+    from trollius.test_utils import SkipTest
+    raise SkipTest('Windows only')
 
 from trollius import _overlapped
+from trollius import py33_winapi as _winapi
+from trollius import test_support as support
+from trollius import test_utils
 from trollius import windows_utils
-try:
-    from test import support
-except ImportError:
-    from trollius import test_support as support
+from trollius.test_utils import mock
 
 
 class WinsocketpairTests(unittest.TestCase):
@@ -31,13 +29,14 @@ class WinsocketpairTests(unittest.TestCase):
         ssock, csock = windows_utils.socketpair()
         self.check_winsocketpair(ssock, csock)
 
-    @unittest.skipUnless(support.IPV6_ENABLED, 'IPv6 not supported or enabled')
+    @test_utils.skipUnless(support.IPV6_ENABLED,
+                           'IPv6 not supported or enabled')
     def test_winsocketpair_ipv6(self):
         ssock, csock = windows_utils.socketpair(family=socket.AF_INET6)
         self.check_winsocketpair(ssock, csock)
 
-    @unittest.skipIf(hasattr(socket, 'socketpair'),
-                     'socket.socketpair is available')
+    @test_utils.skipIf(hasattr(socket, 'socketpair'),
+                       'socket.socketpair is available')
     @mock.patch('trollius.windows_utils.socket')
     def test_winsocketpair_exc(self, m_socket):
         m_socket.AF_INET = socket.AF_INET
@@ -56,8 +55,8 @@ class WinsocketpairTests(unittest.TestCase):
         self.assertRaises(ValueError,
                           windows_utils.socketpair, proto=1)
 
-    @unittest.skipIf(hasattr(socket, 'socketpair'),
-                     'socket.socketpair is available')
+    @test_utils.skipIf(hasattr(socket, 'socketpair'),
+                       'socket.socketpair is available')
     @mock.patch('trollius.windows_utils.socket')
     def test_winsocketpair_close(self, m_socket):
         m_socket.AF_INET = socket.AF_INET
@@ -84,7 +83,7 @@ class PipeTests(unittest.TestCase):
             ERROR_IO_INCOMPLETE = 996
             try:
                 ov1.getresult()
-            except OSError as e:
+            except WindowsError as e:
                 self.assertEqual(e.winerror, ERROR_IO_INCOMPLETE)
             else:
                 raise RuntimeError('expected ERROR_IO_INCOMPLETE')
@@ -94,15 +93,15 @@ class PipeTests(unittest.TestCase):
             self.assertEqual(ov2.error, 0)
 
             ov2.WriteFile(h2, b"hello")
-            self.assertIn(ov2.error, {0, _winapi.ERROR_IO_PENDING})
+            self.assertIn(ov2.error, set((0, _winapi.ERROR_IO_PENDING)))
 
-            res = _winapi.WaitForMultipleObjects([ov2.event], False, 100)
+            res = _winapi.WaitForSingleObject(ov2.event, 100)
             self.assertEqual(res, _winapi.WAIT_OBJECT_0)
 
             self.assertFalse(ov1.pending)
             self.assertEqual(ov1.error, ERROR_IO_INCOMPLETE)
             self.assertFalse(ov2.pending)
-            self.assertIn(ov2.error, {0, _winapi.ERROR_IO_PENDING})
+            self.assertIn(ov2.error, set((0, _winapi.ERROR_IO_PENDING)))
             self.assertEqual(ov1.getresult(), b"hello")
         finally:
             _winapi.CloseHandle(h1)
@@ -117,7 +116,8 @@ class PipeTests(unittest.TestCase):
 
         # check garbage collection of p closes handle
         with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", "",  ResourceWarning)
+            if sys.version_info >= (3, 4):
+                warnings.filterwarnings("ignore", "",  ResourceWarning)
             del p
             support.gc_collect()
         try:

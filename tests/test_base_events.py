@@ -8,23 +8,16 @@ import sys
 import threading
 import time
 import unittest
-from unittest import mock
 
 import trollius as asyncio
+from trollius import Return, From
 from trollius import base_events
 from trollius import constants
 from trollius import test_utils
-try:
-    from test import support
-except ImportError:
-    from trollius import test_support as support
-try:
-    from test.support.script_helper import assert_python_ok
-except ImportError:
-    try:
-        from test.script_helper import assert_python_ok
-    except ImportError:
-        from trollius.test_support import assert_python_ok
+from trollius.py33_exceptions import BlockingIOError
+from trollius.test_utils import mock
+from trollius.time_monotonic import time_monotonic
+from trollius import test_support as support
 
 
 MOCK_ANY = mock.ANY
@@ -61,6 +54,7 @@ class BaseEventLoopTests(test_utils.TestCase):
             NotImplementedError,
             self.loop._make_write_pipe_transport, m, m)
         gen = self.loop._make_subprocess_transport(m, m, m, m, m, m, m)
+        # self.assertRaises(NotImplementedError, next, iter(gen))
         with self.assertRaises(NotImplementedError):
             gen.send(None)
 
@@ -265,9 +259,9 @@ class BaseEventLoopTests(test_utils.TestCase):
         f.cancel()  # Don't complain about abandoned Future.
 
     def test__run_once(self):
-        h1 = asyncio.TimerHandle(time.monotonic() + 5.0, lambda: True, (),
+        h1 = asyncio.TimerHandle(time_monotonic() + 5.0, lambda: True, (),
                                  self.loop)
-        h2 = asyncio.TimerHandle(time.monotonic() + 10.0, lambda: True, (),
+        h2 = asyncio.TimerHandle(time_monotonic() + 10.0, lambda: True, (),
                                  self.loop)
 
         h1.cancel()
@@ -314,23 +308,21 @@ class BaseEventLoopTests(test_utils.TestCase):
         self.assertEqual(logging.DEBUG, m_logger.log.call_args[0][0])
 
     def test__run_once_schedule_handle(self):
-        handle = None
-        processed = False
+        non_local = {'handle': None, 'processed': False}
 
         def cb(loop):
-            nonlocal processed, handle
-            processed = True
-            handle = loop.call_soon(lambda: True)
+            non_local['processed'] = True
+            non_local['handle'] = loop.call_soon(lambda: True)
 
-        h = asyncio.TimerHandle(time.monotonic() - 1, cb, (self.loop,),
+        h = asyncio.TimerHandle(time_monotonic() - 1, cb, (self.loop,),
                                 self.loop)
 
         self.loop._process_events = mock.Mock()
         self.loop._scheduled.append(h)
         self.loop._run_once()
 
-        self.assertTrue(processed)
-        self.assertEqual([handle], list(self.loop._ready))
+        self.assertTrue(non_local['processed'])
+        self.assertEqual([non_local['handle']], list(self.loop._ready))
 
     def test__run_once_cancelled_event_cleanup(self):
         self.loop._process_events = mock.Mock()
@@ -497,10 +489,12 @@ class BaseEventLoopTests(test_utils.TestCase):
 
     def test_default_exc_handler_coro(self):
         self.loop._process_events = mock.Mock()
+        self.loop.set_debug(True)
+        asyncio.set_event_loop(self.loop)
 
         @asyncio.coroutine
         def zero_error_coro():
-            yield from asyncio.sleep(0.01, loop=self.loop)
+            yield From(asyncio.sleep(0.01, loop=self.loop))
             1/0
 
         # Test Future.__del__
@@ -509,6 +503,7 @@ class BaseEventLoopTests(test_utils.TestCase):
             fut.add_done_callback(lambda *args: self.loop.stop())
             self.loop.run_forever()
             fut = None # Trigger Future.__del__ or futures._TracebackLogger
+            support.gc_collect()
             if PY34:
                 # Future.__del__ in Python 3.4 logs error with
                 # an actual exception context
@@ -582,7 +577,7 @@ class BaseEventLoopTests(test_utils.TestCase):
                 exc_info=(AttributeError, MOCK_ANY, MOCK_ANY))
 
     def test_default_exc_handler_broken(self):
-        _context = None
+        contexts = []
 
         class Loop(base_events.BaseEventLoop):
 
@@ -590,8 +585,7 @@ class BaseEventLoopTests(test_utils.TestCase):
             _process_events = mock.Mock()
 
             def default_exception_handler(self, context):
-                nonlocal _context
-                _context = context
+                contexts.append(context)
                 # Simulates custom buggy "default_exception_handler"
                 raise ValueError('spam')
 
@@ -614,7 +608,7 @@ class BaseEventLoopTests(test_utils.TestCase):
         def custom_handler(loop, context):
             raise ValueError('ham')
 
-        _context = None
+        del contexts[:]
         loop.set_exception_handler(custom_handler)
         with mock.patch('trollius.base_events.logger') as log:
             run_loop()
@@ -625,8 +619,9 @@ class BaseEventLoopTests(test_utils.TestCase):
 
             # Check that original context was passed to default
             # exception handler.
-            self.assertIn('context', _context)
-            self.assertIs(type(_context['context']['exception']),
+            context = contexts[0]
+            self.assertIn('context', context)
+            self.assertIs(type(context['context']['exception']),
                           ZeroDivisionError)
 
     def test_set_task_factory_invalid(self):
@@ -667,26 +662,17 @@ class BaseEventLoopTests(test_utils.TestCase):
 
     def test_env_var_debug(self):
         code = '\n'.join((
-            'import asyncio',
-            'loop = asyncio.get_event_loop()',
+            'import trollius',
+            'loop = trollius.get_event_loop()',
             'print(loop.get_debug())'))
 
-        # Test with -E to not fail if the unit test was run with
-        # PYTHONASYNCIODEBUG set to a non-empty string
-        sts, stdout, stderr = assert_python_ok('-E', '-c', code)
+        sts, stdout, stderr = support.assert_python_ok('-c', code,
+                                                       TROLLIUSDEBUG='')
         self.assertEqual(stdout.rstrip(), b'False')
 
-        sts, stdout, stderr = assert_python_ok('-c', code,
-                                               PYTHONASYNCIODEBUG='')
-        self.assertEqual(stdout.rstrip(), b'False')
-
-        sts, stdout, stderr = assert_python_ok('-c', code,
-                                               PYTHONASYNCIODEBUG='1')
+        sts, stdout, stderr = support.assert_python_ok('-c', code,
+                                                       TROLLIUSDEBUG='1')
         self.assertEqual(stdout.rstrip(), b'True')
-
-        sts, stdout, stderr = assert_python_ok('-E', '-c', code,
-                                               PYTHONASYNCIODEBUG='1')
-        self.assertEqual(stdout.rstrip(), b'False')
 
     def test_create_task(self):
         class MyTask(asyncio.Task):
@@ -829,27 +815,29 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def getaddrinfo(*args, **kw):
-            yield from []
-            return [(2, 1, 6, '', ('107.6.106.82', 80)),
-                    (2, 1, 6, '', ('107.6.106.82', 80))]
+            yield From(None)
+            raise Return([(2, 1, 6, '', ('107.6.106.82', 80)),
+                          (2, 1, 6, '', ('107.6.106.82', 80))])
 
         def getaddrinfo_task(*args, **kwds):
             return asyncio.Task(getaddrinfo(*args, **kwds), loop=self.loop)
 
-        idx = -1
-        errors = ['err1', 'err2']
+        non_local = {
+            'idx': -1,
+            'errors': ['err1', 'err2'],
+        }
 
         def _socket(*args, **kw):
-            nonlocal idx, errors
-            idx += 1
-            raise OSError(errors[idx])
+            non_local['idx'] += 1
+            raise socket.error(non_local['errors'][non_local['idx']])
 
+        m_socket.error = socket.error
         m_socket.socket = _socket
 
         self.loop.getaddrinfo = getaddrinfo_task
 
         coro = self.loop.create_connection(MyProto, 'example.com', 80)
-        with self.assertRaises(OSError) as cm:
+        with self.assertRaises(socket.error) as cm:
             self.loop.run_until_complete(coro)
 
         self.assertEqual(str(cm.exception), 'Multiple exceptions: err1, err2')
@@ -859,6 +847,7 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
         # Ensure that the socket is closed on timeout
         sock = mock.Mock()
         m_socket.socket.return_value = sock
+        m_socket.error = socket.error
 
         def getaddrinfo(*args, **kw):
             fut = asyncio.Future(loop=self.loop)
@@ -887,7 +876,7 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
     def test_create_connection_no_getaddrinfo(self):
         @asyncio.coroutine
         def getaddrinfo(*args, **kw):
-            yield from []
+            yield From(None)
 
         def getaddrinfo_task(*args, **kwds):
             return asyncio.Task(getaddrinfo(*args, **kwds), loop=self.loop)
@@ -895,24 +884,24 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
         self.loop.getaddrinfo = getaddrinfo_task
         coro = self.loop.create_connection(MyProto, 'example.com', 80)
         self.assertRaises(
-            OSError, self.loop.run_until_complete, coro)
+            socket.error, self.loop.run_until_complete, coro)
 
     def test_create_connection_connect_err(self):
         @asyncio.coroutine
         def getaddrinfo(*args, **kw):
-            yield from []
-            return [(2, 1, 6, '', ('107.6.106.82', 80))]
+            yield From(None)
+            raise Return([(2, 1, 6, '', ('107.6.106.82', 80))])
 
         def getaddrinfo_task(*args, **kwds):
             return asyncio.Task(getaddrinfo(*args, **kwds), loop=self.loop)
 
         self.loop.getaddrinfo = getaddrinfo_task
         self.loop.sock_connect = mock.Mock()
-        self.loop.sock_connect.side_effect = OSError
+        self.loop.sock_connect.side_effect = socket.error
 
         coro = self.loop.create_connection(MyProto, 'example.com', 80)
         self.assertRaises(
-            OSError, self.loop.run_until_complete, coro)
+            socket.error, self.loop.run_until_complete, coro)
 
     def test_create_connection_multiple(self):
         @asyncio.coroutine
@@ -925,11 +914,11 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
 
         self.loop.getaddrinfo = getaddrinfo_task
         self.loop.sock_connect = mock.Mock()
-        self.loop.sock_connect.side_effect = OSError
+        self.loop.sock_connect.side_effect = socket.error
 
         coro = self.loop.create_connection(
             MyProto, 'example.com', 80, family=socket.AF_INET)
-        with self.assertRaises(OSError):
+        with self.assertRaises(socket.error):
             self.loop.run_until_complete(coro)
 
     @mock.patch('trollius.base_events.socket')
@@ -937,10 +926,11 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
 
         def bind(addr):
             if addr[0] == '0.0.0.1':
-                err = OSError('Err')
+                err = socket.error('Err')
                 err.strerror = 'Err'
                 raise err
 
+        m_socket.error = socket.error
         m_socket.socket.return_value.bind = bind
 
         @asyncio.coroutine
@@ -953,12 +943,12 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
 
         self.loop.getaddrinfo = getaddrinfo_task
         self.loop.sock_connect = mock.Mock()
-        self.loop.sock_connect.side_effect = OSError('Err2')
+        self.loop.sock_connect.side_effect = socket.error('Err2')
 
         coro = self.loop.create_connection(
             MyProto, 'example.com', 80, family=socket.AF_INET,
             local_addr=(None, 8080))
-        with self.assertRaises(OSError) as cm:
+        with self.assertRaises(socket.error) as cm:
             self.loop.run_until_complete(coro)
 
         self.assertTrue(str(cm.exception).startswith('Multiple exceptions: '))
@@ -981,7 +971,7 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
             MyProto, 'example.com', 80, family=socket.AF_INET,
             local_addr=(None, 8080))
         self.assertRaises(
-            OSError, self.loop.run_until_complete, coro)
+            socket.error, self.loop.run_until_complete, coro)
 
     def test_create_connection_ssl_server_hostname_default(self):
         self.loop.getaddrinfo = mock.Mock()
@@ -994,7 +984,9 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
 
         self.loop.getaddrinfo.side_effect = mock_getaddrinfo
         self.loop.sock_connect = mock.Mock()
-        self.loop.sock_connect.return_value = ()
+        f = asyncio.Future(loop=self.loop)
+        f.set_result(())
+        self.loop.sock_connect.return_value = f
         self.loop._make_ssl_transport = mock.Mock()
 
         class _SelectorTransportMock:
@@ -1067,21 +1059,20 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
 
     def test_create_server_empty_host(self):
         # if host is empty string use None instead
-        host = object()
+        non_local = {'host': object()}
 
         @asyncio.coroutine
         def getaddrinfo(*args, **kw):
-            nonlocal host
-            host = args[0]
-            yield from []
+            non_local['host'] = args[0]
+            yield From(None)
 
         def getaddrinfo_task(*args, **kwds):
             return asyncio.Task(getaddrinfo(*args, **kwds), loop=self.loop)
 
         self.loop.getaddrinfo = getaddrinfo_task
         fut = self.loop.create_server(MyProto, '', 0)
-        self.assertRaises(OSError, self.loop.run_until_complete, fut)
-        self.assertIsNone(host)
+        self.assertRaises(socket.error, self.loop.run_until_complete, fut)
+        self.assertIsNone(non_local['host'])
 
     def test_create_server_host_port_sock(self):
         fut = self.loop.create_server(
@@ -1093,18 +1084,25 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
         self.assertRaises(ValueError, self.loop.run_until_complete, fut)
 
     def test_create_server_no_getaddrinfo(self):
-        getaddrinfo = self.loop.getaddrinfo = mock.Mock()
-        getaddrinfo.return_value = []
+        @asyncio.coroutine
+        def getaddrinfo(*args, **kw):
+            raise Return([])
+
+        def getaddrinfo_task(*args, **kwds):
+            return asyncio.Task(getaddrinfo(*args, **kwds), loop=self.loop)
+
+        self.loop.getaddrinfo = getaddrinfo_task
 
         f = self.loop.create_server(MyProto, '0.0.0.0', 0)
-        self.assertRaises(OSError, self.loop.run_until_complete, f)
+        self.assertRaises(socket.error, self.loop.run_until_complete, f)
 
     @mock.patch('trollius.base_events.socket')
     def test_create_server_cant_bind(self, m_socket):
 
-        class Err(OSError):
+        class Err(socket.error):
             strerror = 'error'
 
+        m_socket.error = socket.error
         m_socket.getaddrinfo.return_value = [
             (2, 1, 6, '', ('127.0.0.1', 10100))]
         m_socket.getaddrinfo._is_coroutine = False
@@ -1112,18 +1110,19 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
         m_sock.bind.side_effect = Err
 
         fut = self.loop.create_server(MyProto, '0.0.0.0', 0)
-        self.assertRaises(OSError, self.loop.run_until_complete, fut)
+        self.assertRaises(socket.error, self.loop.run_until_complete, fut)
         self.assertTrue(m_sock.close.called)
 
     @mock.patch('trollius.base_events.socket')
     def test_create_datagram_endpoint_no_addrinfo(self, m_socket):
+        m_socket.error = socket.error
         m_socket.getaddrinfo.return_value = []
         m_socket.getaddrinfo._is_coroutine = False
 
         coro = self.loop.create_datagram_endpoint(
             MyDatagramProto, local_addr=('localhost', 0))
         self.assertRaises(
-            OSError, self.loop.run_until_complete, coro)
+            socket.error, self.loop.run_until_complete, coro)
 
     def test_create_datagram_endpoint_addr_error(self):
         coro = self.loop.create_datagram_endpoint(
@@ -1137,29 +1136,31 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
 
     def test_create_datagram_endpoint_connect_err(self):
         self.loop.sock_connect = mock.Mock()
-        self.loop.sock_connect.side_effect = OSError
+        self.loop.sock_connect.side_effect = socket.error
 
         coro = self.loop.create_datagram_endpoint(
             asyncio.DatagramProtocol, remote_addr=('127.0.0.1', 0))
         self.assertRaises(
-            OSError, self.loop.run_until_complete, coro)
+            socket.error, self.loop.run_until_complete, coro)
 
     @mock.patch('trollius.base_events.socket')
     def test_create_datagram_endpoint_socket_err(self, m_socket):
+        m_socket.error = socket.error
         m_socket.getaddrinfo = socket.getaddrinfo
-        m_socket.socket.side_effect = OSError
+        m_socket.socket.side_effect = socket.error
 
         coro = self.loop.create_datagram_endpoint(
             asyncio.DatagramProtocol, family=socket.AF_INET)
         self.assertRaises(
-            OSError, self.loop.run_until_complete, coro)
+            socket.error, self.loop.run_until_complete, coro)
 
         coro = self.loop.create_datagram_endpoint(
             asyncio.DatagramProtocol, local_addr=('127.0.0.1', 0))
         self.assertRaises(
-            OSError, self.loop.run_until_complete, coro)
+            socket.error, self.loop.run_until_complete, coro)
 
-    @unittest.skipUnless(support.IPV6_ENABLED, 'IPv6 not supported or enabled')
+    @test_utils.skipUnless(support.IPV6_ENABLED,
+                           'IPv6 not supported or enabled')
     def test_create_datagram_endpoint_no_matching_family(self):
         coro = self.loop.create_datagram_endpoint(
             asyncio.DatagramProtocol,
@@ -1169,12 +1170,13 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
 
     @mock.patch('trollius.base_events.socket')
     def test_create_datagram_endpoint_setblk_err(self, m_socket):
-        m_socket.socket.return_value.setblocking.side_effect = OSError
+        m_socket.error = socket.error
+        m_socket.socket.return_value.setblocking.side_effect = socket.error
 
         coro = self.loop.create_datagram_endpoint(
             asyncio.DatagramProtocol, family=socket.AF_INET)
         self.assertRaises(
-            OSError, self.loop.run_until_complete, coro)
+            socket.error, self.loop.run_until_complete, coro)
         self.assertTrue(
             m_socket.socket.return_value.close.called)
 
@@ -1185,10 +1187,11 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
 
     @mock.patch('trollius.base_events.socket')
     def test_create_datagram_endpoint_cant_bind(self, m_socket):
-        class Err(OSError):
+        class Err(socket.error):
             pass
 
         m_socket.AF_INET6 = socket.AF_INET6
+        m_socket.error = socket.error
         m_socket.getaddrinfo = socket.getaddrinfo
         m_sock = m_socket.socket.return_value = mock.Mock()
         m_sock.bind.side_effect = Err
@@ -1210,7 +1213,7 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
     def test_accept_connection_exception(self, m_log):
         sock = mock.Mock()
         sock.fileno.return_value = 10
-        sock.accept.side_effect = OSError(errno.EMFILE, 'Too many open files')
+        sock.accept.side_effect = socket.error(errno.EMFILE, 'Too many open files')
         self.loop.remove_reader = mock.Mock()
         self.loop.call_later = mock.Mock()
 
@@ -1250,7 +1253,7 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def stop_loop_coro(loop):
-            yield from ()
+            yield From(None)
             loop.stop()
 
         asyncio.set_event_loop(self.loop)
@@ -1260,7 +1263,8 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
         # slow callback
         self.loop.call_soon(stop_loop_cb, self.loop)
         self.loop.run_forever()
-        fmt, *args = m_logger.warning.call_args[0]
+        fmt = m_logger.warning.call_args[0][0]
+        args = m_logger.warning.call_args[0][1:]
         self.assertRegex(fmt % tuple(args),
                          "^Executing <Handle.*stop_loop_cb.*> "
                          "took .* seconds$")
@@ -1268,7 +1272,8 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
         # slow task
         asyncio.ensure_future(stop_loop_coro(self.loop), loop=self.loop)
         self.loop.run_forever()
-        fmt, *args = m_logger.warning.call_args[0]
+        fmt = m_logger.warning.call_args[0][0]
+        args = m_logger.warning.call_args[0][1:]
         self.assertRegex(fmt % tuple(args),
                          "^Executing <Task.*stop_loop_coro.*> "
                          "took .* seconds$")

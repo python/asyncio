@@ -1,7 +1,6 @@
 """Tests for asyncio/sslproto.py."""
 
 import unittest
-from unittest import mock
 try:
     import ssl
 except ImportError:
@@ -10,6 +9,7 @@ except ImportError:
 import trollius as asyncio
 from trollius import sslproto
 from trollius import test_utils
+from trollius.test_utils import mock
 
 
 @unittest.skipIf(ssl is None, 'No ssl module')

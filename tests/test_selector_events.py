@@ -2,22 +2,39 @@
 
 import errno
 import socket
+import sys
 import unittest
-from unittest import mock
 try:
     import ssl
 except ImportError:
     ssl = None
+else:
+    from trollius.py3_ssl import SSLWantReadError, SSLWantWriteError
 
 import trollius as asyncio
+from trollius.py33_exceptions import (
+    BlockingIOError, InterruptedError,
+    ConnectionResetError, ConnectionRefusedError)
 from trollius import selectors
 from trollius import test_utils
 from trollius.selector_events import BaseSelectorEventLoop
-from trollius.selector_events import _SelectorTransport
-from trollius.selector_events import _SelectorSslTransport
-from trollius.selector_events import _SelectorSocketTransport
 from trollius.selector_events import _SelectorDatagramTransport
+from trollius.selector_events import _SelectorSocketTransport
+from trollius.selector_events import _SelectorSslTransport
+from trollius.selector_events import _SelectorTransport
+from trollius.selector_events import _SSL_REQUIRES_SELECT
+from trollius.test_utils import mock
 
+
+if sys.version_info >= (3,):
+    UNICODE_STR = 'unicode'
+else:
+    UNICODE_STR = unicode('unicode')
+    try:
+        memoryview
+    except NameError:
+        # Python 2.6
+        memoryview = buffer
 
 MOCK_ANY = mock.ANY
 
@@ -900,7 +917,7 @@ class SelectorSocketTransportTests(test_utils.TestCase):
 
         transport = self.socket_transport()
         transport.write(data)
-        self.sock.send.assert_called_with(data)
+        self.sock.send.assert_called_with(b'data')
 
     def test_write_no_data(self):
         transport = self.socket_transport()
@@ -1112,7 +1129,7 @@ class SelectorSocketTransportTests(test_utils.TestCase):
         tr.close()
 
 
-@unittest.skipIf(ssl is None, 'No ssl module')
+@test_utils.skipIf(ssl is None, 'No ssl module')
 class SelectorSslTransportTests(test_utils.TestCase):
 
     def setUp(self):
@@ -1150,13 +1167,13 @@ class SelectorSslTransportTests(test_utils.TestCase):
 
     def test_on_handshake_reader_retry(self):
         self.loop.set_debug(False)
-        self.sslsock.do_handshake.side_effect = ssl.SSLWantReadError
+        self.sslsock.do_handshake.side_effect = SSLWantReadError
         transport = self.ssl_transport()
         self.loop.assert_reader(1, transport._on_handshake, None)
 
     def test_on_handshake_writer_retry(self):
         self.loop.set_debug(False)
-        self.sslsock.do_handshake.side_effect = ssl.SSLWantWriteError
+        self.sslsock.do_handshake.side_effect = SSLWantWriteError
         transport = self.ssl_transport()
         self.loop.assert_writer(1, transport._on_handshake, None)
 
@@ -1234,7 +1251,7 @@ class SelectorSslTransportTests(test_utils.TestCase):
 
     def test_write_str(self):
         transport = self._make_one()
-        self.assertRaises(TypeError, transport.write, 'str')
+        self.assertRaises(TypeError, transport.write, UNICODE_STR)
 
     def test_write_closing(self):
         transport = self._make_one()
@@ -1255,6 +1272,7 @@ class SelectorSslTransportTests(test_utils.TestCase):
         transport.write(b'data')
         m_log.warning.assert_called_with('socket.send() raised exception.')
 
+    @test_utils.skipIf(_SSL_REQUIRES_SELECT, 'buggy ssl with the workaround')
     def test_read_ready_recv(self):
         self.sslsock.recv.return_value = b'data'
         transport = self._make_one()
@@ -1276,6 +1294,7 @@ class SelectorSslTransportTests(test_utils.TestCase):
         self.loop.add_writer.assert_called_with(
             transport._sock_fd, transport._write_ready)
 
+    @test_utils.skipIf(_SSL_REQUIRES_SELECT, 'buggy ssl with the workaround')
     def test_read_ready_recv_eof(self):
         self.sslsock.recv.return_value = b''
         transport = self._make_one()
@@ -1284,6 +1303,7 @@ class SelectorSslTransportTests(test_utils.TestCase):
         transport.close.assert_called_with()
         self.protocol.eof_received.assert_called_with()
 
+    @test_utils.skipIf(_SSL_REQUIRES_SELECT, 'buggy ssl with the workaround')
     def test_read_ready_recv_conn_reset(self):
         err = self.sslsock.recv.side_effect = ConnectionResetError()
         transport = self._make_one()
@@ -1292,8 +1312,9 @@ class SelectorSslTransportTests(test_utils.TestCase):
             transport._read_ready()
         transport._force_close.assert_called_with(err)
 
+    @test_utils.skipIf(_SSL_REQUIRES_SELECT, 'buggy ssl with the workaround')
     def test_read_ready_recv_retry(self):
-        self.sslsock.recv.side_effect = ssl.SSLWantReadError
+        self.sslsock.recv.side_effect = SSLWantReadError
         transport = self._make_one()
         transport._read_ready()
         self.assertTrue(self.sslsock.recv.called)
@@ -1307,10 +1328,11 @@ class SelectorSslTransportTests(test_utils.TestCase):
         transport._read_ready()
         self.assertFalse(self.protocol.data_received.called)
 
+    @test_utils.skipIf(_SSL_REQUIRES_SELECT, 'buggy ssl with the workaround')
     def test_read_ready_recv_write(self):
         self.loop.remove_reader = mock.Mock()
         self.loop.add_writer = mock.Mock()
-        self.sslsock.recv.side_effect = ssl.SSLWantWriteError
+        self.sslsock.recv.side_effect = SSLWantWriteError
         transport = self._make_one()
         transport._read_ready()
         self.assertFalse(self.protocol.data_received.called)
@@ -1320,6 +1342,7 @@ class SelectorSslTransportTests(test_utils.TestCase):
         self.loop.add_writer.assert_called_with(
             transport._sock_fd, transport._write_ready)
 
+    @test_utils.skipIf(_SSL_REQUIRES_SELECT, 'buggy ssl with the workaround')
     def test_read_ready_recv_exc(self):
         err = self.sslsock.recv.side_effect = OSError()
         transport = self._make_one()
@@ -1383,7 +1406,7 @@ class SelectorSslTransportTests(test_utils.TestCase):
         transport = self._make_one()
         transport._buffer = list_to_buffer([b'data'])
 
-        self.sslsock.send.side_effect = ssl.SSLWantWriteError
+        self.sslsock.send.side_effect = SSLWantWriteError
         transport._write_ready()
         self.assertEqual(list_to_buffer([b'data']), transport._buffer)
 
@@ -1396,7 +1419,7 @@ class SelectorSslTransportTests(test_utils.TestCase):
         transport._buffer = list_to_buffer([b'data'])
 
         self.loop.remove_writer = mock.Mock()
-        self.sslsock.send.side_effect = ssl.SSLWantReadError
+        self.sslsock.send.side_effect = SSLWantReadError
         transport._write_ready()
         self.assertFalse(self.protocol.data_received.called)
         self.assertTrue(transport._write_wants_read)
@@ -1457,7 +1480,7 @@ class SelectorSslTransportTests(test_utils.TestCase):
         self.assertFalse(self.protocol.connection_made.called)
         self.assertFalse(self.protocol.connection_lost.called)
 
-    @unittest.skipIf(ssl is None, 'No SSL support')
+    @test_utils.skipIf(ssl is None, 'No SSL support')
     def test_server_hostname(self):
         self.ssl_transport(server_hostname='localhost')
         self.sslcontext.wrap_socket.assert_called_with(
@@ -1465,7 +1488,7 @@ class SelectorSslTransportTests(test_utils.TestCase):
             server_hostname='localhost')
 
 
-class SelectorSslWithoutSslTransportTests(unittest.TestCase):
+class SelectorSslWithoutSslTransportTests(test_utils.TestCase):
 
     @mock.patch('trollius.selector_events.ssl', None)
     def test_ssl_transport_requires_ssl_module(self):
@@ -1550,7 +1573,7 @@ class SelectorDatagramTransportTests(test_utils.TestCase):
         transport.sendto(data, ('0.0.0.0', 1234))
         self.assertTrue(self.sock.sendto.called)
         self.assertEqual(
-            self.sock.sendto.call_args[0], (data, ('0.0.0.0', 1234)))
+            self.sock.sendto.call_args[0], (b'data', ('0.0.0.0', 1234)))
 
     def test_sendto_no_data(self):
         transport = self.datagram_transport()
@@ -1655,7 +1678,7 @@ class SelectorDatagramTransportTests(test_utils.TestCase):
 
     def test_sendto_str(self):
         transport = self.datagram_transport()
-        self.assertRaises(TypeError, transport.sendto, 'str', ())
+        self.assertRaises(TypeError, transport.sendto, UNICODE_STR, ())
 
     def test_sendto_connected_addr(self):
         transport = self.datagram_transport(address=('0.0.0.0', 1))

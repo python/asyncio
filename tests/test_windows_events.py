@@ -1,17 +1,18 @@
+from trollius import test_utils
 import os
 import sys
 import unittest
-from unittest import mock
 
 if sys.platform != 'win32':
-    raise unittest.SkipTest('Windows only')
-
-import _winapi
+    raise test_utils.SkipTest('Windows only')
 
 import trollius as asyncio
+from trollius import Return, From
 from trollius import _overlapped
-from trollius import test_utils
+from trollius import py33_winapi as _winapi
 from trollius import windows_events
+from trollius.py33_exceptions import PermissionError, FileNotFoundError
+from trollius.test_utils import mock
 
 
 class UpperProto(asyncio.Protocol):
@@ -58,11 +59,11 @@ class ProactorTests(test_utils.TestCase):
         ADDRESS = r'\\.\pipe\_test_pipe-%s' % os.getpid()
 
         with self.assertRaises(FileNotFoundError):
-            yield from self.loop.create_pipe_connection(
-                asyncio.Protocol, ADDRESS)
+            yield From(self.loop.create_pipe_connection(
+                asyncio.Protocol, ADDRESS))
 
-        [server] = yield from self.loop.start_serving_pipe(
-            UpperProto, ADDRESS)
+        [server] = yield From(self.loop.start_serving_pipe(
+            UpperProto, ADDRESS))
         self.assertIsInstance(server, windows_events.PipeServer)
 
         clients = []
@@ -70,27 +71,27 @@ class ProactorTests(test_utils.TestCase):
             stream_reader = asyncio.StreamReader(loop=self.loop)
             protocol = asyncio.StreamReaderProtocol(stream_reader,
                                                     loop=self.loop)
-            trans, proto = yield from self.loop.create_pipe_connection(
-                lambda: protocol, ADDRESS)
+            trans, proto = yield From(self.loop.create_pipe_connection(
+                lambda: protocol, ADDRESS))
             self.assertIsInstance(trans, asyncio.Transport)
             self.assertEqual(protocol, proto)
             clients.append((stream_reader, trans))
 
         for i, (r, w) in enumerate(clients):
-            w.write('lower-{}\n'.format(i).encode())
+            w.write('lower-{0}\n'.format(i).encode())
 
         for i, (r, w) in enumerate(clients):
-            response = yield from r.readline()
-            self.assertEqual(response, 'LOWER-{}\n'.format(i).encode())
+            response = yield From(r.readline())
+            self.assertEqual(response, 'LOWER-{0}\n'.format(i).encode())
             w.close()
 
         server.close()
 
         with self.assertRaises(FileNotFoundError):
-            yield from self.loop.create_pipe_connection(
-                asyncio.Protocol, ADDRESS)
+            yield From(self.loop.create_pipe_connection(
+                asyncio.Protocol, ADDRESS))
 
-        return 'done'
+        raise Return('done')
 
     def test_connect_pipe_cancel(self):
         exc = OSError()

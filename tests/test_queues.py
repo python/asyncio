@@ -1,10 +1,11 @@
 """Tests for queues.py"""
 
 import unittest
-from unittest import mock
 
 import trollius as asyncio
+from trollius import Return, From
 from trollius import test_utils
+from trollius.test_utils import mock
 
 
 class _QueueTestBase(test_utils.TestCase):
@@ -32,7 +33,7 @@ class QueueBasicTests(_QueueTestBase):
 
         q = asyncio.Queue(loop=loop)
         self.assertTrue(fn(q).startswith('<Queue'), fn(q))
-        id_is_present = hex(id(q)) in fn(q)
+        id_is_present = ("%x" % id(q)) in fn(q)
         self.assertEqual(expect_id, id_is_present)
 
         @asyncio.coroutine
@@ -41,7 +42,7 @@ class QueueBasicTests(_QueueTestBase):
             # Start a task that waits to get.
             asyncio.Task(q.get(), loop=loop)
             # Let it start waiting.
-            yield from asyncio.sleep(0.1, loop=loop)
+            yield From(asyncio.sleep(0.1, loop=loop))
             self.assertTrue('_getters[1]' in fn(q))
             # resume q.get coroutine to finish generator
             q.put_nowait(0)
@@ -55,7 +56,7 @@ class QueueBasicTests(_QueueTestBase):
             # Start a task that waits to put.
             asyncio.Task(q.put(2), loop=loop)
             # Let it start waiting.
-            yield from asyncio.sleep(0.1, loop=loop)
+            yield From(asyncio.sleep(0.1, loop=loop))
             self.assertTrue('_putters[1]' in fn(q))
             # resume q.put coroutine to finish generator
             q.get_nowait()
@@ -127,21 +128,22 @@ class QueueBasicTests(_QueueTestBase):
         @asyncio.coroutine
         def putter():
             for i in range(3):
-                yield from q.put(i)
+                yield From(q.put(i))
                 have_been_put.append(i)
-            return True
+            raise Return(True)
 
         @asyncio.coroutine
         def test():
             t = asyncio.Task(putter(), loop=loop)
-            yield from asyncio.sleep(0.01, loop=loop)
+            yield From(None) # one extra iteration for the putter coroutine
+            yield From(asyncio.sleep(0.01, loop=loop))
 
             # The putter is blocked after putting two items.
             self.assertEqual([0, 1], have_been_put)
             self.assertEqual(0, q.get_nowait())
 
             # Let the putter resume and put last item.
-            yield from asyncio.sleep(0.01, loop=loop)
+            yield From(asyncio.sleep(0.01, loop=loop))
             self.assertEqual([0, 1, 2], have_been_put)
             self.assertEqual(1, q.get_nowait())
             self.assertEqual(2, q.get_nowait())
@@ -161,7 +163,8 @@ class QueueGetTests(_QueueTestBase):
 
         @asyncio.coroutine
         def queue_get():
-            return (yield from q.get())
+            result = (yield From(q.get()))
+            raise Return(result)
 
         res = self.loop.run_until_complete(queue_get())
         self.assertEqual(1, res)
@@ -189,25 +192,24 @@ class QueueGetTests(_QueueTestBase):
 
         q = asyncio.Queue(loop=loop)
         started = asyncio.Event(loop=loop)
-        finished = False
+        non_local = {'finished': False}
 
         @asyncio.coroutine
         def queue_get():
-            nonlocal finished
             started.set()
-            res = yield from q.get()
-            finished = True
-            return res
+            res = yield From(q.get())
+            non_local['finished'] = True
+            raise Return(res)
 
         @asyncio.coroutine
         def queue_put():
             loop.call_later(0.01, q.put_nowait, 1)
             queue_get_task = asyncio.Task(queue_get(), loop=loop)
-            yield from started.wait()
-            self.assertFalse(finished)
-            res = yield from queue_get_task
-            self.assertTrue(finished)
-            return res
+            yield From(started.wait())
+            self.assertFalse(non_local['finished'])
+            res = yield From(queue_get_task)
+            self.assertTrue(non_local['finished'])
+            raise Return(res)
 
         res = loop.run_until_complete(queue_put())
         self.assertEqual(1, res)
@@ -237,14 +239,16 @@ class QueueGetTests(_QueueTestBase):
 
         @asyncio.coroutine
         def queue_get():
-            return (yield from asyncio.wait_for(q.get(), 0.051, loop=loop))
+            result = (yield From(asyncio.wait_for(q.get(), 0.051, loop=loop)))
+            raise Return(result)
 
         @asyncio.coroutine
         def test():
             get_task = asyncio.Task(queue_get(), loop=loop)
-            yield from asyncio.sleep(0.01, loop=loop)  # let the task start
+            yield From(asyncio.sleep(0.01, loop=loop))  # let the task start
             q.put_nowait(1)
-            return (yield from get_task)
+            result = (yield From(get_task))
+            raise Return(result)
 
         self.assertEqual(1, loop.run_until_complete(test()))
         self.assertAlmostEqual(0.06, loop.time())
@@ -280,12 +284,13 @@ class QueuePutTests(_QueueTestBase):
         @asyncio.coroutine
         def queue_put():
             # No maxsize, won't block.
-            yield from q.put(1)
+            yield From(q.put(1))
 
         self.loop.run_until_complete(queue_put())
 
     def test_blocking_put_wait(self):
 
+        @asyncio.coroutine
         def gen():
             when = yield
             self.assertAlmostEqual(0.01, when)
@@ -295,24 +300,24 @@ class QueuePutTests(_QueueTestBase):
 
         q = asyncio.Queue(maxsize=1, loop=loop)
         started = asyncio.Event(loop=loop)
-        finished = False
+        non_local = {'finished': False}
 
         @asyncio.coroutine
         def queue_put():
-            nonlocal finished
             started.set()
-            yield from q.put(1)
-            yield from q.put(2)
-            finished = True
+            yield From(q.put(1))
+            yield From(q.put(2))
+            non_local['finished'] = True
 
         @asyncio.coroutine
         def queue_get():
-            loop.call_later(0.01, q.get_nowait)
             queue_put_task = asyncio.Task(queue_put(), loop=loop)
-            yield from started.wait()
-            self.assertFalse(finished)
-            yield from queue_put_task
-            self.assertTrue(finished)
+            yield From(None)
+            loop.call_later(0.01, q.get_nowait)
+            yield From(started.wait())
+            self.assertFalse(non_local['finished'])
+            yield From(queue_put_task)
+            self.assertTrue(non_local['finished'])
 
         loop.run_until_complete(queue_get())
         self.assertAlmostEqual(0.01, loop.time())
@@ -337,8 +342,8 @@ class QueuePutTests(_QueueTestBase):
         q = asyncio.Queue(maxsize=1.3, loop=self.loop)
         @asyncio.coroutine
         def queue_put():
-            yield from q.put(1)
-            yield from q.put(2)
+            yield From(q.put(1))
+            yield From(q.put(2))
             self.assertTrue(q.full())
         self.loop.run_until_complete(queue_put())
 
@@ -347,12 +352,13 @@ class QueuePutTests(_QueueTestBase):
 
         @asyncio.coroutine
         def queue_put():
-            yield from q.put(1)
-            return True
+            yield From(q.put(1))
+            raise Return(True)
 
         @asyncio.coroutine
         def test():
-            return (yield from q.get())
+            result = (yield From(q.get()))
+            raise Return(result)
 
         t = asyncio.Task(queue_put(), loop=self.loop)
         self.assertEqual(1, self.loop.run_until_complete(test()))
@@ -408,7 +414,7 @@ class PriorityQueueTests(_QueueTestBase):
         self.assertEqual([1, 2, 3], items)
 
 
-class _QueueJoinTestMixin:
+class _QueueJoinTestMixin(object):
 
     q_class = None
 
@@ -421,7 +427,7 @@ class _QueueJoinTestMixin:
         for i in range(100):
             q.put_nowait(i)
 
-        accumulator = 0
+        non_local = {'accumulator': 0}
 
         # Two workers get items from the queue and call task_done after each.
         # Join the queue and assert all items have been processed.
@@ -429,11 +435,9 @@ class _QueueJoinTestMixin:
 
         @asyncio.coroutine
         def worker():
-            nonlocal accumulator
-
             while running:
-                item = yield from q.get()
-                accumulator += item
+                item = yield From(q.get())
+                non_local['accumulator'] += item
                 q.task_done()
 
         @asyncio.coroutine
@@ -441,11 +445,11 @@ class _QueueJoinTestMixin:
             tasks = [asyncio.Task(worker(), loop=self.loop)
                      for index in range(2)]
 
-            yield from q.join()
-            return tasks
+            yield From(q.join())
+            raise Return(tasks)
 
         tasks = self.loop.run_until_complete(test())
-        self.assertEqual(sum(range(100)), accumulator)
+        self.assertEqual(sum(range(100)), non_local['accumulator'])
 
         # close running generators
         running = False
@@ -461,8 +465,8 @@ class _QueueJoinTestMixin:
 
         @asyncio.coroutine
         def join():
-            yield from q.join()
-            yield from q.join()
+            yield From(q.join())
+            yield From(q.join())
 
         self.loop.run_until_complete(join())
 

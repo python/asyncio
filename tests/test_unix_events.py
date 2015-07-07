@@ -1,6 +1,7 @@
 """Tests for unix_events.py."""
 
 import collections
+import contextlib
 import errno
 import io
 import os
@@ -11,7 +12,6 @@ import sys
 import tempfile
 import threading
 import unittest
-from unittest import mock
 
 if sys.platform == 'win32':
     raise unittest.SkipTest('UNIX only')
@@ -21,6 +21,8 @@ import trollius as asyncio
 from trollius import log
 from trollius import test_utils
 from trollius import unix_events
+from trollius.py33_exceptions import BlockingIOError, ChildProcessError
+from trollius.test_utils import mock
 
 
 MOCK_ANY = mock.ANY
@@ -35,7 +37,7 @@ def close_pipe_transport(transport):
     transport._pipe = None
 
 
-@unittest.skipUnless(signal, 'Signals are not supported')
+@test_utils.skipUnless(signal, 'Signals are not supported')
 class SelectorEventLoopSignalTests(test_utils.TestCase):
 
     def setUp(self):
@@ -76,7 +78,7 @@ class SelectorEventLoopSignalTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def simple_coroutine():
-            yield from []
+            yield None
 
         # callback must not be a coroutine function
         coro_func = simple_coroutine
@@ -756,7 +758,7 @@ class UnixWritePipeTransportTests(test_utils.TestCase):
         self.assertFalse(self.protocol.connection_lost.called)
 
 
-class AbstractChildWatcherTests(unittest.TestCase):
+class AbstractChildWatcherTests(test_utils.TestCase):
 
     def test_not_implemented(self):
         f = mock.Mock()
@@ -775,7 +777,7 @@ class AbstractChildWatcherTests(unittest.TestCase):
             NotImplementedError, watcher.__exit__, f, f, f)
 
 
-class BaseChildWatcherTests(unittest.TestCase):
+class BaseChildWatcherTests(test_utils.TestCase):
 
     def test_not_implemented(self):
         f = mock.Mock()
@@ -845,19 +847,27 @@ class ChildWatcherTestsMixin:
 
     def waitpid_mocks(func):
         def wrapped_func(self):
-            def patch(target, wrapper):
-                return mock.patch(target, wraps=wrapper,
-                                  new_callable=mock.Mock)
+            exit_stack = []
 
-            with patch('os.WTERMSIG', self.WTERMSIG) as m_WTERMSIG, \
-                 patch('os.WEXITSTATUS', self.WEXITSTATUS) as m_WEXITSTATUS, \
-                 patch('os.WIFSIGNALED', self.WIFSIGNALED) as m_WIFSIGNALED, \
-                 patch('os.WIFEXITED', self.WIFEXITED) as m_WIFEXITED, \
-                 patch('os.waitpid', self.waitpid) as m_waitpid:
+            def patch(target, wrapper):
+                m = mock.patch(target, wraps=wrapper)
+                exit_stack.append(m)
+                return m.__enter__()
+
+            m_waitpid = patch('os.waitpid', self.waitpid)
+            m_WIFEXITED = patch('os.WIFEXITED', self.WIFEXITED)
+            m_WIFSIGNALED = patch('os.WIFSIGNALED', self.WIFSIGNALED)
+            m_WEXITSTATUS = patch('os.WEXITSTATUS', self.WEXITSTATUS)
+            m_WTERMSIG = patch('os.WTERMSIG', self.WTERMSIG)
+            try:
                 func(self, WaitPidMocks(m_waitpid,
                                         m_WIFEXITED, m_WIFSIGNALED,
                                         m_WEXITSTATUS, m_WTERMSIG,
                                         ))
+            finally:
+                for obj in reversed(exit_stack):
+                    obj.__exit__(None, None, None)
+
         return wrapped_func
 
     @waitpid_mocks
@@ -1330,17 +1340,18 @@ class ChildWatcherTestsMixin:
         callback1 = mock.Mock()
         callback2 = mock.Mock()
 
-        with self.ignore_warnings, self.watcher:
-            self.running = True
-            # child 1 terminates
-            self.add_zombie(591, 7)
-            # an unknown child terminates
-            self.add_zombie(593, 17)
+        with self.ignore_warnings:
+            with self.watcher:
+                self.running = True
+                # child 1 terminates
+                self.add_zombie(591, 7)
+                # an unknown child terminates
+                self.add_zombie(593, 17)
 
-            self.watcher._sig_chld()
+                self.watcher._sig_chld()
 
-            self.watcher.add_child_handler(591, callback1)
-            self.watcher.add_child_handler(592, callback2)
+                self.watcher.add_child_handler(591, callback1)
+                self.watcher.add_child_handler(592, callback2)
 
         callback1.assert_called_once_with(591, 7)
         self.assertFalse(callback2.called)
@@ -1359,15 +1370,15 @@ class ChildWatcherTestsMixin:
         self.loop = self.new_test_loop()
         patch = mock.patch.object
 
-        with patch(old_loop, "remove_signal_handler") as m_old_remove, \
-             patch(self.loop, "add_signal_handler") as m_new_add:
+        with patch(old_loop, "remove_signal_handler") as m_old_remove:
+             with patch(self.loop, "add_signal_handler") as m_new_add:
 
-            self.watcher.attach_loop(self.loop)
+                self.watcher.attach_loop(self.loop)
 
-            m_old_remove.assert_called_once_with(
-                signal.SIGCHLD)
-            m_new_add.assert_called_once_with(
-                signal.SIGCHLD, self.watcher._sig_chld)
+                m_old_remove.assert_called_once_with(
+                    signal.SIGCHLD)
+                m_new_add.assert_called_once_with(
+                    signal.SIGCHLD, self.watcher._sig_chld)
 
         # child terminates
         self.running = False
@@ -1479,7 +1490,7 @@ class FastChildWatcherTests (ChildWatcherTestsMixin, test_utils.TestCase):
         return asyncio.FastChildWatcher()
 
 
-class PolicyTests(unittest.TestCase):
+class PolicyTests(test_utils.TestCase):
 
     def create_policy(self):
         return asyncio.DefaultEventLoopPolicy()

@@ -4,22 +4,17 @@ import random
 import signal
 import sys
 from time import sleep
-import unittest
-import unittest.mock
-try:
-    from test import support
-except ImportError:
-    from trollius import test_support as support
-try:
-    from time import monotonic as time
-except ImportError:
-    from time import time as time
 try:
     import resource
 except ImportError:
     resource = None
+
 from trollius import selectors
+from trollius import test_support as support
+from trollius import test_utils
+from trollius.test_utils import mock
 from trollius.test_utils import socketpair
+from trollius.time_monotonic import time_monotonic as time
 
 
 def find_ready_matching(ready, flag):
@@ -30,7 +25,7 @@ def find_ready_matching(ready, flag):
     return match
 
 
-class BaseSelectorTestCase(unittest.TestCase):
+class BaseSelectorTestCase(test_utils.TestCase):
 
     def make_socketpair(self):
         rd, wr = socketpair()
@@ -91,7 +86,7 @@ class BaseSelectorTestCase(unittest.TestCase):
         s.unregister(r)
         s.unregister(w)
 
-    @unittest.skipUnless(os.name == 'posix', "requires posix")
+    @test_utils.skipUnless(os.name == 'posix', "requires posix")
     def test_unregister_after_fd_close_and_reuse(self):
         s = self.SELECTOR()
         self.addCleanup(s.close)
@@ -151,8 +146,8 @@ class BaseSelectorTestCase(unittest.TestCase):
 
         # modify use a shortcut
         d3 = object()
-        s.register = unittest.mock.Mock()
-        s.unregister = unittest.mock.Mock()
+        s.register = mock.Mock()
+        s.unregister = mock.Mock()
 
         s.modify(rd, selectors.EVENT_READ, d3)
         self.assertFalse(s.register.called)
@@ -304,8 +299,8 @@ class BaseSelectorTestCase(unittest.TestCase):
 
         self.assertEqual(bufs, [MSG] * NUM_SOCKETS)
 
-    @unittest.skipIf(sys.platform == 'win32',
-                     'select.select() cannot be used with empty fd sets')
+    @test_utils.skipIf(sys.platform == 'win32',
+                       'select.select() cannot be used with empty fd sets')
     def test_empty_select(self):
         s = self.SELECTOR()
         self.addCleanup(s.close)
@@ -337,8 +332,8 @@ class BaseSelectorTestCase(unittest.TestCase):
         # Tolerate 2.0 seconds for very slow buildbots
         self.assertTrue(0.8 <= dt <= 2.0, dt)
 
-    @unittest.skipUnless(hasattr(signal, "alarm"),
-                         "signal.alarm() required for this test")
+    @test_utils.skipUnless(hasattr(signal, "alarm"),
+                           "signal.alarm() required for this test")
     def test_select_interrupt(self):
         s = self.SELECTOR()
         self.addCleanup(s.close)
@@ -361,7 +356,7 @@ class ScalableSelectorMixIn:
 
     # see issue #18963 for why it's skipped on older OS X versions
     @support.requires_mac_ver(10, 5)
-    @unittest.skipUnless(resource, "Test needs resource module")
+    @test_utils.skipUnless(resource, "Test needs resource module")
     def test_above_fd_setsize(self):
         # A scalable implementation should have no problem with more than
         # FD_SETSIZE file descriptors. Since we don't know the value, we just
@@ -413,29 +408,29 @@ class SelectSelectorTestCase(BaseSelectorTestCase):
     SELECTOR = selectors.SelectSelector
 
 
-@unittest.skipUnless(hasattr(selectors, 'PollSelector'),
-                     "Test needs selectors.PollSelector")
+@test_utils.skipUnless(hasattr(selectors, 'PollSelector'),
+                       "Test needs selectors.PollSelector")
 class PollSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn):
 
     SELECTOR = getattr(selectors, 'PollSelector', None)
 
 
-@unittest.skipUnless(hasattr(selectors, 'EpollSelector'),
-                     "Test needs selectors.EpollSelector")
+@test_utils.skipUnless(hasattr(selectors, 'EpollSelector'),
+                       "Test needs selectors.EpollSelector")
 class EpollSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn):
 
     SELECTOR = getattr(selectors, 'EpollSelector', None)
 
 
-@unittest.skipUnless(hasattr(selectors, 'KqueueSelector'),
-                     "Test needs selectors.KqueueSelector)")
+@test_utils.skipUnless(hasattr(selectors, 'KqueueSelector'),
+                       "Test needs selectors.KqueueSelector)")
 class KqueueSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn):
 
     SELECTOR = getattr(selectors, 'KqueueSelector', None)
 
 
-@unittest.skipUnless(hasattr(selectors, 'DevpollSelector'),
-                     "Test needs selectors.DevpollSelector")
+@test_utils.skipUnless(hasattr(selectors, 'DevpollSelector'),
+                       "Test needs selectors.DevpollSelector")
 class DevpollSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn):
 
     SELECTOR = getattr(selectors, 'DevpollSelector', None)

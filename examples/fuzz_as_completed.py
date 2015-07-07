@@ -2,26 +2,29 @@
 
 """Fuzz tester for as_completed(), by Glenn Langford."""
 
+from __future__ import print_function
+
 import trollius as asyncio
+from trollius import From, Return
 import itertools
 import random
 import sys
 
 @asyncio.coroutine
 def sleeper(time):
-    yield from asyncio.sleep(time)
-    return time
+    yield From(asyncio.sleep(time))
+    raise Return(time)
 
 @asyncio.coroutine
 def watcher(tasks,delay=False):
     res = []
     for t in asyncio.as_completed(tasks):
-        r = yield from t
+        r = yield From(t)
         res.append(r)
         if delay:
             # simulate processing delay
             process_time = random.random() / 10
-            yield from asyncio.sleep(process_time)
+            yield From(asyncio.sleep(process_time))
     #print(res)
     #assert(sorted(res) == res)
     if sorted(res) != res:

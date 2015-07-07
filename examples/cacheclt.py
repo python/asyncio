@@ -5,6 +5,7 @@ See cachesvr.py for protocol description.
 
 import argparse
 import trollius as asyncio
+from trollius import From, Return
 from trollius import test_utils
 import json
 import logging
@@ -62,24 +63,24 @@ class CacheClient:
 
     @asyncio.coroutine
     def get(self, key):
-        resp = yield from self.request('get', key)
+        resp = yield From(self.request('get', key))
         if resp is None:
-            return None
-        return resp.get('value')
+            raise Return()
+        raise Return(resp.get('value'))
 
     @asyncio.coroutine
     def set(self, key, value):
-        resp = yield from self.request('set', key, value)
+        resp = yield From(self.request('set', key, value))
         if resp is None:
-            return False
-        return resp.get('status') == 'ok'
+            raise Return(False)
+        raise Return(resp.get('status') == 'ok')
 
     @asyncio.coroutine
     def delete(self, key):
-        resp = yield from self.request('delete', key)
+        resp = yield From(self.request('delete', key))
         if resp is None:
-            return False
-        return resp.get('status') == 'ok'
+            raise Return(False)
+        raise Return(resp.get('status') == 'ok')
 
     @asyncio.coroutine
     def request(self, type, key, value=None):
@@ -91,24 +92,25 @@ class CacheClient:
         waiter = asyncio.Future(loop=self.loop)
         if self.initialized:
             try:
-                yield from self.send(payload, waiter)
+                yield From(self.send(payload, waiter))
             except IOError:
                 self.todo.add((payload, waiter))
         else:
             self.todo.add((payload, waiter))
-        return (yield from waiter)
+        result = (yield From(waiter))
+        raise Return(result)
 
     @asyncio.coroutine
     def activity(self):
         backoff = 0
         while True:
             try:
-                self.reader, self.writer = yield from asyncio.open_connection(
-                    self.host, self.port, ssl=self.sslctx, loop=self.loop)
+                self.reader, self.writer = yield From(asyncio.open_connection(
+                    self.host, self.port, ssl=self.sslctx, loop=self.loop))
             except Exception as exc:
                 backoff = min(args.max_backoff, backoff + (backoff//2) + 1)
                 logging.info('Error connecting: %r; sleep %s', exc, backoff)
-                yield from asyncio.sleep(backoff, loop=self.loop)
+                yield From(asyncio.sleep(backoff, loop=self.loop))
                 continue
             backoff = 0
             self.next_id = 0
@@ -118,9 +120,9 @@ class CacheClient:
                 while self.todo:
                     payload, waiter = self.todo.pop()
                     if not waiter.done():
-                        yield from self.send(payload, waiter)
+                        yield From(self.send(payload, waiter))
                 while True:
-                    resp_id, resp = yield from self.process()
+                    resp_id, resp = yield From(self.process())
                     if resp_id in self.pending:
                         payload, waiter = self.pending.pop(resp_id)
                         if not waiter.done():
@@ -143,11 +145,11 @@ class CacheClient:
         self.writer.write(frame.encode('ascii'))
         self.writer.write(payload)
         self.pending[req_id] = payload, waiter
-        yield from self.writer.drain()
+        yield From(self.writer.drain())
 
     @asyncio.coroutine
     def process(self):
-        frame = yield from self.reader.readline()
+        frame = yield From(self.reader.readline())
         if not frame:
             raise EOFError()
         head, tail = frame.split(None, 1)
@@ -156,11 +158,11 @@ class CacheClient:
         if head != b'response':
             raise IOError('Bad frame: %r' % frame)
         resp_id, resp_size = map(int, tail.split())
-        data = yield from self.reader.readexactly(resp_size)
+        data = yield From(self.reader.readexactly(resp_size))
         if len(data) != resp_size:
             raise EOFError()
         resp = json.loads(data.decode('utf8'))
-        return resp_id, resp
+        raise Return(resp_id, resp)
 
 
 def main():
@@ -193,13 +195,13 @@ def testing(label, cache, loop):
     while True:
         logging.info('%s %s', label, '-'*20)
         try:
-            ret = yield from w(cache.set(key, 'hello-%s-world' % label))
+            ret = yield From(w(cache.set(key, 'hello-%s-world' % label)))
             logging.info('%s set %s', label, ret)
-            ret = yield from w(cache.get(key))
+            ret = yield From(w(cache.get(key)))
             logging.info('%s get %s', label, ret)
-            ret = yield from w(cache.delete(key))
+            ret = yield From(w(cache.delete(key)))
             logging.info('%s del %s', label, ret)
-            ret = yield from w(cache.get(key))
+            ret = yield From(w(cache.get(key)))
             logging.info('%s get2 %s', label, ret)
         except asyncio.TimeoutError:
             logging.warn('%s Timeout', label)

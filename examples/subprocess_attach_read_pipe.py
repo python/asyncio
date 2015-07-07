@@ -2,6 +2,7 @@
 """Example showing how to attach a read pipe to a subprocess."""
 import trollius as asyncio
 import os, sys
+from trollius import From
 
 code = """
 import os, sys
@@ -17,16 +18,19 @@ def task():
     rfd, wfd = os.pipe()
     args = [sys.executable, '-c', code, str(wfd)]
 
-    pipe = open(rfd, 'rb', 0)
+    pipe = os.fdopen(rfd, 'rb', 0)
     reader = asyncio.StreamReader(loop=loop)
     protocol = asyncio.StreamReaderProtocol(reader, loop=loop)
-    transport, _ = yield from loop.connect_read_pipe(lambda: protocol, pipe)
+    transport, _ = yield From(loop.connect_read_pipe(lambda: protocol, pipe))
 
-    proc = yield from asyncio.create_subprocess_exec(*args, pass_fds={wfd})
-    yield from proc.wait()
+    kwds = {}
+    if sys.version_info >= (3, 2):
+        kwds['pass_fds'] = (wfd,)
+    proc = yield From(asyncio.create_subprocess_exec(*args, **kwds))
+    yield From(proc.wait())
 
     os.close(wfd)
-    data = yield from reader.read()
+    data = yield From(reader.read())
     print("read = %r" % data.decode())
 
 loop.run_until_complete(task())

@@ -1,13 +1,14 @@
 import trollius as asyncio
+from trollius import From
 
 @asyncio.coroutine
 def echo_server():
-    yield from asyncio.start_server(handle_connection, 'localhost', 8000)
+    yield From(asyncio.start_server(handle_connection, 'localhost', 8000))
 
 @asyncio.coroutine
 def handle_connection(reader, writer):
     while True:
-        data = yield from reader.read(8192)
+        data = yield From(reader.read(8192))
         if not data:
             break
         writer.write(data)

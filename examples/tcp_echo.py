@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """TCP echo server example."""
 import argparse
 import trollius as asyncio

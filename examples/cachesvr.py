@@ -58,6 +58,7 @@ form is returned, but the connection is not closed:
 
 import argparse
 import trollius as asyncio
+from trollius import From
 import json
 import logging
 import os
@@ -104,7 +105,7 @@ class Cache:
         peer = writer.get_extra_info('socket').getpeername()
         logging.info('got a connection from %s', peer)
         try:
-            yield from self.frame_parser(reader, writer)
+            yield From(self.frame_parser(reader, writer))
         except Exception as exc:
             logging.error('error %r from %s', exc, peer)
         else:
@@ -122,13 +123,13 @@ class Cache:
             # if the client doesn't send enough data but doesn't
             # disconnect either.  We add a timeout to each.  (But the
             # timeout should really be implemented by StreamReader.)
-            framing_b = yield from asyncio.wait_for(
+            framing_b = yield From(asyncio.wait_for(
                 reader.readline(),
-                timeout=args.timeout, loop=self.loop)
+                timeout=args.timeout, loop=self.loop))
             if random.random()*100 < args.fail_percent:
                 logging.warn('Inserting random failure')
-                yield from asyncio.sleep(args.fail_sleep*random.random(),
-                                         loop=self.loop)
+                yield From(asyncio.sleep(args.fail_sleep*random.random(),
+                                         loop=self.loop))
                 writer.write(b'error random failure\r\n')
                 break
             logging.debug('framing_b = %r', framing_b)
@@ -151,9 +152,9 @@ class Cache:
                 writer.write(b'error invalid frame parameters\r\n')
                 break
             last_request_id = request_id
-            request_b = yield from asyncio.wait_for(
+            request_b = yield From(asyncio.wait_for(
                 reader.readexactly(byte_count),
-                timeout=args.timeout, loop=self.loop)
+                timeout=args.timeout, loop=self.loop))
             try:
                 request = json.loads(request_b.decode('utf8'))
             except ValueError:
@@ -165,10 +166,10 @@ class Cache:
                 break
             response_b = json.dumps(response).encode('utf8') + b'\r\n'
             byte_count = len(response_b)
-            framing_s = 'response {} {}\r\n'.format(request_id, byte_count)
+            framing_s = 'response {0} {1}\r\n'.format(request_id, byte_count)
             writer.write(framing_s.encode('ascii'))
-            yield from asyncio.sleep(args.resp_sleep*random.random(),
-                                     loop=self.loop)
+            yield From(asyncio.sleep(args.resp_sleep*random.random(),
+                                     loop=self.loop))
             writer.write(response_b)
 
     def handle_request(self, request):
@@ -226,7 +227,7 @@ def main():
         import ssl
         # TODO: take cert/key from args as well.
         here = os.path.join(os.path.dirname(__file__), '..', 'tests')
-        sslctx = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+        sslctx = asyncio.SSLContext(ssl.PROTOCOL_SSLv23)
         sslctx.options |= ssl.OP_NO_SSLv2
         sslctx.load_cert_chain(
             certfile=os.path.join(here, 'ssl_cert.pem'),

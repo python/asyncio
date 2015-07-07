@@ -3,19 +3,21 @@ tasks."""
 
 import trollius as asyncio
 import os
+from trollius import From
 from trollius.subprocess import PIPE
+from trollius.py33_exceptions import BrokenPipeError, ConnectionResetError
 
 
 @asyncio.coroutine
 def send_input(writer, input):
     try:
         for line in input:
-            print('sending', len(line), 'bytes')
+            print('sending %s bytes' % len(line))
             writer.write(line)
             d = writer.drain()
             if d:
                 print('pause writing')
-                yield from d
+                yield From(d)
                 print('resume writing')
         writer.close()
     except BrokenPipeError:
@@ -26,7 +28,7 @@ def send_input(writer, input):
 @asyncio.coroutine
 def log_errors(reader):
     while True:
-        line = yield from reader.readline()
+        line = yield From(reader.readline())
         if not line:
             break
         print('ERROR', repr(line))
@@ -34,7 +36,7 @@ def log_errors(reader):
 @asyncio.coroutine
 def read_stdout(stdout):
     while True:
-        line = yield from stdout.readline()
+        line = yield From(stdout.readline())
         print('received', repr(line))
         if not line:
             break
@@ -47,7 +49,7 @@ def start(cmd, input=None, **kwds):
         kwds['stdin'] = None
     else:
         kwds['stdin'] = PIPE
-    proc = yield from asyncio.create_subprocess_shell(cmd, **kwds)
+    proc = yield From(asyncio.create_subprocess_shell(cmd, **kwds))
 
     tasks = []
     if input is not None:
@@ -66,9 +68,9 @@ def start(cmd, input=None, **kwds):
     if tasks:
         # feed stdin while consuming stdout to avoid hang
         # when stdin pipe is full
-        yield from asyncio.wait(tasks)
+        yield From(asyncio.wait(tasks))
 
-    exitcode = yield from proc.wait()
+    exitcode = yield From(proc.wait())
     print("exit code: %s" % exitcode)
 
 

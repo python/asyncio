@@ -1,5 +1,6 @@
 """Test service that accepts connections and reads all data off them."""
 
+from __future__ import print_function
 import argparse
 import os
 import sys
@@ -63,16 +64,17 @@ def start(loop, host, port):
         import ssl
         # TODO: take cert/key from args as well.
         here = os.path.join(os.path.dirname(__file__), '..', 'tests')
-        sslctx = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-        sslctx.options |= ssl.OP_NO_SSLv2
+        sslctx = SSLContext(ssl.PROTOCOL_SSLv23)
+        if not BACKPORT_SSL_CONTEXT:
+            sslctx.options |= ssl.OP_NO_SSLv2
         sslctx.load_cert_chain(
             certfile=os.path.join(here, 'ssl_cert.pem'),
             keyfile=os.path.join(here, 'ssl_key.pem'))
 
-    server = yield from loop.create_server(Service, host, port, ssl=sslctx)
+    server = yield From(loop.create_server(Service, host, port, ssl=sslctx))
     dprint('serving TLS' if sslctx else 'serving',
            [s.getsockname() for s in server.sockets])
-    yield from server.wait_closed()
+    yield From(server.wait_closed())
 
 
 def main():

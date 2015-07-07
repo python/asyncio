@@ -1,5 +1,6 @@
 """Like source.py, but uses streams."""
 
+from __future__ import print_function
 import argparse
 import sys
 
@@ -33,7 +34,7 @@ class Debug:
     overwriting = False
     label = 'stream1:'
 
-    def print(self, *args):
+    def print_(self, *args):
         if self.overwriting:
             print(file=sys.stderr)
             self.overwriting = 0
@@ -46,7 +47,8 @@ class Debug:
             if self.overwriting == 3:
                 print(self.label, '[...]', file=sys.stderr)
             end = '\r'
-        print(self.label, *args, file=sys.stderr, end=end, flush=True)
+        print(self.label, *args, file=sys.stderr, end=end)
+        sys.stdout.flush()
 
 
 @coroutine
@@ -55,11 +57,11 @@ def start(loop, args):
     total = 0
     sslctx = None
     if args.tls:
-        d.print('using dummy SSLContext')
+        d.print_('using dummy SSLContext')
         sslctx = test_utils.dummy_ssl_context()
-    r, w = yield from open_connection(args.host, args.port, ssl=sslctx)
-    d.print('r =', r)
-    d.print('w =', w)
+    r, w = yield From(open_connection(args.host, args.port, ssl=sslctx))
+    d.print_('r =', r)
+    d.print_('w =', w)
     if args.stop:
         w.write(b'stop')
         w.close()
@@ -73,10 +75,10 @@ def start(loop, args):
                 w.write(data)
                 f = w.drain()
                 if f:
-                    d.print('pausing')
-                    yield from f
+                    d.print_('pausing')
+                    yield From(f)
         except (ConnectionResetError, BrokenPipeError) as exc:
-            d.print('caught', repr(exc))
+            d.print_('caught', repr(exc))
 
 
 def main():

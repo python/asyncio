@@ -15,6 +15,7 @@ except ImportError:
     # asyncio is not installed
     sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
     import trollius as asyncio
+from trollius import From, Return
 
 if sys.platform == 'win32':
     from trollius.windows_utils import Popen, PIPE
@@ -29,8 +30,8 @@ else:
 @asyncio.coroutine
 def connect_write_pipe(file):
     loop = asyncio.get_event_loop()
-    transport, _ =  yield from loop.connect_write_pipe(asyncio.Protocol, file)
-    return transport
+    transport, _ =  yield From(loop.connect_write_pipe(asyncio.Protocol, file))
+    raise Return(transport)
 
 #
 # Wrap a readable pipe in a stream
@@ -42,8 +43,8 @@ def connect_read_pipe(file):
     stream_reader = asyncio.StreamReader(loop=loop)
     def factory():
         return asyncio.StreamReaderProtocol(stream_reader)
-    transport, _ = yield from loop.connect_read_pipe(factory, file)
-    return stream_reader, transport
+    transport, _ = yield From(loop.connect_read_pipe(factory, file))
+    raise Return(stream_reader, transport)
 
 
 #
@@ -80,9 +81,9 @@ def main(loop):
     p = Popen([sys.executable, '-c', code],
               stdin=PIPE, stdout=PIPE, stderr=PIPE)
 
-    stdin = yield from connect_write_pipe(p.stdin)
-    stdout, stdout_transport = yield from connect_read_pipe(p.stdout)
-    stderr, stderr_transport = yield from connect_read_pipe(p.stderr)
+    stdin = yield From(connect_write_pipe(p.stdin))
+    stdout, stdout_transport = yield From(connect_read_pipe(p.stdout))
+    stderr, stderr_transport = yield From(connect_read_pipe(p.stderr))
 
     # interact with subprocess
     name = {stdout:'OUT', stderr:'ERR'}
@@ -100,9 +101,9 @@ def main(loop):
         # get and print lines from stdout, stderr
         timeout = None
         while registered:
-            done, pending = yield from asyncio.wait(
+            done, pending = yield From(asyncio.wait(
                 registered, timeout=timeout,
-                return_when=asyncio.FIRST_COMPLETED)
+                return_when=asyncio.FIRST_COMPLETED))
             if not done:
                 break
             for f in done:

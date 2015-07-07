@@ -1,5 +1,6 @@
 """Simplest possible HTTP client."""
 
+from __future__ import print_function
 import sys
 
 from trollius import *
@@ -7,19 +8,19 @@ from trollius import *
 
 @coroutine
 def fetch():
-    r, w = yield from open_connection('python.org', 80)
+    r, w = yield From(open_connection('python.org', 80))
     request = 'GET / HTTP/1.0\r\n\r\n'
     print('>', request, file=sys.stderr)
     w.write(request.encode('latin-1'))
     while True:
-        line = yield from r.readline()
+        line = yield From(r.readline())
         line = line.decode('latin-1').rstrip()
         if not line:
             break
         print('<', line, file=sys.stderr)
     print(file=sys.stderr)
-    body = yield from r.read()
-    return body
+    body = yield From(r.read())
+    raise Return(body)
 
 
 def main():

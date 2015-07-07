@@ -1,4 +1,4 @@
-include AUTHORS COPYING TODO tox.ini
+include AUTHORS COPYING TODO.rst tox.ini
 include Makefile
 include overlapped.c pypi.bat
 include check.py runtests.py run_aiotest.py release.py

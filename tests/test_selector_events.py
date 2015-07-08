@@ -86,7 +86,7 @@ class BaseSelectorEventLoopTests(test_utils.TestCase):
 
         close_transport(transport)
 
-    @unittest.skipIf(ssl is None, 'No ssl module')
+    @test_utils.skipIf(ssl is None, 'No ssl module')
     def test_make_ssl_transport(self):
         m = mock.Mock()
         self.loop.add_reader = mock.Mock()
@@ -1475,7 +1475,7 @@ class SelectorSslTransportTests(test_utils.TestCase):
         self.assertTrue(self.protocol.connection_lost.called)
 
     def test_close_not_connected(self):
-        self.sslsock.do_handshake.side_effect = ssl.SSLWantReadError
+        self.sslsock.do_handshake.side_effect = SSLWantReadError
         self.check_close()
         self.assertFalse(self.protocol.connection_made.called)
         self.assertFalse(self.protocol.connection_lost.called)

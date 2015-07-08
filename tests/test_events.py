@@ -653,7 +653,7 @@ class EventLoopTestsMixin(object):
                 with test_utils.disable_logger():
                     self._basetest_create_ssl_connection(conn_fut, check_sockname)
 
-        self.assertEqual(cm.exception.reason, 'CERTIFICATE_VERIFY_FAILED')
+            self.assertEqual(cm.exception.reason, 'CERTIFICATE_VERIFY_FAILED')
 
     @test_utils.skipIf(ssl is None, 'No ssl module')
     def test_create_ssl_connection(self):
@@ -981,18 +981,19 @@ class EventLoopTestsMixin(object):
             err_msg = "hostname '127.0.0.1' doesn't match u'localhost'"
 
         # incorrect server_hostname
-#         if not asyncio.BACKPORT_SSL_CONTEXT:
-        f_c = self.loop.create_connection(MyProto, host, port,
-                                          ssl=sslcontext_client)
-        with mock.patch.object(self.loop, 'call_exception_handler'):
-            with test_utils.disable_logger():
-                with self.assertRaisesRegex(
-                        ssl.CertificateError,
-                        err_msg):
-                    self.loop.run_until_complete(f_c)
+        if not asyncio.BACKPORT_SSL_CONTEXT:
+            f_c = self.loop.create_connection(MyProto, host, port,
+                                              ssl=sslcontext_client)
+            with mock.patch.object(self.loop, 'call_exception_handler'):
+                with test_utils.disable_logger():
+                    with self.assertRaisesRegex(
+                            ssl.CertificateError,
+                            err_msg):
+                        self.loop.run_until_complete(f_c)
 
-        # close connection
-        proto.transport.close()
+            # close connection
+            proto.transport.close()
+
         server.close()
 
     def test_legacy_create_server_ssl_match_failed(self):

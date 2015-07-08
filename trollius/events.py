@@ -137,7 +137,7 @@ class Handle(object):
             self._callback(*self._args)
         except Exception as exc:
             cb = _format_callback_source(self._callback, self._args)
-            msg = 'Exception in callback {}'.format(cb)
+            msg = 'Exception in callback {0}'.format(cb)
             context = {
                 'message': msg,
                 'exception': exc,

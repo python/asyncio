@@ -42,11 +42,11 @@ if sys.version_info < (3,):
     sys.exc_clear()
 
 try:
-    import unittest
-    from unittest.signals import installHandler
-except ImportError:
     import unittest2 as unittest
     from unittest2.signals import installHandler
+except ImportError:
+    import unittest
+    from unittest.signals import installHandler
 
 ARGS = optparse.OptionParser(description="Run all unittests.", usage="%prog [options] [pattern] [pattern2 ...]")
 ARGS.add_option(

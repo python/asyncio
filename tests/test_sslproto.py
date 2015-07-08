@@ -13,7 +13,7 @@ from trollius.test_utils import mock
 from trollius import ConnectionResetError
 
 
-@unittest.skipIf(ssl is None, 'No ssl module')
+@test_utils.skipIf(ssl is None, 'No ssl module')
 class SslProtoHandshakeTests(test_utils.TestCase):
 
     def setUp(self):

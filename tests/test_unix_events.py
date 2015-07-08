@@ -1,6 +1,7 @@
 """Tests for unix_events.py."""
 
 import collections
+import contextlib
 import errno
 import io
 import os
@@ -241,7 +242,7 @@ class SelectorEventLoopUnixSocketTests(test_utils.TestCase):
         with test_utils.unix_socket_path() as path:
             sock = socket.socket(socket.AF_UNIX)
             sock.bind(path)
-            with sock:
+            with contextlib.closing(sock):
                 coro = self.loop.create_unix_server(lambda: None, path)
                 with self.assertRaisesRegex(OSError,
                                             'Address.*is already in use'):
@@ -269,7 +270,7 @@ class SelectorEventLoopUnixSocketTests(test_utils.TestCase):
 
     def test_create_unix_server_path_inetsock(self):
         sock = socket.socket()
-        with sock:
+        with contextlib.closing(sock):
             coro = self.loop.create_unix_server(lambda: None, path=None,
                                                 sock=sock)
             with self.assertRaisesRegex(ValueError,

@@ -6,8 +6,9 @@ import warnings
 from . import futures
 from . import protocols
 from . import transports
-from .coroutines import coroutine, From
+from .coroutines import coroutine, From, Return
 from .log import logger
+from .py33_exceptions import ProcessLookupError
 
 
 class BaseSubprocessTransport(transports.SubprocessTransport):
@@ -152,21 +153,21 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
             loop = self._loop
 
             if proc.stdin is not None:
-                _, pipe = yield from loop.connect_write_pipe(
+                _, pipe = yield From(loop.connect_write_pipe(
                     lambda: WriteSubprocessPipeProto(self, 0),
-                    proc.stdin)
+                    proc.stdin))
                 self._pipes[0] = pipe
 
             if proc.stdout is not None:
-                _, pipe = yield from loop.connect_read_pipe(
+                _, pipe = yield From(loop.connect_read_pipe(
                     lambda: ReadSubprocessPipeProto(self, 1),
-                    proc.stdout)
+                    proc.stdout))
                 self._pipes[1] = pipe
 
             if proc.stderr is not None:
-                _, pipe = yield from loop.connect_read_pipe(
+                _, pipe = yield From(loop.connect_read_pipe(
                     lambda: ReadSubprocessPipeProto(self, 2),
-                    proc.stderr)
+                    proc.stderr))
                 self._pipes[2] = pipe
 
             assert self._pending_calls is not None
@@ -217,12 +218,12 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
 
         This method is a coroutine."""
         if self._returncode is not None:
-            return self._returncode
+            raise Return(self._returncode)
 
         waiter = futures.Future(loop=self._loop)
         self._exit_waiters.append(waiter)
         returncode = yield From(waiter)
-        return returncode
+        raise Return(returncode)
 
     def _try_finish(self):
         assert not self._finished

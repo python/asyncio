@@ -10,6 +10,7 @@ import trollius as asyncio
 from trollius import sslproto
 from trollius import test_utils
 from trollius.test_utils import mock
+from trollius import ConnectionResetError
 
 
 @unittest.skipIf(ssl is None, 'No ssl module')

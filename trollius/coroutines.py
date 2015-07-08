@@ -51,28 +51,33 @@ except ImportError:
     _CoroutineABC = _AwaitableABC = None
 
 
-# Check for CPython issue #21209
-def has_yield_from_bug():
-    class MyGen:
-        def __init__(self):
-            self.send_args = None
-        def __iter__(self):
-            return self
-        def __next__(self):
-            return 42
-        def send(self, *what):
-            self.send_args = what
-            return None
-    def yield_from_gen(gen):
-        yield from gen
-    value = (1, 2, 3)
-    gen = MyGen()
-    coro = yield_from_gen(gen)
-    next(coro)
-    coro.send(value)
-    return gen.send_args != (value,)
-_YIELD_FROM_BUG = has_yield_from_bug()
-del has_yield_from_bug
+if _YIELD_FROM is not None:
+    # Check for CPython issue #21209
+    exec('''if 1:
+        def has_yield_from_bug():
+            class MyGen:
+                def __init__(self):
+                    self.send_args = None
+                def __iter__(self):
+                    return self
+                def __next__(self):
+                    return 42
+                def send(self, *what):
+                    self.send_args = what
+                    return None
+            def yield_from_gen(gen):
+                yield from gen
+            value = (1, 2, 3)
+            gen = MyGen()
+            coro = yield_from_gen(gen)
+            next(coro)
+            coro.send(value)
+            return gen.send_args != (value,)
+''')
+    _YIELD_FROM_BUG = has_yield_from_bug()
+    del has_yield_from_bug
+else:
+    _YIELD_FROM_BUG = False
 
 
 if compat.PY33:
@@ -316,7 +321,7 @@ def coroutine(func):
             res = func(*args, **kw)
             if (isinstance(res, futures._FUTURE_CLASSES)
                 or inspect.isgenerator(res)):
-                res = yield from res
+                res = yield From(res)
             elif _AwaitableABC is not None:
                 # If 'func' returns an Awaitable (new in 3.5) we
                 # want to run it.
@@ -326,8 +331,8 @@ def coroutine(func):
                     pass
                 else:
                     if isinstance(res, _AwaitableABC):
-                        res = yield from await_meth()
-            return res
+                        res = yield From(await_meth())
+            raise Return(res)
 
     if not _DEBUG:
         if _types_coroutine is None:

@@ -1,3 +1,5 @@
+from __future__ import absolute_import
+
 __all__ = ['create_subprocess_exec', 'create_subprocess_shell']
 
 import subprocess

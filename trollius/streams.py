@@ -498,14 +498,15 @@ class StreamReader(object):
 
         raise Return(b''.join(blocks))
 
-    if _PY35:
-        @coroutine
-        def __aiter__(self):
-            return self
+    # FIXME: should we support __aiter__ and __anext__ in Trollius?
+    #if _PY35:
+    #    @coroutine
+    #    def __aiter__(self):
+    #        return self
 
-        @coroutine
-        def __anext__(self):
-            val = yield from self.readline()
-            if val == b'':
-                raise StopAsyncIteration
-            return val
+    #    @coroutine
+    #    def __anext__(self):
+    #        val = yield from self.readline()
+    #        if val == b'':
+    #            raise StopAsyncIteration
+    #        return val

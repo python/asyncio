@@ -26,7 +26,7 @@ from . import selectors
 from . import transports
 from . import sslproto
 from .compat import flatten_bytes
-from .coroutines import coroutine
+from .coroutines import coroutine, From
 from .log import logger
 from .py33_exceptions import (wrap_error,
     BlockingIOError, InterruptedError, ConnectionAbortedError, BrokenPipeError,
@@ -226,7 +226,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
                     server=server)
 
             try:
-                yield from waiter
+                yield From(waiter)
             except:
                 transport.close()
                 raise

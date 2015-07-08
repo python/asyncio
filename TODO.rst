@@ -1,5 +1,7 @@
 Unsorted "TODO" tasks:
 
+* test_utils.py: remove assertRaisesRegex, assertRegex
+* streams.py:FIXME: should we support __aiter__ and __anext__ in Trollius?
 * reuse selectors backport from PyPI
 * check ssl.SSLxxx in update_xxx.sh
 * document how to port asyncio to trollius

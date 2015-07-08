@@ -1,4 +1,5 @@
 """Event loop and event loop policy."""
+from __future__ import absolute_import
 
 __all__ = ['AbstractEventLoopPolicy',
            'AbstractEventLoop', 'AbstractServer',
@@ -20,7 +21,6 @@ try:
 except ImportError:
     import repr as reprlib   # Python 2
 
-from trollius import compat
 try:
     import asyncio
 except (ImportError, SyntaxError):

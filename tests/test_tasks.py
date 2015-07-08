@@ -26,6 +26,9 @@ PY35 = (sys.version_info >= (3, 5))
 def coroutine_function():
     pass
 
+@asyncio.coroutine
+def coroutine_function2(x, y):
+    yield From(asyncio.sleep(0))
 
 @contextlib.contextmanager
 def set_coroutine_debug(enabled):
@@ -307,11 +310,8 @@ class TaskTests(test_utils.TestCase):
         with set_coroutine_debug(True):
             self.loop.set_debug(True)
 
-            @asyncio.coroutine
-            def func(x, y):
-                yield from asyncio.sleep(0)
-
-            partial_func = asyncio.coroutine(functools.partial(func, 1))
+            cb = functools.partial(coroutine_function2, 1)
+            partial_func = asyncio.coroutine(cb)
             task = self.loop.create_task(partial_func(2))
 
             # make warnings quiet
@@ -319,8 +319,7 @@ class TaskTests(test_utils.TestCase):
             self.addCleanup(task._coro.close)
 
         coro_repr = repr(task._coro)
-        expected = ('<CoroWrapper TaskTests.test_task_repr_partial_corowrapper'
-                    '.<locals>.func(1)() running, ')
+        expected = ('<CoroWrapper coroutine_function2(1)() running, ')
         self.assertTrue(coro_repr.startswith(expected),
                         coro_repr)
 
@@ -424,9 +423,9 @@ class TaskTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def task():
-            yield from fut1
+            yield From(fut1)
             try:
-                yield from fut2
+                yield From(fut2)
             except asyncio.CancelledError:
                 raise Return(42)
 
@@ -1587,7 +1586,8 @@ class TaskTests(test_utils.TestCase):
         with set_coroutine_debug(True):
             @asyncio.coroutine
             def t1():
-                return (yield from t2())
+                res = yield From(t2())
+                raise Return(res)
 
             @asyncio.coroutine
             def t2():
@@ -1708,8 +1708,9 @@ class TaskTests(test_utils.TestCase):
         task = asyncio.Task(coroutine_function(), loop=self.loop)
         lineno = sys._getframe().f_lineno - 1
         self.assertIsInstance(task._source_traceback, list)
+        filename = sys._getframe().f_code.co_filename
         self.assertEqual(task._source_traceback[-1][:3],
-                         (__file__,
+                         (filename,
                           lineno,
                           'test_task_source_traceback'))
         self.loop.run_until_complete(task)
@@ -1993,7 +1994,7 @@ class CoroutineGatherTests(GatherTestsBase, test_utils.TestCase):
 
         @asyncio.coroutine
         def inner(f):
-            yield from f
+            yield From(f)
             raise RuntimeError('should not be ignored')
 
         a = asyncio.Future(loop=self.one_loop)

@@ -9,7 +9,7 @@ from trollius import From, Return
 from trollius import base_subprocess
 from trollius import test_support as support
 from trollius.test_utils import mock
-from trollius.py33_exceptions import BrokenPipeError, ConnectionResetError
+from trollius import BrokenPipeError, ConnectionResetError, ProcessLookupError
 
 if sys.platform != 'win32':
     from trollius import unix_events
@@ -305,15 +305,15 @@ class SubprocessMixin:
 
         @asyncio.coroutine
         def cancel_wait():
-            proc = yield from asyncio.create_subprocess_exec(
+            proc = yield From(asyncio.create_subprocess_exec(
                                           *PROGRAM_BLOCKED,
-                                          loop=self.loop)
+                                          loop=self.loop))
 
             # Create an internal future waiting on the process exit
             task = self.loop.create_task(proc.wait())
             self.loop.call_soon(task.cancel)
             try:
-                yield from task
+                yield From(task)
             except asyncio.CancelledError:
                 pass
 
@@ -368,12 +368,11 @@ class SubprocessMixin:
         def kill_running():
             create = self.loop.subprocess_exec(asyncio.SubprocessProtocol,
                                                *PROGRAM_BLOCKED)
-            transport, protocol = yield from create
+            transport, protocol = yield From(create)
 
-            kill_called = False
+            non_local = {'kill_called': False}
             def kill():
-                nonlocal kill_called
-                kill_called = True
+                non_local['kill_called'] = True
                 orig_kill()
 
             proc = transport.get_extra_info('subprocess')
@@ -381,8 +380,8 @@ class SubprocessMixin:
             proc.kill = kill
             returncode = transport.get_returncode()
             transport.close()
-            yield from transport._wait()
-            return (returncode, kill_called)
+            yield From(transport._wait())
+            raise Return(returncode, non_local['kill_called'])
 
         # Ignore "Close running child process: kill ..." log
         with test_utils.disable_logger():
@@ -398,7 +397,7 @@ class SubprocessMixin:
         def kill_running():
             create = self.loop.subprocess_exec(asyncio.SubprocessProtocol,
                                                *PROGRAM_BLOCKED)
-            transport, protocol = yield from create
+            transport, protocol = yield From(create)
             proc = transport.get_extra_info('subprocess')
 
             # kill the process (but asyncio is not notified immediatly)
@@ -409,7 +408,8 @@ class SubprocessMixin:
             proc_returncode = proc.poll()
             transport_returncode = transport.get_returncode()
             transport.close()
-            return (proc_returncode, transport_returncode, proc.kill.called)
+            raise Return(proc_returncode, transport_returncode,
+                         proc.kill.called)
 
         # Ignore "Unknown child process pid ..." log of SafeChildWatcher,
         # emitted because the test already consumes the exit status:

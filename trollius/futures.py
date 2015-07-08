@@ -425,15 +425,8 @@ class Future(object):
                 result = other.result()
                 self.set_result(result)
 
-    def __iter__(self):
-        if not self.done():
-            self._blocking = True
-            yield self  # This tells Task to wait for completion.
-        assert self.done(), "yield from wasn't used with future"
-        return self.result()  # May raise too.
-
-    if _PY35:
-        __await__ = __iter__ # make compatible with 'await' expression
+    #if _PY35:
+    #    __await__ = __iter__ # make compatible with 'await' expression
 
 
 if events.asyncio is not None:

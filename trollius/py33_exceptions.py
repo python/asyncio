@@ -1,7 +1,7 @@
 __all__ = ['BlockingIOError', 'BrokenPipeError', 'ChildProcessError',
            'ConnectionRefusedError', 'ConnectionResetError',
            'InterruptedError', 'ConnectionAbortedError', 'PermissionError',
-           'FileNotFoundError',
+           'FileNotFoundError', 'ProcessLookupError',
            ]
 
 import errno

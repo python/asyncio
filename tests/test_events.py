@@ -2083,8 +2083,9 @@ class HandleTests(test_utils.TestCase):
         def check_source_traceback(h):
             lineno = sys._getframe(1).f_lineno - 1
             self.assertIsInstance(h._source_traceback, list)
+            filename = sys._getframe().f_code.co_filename
             self.assertEqual(h._source_traceback[-1][:3],
-                             (__file__,
+                             (filename,
                               lineno,
                               'test_handle_source_traceback'))
 

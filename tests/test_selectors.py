@@ -3,6 +3,7 @@ import os
 import random
 import signal
 import sys
+import unittest
 from time import sleep
 try:
     import resource
@@ -25,7 +26,7 @@ def find_ready_matching(ready, flag):
     return match
 
 
-class BaseSelectorTestCase(test_utils.TestCase):
+class BaseSelectorTestCase(object):
 
     def make_socketpair(self):
         rd, wr = socketpair()
@@ -352,7 +353,7 @@ class BaseSelectorTestCase(test_utils.TestCase):
         self.assertLess(time() - t, 2.5)
 
 
-class ScalableSelectorMixIn:
+class ScalableSelectorMixIn(object):
 
     # see issue #18963 for why it's skipped on older OS X versions
     @support.requires_mac_ver(10, 5)
@@ -398,52 +399,48 @@ class ScalableSelectorMixIn:
         self.assertEqual(NUM_FDS // 2, len(s.select()))
 
 
-class DefaultSelectorTestCase(BaseSelectorTestCase):
+class DefaultSelectorTestCase(BaseSelectorTestCase, test_utils.TestCase):
 
     SELECTOR = selectors.DefaultSelector
 
 
-class SelectSelectorTestCase(BaseSelectorTestCase):
+class SelectSelectorTestCase(BaseSelectorTestCase, test_utils.TestCase):
 
     SELECTOR = selectors.SelectSelector
 
 
 @test_utils.skipUnless(hasattr(selectors, 'PollSelector'),
                        "Test needs selectors.PollSelector")
-class PollSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn):
+class PollSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn,
+                           test_utils.TestCase):
 
     SELECTOR = getattr(selectors, 'PollSelector', None)
 
 
 @test_utils.skipUnless(hasattr(selectors, 'EpollSelector'),
                        "Test needs selectors.EpollSelector")
-class EpollSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn):
+class EpollSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn,
+                            test_utils.TestCase):
 
     SELECTOR = getattr(selectors, 'EpollSelector', None)
 
 
 @test_utils.skipUnless(hasattr(selectors, 'KqueueSelector'),
                        "Test needs selectors.KqueueSelector)")
-class KqueueSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn):
+class KqueueSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn,
+                             test_utils.TestCase):
 
     SELECTOR = getattr(selectors, 'KqueueSelector', None)
 
 
 @test_utils.skipUnless(hasattr(selectors, 'DevpollSelector'),
                        "Test needs selectors.DevpollSelector")
-class DevpollSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn):
+class DevpollSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn,
+                              test_utils.TestCase):
 
     SELECTOR = getattr(selectors, 'DevpollSelector', None)
 
 
 
-def test_main():
-    tests = [DefaultSelectorTestCase, SelectSelectorTestCase,
-             PollSelectorTestCase, EpollSelectorTestCase,
-             KqueueSelectorTestCase, DevpollSelectorTestCase]
-    support.run_unittest(*tests)
-    support.reap_children()
-
-
-if __name__ == "__main__":
-    test_main()
+if __name__ == '__main__':
+    unittest.main()

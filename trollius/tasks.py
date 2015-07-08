@@ -1,4 +1,5 @@
 """Support for tasks, coroutines and the scheduler."""
+from __future__ import print_function
 
 __all__ = ['Task',
            'FIRST_COMPLETED', 'FIRST_EXCEPTION', 'ALL_COMPLETED',
@@ -560,7 +561,7 @@ def async(coro_or_future, loop=None):
     return ensure_future(coro_or_future, loop=loop)
 
 
-def ensure_future(coro_or_future, *, loop=None):
+def ensure_future(coro_or_future, loop=None):
     """Wrap a coroutine in a future.
 
     If the argument is a Future, it is returned directly.

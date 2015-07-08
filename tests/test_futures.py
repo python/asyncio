@@ -10,6 +10,7 @@ import threading
 import unittest
 
 import trollius as asyncio
+from trollius import From
 from trollius import compat
 from trollius import test_support as support
 from trollius import test_utils
@@ -182,18 +183,6 @@ class FutureTests(test_utils.TestCase):
         newf_cancelled._copy_state(f_cancelled)
         self.assertTrue(newf_cancelled.cancelled())
 
-    def test_iter(self):
-        fut = asyncio.Future(loop=self.loop)
-
-        def coro():
-            yield from fut
-
-        def test():
-            arg1, arg2 = coro()
-
-        self.assertRaises(AssertionError, test)
-        fut.cancel()
-
     @mock.patch('trollius.base_events.logger')
     def test_tb_logger_abandoned(self, m_log):
         fut = asyncio.Future(loop=self.loop)
@@ -296,8 +285,9 @@ class FutureTests(test_utils.TestCase):
         future = asyncio.Future(loop=self.loop)
         lineno = sys._getframe().f_lineno - 1
         self.assertIsInstance(future._source_traceback, list)
+        filename = sys._getframe().f_code.co_filename
         self.assertEqual(future._source_traceback[-1][:3],
-                         (__file__,
+                         (filename,
                           lineno,
                           'test_future_source_traceback'))
 

@@ -53,40 +53,24 @@ class _ContextManagerMixin(object):
         # always raises; that's how the with-statement works.
         pass
 
-    @coroutine
-    def __iter__(self):
-        # This is not a coroutine.  It is meant to enable the idiom:
-        #
-        #     with (yield from lock):
-        #         <block>
-        #
-        # as an alternative to:
-        #
-        #     yield from lock.acquire()
-        #     try:
-        #         <block>
-        #     finally:
-        #         lock.release()
-        yield from self.acquire()
-        return _ContextManager(self)
+    # FIXME: support PEP 492?
+    #if _PY35:
 
-    if _PY35:
+    #    def __await__(self):
+    #        # To make "with await lock" work.
+    #        yield from self.acquire()
+    #        return _ContextManager(self)
 
-        def __await__(self):
-            # To make "with await lock" work.
-            yield from self.acquire()
-            return _ContextManager(self)
+    #    @coroutine
+    #    def __aenter__(self):
+    #        yield from self.acquire()
+    #        # We have no use for the "as ..."  clause in the with
+    #        # statement for locks.
+    #        return None
 
-        @coroutine
-        def __aenter__(self):
-            yield from self.acquire()
-            # We have no use for the "as ..."  clause in the with
-            # statement for locks.
-            return None
-
-        @coroutine
-        def __aexit__(self, exc_type, exc, tb):
-            self.release()
+    #    @coroutine
+    #    def __aexit__(self, exc_type, exc, tb):
+    #        self.release()
 
 
 class Lock(_ContextManagerMixin):

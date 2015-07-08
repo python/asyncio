@@ -9,6 +9,7 @@ except ImportError:  # pragma: no cover
 from . import protocols
 from . import transports
 from .log import logger
+from .py33_exceptions import BrokenPipeError, ConnectionResetError
 from .py3_ssl import BACKPORT_SSL_CONTEXT
 
 

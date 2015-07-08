@@ -411,7 +411,7 @@ if hasattr(select, 'epoll'):
             key = super(EpollSelector, self).unregister(fileobj)
             try:
                 self._epoll.unregister(key.fd)
-            except OSError:
+            except IOError:
                 # This can happen if the FD was closed since it
                 # was registered.
                 pass

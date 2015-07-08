@@ -103,7 +103,7 @@ def _check_resolved_address(sock, address):
         # if available
         try:
             socket.inet_pton(family, host)
-        except OSError as exc:
+        except socket.error as exc:
             raise ValueError("address must be resolved (IP address), "
                              "got host %r: %s"
                              % (host, exc))
@@ -374,7 +374,7 @@ class BaseEventLoop(events.AbstractEventLoop):
             logger.debug("Close %r", self)
         self._closed = True
         self._ready.clear()
-        self._scheduled.clear()
+        del self._scheduled[:]
         executor = self._default_executor
         if executor is not None:
             self._default_executor = None
@@ -706,7 +706,7 @@ class BaseEventLoop(events.AbstractEventLoop):
 
     @coroutine
     def create_datagram_endpoint(self, protocol_factory,
-                                 local_addr=None, remote_addr=None, *,
+                                 local_addr=None, remote_addr=None,
                                  family=0, proto=0, flags=0):
         """Create datagram connection."""
         if not (local_addr or remote_addr):

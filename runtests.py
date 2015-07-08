@@ -50,7 +50,7 @@ except ImportError:
 
 ARGS = optparse.OptionParser(description="Run all unittests.", usage="%prog [options] [pattern] [pattern2 ...]")
 ARGS.add_option(
-    '-v', '--verbose', action="store_true", dest='verbose',
+    '-v', '--verbose', type=int, dest='verbose',
     default=0, help='verbose')
 ARGS.add_option(
     '-x', action="store_true", dest='exclude', help='exclude tests')
@@ -275,7 +275,6 @@ def runtests():
                                 )
         cov.start()
 
-    logger = logging.getLogger()
     if v == 0:
         level = logging.CRITICAL
     elif v == 1:

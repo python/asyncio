@@ -6,6 +6,7 @@ import signal
 import sys
 import unittest
 from trollius import From, Return
+from trollius import base_subprocess
 from trollius import test_support as support
 from trollius.test_utils import mock
 from trollius.py33_exceptions import BrokenPipeError, ConnectionResetError

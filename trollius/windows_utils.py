@@ -8,7 +8,6 @@ import sys
 if sys.platform != 'win32':  # pragma: no cover
     raise ImportError('win32 only')
 
-import _winapi
 import itertools
 import msvcrt
 import os

@@ -6,12 +6,9 @@ __all__ = ['Task',
            'gather', 'shield', 'ensure_future',
            ]
 
-import concurrent.futures
 import functools
-import inspect
 import linecache
 import sys
-import types
 import traceback
 import warnings
 try:
@@ -407,7 +404,7 @@ def wait_for(fut, timeout, loop=None):
         loop = events.get_event_loop()
 
     if timeout is None:
-	result = yield From(fut)
+        result = yield From(fut)
         raise Return(result)
 
     waiter = futures.Future(loop=loop)

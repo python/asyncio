@@ -1,6 +1,7 @@
 """Tests for tasks.py."""
 
 import contextlib
+import functools
 import os
 import re
 import sys
@@ -356,6 +357,7 @@ class TaskTests(test_utils.TestCase):
             raise Return(12)
 
         t = asyncio.Task(task(), loop=loop)
+        test_utils.run_briefly(loop)
         loop.call_soon(t.cancel)
         with self.assertRaises(asyncio.CancelledError):
             loop.run_until_complete(t)
@@ -1303,37 +1305,6 @@ class TaskTests(test_utils.TestCase):
         def fn2():
             yield
         self.assertTrue(asyncio.iscoroutinefunction(fn2))
-
-    def test_yield_vs_yield_from(self):
-        fut = asyncio.Future(loop=self.loop)
-
-        @asyncio.coroutine
-        def wait_for_future():
-            yield fut
-
-        task = wait_for_future()
-        with self.assertRaises(RuntimeError):
-            self.loop.run_until_complete(task)
-
-        self.assertFalse(fut.done())
-
-    def test_yield_vs_yield_from_generator(self):
-        @asyncio.coroutine
-        def coro():
-            yield
-
-        @asyncio.coroutine
-        def wait_for_future():
-            gen = coro()
-            try:
-                yield gen
-            finally:
-                gen.close()
-
-        task = wait_for_future()
-        self.assertRaises(
-            RuntimeError,
-            self.loop.run_until_complete, task)
 
     def test_coroutine_non_gen_function(self):
         @asyncio.coroutine

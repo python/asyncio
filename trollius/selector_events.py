@@ -14,8 +14,7 @@ import sys
 import warnings
 try:
     import ssl
-    from .py3_ssl import (wrap_ssl_error, SSLContext, SSLWantReadError,
-                          SSLWantWriteError)
+    from .py3_ssl import wrap_ssl_error, SSLWantReadError, SSLWantWriteError
 except ImportError:  # pragma: no cover
     ssl = None
 

@@ -23,6 +23,7 @@ import socket
 import subprocess
 import sys
 import traceback
+import warnings
 try:
     from collections import OrderedDict
 except ImportError:
@@ -198,7 +199,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         # Identifier of the thread running the event loop, or None if the
         # event loop is not running
         self._thread_id = None
-        self._clock_resolution = time.get_clock_info('monotonic').resolution
+        self._clock_resolution = time_monotonic_resolution
         self._exception_handler = None
         self.set_debug(bool(os.environ.get('TROLLIUSDEBUG')))
         # In debug mode, if the execution of a callback or a step of a task
@@ -301,7 +302,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         if self.is_running():
             raise RuntimeError('Event loop is running.')
         self._set_coroutine_wrapper(self._debug)
-        self._thread_id = threading.get_ident()
+        self._thread_id = _get_thread_ident()
         try:
             while True:
                 try:
@@ -325,7 +326,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         """
         self._check_closed()
 
-        new_task = not isinstance(future, futures.Future)
+        new_task = not isinstance(future, futures._FUTURE_CLASSES)
         future = tasks.ensure_future(future, loop=self)
         if new_task:
             # An exception is raised if the future didn't complete, so there
@@ -404,7 +405,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         epoch, precision, accuracy and drift are unspecified and may
         differ per event loop.
         """
-        return time.monotonic()
+        return time_monotonic()
 
     def call_later(self, delay, callback, *args):
         """Arrange for a callback to be called at a given time.
@@ -484,7 +485,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         """
         if self._thread_id is None:
             return
-        thread_id = threading.get_ident()
+        thread_id = _get_thread_ident()
         if thread_id != self._thread_id:
             raise RuntimeError(
                 "Non-thread-safe operation invoked on an event loop other "

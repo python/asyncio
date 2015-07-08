@@ -46,7 +46,7 @@ class _ContextManager:
 class _ContextManagerMixin(object):
     def __enter__(self):
         raise RuntimeError(
-            '"yield from" should be used as context manager expression')
+            '"yield From" should be used as context manager expression')
 
     def __exit__(self, *args):
         # This must exist because __enter__ exists, even though that
@@ -331,8 +331,19 @@ class Condition(_ContextManagerMixin):
             finally:
                 self._waiters.remove(fut)
 
-        finally:
+        except Exception as exc:
+            # Workaround CPython bug #23353: using yield/yield-from in an
+            # except block of a generator doesn't clear properly
+            # sys.exc_info()
+            err = exc
+        else:
+            err = None
+
+        if err is not None:
             yield From(self.acquire())
+            raise err
+
+        yield From(self.acquire())
 
     @coroutine
     def wait_for(self, predicate):

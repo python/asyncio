@@ -18,8 +18,7 @@ from . import windows_utils
 from . import _overlapped
 from .coroutines import coroutine, From, Return
 from .log import logger
-from .py33_exceptions import (wrap_error, get_error_class,
-    ConnectionRefusedError, BrokenPipeError)
+from .py33_exceptions import wrap_error, BrokenPipeError
 
 
 __all__ = ['SelectorEventLoop', 'ProactorEventLoop', 'IocpProactor',

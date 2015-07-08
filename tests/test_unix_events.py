@@ -1,7 +1,6 @@
 """Tests for unix_events.py."""
 
 import collections
-import contextlib
 import errno
 import io
 import os
@@ -282,6 +281,7 @@ class SelectorEventLoopUnixSocketTests(test_utils.TestCase):
         # Ensure that the socket is closed on any bind error
         sock = mock.Mock()
         m_socket.socket.return_value = sock
+        m_socket.error = socket.error
 
         sock.bind.side_effect = OSError
         coro = self.loop.create_unix_server(lambda: None, path="/test")

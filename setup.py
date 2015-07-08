@@ -28,7 +28,7 @@ except ImportError:
     # We won't be able to build the Wheel file on Windows.
     from distutils.core import setup, Extension
 
-with open("README") as fp:
+with open("README.rst") as fp:
     long_description = fp.read()
 
 extensions = []

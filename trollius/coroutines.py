@@ -1,5 +1,6 @@
 __all__ = ['coroutine',
-           'iscoroutinefunction', 'iscoroutine']
+           'iscoroutinefunction', 'iscoroutine',
+           'From', 'Return']
 
 import functools
 import inspect
@@ -127,6 +128,21 @@ def debug_wrapper(gen):
     # Generator-based coroutines are wrapped in @coroutine
     # decorator.
     return CoroWrapper(gen, None)
+
+
+def _coroutine_at_yield_from(coro):
+    """Test if the last instruction of a coroutine is "yield from".
+
+    Return False if the coroutine completed.
+    """
+    frame = coro.gi_frame
+    if frame is None:
+        return False
+    code = coro.gi_code
+    assert frame.f_lasti >= 0
+    offset = frame.f_lasti + 1
+    instr = code.co_code[offset]
+    return (instr == _YIELD_FROM)
 
 
 class CoroWrapper:
@@ -298,7 +314,8 @@ def coroutine(func):
         @_wraps(func)
         def coro(*args, **kw):
             res = func(*args, **kw)
-            if isinstance(res, futures.Future) or inspect.isgenerator(res):
+            if (isinstance(res, futures._FUTURE_CLASSES)
+                or inspect.isgenerator(res)):
                 res = yield from res
             elif _AwaitableABC is not None:
                 # If 'func' returns an Awaitable (new in 3.5) we

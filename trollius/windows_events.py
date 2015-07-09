@@ -1,6 +1,5 @@
 """Selector and proactor event loops for Windows."""
 
-import _winapi
 import errno
 import math
 import socket

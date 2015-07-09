@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Run Tulip unittests.
+"""Run trollius unittests.
 
 Usage:
   python3 runtests.py [flags] [pattern] ...

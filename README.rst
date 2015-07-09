@@ -24,6 +24,8 @@ primitives.  Here is a more detailed list of the package contents:
 * an interface for passing work off to a threadpool, for times when you
   absolutely, positively have to use a library that makes blocking I/O calls.
 
+Note: The implementation of asyncio was previously called "Tulip".
+
 
 Installation
 ============

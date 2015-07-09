@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run Tulip unittests.
+"""Run asyncio unittests.
 
 Usage:
   python3 runtests.py [flags] [pattern] ...

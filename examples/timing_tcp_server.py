@@ -1,7 +1,7 @@
 """
 A variant of simple_tcp_server.py that measures the time it takes to
 send N messages for a range of N.  (This was O(N**2) in a previous
-version of Tulip.)
+version of asyncio.)
 
 Note that running this example starts both the TCP server and client
 in the same process.  It listens on port 1234 on 127.0.0.1, so it will

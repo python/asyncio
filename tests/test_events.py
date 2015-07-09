@@ -2239,8 +2239,6 @@ class AbstractEventLoopTests(test_utils.TestCase):
         self.assertRaises(
             NotImplementedError, loop.close)
         self.assertRaises(
-            NotImplementedError, loop.create_task, None)
-        self.assertRaises(
             NotImplementedError, loop.call_later, None, None)
         self.assertRaises(
             NotImplementedError, loop.call_at, f, f)

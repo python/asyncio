@@ -24,7 +24,7 @@ Test Dependencies
 -----------------
 
 On Python older than 3.3, unit tests require the `mock
-<https://pypi.python.org/pypi/mock>`_ module. Python 2.6 requires also
+<https://pypi.python.org/pypi/mock>`_ module. Python 2.6 and 2.7 require also
 `unittest2 <https://pypi.python.org/pypi/unittest2>`_.
 
 To run ``run_aiotest.py``, you need the `aiotest

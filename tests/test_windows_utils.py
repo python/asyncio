@@ -172,9 +172,10 @@ class PopenTests(unittest.TestCase):
         self.assertTrue(msg.upper().rstrip().startswith(out))
         self.assertTrue(b"stderr".startswith(err))
 
-        # The context manager calls wait() and closes resources
-        with p:
-            pass
+        p.stdin.close()
+        p.stdout.close()
+        p.stderr.close()
+        p.wait()
 
 
 if __name__ == '__main__':

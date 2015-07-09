@@ -2,12 +2,11 @@
 
 import socket
 import sys
-import unittest
 import warnings
+from trollius.test_utils import unittest
 
 if sys.platform != 'win32':
-    from trollius.test_utils import SkipTest
-    raise SkipTest('Windows only')
+    raise unittest.SkipTest('Windows only')
 
 from trollius import _overlapped
 from trollius import py33_winapi as _winapi
@@ -29,14 +28,14 @@ class WinsocketpairTests(unittest.TestCase):
         ssock, csock = windows_utils.socketpair()
         self.check_winsocketpair(ssock, csock)
 
-    @test_utils.skipUnless(support.IPV6_ENABLED,
-                           'IPv6 not supported or enabled')
+    @unittest.skipUnless(support.IPV6_ENABLED,
+                         'IPv6 not supported or enabled')
     def test_winsocketpair_ipv6(self):
         ssock, csock = windows_utils.socketpair(family=socket.AF_INET6)
         self.check_winsocketpair(ssock, csock)
 
-    @test_utils.skipIf(hasattr(socket, 'socketpair'),
-                       'socket.socketpair is available')
+    @unittest.skipIf(hasattr(socket, 'socketpair'),
+                     'socket.socketpair is available')
     @mock.patch('trollius.windows_utils.socket')
     def test_winsocketpair_exc(self, m_socket):
         m_socket.AF_INET = socket.AF_INET
@@ -55,8 +54,8 @@ class WinsocketpairTests(unittest.TestCase):
         self.assertRaises(ValueError,
                           windows_utils.socketpair, proto=1)
 
-    @test_utils.skipIf(hasattr(socket, 'socketpair'),
-                       'socket.socketpair is available')
+    @unittest.skipIf(hasattr(socket, 'socketpair'),
+                     'socket.socketpair is available')
     @mock.patch('trollius.windows_utils.socket')
     def test_winsocketpair_close(self, m_socket):
         m_socket.AF_INET = socket.AF_INET

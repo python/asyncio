@@ -2,7 +2,7 @@ from trollius import test_utils
 from trollius import From, Return
 import trollius
 import trollius.coroutines
-import unittest
+from trollius.test_utils import unittest
 
 try:
     import asyncio

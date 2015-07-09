@@ -6,7 +6,6 @@ import os
 import re
 import sys
 import types
-import unittest
 import weakref
 
 import trollius as asyncio
@@ -15,6 +14,7 @@ from trollius import coroutines
 from trollius import test_support as support
 from trollius import test_utils
 from trollius.test_utils import mock
+from trollius.test_utils import unittest
 
 
 PY33 = (sys.version_info >= (3, 3))
@@ -1631,8 +1631,8 @@ class TaskTests(test_utils.TestCase):
         wd['cw'] = cw  # Would fail without __weakref__ slot.
         cw.gen = None  # Suppress warning from __del__.
 
-    @test_utils.skipUnless(PY34,
-                           'need python 3.4 or later')
+    @unittest.skipUnless(PY34,
+                         'need python 3.4 or later')
     def test_log_destroyed_pending_task(self):
         @asyncio.coroutine
         def kill_me(loop):

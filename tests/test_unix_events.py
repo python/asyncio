@@ -11,11 +11,10 @@ import stat
 import sys
 import tempfile
 import threading
-import unittest
+from trollius.test_utils import unittest
 
 if sys.platform == 'win32':
     raise unittest.SkipTest('UNIX only')
-
 
 import trollius as asyncio
 from trollius import log
@@ -37,7 +36,7 @@ def close_pipe_transport(transport):
     transport._pipe = None
 
 
-@test_utils.skipUnless(signal, 'Signals are not supported')
+@unittest.skipUnless(signal, 'Signals are not supported')
 class SelectorEventLoopSignalTests(test_utils.TestCase):
 
     def setUp(self):
@@ -230,8 +229,8 @@ class SelectorEventLoopSignalTests(test_utils.TestCase):
         m_signal.set_wakeup_fd.assert_called_once_with(-1)
 
 
-@test_utils.skipUnless(hasattr(socket, 'AF_UNIX'),
-                       'UNIX Sockets are not supported')
+@unittest.skipUnless(hasattr(socket, 'AF_UNIX'),
+                     'UNIX Sockets are not supported')
 class SelectorEventLoopUnixSocketTests(test_utils.TestCase):
 
     def setUp(self):

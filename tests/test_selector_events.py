@@ -3,7 +3,6 @@
 import errno
 import socket
 import sys
-import unittest
 try:
     import ssl
 except ImportError:
@@ -24,6 +23,7 @@ from trollius.selector_events import _SelectorSslTransport
 from trollius.selector_events import _SelectorTransport
 from trollius.selector_events import _SSL_REQUIRES_SELECT
 from trollius.test_utils import mock
+from trollius.test_utils import unittest
 
 
 if sys.version_info >= (3,):
@@ -86,7 +86,7 @@ class BaseSelectorEventLoopTests(test_utils.TestCase):
 
         close_transport(transport)
 
-    @test_utils.skipIf(ssl is None, 'No ssl module')
+    @unittest.skipIf(ssl is None, 'No ssl module')
     def test_make_ssl_transport(self):
         m = mock.Mock()
         self.loop.add_reader = mock.Mock()
@@ -1129,7 +1129,7 @@ class SelectorSocketTransportTests(test_utils.TestCase):
         tr.close()
 
 
-@test_utils.skipIf(ssl is None, 'No ssl module')
+@unittest.skipIf(ssl is None, 'No ssl module')
 class SelectorSslTransportTests(test_utils.TestCase):
 
     def setUp(self):
@@ -1272,7 +1272,7 @@ class SelectorSslTransportTests(test_utils.TestCase):
         transport.write(b'data')
         m_log.warning.assert_called_with('socket.send() raised exception.')
 
-    @test_utils.skipIf(_SSL_REQUIRES_SELECT, 'buggy ssl with the workaround')
+    @unittest.skipIf(_SSL_REQUIRES_SELECT, 'buggy ssl with the workaround')
     def test_read_ready_recv(self):
         self.sslsock.recv.return_value = b'data'
         transport = self._make_one()
@@ -1294,7 +1294,7 @@ class SelectorSslTransportTests(test_utils.TestCase):
         self.loop.add_writer.assert_called_with(
             transport._sock_fd, transport._write_ready)
 
-    @test_utils.skipIf(_SSL_REQUIRES_SELECT, 'buggy ssl with the workaround')
+    @unittest.skipIf(_SSL_REQUIRES_SELECT, 'buggy ssl with the workaround')
     def test_read_ready_recv_eof(self):
         self.sslsock.recv.return_value = b''
         transport = self._make_one()
@@ -1303,7 +1303,7 @@ class SelectorSslTransportTests(test_utils.TestCase):
         transport.close.assert_called_with()
         self.protocol.eof_received.assert_called_with()
 
-    @test_utils.skipIf(_SSL_REQUIRES_SELECT, 'buggy ssl with the workaround')
+    @unittest.skipIf(_SSL_REQUIRES_SELECT, 'buggy ssl with the workaround')
     def test_read_ready_recv_conn_reset(self):
         err = self.sslsock.recv.side_effect = ConnectionResetError()
         transport = self._make_one()
@@ -1312,7 +1312,7 @@ class SelectorSslTransportTests(test_utils.TestCase):
             transport._read_ready()
         transport._force_close.assert_called_with(err)
 
-    @test_utils.skipIf(_SSL_REQUIRES_SELECT, 'buggy ssl with the workaround')
+    @unittest.skipIf(_SSL_REQUIRES_SELECT, 'buggy ssl with the workaround')
     def test_read_ready_recv_retry(self):
         self.sslsock.recv.side_effect = SSLWantReadError
         transport = self._make_one()
@@ -1328,7 +1328,7 @@ class SelectorSslTransportTests(test_utils.TestCase):
         transport._read_ready()
         self.assertFalse(self.protocol.data_received.called)
 
-    @test_utils.skipIf(_SSL_REQUIRES_SELECT, 'buggy ssl with the workaround')
+    @unittest.skipIf(_SSL_REQUIRES_SELECT, 'buggy ssl with the workaround')
     def test_read_ready_recv_write(self):
         self.loop.remove_reader = mock.Mock()
         self.loop.add_writer = mock.Mock()
@@ -1342,7 +1342,7 @@ class SelectorSslTransportTests(test_utils.TestCase):
         self.loop.add_writer.assert_called_with(
             transport._sock_fd, transport._write_ready)
 
-    @test_utils.skipIf(_SSL_REQUIRES_SELECT, 'buggy ssl with the workaround')
+    @unittest.skipIf(_SSL_REQUIRES_SELECT, 'buggy ssl with the workaround')
     def test_read_ready_recv_exc(self):
         err = self.sslsock.recv.side_effect = OSError()
         transport = self._make_one()
@@ -1480,7 +1480,7 @@ class SelectorSslTransportTests(test_utils.TestCase):
         self.assertFalse(self.protocol.connection_made.called)
         self.assertFalse(self.protocol.connection_lost.called)
 
-    @test_utils.skipIf(ssl is None, 'No SSL support')
+    @unittest.skipIf(ssl is None, 'No SSL support')
     def test_server_hostname(self):
         self.ssl_transport(server_hostname='localhost')
         self.sslcontext.wrap_socket.assert_called_with(

@@ -1,10 +1,9 @@
-from trollius import test_utils
 import os
 import sys
-import unittest
+from trollius.test_utils import unittest
 
 if sys.platform != 'win32':
-    raise test_utils.SkipTest('Windows only')
+    raise unittest.SkipTest('Windows only')
 
 import trollius as asyncio
 from trollius import Return, From

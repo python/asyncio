@@ -1,11 +1,10 @@
 """Tests for queues.py"""
 
-import unittest
-
 import trollius as asyncio
 from trollius import Return, From
 from trollius import test_utils
 from trollius.test_utils import mock
+from trollius.test_utils import unittest
 
 
 class _QueueTestBase(test_utils.TestCase):

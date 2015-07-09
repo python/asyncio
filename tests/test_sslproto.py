@@ -1,19 +1,19 @@
 """Tests for asyncio/sslproto.py."""
 
-import unittest
 try:
     import ssl
 except ImportError:
     ssl = None
 
 import trollius as asyncio
+from trollius import ConnectionResetError
 from trollius import sslproto
 from trollius import test_utils
 from trollius.test_utils import mock
-from trollius import ConnectionResetError
+from trollius.test_utils import unittest
 
 
-@test_utils.skipIf(ssl is None, 'No ssl module')
+@unittest.skipIf(ssl is None, 'No ssl module')
 class SslProtoHandshakeTests(test_utils.TestCase):
 
     def setUp(self):

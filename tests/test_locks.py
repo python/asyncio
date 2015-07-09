@@ -1,12 +1,12 @@
 """Tests for lock.py"""
 
-import unittest
 import re
 
 import trollius as asyncio
 from trollius import From, Return
 from trollius import test_utils
 from trollius.test_utils import mock
+from trollius.test_utils import unittest
 
 
 STR_RGX_REPR = (

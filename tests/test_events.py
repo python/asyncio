@@ -13,7 +13,6 @@ import subprocess
 import sys
 import threading
 import errno
-import unittest
 import weakref
 
 try:
@@ -37,6 +36,7 @@ from trollius import selector_events
 from trollius import sslproto
 from trollius import test_support as support
 from trollius import test_utils
+from trollius.test_utils import unittest
 from trollius.py33_exceptions import (wrap_error,
     BlockingIOError, ConnectionRefusedError,
     FileNotFoundError)
@@ -343,7 +343,7 @@ class EventLoopTestsMixin(object):
         self.loop.run_forever()
         self.assertEqual(results, ['hello', 'world'])
 
-    @test_utils.skipIf(concurrent is None, 'need concurrent.futures')
+    @unittest.skipIf(concurrent is None, 'need concurrent.futures')
     def test_run_in_executor(self):
         def run(arg):
             return (arg, threading.current_thread().ident)
@@ -438,7 +438,7 @@ class EventLoopTestsMixin(object):
             sock = socket.socket()
             self._basetest_sock_client_ops(httpd, sock)
 
-    @test_utils.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
+    @unittest.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
     def test_unix_sock_client_ops(self):
         with test_utils.run_test_unix_server() as httpd:
             sock = socket.socket(socket.AF_UNIX)
@@ -478,7 +478,7 @@ class EventLoopTestsMixin(object):
         conn.close()
         listener.close()
 
-    @test_utils.skipUnless(hasattr(signal, 'SIGKILL'), 'No SIGKILL')
+    @unittest.skipUnless(hasattr(signal, 'SIGKILL'), 'No SIGKILL')
     def test_add_signal_handler(self):
         non_local = {'caught': 0}
 
@@ -521,7 +521,7 @@ class EventLoopTestsMixin(object):
         # Removing again returns False.
         self.assertFalse(self.loop.remove_signal_handler(signal.SIGINT))
 
-    @test_utils.skipUnless(hasattr(signal, 'SIGALRM'), 'No SIGALRM')
+    @unittest.skipUnless(hasattr(signal, 'SIGALRM'), 'No SIGALRM')
     def test_signal_handling_while_selecting(self):
         # Test with a signal actually arriving during a select() call.
         non_local = {'caught': 0}
@@ -536,7 +536,7 @@ class EventLoopTestsMixin(object):
         self.loop.run_forever()
         self.assertEqual(non_local['caught'], 1)
 
-    @test_utils.skipUnless(hasattr(signal, 'SIGALRM'), 'No SIGALRM')
+    @unittest.skipUnless(hasattr(signal, 'SIGALRM'), 'No SIGALRM')
     def test_signal_handling_args(self):
         some_args = (42,)
         non_local = {'caught': 0}
@@ -569,7 +569,7 @@ class EventLoopTestsMixin(object):
                 lambda: MyProto(loop=self.loop), *httpd.address)
             self._basetest_create_connection(conn_fut)
 
-    @test_utils.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
+    @unittest.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
     def test_create_unix_connection(self):
         # Issue #20682: On Mac OS X Tiger, getsockname() returns a
         # zero-length address for UNIX socket.
@@ -655,7 +655,7 @@ class EventLoopTestsMixin(object):
 
             self.assertEqual(cm.exception.reason, 'CERTIFICATE_VERIFY_FAILED')
 
-    @test_utils.skipIf(ssl is None, 'No ssl module')
+    @unittest.skipIf(ssl is None, 'No ssl module')
     def test_create_ssl_connection(self):
         with test_utils.run_test_server(use_ssl=True) as httpd:
             create_connection = functools.partial(
@@ -668,8 +668,8 @@ class EventLoopTestsMixin(object):
         with test_utils.force_legacy_ssl_support():
             self.test_create_ssl_connection()
 
-    @test_utils.skipIf(ssl is None, 'No ssl module')
-    @test_utils.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
+    @unittest.skipIf(ssl is None, 'No ssl module')
+    @unittest.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
     def test_create_ssl_unix_connection(self):
         # Issue #20682: On Mac OS X Tiger, getsockname() returns a
         # zero-length address for UNIX socket.
@@ -755,7 +755,7 @@ class EventLoopTestsMixin(object):
 
         return server, path
 
-    @test_utils.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
+    @unittest.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
     def test_create_unix_server(self):
         proto = MyProto(loop=self.loop)
         server, path = self._make_unix_server(lambda: proto)
@@ -783,7 +783,7 @@ class EventLoopTestsMixin(object):
         # close server
         server.close()
 
-    @test_utils.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
+    @unittest.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
     def test_create_unix_server_path_socket_error(self):
         proto = MyProto(loop=self.loop)
         sock = socket.socket()
@@ -818,7 +818,7 @@ class EventLoopTestsMixin(object):
         sslcontext = self._create_ssl_context(certfile, keyfile)
         return self._make_unix_server(factory, ssl=sslcontext)
 
-    @test_utils.skipIf(ssl is None, 'No ssl module')
+    @unittest.skipIf(ssl is None, 'No ssl module')
     def test_create_server_ssl(self):
         proto = MyProto(loop=self.loop)
         server, host, port = self._make_ssl_server(
@@ -856,8 +856,8 @@ class EventLoopTestsMixin(object):
         with test_utils.force_legacy_ssl_support():
             self.test_create_server_ssl()
 
-    @test_utils.skipIf(ssl is None, 'No ssl module')
-    @test_utils.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
+    @unittest.skipIf(ssl is None, 'No ssl module')
+    @unittest.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
     def test_create_unix_server_ssl(self):
         proto = MyProto(loop=self.loop)
         server, path = self._make_ssl_unix_server(
@@ -891,8 +891,8 @@ class EventLoopTestsMixin(object):
         with test_utils.force_legacy_ssl_support():
             self.test_create_unix_server_ssl()
 
-    @test_utils.skipIf(ssl is None, 'No ssl module')
-    @test_utils.skipIf(asyncio.BACKPORT_SSL_CONTEXT, 'need ssl.SSLContext')
+    @unittest.skipIf(ssl is None, 'No ssl module')
+    @unittest.skipIf(asyncio.BACKPORT_SSL_CONTEXT, 'need ssl.SSLContext')
     def test_create_server_ssl_verify_failed(self):
         proto = MyProto(loop=self.loop)
         server, host, port = self._make_ssl_server(
@@ -924,9 +924,9 @@ class EventLoopTestsMixin(object):
         with test_utils.force_legacy_ssl_support():
             self.test_create_server_ssl_verify_failed()
 
-    @test_utils.skipIf(ssl is None, 'No ssl module')
-    @test_utils.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
-    @test_utils.skipIf(asyncio.BACKPORT_SSL_CONTEXT, 'need ssl.SSLContext')
+    @unittest.skipIf(ssl is None, 'No ssl module')
+    @unittest.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
+    @unittest.skipIf(asyncio.BACKPORT_SSL_CONTEXT, 'need ssl.SSLContext')
     def test_create_unix_server_ssl_verify_failed(self):
         proto = MyProto(loop=self.loop)
         server, path = self._make_ssl_unix_server(
@@ -959,7 +959,7 @@ class EventLoopTestsMixin(object):
         with test_utils.force_legacy_ssl_support():
             self.test_create_unix_server_ssl_verify_failed()
 
-    @test_utils.skipIf(ssl is None, 'No ssl module')
+    @unittest.skipIf(ssl is None, 'No ssl module')
     def test_create_server_ssl_match_failed(self):
         proto = MyProto(loop=self.loop)
         server, host, port = self._make_ssl_server(
@@ -1000,8 +1000,8 @@ class EventLoopTestsMixin(object):
         with test_utils.force_legacy_ssl_support():
             self.test_create_server_ssl_match_failed()
 
-    @test_utils.skipIf(ssl is None, 'No ssl module')
-    @test_utils.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
+    @unittest.skipIf(ssl is None, 'No ssl module')
+    @unittest.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
     def test_create_unix_server_ssl_verified(self):
         proto = MyProto(loop=self.loop)
         server, path = self._make_ssl_unix_server(
@@ -1031,7 +1031,7 @@ class EventLoopTestsMixin(object):
         with test_utils.force_legacy_ssl_support():
             self.test_create_unix_server_ssl_verified()
 
-    @test_utils.skipIf(ssl is None, 'No ssl module')
+    @unittest.skipIf(ssl is None, 'No ssl module')
     def test_create_server_ssl_verified(self):
         proto = MyProto(loop=self.loop)
         server, host, port = self._make_ssl_server(
@@ -1104,7 +1104,7 @@ class EventLoopTestsMixin(object):
 
         server.close()
 
-    @test_utils.skipUnless(support.IPV6_ENABLED, 'IPv6 not supported or enabled')
+    @unittest.skipUnless(support.IPV6_ENABLED, 'IPv6 not supported or enabled')
     def test_create_server_dual_stack(self):
         f_proto = asyncio.Future(loop=self.loop)
 
@@ -1222,7 +1222,7 @@ class EventLoopTestsMixin(object):
         self.assertIsNone(loop._csock)
         self.assertIsNone(loop._ssock)
 
-    @test_utils.skipUnless(sys.platform != 'win32',
+    @unittest.skipUnless(sys.platform != 'win32',
                          "Don't support pipes for Windows")
     def test_read_pipe(self):
         proto = MyReadPipeProto(loop=self.loop)
@@ -1257,7 +1257,7 @@ class EventLoopTestsMixin(object):
         # extra info is available
         self.assertIsNotNone(proto.transport.get_extra_info('pipe'))
 
-    @test_utils.skipUnless(sys.platform != 'win32',
+    @unittest.skipUnless(sys.platform != 'win32',
                          "Don't support pipes for Windows")
     # select, poll and kqueue don't support character devices (PTY) on Mac OS X
     # older than 10.6 (Snow Leopard)
@@ -1297,8 +1297,8 @@ class EventLoopTestsMixin(object):
         # extra info is available
         self.assertIsNotNone(proto.transport.get_extra_info('pipe'))
 
-    @test_utils.skipUnless(sys.platform != 'win32',
-                           "Don't support pipes for Windows")
+    @unittest.skipUnless(sys.platform != 'win32',
+                         "Don't support pipes for Windows")
     def test_write_pipe(self):
         rpipe, wpipe = os.pipe()
         pipeobj = io.open(wpipe, 'wb', 1024)
@@ -1336,7 +1336,7 @@ class EventLoopTestsMixin(object):
         self.loop.run_until_complete(proto.done)
         self.assertEqual('CLOSED', proto.state)
 
-    @test_utils.skipUnless(sys.platform != 'win32',
+    @unittest.skipUnless(sys.platform != 'win32',
                          "Don't support pipes for Windows")
     def test_write_pipe_disconnect_on_close(self):
         rsock, wsock = test_utils.socketpair()
@@ -1364,8 +1364,8 @@ class EventLoopTestsMixin(object):
         self.loop.run_until_complete(proto.done)
         self.assertEqual('CLOSED', proto.state)
 
-    @test_utils.skipUnless(sys.platform != 'win32',
-                           "Don't support pipes for Windows")
+    @unittest.skipUnless(sys.platform != 'win32',
+                         "Don't support pipes for Windows")
     # select, poll and kqueue don't support character devices (PTY) on Mac OS X
     # older than 10.6 (Snow Leopard)
     @support.requires_mac_ver(10, 6)
@@ -1692,7 +1692,7 @@ class SubprocessTestsMixin(object):
         self.check_terminated(proto.returncode)
         transp.close()
 
-    @test_utils.skipIf(sys.platform == 'win32', "Don't have SIGHUP")
+    @unittest.skipIf(sys.platform == 'win32', "Don't have SIGHUP")
     def test_subprocess_send_signal(self):
         prog = os.path.join(os.path.dirname(__file__), 'echo.py')
 
@@ -1784,7 +1784,7 @@ class SubprocessTestsMixin(object):
         self.loop.run_until_complete(proto.completed)
         self.check_killed(proto.returncode)
 
-    @test_utils.skipUnless(hasattr(os, 'setsid'), "need os.setsid()")
+    @unittest.skipUnless(hasattr(os, 'setsid'), "need os.setsid()")
     def test_subprocess_wait_no_same_group(self):
         # start the new process in a new session
         connect = self.loop.subprocess_shell(
@@ -1920,8 +1920,8 @@ else:
             @support.requires_mac_ver(10, 9)
             # Issue #20667: KqueueEventLoopTests.test_read_pty_output()
             # hangs on OpenBSD 5.5
-            @test_utils.skipIf(sys.platform.startswith('openbsd'),
-                              'test hangs on OpenBSD')
+            @unittest.skipIf(sys.platform.startswith('openbsd'),
+                             'test hangs on OpenBSD')
             def test_read_pty_output(self):
                 super(KqueueEventLoopTests, self).test_read_pty_output()
 

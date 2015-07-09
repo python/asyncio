@@ -50,20 +50,17 @@ else:
     from socket import socketpair  # pragma: no cover
 
 try:
-    import unittest2
-    skipIf = unittest2.skipIf
-    skipUnless = unittest2.skipUnless
-    SkipTest = unittest2.SkipTest
-    _TestCase = unittest2.TestCase
+    # Prefer unittest2 if available (on Python 2)
+    import unittest2 as unittest
 except ImportError:
     import unittest
-    skipIf = unittest.skipIf
-    skipUnless = unittest.skipUnless
-    SkipTest = unittest.SkipTest
-    _TestCase = unittest.TestCase
+
+skipIf = unittest.skipIf
+skipUnless = unittest.skipUnless
+SkipTest = unittest.SkipTest
 
 
-if not hasattr(_TestCase, 'assertRaisesRegex'):
+if not hasattr(unittest.TestCase, 'assertRaisesRegex'):
     class _BaseTestCaseContext:
 
         def __init__(self, test_case):
@@ -502,7 +499,7 @@ def get_function_source(func):
     return source
 
 
-class TestCase(_TestCase):
+class TestCase(unittest.TestCase):
     def set_event_loop(self, loop, cleanup=True):
         assert loop is not None
         # ensure that the event loop is passed explicitly in asyncio
@@ -522,7 +519,7 @@ class TestCase(_TestCase):
         # in an except block of a generator
         self.assertEqual(sys.exc_info(), (None, None, None))
 
-    if not hasattr(_TestCase, 'assertRaisesRegex'):
+    if not hasattr(unittest.TestCase, 'assertRaisesRegex'):
         def assertRaisesRegex(self, expected_exception, expected_regex,
                               callable_obj=None, *args, **kwargs):
             """Asserts that the message in a raised exception matches a regex.
@@ -542,7 +539,7 @@ class TestCase(_TestCase):
 
             return context.handle('assertRaisesRegex', callable_obj, args, kwargs)
 
-    if not hasattr(_TestCase, 'assertRegex'):
+    if not hasattr(unittest.TestCase, 'assertRegex'):
         def assertRegex(self, text, expected_regex, msg=None):
             """Fail the test unless the text matches the regular expression."""
             if isinstance(expected_regex, (str, bytes)):

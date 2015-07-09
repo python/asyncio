@@ -3,7 +3,6 @@ import os
 import random
 import signal
 import sys
-import unittest
 from time import sleep
 try:
     import resource
@@ -15,6 +14,7 @@ from trollius import test_support as support
 from trollius import test_utils
 from trollius.test_utils import mock
 from trollius.test_utils import socketpair
+from trollius.test_utils import unittest
 from trollius.time_monotonic import time_monotonic as time
 
 
@@ -87,7 +87,7 @@ class BaseSelectorTestCase(object):
         s.unregister(r)
         s.unregister(w)
 
-    @test_utils.skipUnless(os.name == 'posix', "requires posix")
+    @unittest.skipUnless(os.name == 'posix', "requires posix")
     def test_unregister_after_fd_close_and_reuse(self):
         s = self.SELECTOR()
         self.addCleanup(s.close)
@@ -300,8 +300,8 @@ class BaseSelectorTestCase(object):
 
         self.assertEqual(bufs, [MSG] * NUM_SOCKETS)
 
-    @test_utils.skipIf(sys.platform == 'win32',
-                       'select.select() cannot be used with empty fd sets')
+    @unittest.skipIf(sys.platform == 'win32',
+                     'select.select() cannot be used with empty fd sets')
     def test_empty_select(self):
         s = self.SELECTOR()
         self.addCleanup(s.close)
@@ -333,8 +333,8 @@ class BaseSelectorTestCase(object):
         # Tolerate 2.0 seconds for very slow buildbots
         self.assertTrue(0.8 <= dt <= 2.0, dt)
 
-    @test_utils.skipUnless(hasattr(signal, "alarm"),
-                           "signal.alarm() required for this test")
+    @unittest.skipUnless(hasattr(signal, "alarm"),
+                         "signal.alarm() required for this test")
     def test_select_interrupt(self):
         s = self.SELECTOR()
         self.addCleanup(s.close)
@@ -357,7 +357,7 @@ class ScalableSelectorMixIn(object):
 
     # see issue #18963 for why it's skipped on older OS X versions
     @support.requires_mac_ver(10, 5)
-    @test_utils.skipUnless(resource, "Test needs resource module")
+    @unittest.skipUnless(resource, "Test needs resource module")
     def test_above_fd_setsize(self):
         # A scalable implementation should have no problem with more than
         # FD_SETSIZE file descriptors. Since we don't know the value, we just
@@ -409,23 +409,23 @@ class SelectSelectorTestCase(BaseSelectorTestCase, test_utils.TestCase):
     SELECTOR = selectors.SelectSelector
 
 
-@test_utils.skipUnless(hasattr(selectors, 'PollSelector'),
-                       "Test needs selectors.PollSelector")
+@unittest.skipUnless(hasattr(selectors, 'PollSelector'),
+                     "Test needs selectors.PollSelector")
 class PollSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn,
                            test_utils.TestCase):
 
     SELECTOR = getattr(selectors, 'PollSelector', None)
 
 
-@test_utils.skipUnless(hasattr(selectors, 'EpollSelector'),
-                       "Test needs selectors.EpollSelector")
+@unittest.skipUnless(hasattr(selectors, 'EpollSelector'),
+                     "Test needs selectors.EpollSelector")
 class EpollSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn,
                             test_utils.TestCase):
 
     SELECTOR = getattr(selectors, 'EpollSelector', None)
 
 
-@test_utils.skipUnless(hasattr(selectors, 'KqueueSelector'),
+@unittest.skipUnless(hasattr(selectors, 'KqueueSelector'),
                        "Test needs selectors.KqueueSelector)")
 class KqueueSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn,
                              test_utils.TestCase):
@@ -433,7 +433,7 @@ class KqueueSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn,
     SELECTOR = getattr(selectors, 'KqueueSelector', None)
 
 
-@test_utils.skipUnless(hasattr(selectors, 'DevpollSelector'),
+@unittest.skipUnless(hasattr(selectors, 'DevpollSelector'),
                        "Test needs selectors.DevpollSelector")
 class DevpollSelectorTestCase(BaseSelectorTestCase, ScalableSelectorMixIn,
                               test_utils.TestCase):

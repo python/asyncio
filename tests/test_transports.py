@@ -1,11 +1,10 @@
 """Tests for transports.py."""
 
-import unittest
-
 import trollius as asyncio
 from trollius import test_utils
 from trollius import transports
 from trollius.test_utils import mock
+from trollius.test_utils import unittest
 
 try:
     memoryview

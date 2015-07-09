@@ -4,12 +4,12 @@ import trollius as asyncio
 import os
 import signal
 import sys
-import unittest
+from trollius import BrokenPipeError, ConnectionResetError, ProcessLookupError
 from trollius import From, Return
 from trollius import base_subprocess
 from trollius import test_support as support
 from trollius.test_utils import mock
-from trollius import BrokenPipeError, ConnectionResetError, ProcessLookupError
+from trollius.test_utils import unittest
 
 if sys.platform != 'win32':
     from trollius import unix_events
@@ -134,7 +134,7 @@ class SubprocessMixin:
         exitcode = self.loop.run_until_complete(proc.wait())
         self.assertEqual(exitcode, 7)
 
-    @test_utils.skipUnless(hasattr(os, 'setsid'), "need os.setsid()")
+    @unittest.skipUnless(hasattr(os, 'setsid'), "need os.setsid()")
     def test_start_new_session(self):
         def start_new_session():
             os.setsid()
@@ -171,7 +171,7 @@ class SubprocessMixin:
         else:
             self.assertEqual(-signal.SIGTERM, returncode)
 
-    @test_utils.skipIf(sys.platform == 'win32', "Don't have SIGHUP")
+    @unittest.skipIf(sys.platform == 'win32', "Don't have SIGHUP")
     def test_send_signal(self):
         code = '; '.join((
             'import sys, time',

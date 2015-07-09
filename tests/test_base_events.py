@@ -7,7 +7,6 @@ import socket
 import sys
 import threading
 import time
-import unittest
 
 import trollius as asyncio
 from trollius import Return, From
@@ -17,6 +16,7 @@ from trollius import test_utils
 from trollius.py33_exceptions import BlockingIOError
 from trollius.test_utils import mock
 from trollius.time_monotonic import time_monotonic
+from trollius.test_utils import unittest
 from trollius import test_support as support
 
 
@@ -1159,8 +1159,8 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
         self.assertRaises(
             socket.error, self.loop.run_until_complete, coro)
 
-    @test_utils.skipUnless(support.IPV6_ENABLED,
-                           'IPv6 not supported or enabled')
+    @unittest.skipUnless(support.IPV6_ENABLED,
+                         'IPv6 not supported or enabled')
     def test_create_datagram_endpoint_no_matching_family(self):
         coro = self.loop.create_datagram_endpoint(
             asyncio.DatagramProtocol,

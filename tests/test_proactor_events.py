@@ -1,7 +1,6 @@
 """Tests for proactor_events.py"""
 
 import socket
-import unittest
 
 from trollius import test_utils
 from trollius.proactor_events import BaseProactorEventLoop
@@ -10,6 +9,7 @@ from trollius.proactor_events import _ProactorSocketTransport
 from trollius.proactor_events import _ProactorWritePipeTransport
 from trollius.py33_exceptions import ConnectionAbortedError, ConnectionResetError
 from trollius.test_utils import mock
+from trollius.test_utils import unittest
 import trollius as asyncio
 
 

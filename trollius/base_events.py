@@ -117,10 +117,10 @@ def _check_resolved_address(sock, address):
             type_mask |= socket.SOCK_CLOEXEC
         try:
             socket.getaddrinfo(host, port,
-                               family=family,
-                               type=(sock.type & ~type_mask),
-                               proto=sock.proto,
-                               flags=socket.AI_NUMERICHOST)
+                               family,
+                               (sock.type & ~type_mask),
+                               sock.proto,
+                               socket.AI_NUMERICHOST)
         except socket.gaierror as err:
             raise ValueError("address must be resolved (IP address), "
                              "got host %r: %s"

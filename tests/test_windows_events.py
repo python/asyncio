@@ -11,6 +11,7 @@ from trollius import _overlapped
 from trollius import py33_winapi as _winapi
 from trollius import windows_events
 from trollius.py33_exceptions import PermissionError, FileNotFoundError
+from trollius import test_utils
 from trollius.test_utils import mock
 
 

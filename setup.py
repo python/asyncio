@@ -1,5 +1,5 @@
 # Release procedure:
-#  - fill Tulip changelog
+#  - fill trollius changelog
 #  - run maybe update_tulip.sh
 #  - run unit tests with concurrent.futures
 #  - run unit tests without concurrent.futures

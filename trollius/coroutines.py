@@ -371,7 +371,7 @@ if events.asyncio is not None:
     if hasattr(events.asyncio, 'coroutines'):
         _COROUTINE_TYPES += (events.asyncio.coroutines.CoroWrapper,)
     else:
-        # old Tulip/Python versions
+        # old asyncio/Python versions
         _COROUTINE_TYPES += (events.asyncio.tasks.CoroWrapper,)
 
 def iscoroutine(obj):

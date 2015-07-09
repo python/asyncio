@@ -9,6 +9,6 @@ The photo of Trollis flower was taken by Imartin6 and distributed under the CC
 BY-SA 3.0 license. It comes from:
 http://commons.wikimedia.org/wiki/File:Trollius_altaicus.jpg
 
-Trollius is a port of the Tulip project on Python 2, see also authors of the
-Tulip project (AUTHORS file of the Tulip project).
+Trollius is a port of the asyncio project on Python 2, see also authors of the
+asyncio project (AUTHORS file).
 

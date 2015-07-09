@@ -1,17 +1,17 @@
-++++++++++++++++++
-Trollius and Tulip
-++++++++++++++++++
+++++++++++++++++++++
+Trollius and asyncio
+++++++++++++++++++++
 
-Differences between Trollius and Tulip
-======================================
+Differences between Trollius and asyncio
+========================================
 
 Syntax of coroutines
 --------------------
 
-The major difference between Trollius and Tulip is the syntax of coroutines:
+The major difference between Trollius and asyncio is the syntax of coroutines:
 
 ==================  ======================
-Tulip               Trollius
+asyncio             Trollius
 ==================  ======================
 ``yield from ...``  ``yield From(...)``
 ``yield from []``   ``yield From(None)``
@@ -129,41 +129,41 @@ Other differences
   ``BaseEventLoop.run_in_executor()`` uses a synchronous executor instead of a
   pool of threads. It blocks until the function returns. For example, DNS
   resolutions are blocking in this case.
-* Trollius has more symbols than Tulip for compatibility with Python older than
-  3.3:
+* Trollius has more symbols than asyncio for compatibility with Python older
+  than 3.3:
 
   - ``From``: part of ``yield From(...)`` syntax
   - ``Return``: part of ``raise Return(...)`` syntax
 
 
-Write code working on Trollius and Tulip
-========================================
+Write code working on Trollius and asyncio
+==========================================
 
-Trollius and Tulip are different, especially for coroutines (``yield
+Trollius and asyncio are different, especially for coroutines (``yield
 From(...)`` vs ``yield from ...``).
 
 To use asyncio or Trollius on Python 2 and Python 3, add the following code at
 the top of your file::
 
     try:
-        # Use builtin asyncio on Python 3.4+, or Tulip on Python 3.3
+        # Use builtin asyncio on Python 3.4+, or asyncio on Python 3.3
         import asyncio
     except ImportError:
         # Use Trollius on Python <= 3.2
         import trollius as asyncio
 
 It is possible to write code working on both projects using only callbacks.
-This option is used by the following projects which work on Trollius and Tulip:
+This option is used by the following projects which work on Trollius and asyncio:
 
 * `AutobahnPython <https://github.com/tavendo/AutobahnPython>`_: WebSocket &
-  WAMP for Python, it works on Trollius (Python 2.6 and 2.7), Tulip (Python
+  WAMP for Python, it works on Trollius (Python 2.6 and 2.7), asyncio (Python
   3.3) and Python 3.4 (asyncio), and also on Twisted.
 * `Pulsar <http://pythonhosted.org/pulsar/>`_: Event driven concurrent
   framework for Python. With pulsar you can write asynchronous servers
   performing one or several activities in different threads and/or processes.
   Trollius 0.3 requires Pulsar 0.8.2 or later. Pulsar uses the ``asyncio``
   module if available, or import ``trollius``.
-* `Tornado <http://www.tornadoweb.org/>`_ supports Tulip and Trollius since
+* `Tornado <http://www.tornadoweb.org/>`_ supports asyncio and Trollius since
   Tornado 3.2: `tornado.platform.asyncio — Bridge between asyncio and Tornado
   <http://tornado.readthedocs.org/en/latest/asyncio.html>`_. It tries to import
   asyncio or fallback on importing trollius.
@@ -171,10 +171,10 @@ This option is used by the following projects which work on Trollius and Tulip:
 Another option is to provide functions returning ``Future`` objects, so the
 caller can decide to use callback using ``fut.add_done_callback(callback)`` or
 to use coroutines (``yield From(fut)`` for Trollius, or ``yield from fut`` for
-Tulip). This option is used by the `aiodns <https://github.com/saghul/aiodns>`_
+asyncio). This option is used by the `aiodns <https://github.com/saghul/aiodns>`_
 project for example.
 
-Since Trollius 0.4, it's possible to use Tulip and Trollius coroutines in the
+Since Trollius 0.4, it's possible to use asyncio and Trollius coroutines in the
 same process. The only limit is that the event loop must be a Trollius event
 loop.
 

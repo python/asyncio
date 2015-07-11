@@ -22,9 +22,6 @@ _PENDING = 'PENDING'
 _CANCELLED = 'CANCELLED'
 _FINISHED = 'FINISHED'
 
-_PY34 = sys.version_info >= (3, 4)
-_PY35 = sys.version_info >= (3, 5)
-
 Error = executor.Error
 CancelledError = executor.CancelledError
 TimeoutError = executor.TimeoutError
@@ -207,7 +204,7 @@ class Future(object):
     # On Python 3.3 and older, objects with a destructor part of a reference
     # cycle are never destroyed. It's not more the case on Python 3.4 thanks
     # to the PEP 442.
-    if _PY34:
+    if compat.PY34:
         def __del__(self):
             if not self._log_traceback:
                 # set_exception() was not called, or result() or exception()
@@ -377,7 +374,7 @@ class Future(object):
             self._exception_tb = sys.exc_info()[2]
         self._state = _FINISHED
         self._schedule_callbacks()
-        if _PY34:
+        if compat.PY34:
             self._log_traceback = True
         else:
             self._tb_logger = _TracebackLogger(self, exception)
@@ -425,9 +422,8 @@ class Future(object):
                 result = other.result()
                 self.set_result(result)
 
-    #if _PY35:
-    #    __await__ = __iter__ # make compatible with 'await' expression
-
+    if compat.PY35:
+        __await__ = __iter__ # make compatible with 'await' expression
 
 if events.asyncio is not None:
     # Accept also asyncio Future objects for interoperability

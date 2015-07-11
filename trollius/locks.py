@@ -5,12 +5,10 @@ __all__ = ['Lock', 'Event', 'Condition', 'Semaphore', 'BoundedSemaphore']
 import collections
 import sys
 
+from . import compat
 from . import events
 from . import futures
 from .coroutines import coroutine, From, Return
-
-
-_PY35 = sys.version_info >= (3, 5)
 
 
 class _ContextManager:
@@ -54,23 +52,23 @@ class _ContextManagerMixin(object):
         pass
 
     # FIXME: support PEP 492?
-    #if _PY35:
+    # if compat.PY35:
 
-    #    def __await__(self):
-    #        # To make "with await lock" work.
-    #        yield from self.acquire()
-    #        return _ContextManager(self)
+    #     def __await__(self):
+    #         # To make "with await lock" work.
+    #         yield from self.acquire()
+    #         return _ContextManager(self)
 
-    #    @coroutine
-    #    def __aenter__(self):
-    #        yield from self.acquire()
-    #        # We have no use for the "as ..."  clause in the with
-    #        # statement for locks.
-    #        return None
+    #     @coroutine
+    #     def __aenter__(self):
+    #         yield from self.acquire()
+    #         # We have no use for the "as ..."  clause in the with
+    #         # statement for locks.
+    #         return None
 
-    #    @coroutine
-    #    def __aexit__(self, exc_type, exc, tb):
-    #        self.release()
+    #     @coroutine
+    #     def __aexit__(self, exc_type, exc, tb):
+    #         self.release()
 
 
 class Lock(_ContextManagerMixin):

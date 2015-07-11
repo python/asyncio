@@ -1,9 +1,8 @@
 """Abstract Transport class."""
 
 import sys
-from .compat import flatten_bytes
 
-_PY34 = sys.version_info >= (3, 4)
+from trollius import compat
 
 __all__ = ['BaseTransport', 'ReadTransport', 'WriteTransport',
            'Transport', 'DatagramTransport', 'SubprocessTransport',
@@ -95,8 +94,8 @@ class WriteTransport(BaseTransport):
         The default implementation concatenates the arguments and
         calls write() on the result.
         """
-        data = map(flatten_bytes, list_of_data)
-        self.write(b''.join(data))
+        data = compat.flatten_list_bytes(list_of_data)
+        self.write(data)
 
     def write_eof(self):
         """Close the write end after flushing buffered data.

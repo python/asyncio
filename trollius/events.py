@@ -28,12 +28,11 @@ except (ImportError, SyntaxError):
     # from" if asyncio module is in the Python path
     asyncio = None
 
-
-_PY34 = sys.version_info >= (3, 4)
+from trollius import compat
 
 
 def _get_function_source(func):
-    if _PY34:
+    if compat.PY34:
         func = inspect.unwrap(func)
     elif hasattr(func, '__wrapped__'):
         func = func.__wrapped__
@@ -42,7 +41,7 @@ def _get_function_source(func):
         return (code.co_filename, code.co_firstlineno)
     if isinstance(func, functools.partial):
         return _get_function_source(func.func)
-    if _PY34 and isinstance(func, functools.partialmethod):
+    if compat.PY34 and isinstance(func, functools.partialmethod):
         return _get_function_source(func.func)
     return None
 

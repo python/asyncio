@@ -27,11 +27,6 @@ if $(grep -q -E '\{[^0-9].*format' */*.py); then
     grep -E '\{[^0-9].*format' */*.py
     exit 1
 fi
-if $(grep -q -E 'unittest\.skip' tests/*.py); then
-    echo "Issues with Python 2.6 compatibility:"
-    grep -E 'unittest\.skip' tests/*.py
-    exit 1
-fi
 if $(grep -q -F 'super()' */*.py); then
     echo "Issues with Python 2.6 compatibility:"
     grep -F 'super()' */*.py

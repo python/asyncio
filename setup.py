@@ -1,9 +1,7 @@
 # Release procedure:
 #  - fill trollius changelog
 #  - run maybe ./update_asyncio_step1.sh
-#  - run unit tests with concurrent.futures
-#  - run unit tests without concurrent.futures
-#  - run unit tests without ssl: set sys.modules['ssl']=None at startup
+#  - run all tests: tox
 #  - test examples
 #  - update version in setup.py (version) and doc/conf.py (version, release)
 #  - set release date in doc/changelog.rst

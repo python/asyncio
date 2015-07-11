@@ -29,7 +29,8 @@ import random
 import re
 import sys
 import textwrap
-from trollius.compat import PY33
+PY2 = (sys.version_info < (3,))
+PY33 = (sys.version_info >= (3, 3))
 if PY33:
     import importlib.machinery
 else:
@@ -38,7 +39,7 @@ try:
     import coverage
 except ImportError:
     coverage = None
-if sys.version_info < (3,):
+if PY2:
     sys.exc_clear()
 
 try:
@@ -57,6 +58,12 @@ ARGS.add_option(
 ARGS.add_option(
     '-f', '--failfast', action="store_true", default=False,
     dest='failfast', help='Stop on first fail or error')
+ARGS.add_option(
+    '--no-ssl', action="store_true", default=False,
+    help='Disable the SSL module')
+ARGS.add_option(
+    '--no-concurrent', action="store_true", default=False,
+    help='Disable the concurrent module')
 ARGS.add_option(
     '-c', '--catch', action="store_true", default=False,
     dest='catchbreak', help='Catch control-C and display results')
@@ -121,7 +128,7 @@ def load_modules(basedir, suffix='.py'):
     for modname, sourcefile in list_dir('', basedir):
         if modname == 'runtests':
             continue
-        if modname == 'test_asyncio' and sys.version_info <= (3, 3):
+        if modname == 'test_asyncio' and not PY33:
             print("Skipping '{0}': need at least Python 3.3".format(modname),
                   file=sys.stderr)
             continue
@@ -237,6 +244,12 @@ def _runtests(args, tests):
 
 def runtests():
     args, pattern = ARGS.parse_args()
+
+    if args.no_ssl:
+        sys.modules['ssl'] = None
+
+    if args.no_concurrent:
+        sys.modules['concurrent'] = None
 
     if args.coverage and coverage is None:
         URL = "bitbucket.org/pypa/setuptools/raw/bootstrap/ez_setup.py"

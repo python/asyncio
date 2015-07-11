@@ -1,9 +1,8 @@
 set -e -x
-hg update trollius
-hg pull --update
-hg update default
-hg pull https://code.google.com/p/tulip/
-hg update
-hg update trollius
-hg merge default
+git checkout trollius
+git pull -u
+git checkout master
+git pull https://github.com/python/asyncio.git
+git checkout trollius
+git merge master
 echo "Now run ./update-tulip-step2.sh"

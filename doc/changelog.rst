@@ -44,9 +44,9 @@ API changes:
 
 New SSL implementation:
 
-* Python issue #22560: On Python 3.5 and newer, a new SSL implementation based
-  on ssl.MemoryBIO instead of the legacy SSL implementation. Patch written by
-  Antoine Pitrou, based on the work of Geert Jansen.
+* Python issue #22560: On Python 3.5 and newer, use new SSL implementation
+  based on ssl.MemoryBIO instead of the legacy SSL implementation. Patch
+  written by Antoine Pitrou, based on the work of Geert Jansen.
 * If available, the new SSL implementation can be used by ProactorEventLoop to
   support SSL.
 
@@ -69,13 +69,13 @@ Enhance, fix and cleanup the IocpProactor:
   UnregisterWaitEx() is used with an event instead of UnregisterWait().
 * Python issue #23293: Rewrite IocpProactor.connect_pipe() as a coroutine. Use
   a coroutine with asyncio.sleep() instead of call_later() to ensure that the
-  schedule call is cancelled.
-* Fix ProactorEventLoop.start_serving_pipe(). If a client connected before the
-  server was closed: drop the client (close the pipe) and exit
+  scheduled call is cancelled.
+* Fix ProactorEventLoop.start_serving_pipe(). If a client was connected before
+  the server was closed: drop the client (close the pipe) and exit
 * Python issue #23293: Cleanup IocpProactor.close(). The special case for
-  connect_pipe() is not more needed. connect_pipe() doesn't use overlapped
+  connect_pipe() is no more needed. connect_pipe() doesn't use overlapped
   operations anymore.
-*  IocpProactor.close(): don't cancel futures which are already cancelled
+* IocpProactor.close(): don't cancel futures which are already cancelled
 * Enhance (fix) BaseProactorEventLoop._loop_self_reading(). Handle correctly
   CancelledError: just exit. On error, log the exception and exit; don't try to
   close the event loop (it doesn't work).

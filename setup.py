@@ -1,6 +1,6 @@
 # Release procedure:
 #  - fill trollius changelog
-#  - run maybe update_tulip.sh
+#  - run maybe ./update_asyncio_step1.sh
 #  - run unit tests with concurrent.futures
 #  - run unit tests without concurrent.futures
 #  - run unit tests without ssl: set sys.modules['ssl']=None at startup
@@ -9,13 +9,14 @@
 #  - set release date in doc/changelog.rst
 #  - check that "python setup.py sdist" contains all files tracked by
 #    the SCM (Mercurial): update MANIFEST.in if needed
-#  - hg ci
-#  - hg tag trollius-VERSION
-#  - hg push
+#  - git commit
+#  - git tag trollius-VERSION
+#  - git push --tags
+#  - git push
 #  - On Linux: python setup.py register sdist bdist_wheel upload
 #  - On Windows: python release.py release
 #  - increment version in setup.py (version) and doc/conf.py (version, release)
-#  - hg ci && hg push
+#  - gt commit && git push
 
 import os
 import sys

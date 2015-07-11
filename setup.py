@@ -45,14 +45,14 @@ if sys.version_info < (3,):
 
 install_options = {
     "name": "trollius",
-    "version": "1.0.5",
+    "version": "2.0",
     "license": "Apache License 2.0",
     "author": 'Victor Stinner',
     "author_email": 'victor.stinner@gmail.com',
 
     "description": "Port of the Tulip project (asyncio module, PEP 3156) on Python 2",
     "long_description": long_description,
-    "url": "https://bitbucket.org/enovance/trollius/",
+    "url": "https://github.com/haypo/trollius",
 
     "classifiers": [
         "Programming Language :: Python",

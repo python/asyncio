@@ -35,8 +35,8 @@ OpenIndiana.
 * `Trollius documentation <http://trollius.readthedocs.org/>`_
 * `Trollius project in the Python Cheeseshop (PyPI)
   <https://pypi.python.org/pypi/trollius>`_
-* `Trollius project at Github <https://github.com/haypo/trollius>`_ (code,
-  bug tracker)
+* `Trollius project at Github <https://github.com/haypo/trollius>`_
+  (bug tracker, source code)
 * Copyright/license: Open source, Apache 2.0. Enjoy!
 
 See also the `asyncio project at Github <https://github.com/python/asyncio>`_.

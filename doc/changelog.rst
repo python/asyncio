@@ -2,14 +2,32 @@
 Change log
 ++++++++++
 
-Version 1.0.5
-=============
+Version 2.0
+===========
 
 Major changes: on Python 3.5+ ProactorEventLoop now supports SSL, a lot of
 bugfixes (random race conditions) in the ProactorEventLoop.
 
+The Trollius project moved from Bitbucket to Github. The project is now a fork
+of the Git repository of the asyncio project (previously called the "tulip"
+project), the trollius source code lives in the trollius branch.
+
+The new Trollius home page is now: https://github.com/haypo/trollius
+
+The asyncio project moved to: https://github.com/python/asyncio
+
+Note: the PEP 492 is not supported in trollius (yet?).
+
 API changes:
 
+* Issue #234: Drop JoinableQueue on Python 3.5+
+* add the asyncio.ensure_future() function, previously called async().
+  The async() function is now deprecated.
+* New event loop methods: set_task_factory() and get_task_factory().
+* Python issue #23347: Make BaseSubprocessTransport.wait() private.
+* Python issue #23347: send_signal(), kill() and terminate() methods of
+  BaseSubprocessTransport now check if the transport was closed and if the
+  process exited.
 * Python issue #23209, #23225: selectors.BaseSelector.get_key() now raises a
   RuntimeError if the selector is closed. And selectors.BaseSelector.close()
   now clears its internal reference to the selector mapping to break a
@@ -18,6 +36,11 @@ API changes:
   pipe is closed.
 * Remove Overlapped.WaitNamedPipeAndConnect() of the _overlapped module,
   it is no more used and it had issues.
+* Python issue #23537: Remove 2 unused private methods of
+  BaseSubprocessTransport: _make_write_subprocess_pipe_proto,
+  _make_read_subprocess_pipe_proto. Methods only raise NotImplementedError and
+  are never used.
+* Remove unused SSLProtocol._closing attribute
 
 New SSL implementation:
 
@@ -57,8 +80,35 @@ Enhance, fix and cleanup the IocpProactor:
   CancelledError: just exit. On error, log the exception and exit; don't try to
   close the event loop (it doesn't work).
 
-Bugfixes:
+Bug fixes:
 
+* Fix LifoQueue's and PriorityQueue's put() and task_done().
+* Issue #222: Fix the @coroutine decorator for functions without __name__
+  attribute like functools.partial(). Enhance also the representation of a
+  CoroWrapper if the coroutine function is a functools.partial().
+* Python issue #23879: SelectorEventLoop.sock_connect() must not call connect()
+  again if the first call to connect() raises an InterruptedError. When the C
+  function connect() fails with EINTR, the connection runs in background. We
+  have to wait until the socket becomes writable to be notified when the
+  connection succeed or fails.
+* Fix _SelectorTransport.__repr__() if the event loop is closed
+* Fix repr(BaseSubprocessTransport) if it didn't start yet
+* Workaround CPython bug #23353. Don't use yield/yield-from in an except block
+  of a generator. Store the exception and handle it outside the except block.
+* Fix BaseSelectorEventLoop._accept_connection(). Close the transport on error.
+  In debug mode, log errors using call_exception_handler().
+* Fix _UnixReadPipeTransport and _UnixWritePipeTransport. Only start reading
+  when connection_made() has been called.
+* Fix _SelectorSslTransport.close(). Don't call protocol.connection_lost() if
+  protocol.connection_made() was not called yet: if the SSL handshake failed or
+  is still in progress. The close() method can be called if the creation of the
+  connection is cancelled, by a timeout for example.
+* Fix _SelectorDatagramTransport constructor. Only start reading after
+  connection_made() has been called.
+* Fix _SelectorSocketTransport constructor. Only start reading when
+  connection_made() has been called: protocol.data_received() must not be
+  called before protocol.connection_made().
+* Fix SSLProtocol.eof_received(). Wake-up the waiter if it is not done yet.
 * Close transports on error. Fix create_datagram_endpoint(),
   connect_read_pipe() and connect_write_pipe(): close the transport if the task
   is cancelled or on error.
@@ -82,8 +132,34 @@ Bugfixes:
 * Python issue #23209: Break some reference cycles in asyncio. Patch written by
   Martin Richard.
 
-Changes:
+Optimization:
 
+* Only call _check_resolved_address() in debug mode. _check_resolved_address()
+  is implemented with getaddrinfo() which is slow. If available, use
+  socket.inet_pton() instead of socket.getaddrinfo(), because it is much faster
+
+Other changes:
+
+* Python issue #23456: Add missing @coroutine decorators
+* Python issue #23475: Fix test_close_kill_running(). Really kill the child
+  process, don't mock completly the Popen.kill() method. This change fix memory
+  leaks and reference leaks.
+* BaseSubprocessTransport: repr() mentions when the child process is running
+* BaseSubprocessTransport.close() doesn't try to kill the process if it already
+  finished.
+* Tulip issue #221: Fix docstring of QueueEmpty and QueueFull
+* Fix subprocess_attach_write_pipe example. Close the transport, not directly
+  the pipe.
+* Python issue #23347: send_signal(), terminate(), kill() don't check if the
+  transport was closed. The check broken a Tulip example and this limitation is
+  arbitrary. Check if _proc is None should be enough. Enhance also close(): do
+  nothing when called the second time.
+* Python issue #23347: Refactor creation of subprocess transports.
+* Python issue #23243: On Python 3.4 and newer, emit a ResourceWarning when an
+  event loop or a transport is not explicitly closed
+* tox.ini: enable ResourceWarning warnings
+* Python issue #23243: test_sslproto: Close explicitly transports
+* SSL transports now clear their reference to the waiter.
 * Python issue #23208: Add BaseEventLoop._current_handle. In debug mode,
   BaseEventLoop._run_once() now sets the BaseEventLoop._current_handle
   attribute to the handle currently executed.
@@ -105,7 +181,6 @@ Changes:
   was raised when the thread had no event loop. Now the methods always raise an
   exception in debug mode when called from the wrong thread. It should help to
   notice misusage of the API.
-
 
 2014-12-19: Version 1.0.4
 =========================

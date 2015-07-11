@@ -1,16 +1,16 @@
 set -e
 
 # Check for merge conflicts
-if $(hg resolve -l | grep -q -v '^R'); then
+if $(git status --porcelain|grep -q '^.U '); then
     echo "Fix the following conflicts:"
-    hg resolve -l | grep -v '^R'
+    git status
     exit 1
 fi
 
 # Ensure that yield from is not used
-if $(hg diff|grep -q 'yield from'); then
+if $(git diff|grep -q 'yield from'); then
     echo "yield from present in changed code!"
-    hg diff | grep 'yield from' -B5 -A3
+    git diff | grep 'yield from' -B5 -A3
     exit 1
 fi
 

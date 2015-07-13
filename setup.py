@@ -15,7 +15,7 @@
 #  - On Linux: python setup.py register sdist bdist_wheel upload
 #  - On Windows: python releaser.py release
 #  - increment version in setup.py (version) and doc/conf.py (version, release)
-#  - gt commit && git push
+#  - git commit -a && git push
 
 import os
 import sys
@@ -46,7 +46,7 @@ if sys.version_info < (3,):
 
 install_options = {
     "name": "trollius",
-    "version": "2.0",
+    "version": "2.0.1",
     "license": "Apache License 2.0",
     "author": 'Victor Stinner',
     "author_email": 'victor.stinner@gmail.com',

@@ -1,12 +1,12 @@
 # Release procedure:
 #  - fill trollius changelog
-#  - run maybe ./update_asyncio_step1.sh
+#  - run maybe ./update-asyncio-step1.sh
 #  - run all tests: tox
 #  - test examples
-#  - update version in setup.py (version) and doc/conf.py (version, release)
 #  - check that "python setup.py sdist" contains all files tracked by
 #    the SCM (Mercurial): update MANIFEST.in if needed
 #  - run test on Windows: releaser.py test
+#  - update version in setup.py (version) and doc/conf.py (version, release)
 #  - set release date in doc/changelog.rst
 #  - git commit
 #  - git tag trollius-VERSION

@@ -2,7 +2,9 @@ include AUTHORS COPYING TODO.rst tox.ini
 include Makefile
 include overlapped.c pypi.bat
 include check.py runtests.py run_aiotest.py release.py
-include update-tulip*.sh
+include update-asyncio-*.sh
+include .travis.yml
+include releaser.conf
 
 include doc/conf.py doc/make.bat doc/Makefile
 include doc/*.rst doc/*.jpg

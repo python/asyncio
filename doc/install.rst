@@ -39,8 +39,8 @@ Trollius on Windows:
 
 .. note::
 
-   Only wheel packages for Python 2.7 are currently distributed on the
-   Cheeseshop (PyPI). If you need wheel packages for other Python versions,
+   Only wheel packages for Python 2.7, 3.3 and 3.4 are currently distributed on
+   the Cheeseshop (PyPI). If you need wheel packages for other Python versions,
    please ask.
 
 Download source code

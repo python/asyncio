@@ -4,15 +4,16 @@
 #  - run all tests: tox
 #  - test examples
 #  - update version in setup.py (version) and doc/conf.py (version, release)
-#  - set release date in doc/changelog.rst
 #  - check that "python setup.py sdist" contains all files tracked by
 #    the SCM (Mercurial): update MANIFEST.in if needed
+#  - run test on Windows: releaser.py test
+#  - set release date in doc/changelog.rst
 #  - git commit
 #  - git tag trollius-VERSION
 #  - git push --tags
 #  - git push
 #  - On Linux: python setup.py register sdist bdist_wheel upload
-#  - On Windows: python release.py release
+#  - On Windows: python releaser.py release
 #  - increment version in setup.py (version) and doc/conf.py (version, release)
 #  - gt commit && git push
 

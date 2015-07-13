@@ -36,6 +36,7 @@ except ImportError:  # pragma: no cover
     ssl = None
 
 from . import base_events
+from . import compat
 from . import events
 from . import futures
 from . import selectors
@@ -517,7 +518,11 @@ class TestCase(unittest.TestCase):
 
         # Detect CPython bug #23353: ensure that yield/yield-from is not used
         # in an except block of a generator
-        self.assertEqual(sys.exc_info(), (None, None, None))
+        if sys.exc_info()[0] == SkipTest:
+            if compat.PY2:
+                sys.exc_clear()
+        else:
+            self.assertEqual(sys.exc_info(), (None, None, None))
 
     if not hasattr(unittest.TestCase, 'assertRaisesRegex'):
         def assertRaisesRegex(self, expected_exception, expected_regex,

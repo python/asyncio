@@ -2,6 +2,9 @@
 
 import sys
 
+# Python 2 or older?
+PY2 = (sys.version_info <= (2,))
+
 # Python 2.6 or older?
 PY26 = (sys.version_info < (2, 7))
 

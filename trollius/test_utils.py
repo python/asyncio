@@ -524,37 +524,6 @@ class TestCase(unittest.TestCase):
         else:
             self.assertEqual(sys.exc_info(), (None, None, None))
 
-    if not hasattr(unittest.TestCase, 'assertRaisesRegex'):
-        def assertRaisesRegex(self, expected_exception, expected_regex,
-                              callable_obj=None, *args, **kwargs):
-            """Asserts that the message in a raised exception matches a regex.
-
-            Args:
-                expected_exception: Exception class expected to be raised.
-                expected_regex: Regex (re pattern object or string) expected
-                        to be found in error message.
-                callable_obj: Function to be called.
-                msg: Optional message used in case of failure. Can only be used
-                        when assertRaisesRegex is used as a context manager.
-                args: Extra args.
-                kwargs: Extra kwargs.
-            """
-            context = _AssertRaisesContext(expected_exception, self, callable_obj,
-                                           expected_regex)
-
-            return context.handle('assertRaisesRegex', callable_obj, args, kwargs)
-
-    if not hasattr(unittest.TestCase, 'assertRegex'):
-        def assertRegex(self, text, expected_regex, msg=None):
-            """Fail the test unless the text matches the regular expression."""
-            if isinstance(expected_regex, (str, bytes)):
-                assert expected_regex, "expected_regex must not be empty."
-                expected_regex = re.compile(expected_regex)
-            if not expected_regex.search(text):
-                msg = msg or "Regex didn't match"
-                msg = '%s: %r not found in %r' % (msg, expected_regex.pattern, text)
-                raise self.failureException(msg)
-
     def check_soure_traceback(self, source_traceback, lineno_delta):
         frame = sys._getframe(1)
         filename = frame.f_code.co_filename

@@ -3,6 +3,7 @@ import sys
 import warnings
 try:
     import ssl
+    from .py3_ssl import BACKPORT_SSL_CONTEXT
 except ImportError:  # pragma: no cover
     ssl = None
 
@@ -10,7 +11,6 @@ from . import protocols
 from . import transports
 from .log import logger
 from .py33_exceptions import BrokenPipeError, ConnectionResetError
-from .py3_ssl import BACKPORT_SSL_CONTEXT
 
 
 def _create_transport_context(server_side, server_hostname):
@@ -46,10 +46,11 @@ _DO_HANDSHAKE = "DO_HANDSHAKE"
 _WRAPPED = "WRAPPED"
 _SHUTDOWN = "SHUTDOWN"
 
-if hasattr(ssl, 'CertificateError'):
-    _SSL_ERRORS = (ssl.SSLError, ssl.CertificateError)
-else:
-    _SSL_ERRORS = ssl.SSLError
+if ssl is not None:
+    if hasattr(ssl, 'CertificateError'):
+        _SSL_ERRORS = (ssl.SSLError, ssl.CertificateError)
+    else:
+        _SSL_ERRORS = ssl.SSLError
 
 
 class _SSLPipe(object):

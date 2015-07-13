@@ -64,6 +64,11 @@ def osx_tiger():
     return version < (10, 5)
 
 
+def skip_if_backported_sslcontext():
+    backported = getattr(asyncio, 'BACKPORT_SSL_CONTEXT', False)
+    return unittest.skipIf(backported, 'need ssl.SSLContext')
+
+
 ONLYCERT = data_file('ssl_cert.pem')
 ONLYKEY = data_file('ssl_key.pem')
 SIGNED_CERTFILE = data_file('keycert3.pem')
@@ -894,7 +899,7 @@ class EventLoopTestsMixin(object):
             self.test_create_unix_server_ssl()
 
     @unittest.skipIf(ssl is None, 'No ssl module')
-    @unittest.skipIf(asyncio.BACKPORT_SSL_CONTEXT, 'need ssl.SSLContext')
+    @skip_if_backported_sslcontext()
     def test_create_server_ssl_verify_failed(self):
         proto = MyProto(loop=self.loop)
         server, host, port = self._make_ssl_server(
@@ -928,7 +933,7 @@ class EventLoopTestsMixin(object):
 
     @unittest.skipIf(ssl is None, 'No ssl module')
     @unittest.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
-    @unittest.skipIf(asyncio.BACKPORT_SSL_CONTEXT, 'need ssl.SSLContext')
+    @skip_if_backported_sslcontext()
     def test_create_unix_server_ssl_verify_failed(self):
         proto = MyProto(loop=self.loop)
         server, path = self._make_ssl_unix_server(

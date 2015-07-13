@@ -23,8 +23,8 @@ from . import constants
 from . import events
 from . import futures
 from . import selectors
-from . import transports
 from . import sslproto
+from . import transports
 from .compat import flatten_bytes
 from .coroutines import coroutine, From
 from .log import logger

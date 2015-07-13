@@ -5,8 +5,16 @@ Change log
 Version 2.0
 ===========
 
-Major changes: on Python 3.5+ ProactorEventLoop now supports SSL, a lot of
-bugfixes (random race conditions) in the ProactorEventLoop.
+Summary:
+
+* SSL support on Windows for proactor event loop with Python 3.5 and newer
+* Many race conditions were fixed in the proactor event loop
+* Trollius moved to Github and the fork was recreated on top to asyncio git
+  repository
+* Many resource leaks (ex: unclosed sockets) were fixed
+* Optimization of socket connections: avoid: don't call the slow getaddrinfo()
+  function to ensure that the address is already resolved. The check is now
+  only done in debug mode.
 
 The Trollius project moved from Bitbucket to Github. The project is now a fork
 of the Git repository of the asyncio project (previously called the "tulip"
@@ -16,7 +24,7 @@ The new Trollius home page is now: https://github.com/haypo/trollius
 
 The asyncio project moved to: https://github.com/python/asyncio
 
-Note: the PEP 492 is not supported in trollius (yet?).
+Note: the PEP 492 is not supported in trollius yet.
 
 API changes:
 

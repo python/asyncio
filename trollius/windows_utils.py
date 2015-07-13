@@ -168,7 +168,7 @@ class PipeHandle(object):
 
     def __del__(self):
         if self._handle is not None:
-            if compat.PY3:
+            if six.PY3:
                 warnings.warn("unclosed %r" % self, ResourceWarning)
             self.close()
 

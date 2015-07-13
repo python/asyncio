@@ -4,6 +4,7 @@ import gc
 import io
 import os
 import socket
+import six
 import sys
 try:
     import ssl
@@ -609,7 +610,7 @@ os.close(fd)
         try:
             asyncio.set_child_watcher(watcher)
             kw = {'loop': self.loop}
-            if compat.PY3:
+            if six.PY3:
                 kw['pass_fds'] = set((wfd,))
             create = asyncio.create_subprocess_exec(*args, **kw)
             proc = self.loop.run_until_complete(create)

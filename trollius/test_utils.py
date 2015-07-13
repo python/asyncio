@@ -519,7 +519,7 @@ class TestCase(unittest.TestCase):
         # Detect CPython bug #23353: ensure that yield/yield-from is not used
         # in an except block of a generator
         if sys.exc_info()[0] == SkipTest:
-            if compat.PY2:
+            if six.PY2:
                 sys.exc_clear()
         else:
             self.assertEqual(sys.exc_info(), (None, None, None))

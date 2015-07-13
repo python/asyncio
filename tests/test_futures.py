@@ -5,6 +5,7 @@ try:
 except ImportError:
     concurrent = None
 import re
+import six
 import sys
 import threading
 
@@ -347,7 +348,7 @@ class FutureTests(test_utils.TestCase):
                          r'MemoryError$'
                          ).format(filename=re.escape(frame[0]),
                                   lineno=frame[1])
-            elif compat.PY3:
+            elif six.PY3:
                 regex = (r'^Future/Task exception was never retrieved\n'
                          r'Traceback \(most recent call last\):\n'
                          r'.*\n'

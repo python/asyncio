@@ -38,7 +38,7 @@ if os.name == 'nt':
     )
     extensions.append(ext)
 
-requirements = []
+requirements = ['six']
 if sys.version_info < (2, 7):
     requirements.append('ordereddict')
 if sys.version_info < (3,):

@@ -8,6 +8,7 @@ import os
 import platform
 import re
 import signal
+import six
 import socket
 import subprocess
 import sys
@@ -981,7 +982,7 @@ class EventLoopTestsMixin(object):
         if hasattr(sslcontext_client, 'check_hostname'):
             sslcontext_client.check_hostname = True
 
-        if compat.PY3:
+        if six.PY3:
             err_msg = "hostname '127.0.0.1' doesn't match 'localhost'"
         else:
             # http://bugs.python.org/issue22861

@@ -6,6 +6,7 @@ __all__ = ['CancelledError', 'TimeoutError',
            ]
 
 import logging
+import six
 import sys
 import traceback
 try:
@@ -370,7 +371,7 @@ class Future(object):
         if exc_tb is not None:
             self._exception_tb = exc_tb
             exc_tb = None
-        elif self._loop.get_debug() and not compat.PY3:
+        elif self._loop.get_debug() and not six.PY3:
             self._exception_tb = sys.exc_info()[2]
         self._state = _FINISHED
         self._schedule_callbacks()

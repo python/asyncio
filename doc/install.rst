@@ -65,6 +65,8 @@ Tulip project, Trollius repository is a fork of the Tulip repository.
 Dependencies
 ============
 
+Trollius requires the `six <https://pypi.python.org/pypi/six>`_ module.
+
 On Python older than 3.2, the `futures <https://pypi.python.org/pypi/futures>`_
 project is needed to get a backport of ``concurrent.futures``.
 

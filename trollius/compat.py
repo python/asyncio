@@ -1,15 +1,10 @@
 """Compatibility helpers for the different Python versions."""
 
+import six
 import sys
-
-# Python 2 or older?
-PY2 = (sys.version_info <= (2,))
 
 # Python 2.6 or older?
 PY26 = (sys.version_info < (2, 7))
-
-# Python 3.0 or newer?
-PY3 = (sys.version_info >= (3,))
 
 # Python 3.3 or newer?
 PY33 = (sys.version_info >= (3, 3))
@@ -20,7 +15,7 @@ PY34 = sys.version_info >= (3, 4)
 # Python 3.5 or newer?
 PY35 = sys.version_info >= (3, 5)
 
-if PY3:
+if six.PY3:
     integer_types = (int,)
     bytes_type = bytes
     text_type = str
@@ -37,7 +32,7 @@ else:
         BYTES_TYPES = (str, bytearray, memoryview, buffer)
 
 
-if PY3:
+if six.PY3:
     def reraise(tp, value, tb=None):
         if value.__traceback__ is not tb:
             raise value.with_traceback(tb)
@@ -60,7 +55,7 @@ def flatten_bytes(data):
         return data
     if not data:
         return b''
-    if not PY3 and isinstance(data, (buffer, bytearray)):
+    if six.PY2 and isinstance(data, (buffer, bytearray)):
         return str(data)
     elif not PY26 and isinstance(data, memoryview):
         return data.tobytes()

@@ -240,6 +240,7 @@ class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
 
     def eof_received(self):
         self._stream_reader.feed_eof()
+        return True
 
 
 class StreamWriter:
@@ -320,6 +321,24 @@ class StreamReader:
         self._exception = None
         self._transport = None
         self._paused = False
+
+    def __repr__(self):
+        info = ['StreamReader']
+        if self._buffer:
+            info.append('%d bytes' % len(info))
+        if self._eof:
+            info.append('eof')
+        if self._limit != _DEFAULT_LIMIT:
+            info.append('l=%d' % self._limit)
+        if self._waiter:
+            info.append('w=%r' % self._waiter)
+        if self._exception:
+            info.append('e=%r' % self._exception)
+        if self._transport:
+            info.append('t=%r' % self._transport)
+        if self._paused:
+            info.append('paused')
+        return '<%s>' % ' '.join(info)
 
     def exception(self):
         return self._exception

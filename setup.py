@@ -12,7 +12,9 @@
 #  - git tag trollius-VERSION
 #  - git push --tags
 #  - git push
-#  - On Linux: python setup.py register sdist bdist_wheel upload
+#  - On Linux: python setup.py register sdist upload
+#    FIXME: don't use bdist_wheel because of
+#    FIXME: https://github.com/haypo/trollius/issues/1
 #  - On Windows: python releaser.py release
 #  - increment version in setup.py (version) and doc/conf.py (version, release)
 #  - git commit -a && git push

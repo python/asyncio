@@ -14,6 +14,8 @@ import time
 
 from wsgiref.simple_server import WSGIRequestHandler, WSGIServer
 
+import six
+
 try:
     import socketserver
     from http.server import HTTPServer

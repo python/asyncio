@@ -60,6 +60,7 @@ Table Of Contents
 
    using
    install
+   libraries
    asyncio
    dev
    changelog

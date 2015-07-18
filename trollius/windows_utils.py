@@ -16,6 +16,8 @@ import subprocess
 import tempfile
 import warnings
 
+import six
+
 from . import py33_winapi as _winapi
 from . import compat
 from .py33_exceptions import wrap_error, BlockingIOError, InterruptedError

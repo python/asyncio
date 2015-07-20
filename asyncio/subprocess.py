@@ -23,7 +23,6 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
         super().__init__(loop=loop)
         self._limit = limit
         self.stdin = self.stdout = self.stderr = None
-        self._transport = None
 
     def __repr__(self):
         info = [self.__class__.__name__]
@@ -36,7 +35,7 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
         return '<%s>' % ' '.join(info)
 
     def connection_made(self, transport):
-        self._transport = transport
+        super().connection_made(transport)
 
         stdout_transport = transport.get_pipe_transport(1)
         if stdout_transport is not None:

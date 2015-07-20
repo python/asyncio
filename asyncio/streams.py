@@ -153,15 +153,25 @@ class FlowControlMixin(protocols.Protocol):
         self._paused = False
         self._drain_waiter = None
         self._connection_lost = False
+        self._transport = None
+
+    def connection_made(self, transport):
+        self._transport = transport
 
     def pause_writing(self):
         assert not self._paused
+        if self._transport is not None and self._transport.closing:
+            raise RuntimeError('Cannot call pause_writing() '
+                               'on closing or closed transport')
         self._paused = True
         if self._loop.get_debug():
             logger.debug("%r pauses writing", self)
 
     def resume_writing(self):
         assert self._paused
+        if self._transport is not None and self._transport.closing:
+            raise RuntimeError('Cannot call resume_writing() '
+                               'on closing or closed transport')
         self._paused = False
         if self._loop.get_debug():
             logger.debug("%r resumes writing", self)
@@ -217,6 +227,7 @@ class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
         self._client_connected_cb = client_connected_cb
 
     def connection_made(self, transport):
+        super().connection_made(transport)
         self._stream_reader.set_transport(transport)
         if self._client_connected_cb is not None:
             self._stream_writer = StreamWriter(transport, self,

@@ -311,7 +311,6 @@ class _UnixReadPipeTransport(transports.ReadTransport):
             raise ValueError("Pipe transport is for pipes/sockets only.")
         _set_nonblocking(self._fileno)
         self._protocol = protocol
-        self._closing = False
         self._loop.call_soon(self._protocol.connection_made, self)
         # only start reading when connection_made() has been called
         self._loop.call_soon(self._loop.add_reader,
@@ -424,7 +423,6 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
         self._protocol = protocol
         self._buffer = []
         self._conn_lost = 0
-        self._closing = False  # Set when close() or write_eof() called.
 
         self._loop.call_soon(self._protocol.connection_made, self)
 

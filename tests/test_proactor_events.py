@@ -144,6 +144,12 @@ class ProactorSocketTransportTests(test_utils.TestCase):
         self.assertEqual(tr._buffer, b'data')
         self.assertFalse(tr._loop_writing.called)
 
+    def test_write_closing(self):
+        transport = self.socket_transport()
+        transport.close()
+        # write() is disallowed after close()
+        self.assertRaises(RuntimeError, transport.write, b'data')
+
     def test_loop_writing(self):
         tr = self.socket_transport()
         tr._buffer = bytearray(b'data')

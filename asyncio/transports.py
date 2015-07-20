@@ -14,6 +14,7 @@ class BaseTransport:
         if extra is None:
             extra = {}
         self._extra = extra
+        self._closing = False
 
     def get_extra_info(self, name, default=None):
         """Get optional transport information."""
@@ -28,6 +29,11 @@ class BaseTransport:
         with None as its argument.
         """
         raise NotImplementedError
+
+    @property
+    def closing(self):
+        """Is the transport being closed?"""
+        return self._closing
 
 
 class ReadTransport(BaseTransport):

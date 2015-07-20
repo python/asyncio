@@ -521,7 +521,6 @@ class _SelectorTransport(transports._FlowControlMixin,
         self._server = server
         self._buffer = self._buffer_factory()
         self._conn_lost = 0  # Set when call to connection_lost scheduled.
-        self._closing = False  # Set when close() called.
         if self._server is not None:
             self._server._attach()
 
@@ -681,6 +680,8 @@ class _SelectorSocketTransport(_SelectorTransport):
         if not isinstance(data, (bytes, bytearray, memoryview)):
             raise TypeError('data argument must be byte-ish (%r)',
                             type(data))
+        if self._closing:
+            raise RuntimeError('Cannot call write() after close()')
         if self._eof:
             raise RuntimeError('Cannot call write() after write_eof()')
         if not data:

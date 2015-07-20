@@ -34,7 +34,6 @@ class _ProactorBasePipeTransport(transports._FlowControlMixin,
         self._write_fut = None
         self._pending_write = 0
         self._conn_lost = 0
-        self._closing = False  # Set when close() called.
         self._eof_written = False
         if self._server is not None:
             self._server._attach()
@@ -225,6 +224,8 @@ class _ProactorBaseWritePipeTransport(_ProactorBasePipeTransport,
                             type(data))
         if self._eof_written:
             raise RuntimeError('write_eof() already called')
+        if self._closing:
+            raise RuntimeError('Cannot call write() after close()')
 
         if not data:
             return

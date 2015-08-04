@@ -1206,7 +1206,7 @@ class BaseEventLoop(events.AbstractEventLoop):
             return
 
         enabled = bool(enabled)
-        if self._coroutine_wrapper_set is enabled:
+        if self._coroutine_wrapper_set == enabled:
             return
 
         wrapper = coroutines.debug_wrapper

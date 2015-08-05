@@ -6,7 +6,6 @@ __all__ = ['StreamReader', 'StreamWriter', 'StreamReaderProtocol',
            ]
 
 import socket
-import sys
 
 if hasattr(socket, 'AF_UNIX'):
     __all__.extend(['open_unix_connection', 'start_unix_server'])

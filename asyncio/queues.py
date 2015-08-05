@@ -205,7 +205,15 @@ class Queue:
             try:
                 return (yield from waiter)
             except futures.CancelledError:
-                self._put_it_back(waiter.result())
+                # if we get CancelledError, it means someone cancelled this
+                # get() coroutine.  But there is a chance that the waiter
+                # already is ready and contains an item that has just been
+                # removed from the queue.  In this case, we need to put the item
+                # back into the front of the queue.  This get() must either
+                # succeed without fault or, if it gets cancelled, it must be as
+                # if it never happened.
+                if waiter.done():
+                    self._put_it_back(waiter.result())
                 raise
 
     def _put_it_back(self, item):
@@ -214,6 +222,7 @@ class Queue:
         gets cancelled.  In this case, we put the item back: wake up another
         waiter or put it in the _queue.
         """
+        self._consume_done_getters()
         if self._getters:
             assert not self._queue, (
                 'queue non-empty, why are getters waiting?')

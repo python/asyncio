@@ -136,14 +136,12 @@ class Queue:
         """
         self._consume_done_getters()
         if self._getters:
-            assert not self._queue, (
-                'queue non-empty, why are getters waiting?')
 
             getter = self._getters.popleft()
             self.__put_internal(item)
 
             # getter cannot be cancelled, we just removed done getters
-            getter.set_result(self._get())
+            getter.set_result(None)
 
         elif self._maxsize > 0 and self._maxsize <= self.qsize():
             waiter = futures.Future(loop=self._loop)
@@ -162,14 +160,12 @@ class Queue:
         """
         self._consume_done_getters()
         if self._getters:
-            assert not self._queue, (
-                'queue non-empty, why are getters waiting?')
 
             getter = self._getters.popleft()
             self.__put_internal(item)
 
             # getter cannot be cancelled, we just removed done getters
-            getter.set_result(self._get())
+            getter.set_result(None)
 
         elif self._maxsize > 0 and self._maxsize <= self.qsize():
             raise QueueFull
@@ -203,37 +199,21 @@ class Queue:
             waiter = futures.Future(loop=self._loop)
             self._getters.append(waiter)
             try:
-                return (yield from waiter)
+                yield from waiter
             except futures.CancelledError:
-                # if we get CancelledError, it means someone cancelled this
-                # get() coroutine.  But there is a chance that the waiter
-                # already is ready and contains an item that has just been
-                # removed from the queue.  In this case, we need to put the item
-                # back into the front of the queue.  This get() must either
-                # succeed without fault or, if it gets cancelled, it must be as
-                # if it never happened.
-                if waiter.done():
-                    self._put_it_back(waiter.result())
+                # we got cancelled, remove this waiter
+                try:
+                    self._getters.remove(waiter)
+                except ValueError:
+                    # in some situations, waiter may have already been removed
+                    pass
+                # if there are more getters, and since we got cancelled, wake up
+                # the next getter.
+                if self._getters and self.qsize():
+                    getter = self._getters.popleft()
+                    getter.set_result(None)
                 raise
-
-    def _put_it_back(self, item):
-        """
-        This is called when we have a waiter to get() an item and this waiter
-        gets cancelled.  In this case, we put the item back: wake up another
-        waiter or put it in the _queue.
-        """
-        self._consume_done_getters()
-        if self._getters:
-            assert not self._queue, (
-                'queue non-empty, why are getters waiting?')
-
-            getter = self._getters.popleft()
-            self.__put_internal(item)
-
-            # getter cannot be cancelled, we just removed done getters
-            getter.set_result(item)
-        else:
-            self._queue.appendleft(item)
+            return self._get()
 
     def get_nowait(self):
         """Remove and return an item from the queue.

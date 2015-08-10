@@ -176,7 +176,7 @@ class QueueGetTests(_QueueTestBase):
         res = self.loop.run_until_complete(q.get())
         self.assertEqual(1, res)
         self.assertTrue(waiter.done())
-        self.assertIsNone(waiter.result())
+        self.assertIs(waiter.result(), asyncio.queues._WAKEUP)
 
     def test_blocking_get_wait(self):
 

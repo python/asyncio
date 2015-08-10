@@ -12,6 +12,9 @@ from . import locks
 from .coroutines import coroutine
 
 
+_WAKEUP = object()
+
+
 class QueueEmpty(Exception):
     """Exception raised when Queue.get_nowait() is called on a Queue object
     which is empty.
@@ -141,13 +144,14 @@ class Queue:
             self.__put_internal(item)
 
             # getter cannot be cancelled, we just removed done getters
-            getter.set_result(None)
+            getter.set_result(_WAKEUP)
 
         elif self._maxsize > 0 and self._maxsize <= self.qsize():
             waiter = futures.Future(loop=self._loop)
 
             self._putters.append(waiter)
-            yield from waiter
+            result = yield from waiter
+            assert result is _WAKEUP
             self._put(item)
 
         else:
@@ -165,7 +169,7 @@ class Queue:
             self.__put_internal(item)
 
             # getter cannot be cancelled, we just removed done getters
-            getter.set_result(None)
+            getter.set_result(_WAKEUP)
 
         elif self._maxsize > 0 and self._maxsize <= self.qsize():
             raise QueueFull
@@ -189,7 +193,7 @@ class Queue:
             # run, we need to defer the put for a tick to ensure that
             # getters and putters alternate perfectly. See
             # ChannelTest.test_wait.
-            self._loop.call_soon(putter._set_result_unless_cancelled, None)
+            self._loop.call_soon(putter._set_result_unless_cancelled, _WAKEUP)
 
             return self._get()
 
@@ -201,17 +205,12 @@ class Queue:
             try:
                 yield from waiter
             except futures.CancelledError:
-                # we got cancelled, remove this waiter
-                try:
-                    self._getters.remove(waiter)
-                except ValueError:
-                    # in some situations, waiter may have already been removed
-                    pass
                 # if there are more getters, and since we got cancelled, wake up
                 # the next getter.
+                self._consume_done_getters()
                 if self._getters and self.qsize():
                     getter = self._getters.popleft()
-                    getter.set_result(None)
+                    getter.set_result(_WAKEUP)
                 raise
             return self._get()
 
@@ -227,7 +226,7 @@ class Queue:
             # Wake putter on next tick.
 
             # getter cannot be cancelled, we just removed done putters
-            putter.set_result(None)
+            putter.set_result(_WAKEUP)
 
             return self._get()
 

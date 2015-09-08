@@ -450,6 +450,8 @@ class StreamReaderTests(test_utils.TestCase):
             def handle_client(self, client_reader, client_writer):
                 data = yield From(client_reader.readline())
                 client_writer.write(data)
+                yield From(client_writer.drain())
+                client_writer.close()
 
             def start(self):
                 sock = socket.socket()
@@ -461,12 +463,8 @@ class StreamReaderTests(test_utils.TestCase):
                 return sock.getsockname()
 
             def handle_client_callback(self, client_reader, client_writer):
-                task = asyncio.Task(client_reader.readline(), loop=self.loop)
-
-                def done(task):
-                    client_writer.write(task.result())
-
-                task.add_done_callback(done)
+                self.loop.create_task(self.handle_client(client_reader,
+                                                         client_writer))
 
             def start_callback(self):
                 sock = socket.socket()
@@ -526,6 +524,8 @@ class StreamReaderTests(test_utils.TestCase):
             def handle_client(self, client_reader, client_writer):
                 data = yield From(client_reader.readline())
                 client_writer.write(data)
+                yield From(client_writer.drain())
+                client_writer.close()
 
             def start(self):
                 self.server = self.loop.run_until_complete(
@@ -534,18 +534,14 @@ class StreamReaderTests(test_utils.TestCase):
                                               loop=self.loop))
 
             def handle_client_callback(self, client_reader, client_writer):
-                task = asyncio.Task(client_reader.readline(), loop=self.loop)
-
-                def done(task):
-                    client_writer.write(task.result())
-
-                task.add_done_callback(done)
+                self.loop.create_task(self.handle_client(client_reader,
+                                                         client_writer))
 
             def start_callback(self):
-                self.server = self.loop.run_until_complete(
-                    asyncio.start_unix_server(self.handle_client_callback,
-                                              path=self.path,
-                                              loop=self.loop))
+                start = asyncio.start_unix_server(self.handle_client_callback,
+                                                  path=self.path,
+                                                  loop=self.loop)
+                self.server = self.loop.run_until_complete(start)
 
             def stop(self):
                 if self.server is not None:

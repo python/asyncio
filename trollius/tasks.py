@@ -9,7 +9,6 @@ __all__ = ['Task',
 
 import functools
 import linecache
-import sys
 import traceback
 import warnings
 try:
@@ -141,7 +140,11 @@ class Task(futures.Future):
         returned for a suspended coroutine.
         """
         frames = []
-        f = self._coro.gi_frame
+        try:
+            # 'async def' coroutines
+            f = self._coro.cr_frame
+        except AttributeError:
+            f = self._coro.gi_frame
         if f is not None:
             while f is not None:
                 if limit is not None:

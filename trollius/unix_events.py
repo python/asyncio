@@ -399,7 +399,7 @@ class _UnixReadPipeTransport(transports.ReadTransport):
     # On Python 3.3 and older, objects with a destructor part of a reference
     # cycle are never destroyed. It's not more the case on Python 3.4 thanks
     # to the PEP 442.
-    if sys.version_info >= (3, 4):
+    if compat.PY34:
         def __del__(self):
             if self._pipe is not None:
                 warnings.warn("unclosed transport %r" % self, ResourceWarning)
@@ -582,7 +582,7 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
     # On Python 3.3 and older, objects with a destructor part of a reference
     # cycle are never destroyed. It's not more the case on Python 3.4 thanks
     # to the PEP 442.
-    if sys.version_info >= (3, 4):
+    if compat.PY34:
         def __del__(self):
             if self._pipe is not None:
                 warnings.warn("unclosed transport %r" % self, ResourceWarning)

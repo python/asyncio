@@ -1,7 +1,5 @@
 """Abstract Transport class."""
 
-import sys
-
 from trollius import compat
 
 __all__ = ['BaseTransport', 'ReadTransport', 'WriteTransport',

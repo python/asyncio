@@ -176,7 +176,7 @@ class QueueGetTests(_QueueTestBase):
         res = self.loop.run_until_complete(q.get())
         self.assertEqual(1, res)
         self.assertTrue(waiter.done())
-        self.assertIsNone(waiter.result())
+        self.assertIs(waiter.result(), asyncio.queues._WAKEUP)
 
     def test_blocking_get_wait(self):
 
@@ -257,10 +257,16 @@ class QueueGetTests(_QueueTestBase):
 
         test_utils.run_briefly(self.loop)
         t1.cancel()
-        test_utils.run_briefly(self.loop)
-        self.assertTrue(t1.done())
+
+        try:
+            self.loop.run_until_complete(t1)
+        except asyncio.CancelledError:
+            pass
+
         q.put_nowait('a')
-        test_utils.run_briefly(self.loop)
+
+        self.loop.run_until_complete(t2)
+
         self.assertEqual(t2.result(), 'a')
 
     def test_get_with_waiting_putters(self):
@@ -375,15 +381,11 @@ class QueuePutTests(_QueueTestBase):
         except asyncio.CancelledError:
             pass
 
+        loop.run_until_complete(reader2)
         loop.run_until_complete(reader3)
 
-        # reader2 will receive `2`, because it was added to the
-        # queue of pending readers *before* put_nowaits were called.
-        self.assertEqual(reader2.result(), 2)
-        # reader3 will receive `1`, because reader1 was cancelled
-        # before is had a chance to execute, and `2` was already
-        # pushed to reader2 by second `put_nowait`.
-        self.assertEqual(reader3.result(), 1)
+        self.assertEqual(reader2.result(), 1)
+        self.assertEqual(reader3.result(), 2)
 
     def test_put_cancel_drop(self):
 

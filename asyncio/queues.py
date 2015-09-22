@@ -12,6 +12,9 @@ from . import locks
 from .coroutines import coroutine
 
 
+_WAKEUP = object()
+
+
 class QueueEmpty(Exception):
     """Exception raised when Queue.get_nowait() is called on a Queue object
     which is empty.
@@ -136,20 +139,19 @@ class Queue:
         """
         self._consume_done_getters()
         if self._getters:
-            assert not self._queue, (
-                'queue non-empty, why are getters waiting?')
 
             getter = self._getters.popleft()
             self.__put_internal(item)
 
             # getter cannot be cancelled, we just removed done getters
-            getter.set_result(self._get())
+            getter.set_result(_WAKEUP)
 
         elif self._maxsize > 0 and self._maxsize <= self.qsize():
             waiter = futures.Future(loop=self._loop)
 
             self._putters.append(waiter)
-            yield from waiter
+            result = yield from waiter
+            assert result is _WAKEUP
             self._put(item)
 
         else:
@@ -162,14 +164,12 @@ class Queue:
         """
         self._consume_done_getters()
         if self._getters:
-            assert not self._queue, (
-                'queue non-empty, why are getters waiting?')
 
             getter = self._getters.popleft()
             self.__put_internal(item)
 
             # getter cannot be cancelled, we just removed done getters
-            getter.set_result(self._get())
+            getter.set_result(_WAKEUP)
 
         elif self._maxsize > 0 and self._maxsize <= self.qsize():
             raise QueueFull
@@ -193,7 +193,7 @@ class Queue:
             # run, we need to defer the put for a tick to ensure that
             # getters and putters alternate perfectly. See
             # ChannelTest.test_wait.
-            self._loop.call_soon(putter._set_result_unless_cancelled, None)
+            self._loop.call_soon(putter._set_result_unless_cancelled, _WAKEUP)
 
             return self._get()
 
@@ -203,37 +203,16 @@ class Queue:
             waiter = futures.Future(loop=self._loop)
             self._getters.append(waiter)
             try:
-                return (yield from waiter)
+                yield from waiter
             except futures.CancelledError:
-                # if we get CancelledError, it means someone cancelled this
-                # get() coroutine.  But there is a chance that the waiter
-                # already is ready and contains an item that has just been
-                # removed from the queue.  In this case, we need to put the item
-                # back into the front of the queue.  This get() must either
-                # succeed without fault or, if it gets cancelled, it must be as
-                # if it never happened.
-                if waiter.done():
-                    self._put_it_back(waiter.result())
+                # if there are more getters, and since we got cancelled, wake up
+                # the next getter.
+                self._consume_done_getters()
+                if self._getters and self.qsize():
+                    getter = self._getters.popleft()
+                    getter.set_result(_WAKEUP)
                 raise
-
-    def _put_it_back(self, item):
-        """
-        This is called when we have a waiter to get() an item and this waiter
-        gets cancelled.  In this case, we put the item back: wake up another
-        waiter or put it in the _queue.
-        """
-        self._consume_done_getters()
-        if self._getters:
-            assert not self._queue, (
-                'queue non-empty, why are getters waiting?')
-
-            getter = self._getters.popleft()
-            self.__put_internal(item)
-
-            # getter cannot be cancelled, we just removed done getters
-            getter.set_result(item)
-        else:
-            self._queue.appendleft(item)
+            return self._get()
 
     def get_nowait(self):
         """Remove and return an item from the queue.
@@ -247,7 +226,7 @@ class Queue:
             # Wake putter on next tick.
 
             # getter cannot be cancelled, we just removed done putters
-            putter.set_result(None)
+            putter.set_result(_WAKEUP)
 
             return self._get()
 

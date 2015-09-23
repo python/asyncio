@@ -804,7 +804,8 @@ class BaseEventLoop(events.AbstractEventLoop):
                       sock=None,
                       backlog=100,
                       ssl=None,
-                      reuse_address=None):
+                      reuse_address=None,
+                      sock_config_cb=lambda sock: None):
         """Create a TCP server.
 
         The host parameter can be a string, in that case the TCP server is bound
@@ -866,6 +867,7 @@ class BaseEventLoop(events.AbstractEventLoop):
                         sock.setsockopt(socket.IPPROTO_IPV6,
                                         socket.IPV6_V6ONLY,
                                         True)
+                    sock_config_cb(sock)
                     try:
                         sock.bind(sa)
                     except OSError as err:

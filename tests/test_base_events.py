@@ -1199,6 +1199,15 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
         self.assertRaises(Err, self.loop.run_until_complete, fut)
         self.assertTrue(m_sock.close.called)
 
+    def test_create_datagram_pass_sock(self):
+        sock = mock.Mock()
+        sock.fileno.return_value = 10
+        sock.recvfrom.side_effect = BlockingIOError
+        fut = self.loop.create_datagram_endpoint(MyDatagramProto, sock=sock)
+        t, p = self.loop.run_until_complete(fut)
+        self.assertIsInstance(t, asyncio.DatagramTransport)
+        self.assertIsInstance(p, MyDatagramProto)
+
     def test_accept_connection_retry(self):
         sock = mock.Mock()
         sock.accept.side_effect = BlockingIOError()

@@ -700,70 +700,78 @@ class BaseEventLoop(events.AbstractEventLoop):
     @coroutine
     def create_datagram_endpoint(self, protocol_factory,
                                  local_addr=None, remote_addr=None, *,
-                                 family=0, proto=0, flags=0):
+                                 family=0, proto=0, flags=0, sock=None):
         """Create datagram connection."""
-        if not (local_addr or remote_addr):
-            if family == 0:
-                raise ValueError('unexpected address family')
-            addr_pairs_info = (((family, proto), (None, None)),)
-        else:
-            # join address by (family, protocol)
-            addr_infos = collections.OrderedDict()
-            for idx, addr in ((0, local_addr), (1, remote_addr)):
-                if addr is not None:
-                    assert isinstance(addr, tuple) and len(addr) == 2, (
-                        '2-tuple is expected')
-
-                    infos = yield from self.getaddrinfo(
-                        *addr, family=family, type=socket.SOCK_DGRAM,
-                        proto=proto, flags=flags)
-                    if not infos:
-                        raise OSError('getaddrinfo() returned empty list')
-
-                    for fam, _, pro, _, address in infos:
-                        key = (fam, pro)
-                        if key not in addr_infos:
-                            addr_infos[key] = [None, None]
-                        addr_infos[key][idx] = address
-
-            # each addr has to have info for each (family, proto) pair
-            addr_pairs_info = [
-                (key, addr_pair) for key, addr_pair in addr_infos.items()
-                if not ((local_addr and addr_pair[0] is None) or
-                        (remote_addr and addr_pair[1] is None))]
-
-            if not addr_pairs_info:
-                raise ValueError('can not get address information')
-
-        exceptions = []
-
-        for ((family, proto),
-             (local_address, remote_address)) in addr_pairs_info:
-            sock = None
+        if sock is not None:
+            if local_addr or remote_addr or family:
+                raise ValueError(
+                    "local_addr/remote_addr/family "
+                    "cannot be specified when sock is specified")
+            sock.setblocking(False)
             r_addr = None
-            try:
-                sock = socket.socket(
-                    family=family, type=socket.SOCK_DGRAM, proto=proto)
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                sock.setblocking(False)
-
-                if local_addr:
-                    sock.bind(local_address)
-                if remote_addr:
-                    yield from self.sock_connect(sock, remote_address)
-                    r_addr = remote_address
-            except OSError as exc:
-                if sock is not None:
-                    sock.close()
-                exceptions.append(exc)
-            except:
-                if sock is not None:
-                    sock.close()
-                raise
-            else:
-                break
         else:
-            raise exceptions[0]
+            if not (local_addr or remote_addr):
+                if family == 0:
+                    raise ValueError('unexpected address family')
+                addr_pairs_info = (((family, proto), (None, None)),)
+            else:
+                # join address by (family, protocol)
+                addr_infos = collections.OrderedDict()
+                for idx, addr in ((0, local_addr), (1, remote_addr)):
+                    if addr is not None:
+                        assert isinstance(addr, tuple) and len(addr) == 2, (
+                            '2-tuple is expected')
+
+                        infos = yield from self.getaddrinfo(
+                            *addr, family=family, type=socket.SOCK_DGRAM,
+                            proto=proto, flags=flags)
+                        if not infos:
+                            raise OSError('getaddrinfo() returned empty list')
+
+                        for fam, _, pro, _, address in infos:
+                            key = (fam, pro)
+                            if key not in addr_infos:
+                                addr_infos[key] = [None, None]
+                            addr_infos[key][idx] = address
+
+                # each addr has to have info for each (family, proto) pair
+                addr_pairs_info = [
+                    (key, addr_pair) for key, addr_pair in addr_infos.items()
+                    if not ((local_addr and addr_pair[0] is None) or
+                            (remote_addr and addr_pair[1] is None))]
+
+                if not addr_pairs_info:
+                    raise ValueError('can not get address information')
+
+            exceptions = []
+
+            for ((family, proto),
+                 (local_address, remote_address)) in addr_pairs_info:
+                sock = None
+                r_addr = None
+                try:
+                    sock = socket.socket(
+                        family=family, type=socket.SOCK_DGRAM, proto=proto)
+                    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    sock.setblocking(False)
+
+                    if local_addr:
+                        sock.bind(local_address)
+                    if remote_addr:
+                        yield from self.sock_connect(sock, remote_address)
+                        r_addr = remote_address
+                except OSError as exc:
+                    if sock is not None:
+                        sock.close()
+                    exceptions.append(exc)
+                except:
+                    if sock is not None:
+                        sock.close()
+                    raise
+                else:
+                    break
+            else:
+                raise exceptions[0]
 
         protocol = protocol_factory()
         waiter = futures.Future(loop=self)
@@ -774,10 +782,13 @@ class BaseEventLoop(events.AbstractEventLoop):
                 logger.info("Datagram endpoint local_addr=%r remote_addr=%r "
                             "created: (%r, %r)",
                             local_addr, remote_addr, transport, protocol)
-            else:
+            elif remote_addr:
                 logger.debug("Datagram endpoint remote_addr=%r created: "
                              "(%r, %r)",
                              remote_addr, transport, protocol)
+            else:
+                logger.debug("Datagram endpoint created: (%r, %r)",
+                             transport, protocol)
 
         try:
             yield from waiter

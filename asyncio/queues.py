@@ -67,6 +67,14 @@ class Queue:
 
     # End of the overridable methods.
 
+    def _wakeup_next(self, waiters):
+        # Wake up the next waiter (if any) that isn't cancelled.
+        while waiters:
+            waiter = waiters.popleft()
+            if not waiter.done():
+                waiter.set_result(None)
+                break
+
     def __repr__(self):
         return '<{} at {:#x} {}>'.format(
             type(self).__name__, id(self), self._format())
@@ -122,7 +130,14 @@ class Queue:
         while self.full():
             putter = futures.Future(loop=self._loop)
             self._putters.append(putter)
-            yield from putter
+            try:
+                yield from putter
+            except (futures.CancelledError, futures.TimeoutError):
+                if not putter.done():
+                    putter.cancel()
+                elif not putter.cancelled():
+                    self._wakeup_next(self._putters)
+                raise
         return self.put_nowait(item)
 
     def put_nowait(self, item):
@@ -135,11 +150,7 @@ class Queue:
         self._put(item)
         self._unfinished_tasks += 1
         self._finished.clear()
-        # Wake up all the getters.
-        while self._getters:
-            getter = self._getters.popleft()
-            if not getter.done():
-                getter.set_result(None)
+        self._wakeup_next(self._getters)
 
     @coroutine
     def get(self):
@@ -152,7 +163,14 @@ class Queue:
         while self.empty():
             getter = futures.Future(loop=self._loop)
             self._getters.append(getter)
-            yield from getter
+            try:
+                yield from getter
+            except (futures.CancelledError, futures.TimeoutError):
+                if not getter.done():
+                    getter.cancel()
+                elif not getter.cancelled():
+                    self._wakeup_next(self._getters)
+                raise
         return self.get_nowait()
 
     def get_nowait(self):
@@ -163,11 +181,7 @@ class Queue:
         if self.empty():
             raise QueueEmpty
         item = self._get()
-        # Wake up all the putters.
-        while self._putters:
-            putter = self._putters.popleft()
-            if not putter.done():
-                putter.set_result(None)
+        self._wakeup_next(self._putters)
         return item
 
     def task_done(self):

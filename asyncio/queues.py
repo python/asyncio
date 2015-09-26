@@ -132,10 +132,9 @@ class Queue:
             self._putters.append(putter)
             try:
                 yield from putter
-            except (futures.CancelledError, futures.TimeoutError):
-                if not putter.done():
-                    putter.cancel()
-                elif not putter.cancelled():
+            except:
+                putter.cancel()
+                if not self.full() and not putter.cancelled():
                     self._wakeup_next(self._putters)
                 raise
         return self.put_nowait(item)
@@ -165,10 +164,9 @@ class Queue:
             self._getters.append(getter)
             try:
                 yield from getter
-            except (futures.CancelledError, futures.TimeoutError):
-                if not getter.done():
-                    getter.cancel()
-                elif not getter.cancelled():
+            except:
+                getter.cancel()
+                if not self.empty() and not getter.cancelled():
                     self._wakeup_next(self._getters)
                 raise
         return self.get_nowait()

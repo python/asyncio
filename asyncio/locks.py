@@ -434,7 +434,7 @@ class Semaphore(_ContextManagerMixin):
         called release() to make it larger than 0, and then return
         True.
         """
-        if not self._num_ready and self._value > 0:
+        if self._value - self._num_ready > 0:
             self._value -= 1
             return True
 

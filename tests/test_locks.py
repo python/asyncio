@@ -811,6 +811,21 @@ class SemaphoreTests(test_utils.TestCase):
             self.loop.run_until_complete, acquire)
         self.assertFalse(sem._waiters)
 
+    def test_acquire_hang(self):
+        sem = asyncio.Semaphore(value=0, loop=self.loop)
+
+        t1 = asyncio.Task(sem.acquire(), loop=self.loop)
+        t2 = asyncio.Task(sem.acquire(), loop=self.loop)
+
+        test_utils.run_briefly(self.loop)
+
+        sem.release()
+        t1.cancel()
+
+        test_utils.run_briefly(self.loop)
+        self.assertTrue(sem.locked())
+
+
     def test_release_not_acquired(self):
         sem = asyncio.BoundedSemaphore(loop=self.loop)
 

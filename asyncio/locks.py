@@ -397,6 +397,7 @@ class Semaphore(_ContextManagerMixin):
         if value < 0:
             raise ValueError("Semaphore initial value must be >= 0")
         self._value = value
+        self._num_ready = 0
         self._waiters = collections.deque()
         if loop is not None:
             self._loop = loop
@@ -410,6 +411,14 @@ class Semaphore(_ContextManagerMixin):
         if self._waiters:
             extra = '{},waiters:{}'.format(extra, len(self._waiters))
         return '<{} [{}]>'.format(res[1:-1], extra)
+
+    def _wake_up_next(self):
+        while self._waiters:
+            waiter = self._waiters.popleft()
+            if not waiter.done():
+                waiter.set_result(None)
+                self._num_ready += 1
+                return
 
     def locked(self):
         """Returns True if semaphore can not be acquired immediately."""
@@ -425,7 +434,7 @@ class Semaphore(_ContextManagerMixin):
         called release() to make it larger than 0, and then return
         True.
         """
-        if not self._waiters and self._value > 0:
+        if not self._num_ready and self._value > 0:
             self._value -= 1
             return True
 
@@ -435,8 +444,16 @@ class Semaphore(_ContextManagerMixin):
             yield from fut
             self._value -= 1
             return True
+        except futures.CancelledError:
+            if self._value > 0:
+                self._wake_up_next()
+            # `test_acquire_cancel` in tests/test_locks.py doesn't allow
+            # cancelled waiters left in self._waiters
+            if fut in self._waiters:
+                self._waiters.remove(fut)
+            raise
         finally:
-            self._waiters.remove(fut)
+            self._num_ready -= 1
 
     def release(self):
         """Release a semaphore, incrementing the internal counter by one.
@@ -444,10 +461,7 @@ class Semaphore(_ContextManagerMixin):
         become larger than zero again, wake up that coroutine.
         """
         self._value += 1
-        for waiter in self._waiters:
-            if not waiter.done():
-                waiter.set_result(True)
-                break
+        self._wake_up_next()
 
 
 class BoundedSemaphore(Semaphore):

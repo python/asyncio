@@ -133,8 +133,10 @@ class Queue:
             try:
                 yield from putter
             except:
-                putter.cancel()
+                putter.cancel()  # Just in case putter is not done yet.
                 if not self.full() and not putter.cancelled():
+                    # We were woken up by get_nowait(), but can't take
+                    # the call.  Wake up the next in line.
                     self._wakeup_next(self._putters)
                 raise
         return self.put_nowait(item)
@@ -165,8 +167,10 @@ class Queue:
             try:
                 yield from getter
             except:
-                getter.cancel()
+                getter.cancel()  # Just in case getter is not done yet.
                 if not self.empty() and not getter.cancelled():
+                    # We were woken up by put_nowait(), but can't take
+                    # the call.  Wake up the next in line.
                     self._wakeup_next(self._getters)
                 raise
         return self.get_nowait()

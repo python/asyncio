@@ -1000,8 +1000,8 @@ class SelectorSocketTransportTests(test_utils.TestCase):
         transport = self.socket_transport()
         transport.close()
         self.assertEqual(transport._conn_lost, 1)
-        transport.write(b'data')
-        self.assertEqual(transport._conn_lost, 2)
+        # write() is disallowed after close()
+        self.assertRaises(RuntimeError, transport.write, b'data')
 
     def test_write_ready(self):
         data = b'data'

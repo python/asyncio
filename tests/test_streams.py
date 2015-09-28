@@ -632,6 +632,23 @@ os.close(fd)
         protocol = asyncio.StreamReaderProtocol(reader)
         self.assertIs(protocol._loop, self.loop)
 
+    def test_pause_writing_closing(self):
+        reader = mock.Mock()
+        transport = asyncio.ReadTransport()
+        protocol = asyncio.StreamReaderProtocol(reader, loop=self.loop)
+        protocol.connection_made(transport)
+        transport._closing = True
+        self.assertRaises(RuntimeError, protocol.pause_writing)
+
+    def test_resume_writing_closing(self):
+        reader = mock.Mock()
+        transport = asyncio.ReadTransport()
+        protocol = asyncio.StreamReaderProtocol(reader, loop=self.loop)
+        protocol.connection_made(transport)
+        protocol.pause_writing()
+        transport._closing = True
+        self.assertRaises(RuntimeError, protocol.resume_writing)
+
 
 if __name__ == '__main__':
     unittest.main()

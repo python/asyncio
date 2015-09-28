@@ -2,17 +2,19 @@
 
 __all__ = ['CancelledError', 'TimeoutError',
            'InvalidStateError',
-           'Future', 'wrap_future',
-           ]
+           'Future', 'connect_futures', 'wrap_future',
+           'submit_to_loop']
 
 import concurrent.futures._base
 import logging
 import reprlib
 import sys
 import traceback
+import functools
 
 from . import compat
 from . import events
+import asyncio
 
 # States for Future.
 _PENDING = 'PENDING'
@@ -387,25 +389,79 @@ class Future:
         return self.result()  # May raise too.
 
     if compat.PY35:
-        __await__ = __iter__ # make compatible with 'await' expression
+        __await__ = __iter__  # make compatible with 'await' expression
 
 
-def wrap_future(fut, *, loop=None):
+# Helpers to connect asyncio futures and concurrent futures
+
+def _copy_state(source, destination):
+    """Copy state from a future to another future.
+    Compatible with both asyncio.Future and concurrent.futures.Future."""
+    # Future._copy_state code should probably move in here
+    return Future._copy_state.__get__(destination)(source)
+
+
+def _safe_callback(origin, affected, callback):
+    """Run a callback safely.
+    If the callback is generated from a concurrent.futures.Futres
+    and it affects an asyncio.Future, the execution is safely scheduled.
+    Otherwise, it is executed directly."""
+    if isinstance(origin, concurrent.futures.Future) and \
+       isinstance(affected, Future):
+        affected._loop.call_soon_threadsafe(callback)
+    else:
+        callback()
+
+
+def connect_futures(source, destination):
+    """Connect a future to another future.
+    Compatible with both asyncio.Future and concurrent.futures.Future."""
+    if not isinstance(source, (Future, concurrent.futures.Future)):
+        raise TypeError('A future is required for source argument')
+    if not isinstance(destination, (Future, concurrent.futures.Future)):
+        raise TypeError('A future is required for destination argument')
+
+    def _check_cancel_other(destination):
+        if destination.cancelled():
+            _safe_callback(destination, source, source.cancel)
+
+    def _safe_copy_state(source):
+        _copy_func = lambda: _copy_state(source, destination)
+        _safe_callback(source, destination, _copy_func)
+
+    destination.add_done_callback(_check_cancel_other)
+    source.add_done_callback(_safe_copy_state)
+
+
+def wrap_future(future, *, loop=None):
     """Wrap concurrent.futures.Future object."""
-    if isinstance(fut, Future):
-        return fut
-    assert isinstance(fut, concurrent.futures.Future), \
-        'concurrent.futures.Future is expected, got {!r}'.format(fut)
-    if loop is None:
-        loop = events.get_event_loop()
+    if isinstance(future, Future):
+        return future
+    assert isinstance(future, concurrent.futures.Future), \
+        'concurrent.futures.Future is expected, got {!r}'.format(future)
     new_future = Future(loop=loop)
-
-    def _check_cancel_other(f):
-        if f.cancelled():
-            fut.cancel()
-
-    new_future.add_done_callback(_check_cancel_other)
-    fut.add_done_callback(
-        lambda future: loop.call_soon_threadsafe(
-            new_future._copy_state, future))
+    connect_futures(future, new_future)
     return new_future
+
+
+# Submission of a coroutine to an event loop
+
+def _schedule(coro, *, loop=None, destination=None):
+    """Schedule a coroutine execution and return a future.
+    Connect the result to an optional destination future."""
+    future = asyncio.ensure_future(coro, loop=loop)
+    if destination is not None:
+        connect_futures(future, destination)
+    return future
+
+
+def submit_to_loop(coro, loop):
+    """Submit a coroutine to a given event loop.
+    Return a concurrent.futures.Future."""
+    if not asyncio.iscoroutine(coro):
+        raise TypeError('A coroutine is required')
+    future = concurrent.futures.Future()
+    callback = functools.partial(_schedule, coro, loop=loop,
+                                 destination=future)
+    loop.call_soon_threadsafe(callback)
+    return future

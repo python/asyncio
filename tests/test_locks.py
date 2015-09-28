@@ -7,7 +7,6 @@ import re
 import asyncio
 from asyncio import test_utils
 
-
 STR_RGX_REPR = (
     r'^<(?P<class>.*?) object at (?P<address>.*?)'
     r'\[(?P<extras>'
@@ -18,7 +17,6 @@ RGX_REPR = re.compile(STR_RGX_REPR)
 
 
 class LockTests(test_utils.TestCase):
-
     def setUp(self):
         self.loop = self.new_test_loop()
 
@@ -234,7 +232,6 @@ class LockTests(test_utils.TestCase):
 
 
 class EventTests(test_utils.TestCase):
-
     def setUp(self):
         self.loop = self.new_test_loop()
 
@@ -363,7 +360,6 @@ class EventTests(test_utils.TestCase):
 
 
 class ConditionTests(test_utils.TestCase):
-
     def setUp(self):
         self.loop = self.new_test_loop()
 
@@ -673,7 +669,6 @@ class ConditionTests(test_utils.TestCase):
 
 
 class SemaphoreTests(test_utils.TestCase):
-
     def setUp(self):
         self.loop = self.new_test_loop()
 
@@ -783,22 +778,20 @@ class SemaphoreTests(test_utils.TestCase):
 
         test_utils.run_briefly(self.loop)
         self.assertEqual(0, sem._value)
-        self.assertEqual([1, 2, 3], result)
+        self.assertEqual(3, len(result))
         self.assertTrue(sem.locked())
         self.assertEqual(1, len(sem._waiters))
         self.assertEqual(0, sem._value)
 
         self.assertTrue(t1.done())
         self.assertTrue(t1.result())
-        self.assertTrue(t2.done())
-        self.assertTrue(t2.result())
-        self.assertTrue(t3.done())
-        self.assertTrue(t3.result())
-        self.assertFalse(t4.done())
+        race_tasks = [t2, t3, t4]
+        done_tasks = [t for t in race_tasks if t.done() and t.result()]
+        self.assertTrue(2, len(done_tasks))
 
         # cleanup locked semaphore
         sem.release()
-        self.loop.run_until_complete(t4)
+        self.loop.run_until_complete(asyncio.gather(*race_tasks))
 
     def test_acquire_cancel(self):
         sem = asyncio.Semaphore(loop=self.loop)
@@ -809,7 +802,8 @@ class SemaphoreTests(test_utils.TestCase):
         self.assertRaises(
             asyncio.CancelledError,
             self.loop.run_until_complete, acquire)
-        self.assertFalse(sem._waiters)
+        self.assertTrue((not sem._waiters) or
+                        all(waiter.done() for waiter in sem._waiters))
 
     def test_acquire_cancel_before_awoken(self):
         sem = asyncio.Semaphore(value=0, loop=self.loop)

@@ -397,7 +397,6 @@ class Semaphore(_ContextManagerMixin):
         if value < 0:
             raise ValueError("Semaphore initial value must be >= 0")
         self._value = value
-        self._num_ready = 0
         self._waiters = collections.deque()
         if loop is not None:
             self._loop = loop
@@ -417,7 +416,6 @@ class Semaphore(_ContextManagerMixin):
             waiter = self._waiters.popleft()
             if not waiter.done():
                 waiter.set_result(None)
-                self._num_ready += 1
                 return
 
     def locked(self):
@@ -434,26 +432,18 @@ class Semaphore(_ContextManagerMixin):
         called release() to make it larger than 0, and then return
         True.
         """
-        if self._value - self._num_ready > 0:
-            self._value -= 1
-            return True
-
-        fut = futures.Future(loop=self._loop)
-        self._waiters.append(fut)
-        try:
-            yield from fut
-            self._value -= 1
-            self._num_ready -= 1
-            return True
-        except futures.CancelledError:
-            if not fut.cancelled():
-                self._num_ready -= 1
-                self._wake_up_next()
-            # `test_acquire_cancel` in tests/test_locks.py doesn't allow
-            # cancelled waiters left in self._waiters
-            if fut in self._waiters:
-                self._waiters.remove(fut)
-            raise
+        while self._value == 0:
+            fut = futures.Future(loop=self._loop)
+            self._waiters.append(fut)
+            try:
+                yield from fut
+            except:
+                fut.cancel()
+                if self._value > 0 and not fut.cancelled():
+                    self._wake_up_next()
+                raise
+        self._value -= 1
+        return True
 
     def release(self):
         """Release a semaphore, incrementing the internal counter by one.

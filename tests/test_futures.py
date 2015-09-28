@@ -503,7 +503,7 @@ class SubmitToLoopTests(test_utils.TestCase):
         result = self.loop.run_until_complete(future)
         self.assertEqual(result, 3)
 
-    def test_single_loop_with_exception(self):
+    def test_submit_to_loop_with_exception(self):
         """Test coroutine submission from a tread to an event loop
         when an exception is raised."""
         future = self.loop.run_in_executor(None, self.target, True)
@@ -511,7 +511,7 @@ class SubmitToLoopTests(test_utils.TestCase):
             self.loop.run_until_complete(future)
         self.assertIn("Fail!", exc_context.exception.args)
 
-    def test_single_loop_with_timeout(self):
+    def test_submit_to_loop_with_timeout(self):
         """Test coroutine submission from a tread to an event loop
         when a timeout is raised."""
         callback = lambda: self.target(timeout=0)
@@ -520,8 +520,9 @@ class SubmitToLoopTests(test_utils.TestCase):
             self.loop.run_until_complete(future)
         # Clear the time generator and tasks
         test_utils.run_briefly(self.loop)
-        # Check that there's no pending task
-        self.assertFalse(asyncio.Task.all_tasks(self.loop))
+        # Check that there's no pending task (add has been cancelled)
+        for task in asyncio.Task.all_tasks(self.loop):
+            self.assertTrue(task.done())
 
 
 if __name__ == '__main__':

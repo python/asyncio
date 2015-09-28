@@ -443,17 +443,17 @@ class Semaphore(_ContextManagerMixin):
         try:
             yield from fut
             self._value -= 1
+            self._num_ready -= 1
             return True
         except futures.CancelledError:
-            if self._value > 0:
+            if not fut.cancelled():
+                self._num_ready -= 1
                 self._wake_up_next()
             # `test_acquire_cancel` in tests/test_locks.py doesn't allow
             # cancelled waiters left in self._waiters
             if fut in self._waiters:
                 self._waiters.remove(fut)
             raise
-        finally:
-            self._num_ready -= 1
 
     def release(self):
         """Release a semaphore, incrementing the internal counter by one.

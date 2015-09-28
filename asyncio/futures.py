@@ -2,8 +2,9 @@
 
 __all__ = ['CancelledError', 'TimeoutError',
            'InvalidStateError',
-           'Future', 'connect_futures', 'wrap_future',
-           'submit_to_loop']
+           'Future', 'chain_future', 'wrap_future',
+           'submit_to_loop',
+           ]
 
 import concurrent.futures._base
 import logging
@@ -413,7 +414,7 @@ def _safe_callback(origin, affected, callback):
         callback()
 
 
-def connect_futures(source, destination):
+def chain_future(source, destination):
     """Connect a future to another future.
     Compatible with both asyncio.Future and concurrent.futures.Future."""
     if not isinstance(source, (Future, concurrent.futures.Future)):
@@ -440,7 +441,7 @@ def wrap_future(future, *, loop=None):
     assert isinstance(future, concurrent.futures.Future), \
         'concurrent.futures.Future is expected, got {!r}'.format(future)
     new_future = Future(loop=loop)
-    connect_futures(future, new_future)
+    chain_future(future, new_future)
     return new_future
 
 
@@ -451,7 +452,7 @@ def _schedule(coro, *, loop=None, destination=None):
     Connect the result to an optional destination future."""
     future = asyncio.ensure_future(coro, loop=loop)
     if destination is not None:
-        connect_futures(future, destination)
+        chain_future(future, destination)
     return future
 
 

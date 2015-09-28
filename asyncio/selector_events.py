@@ -514,6 +514,8 @@ class _SelectorTransport(transports._FlowControlMixin,
                 self._extra['peername'] = sock.getpeername()
             except socket.error:
                 self._extra['peername'] = None
+        if sock.family == socket.AF_UNIX:
+            self._extra['peercred'] = sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED)
         self._sock = sock
         self._sock_fd = sock.fileno()
         self._protocol = protocol

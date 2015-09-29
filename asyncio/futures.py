@@ -360,26 +360,6 @@ class Future:
 
     # Truly internal methods.
 
-    @staticmethod
-    def _copy_state(source, destination):
-        """Copy state from a future to another future.
-
-        Compatible with both asyncio.Future and concurrent.futures.Future.
-        """
-        assert source.done()
-        if destination.cancelled():
-            return
-        assert not destination.done()
-        if source.cancelled():
-            destination.cancel()
-        else:
-            exception = source.exception()
-            if exception is not None:
-                destination.set_exception(exception)
-            else:
-                result = source.result()
-                destination.set_result(result)
-
     def __iter__(self):
         if not self.done():
             self._blocking = True
@@ -391,7 +371,25 @@ class Future:
         __await__ = __iter__  # make compatible with 'await' expression
 
 
-# Helpers to connect asyncio futures and concurrent futures
+def _copy_state(source, destination):
+    """Copy state from a future to another future.
+
+    Compatible with both asyncio.Future and concurrent.futures.Future.
+    """
+    assert source.done()
+    if destination.cancelled():
+        return
+    assert not destination.done()
+    if source.cancelled():
+        destination.cancel()
+    else:
+        exception = source.exception()
+        if exception is not None:
+            destination.set_exception(exception)
+        else:
+            result = source.result()
+            destination.set_result(result)
+
 
 def _safe_callback(origin, affected, callback):
     """Run a callback safely.
@@ -422,7 +420,7 @@ def chain_future(source, destination):
             _safe_callback(destination, source, source.cancel)
 
     def _safe_copy_state(source):
-        _copy_func = lambda: Future._copy_state(source, destination)
+        _copy_func = lambda: _copy_state(source, destination)
         _safe_callback(source, destination, _copy_func)
 
     destination.add_done_callback(_check_cancel_other)

@@ -402,20 +402,19 @@ def chain_future(source, destination):
         raise TypeError('A future is required for source argument')
     if not isinstance(destination, (Future, concurrent.futures.Future)):
         raise TypeError('A future is required for destination argument')
-    source_loop = getattr(source, '_loop', None)
-    destination_loop = getattr(destination, '_loop', None)
+    source_loop = source._loop if isinstance(source, Future) else None
+    dest_loop = destination._loop if isinstance(destination, Future) else None
 
     def _check_cancel_other(destination):
         if destination.cancelled():
-            if source_loop and source_loop != destination_loop:
+            if source_loop is not None and source_loop != dest_loop:
                 source_loop.call_soon_threadsafe(source.cancel)
             else:
                 source.cancel()
 
     def _safe_copy_state(source):
-        if destination_loop and destination_loop != source_loop:
-            destination_loop.call_soon_threadsafe(
-                _copy_state, source, destination)
+        if dest_loop is not None and dest_loop != source_loop:
+            dest_loop.call_soon_threadsafe(_copy_state, source, destination)
         else:
             _copy_state(source, destination)
 

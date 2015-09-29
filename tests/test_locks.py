@@ -672,7 +672,6 @@ class ConditionTests(test_utils.TestCase):
 
 
 class SemaphoreTests(test_utils.TestCase):
-
     def setUp(self):
         self.loop = self.new_test_loop()
 

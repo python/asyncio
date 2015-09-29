@@ -392,8 +392,10 @@ def _copy_state(source, destination):
 
 
 def chain_future(source, destination):
-    """Connect a future to another future.
+    """Chain two futures so that when one completes, so does the other.
 
+    The result (or exception) of source will be copied to destination.
+    If destination is cancelled, source gets cancelled too.
     Compatible with both asyncio.Future and concurrent.futures.Future.
     """
     if not isinstance(source, (Future, concurrent.futures.Future)):

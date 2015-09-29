@@ -363,24 +363,25 @@ class Future:
 
     # Truly internal methods.
 
-    def _copy_state(self, other):
-        """Internal helper to copy state from another Future.
+    @staticmethod
+    def _copy_state(source, destination):
+        """Copy state from a future to another future.
 
-        The other Future may be a concurrent.futures.Future.
+        Compatible with both asyncio.Future and concurrent.futures.Future.
         """
-        assert other.done()
-        if self.cancelled():
+        assert source.done()
+        if destination.cancelled():
             return
-        assert not self.done()
-        if other.cancelled():
-            self.cancel()
+        assert not destination.done()
+        if source.cancelled():
+            destination.cancel()
         else:
-            exception = other.exception()
+            exception = source.exception()
             if exception is not None:
-                self.set_exception(exception)
+                destination.set_exception(exception)
             else:
-                result = other.result()
-                self.set_result(result)
+                result = source.result()
+                destination.set_result(result)
 
     def __iter__(self):
         if not self.done():
@@ -394,13 +395,6 @@ class Future:
 
 
 # Helpers to connect asyncio futures and concurrent futures
-
-def _copy_state(source, destination):
-    """Copy state from a future to another future.
-    Compatible with both asyncio.Future and concurrent.futures.Future."""
-    # Future._copy_state code should probably move in here
-    return Future._copy_state.__get__(destination)(source)
-
 
 def _safe_callback(origin, affected, callback):
     """Run a callback safely.
@@ -427,7 +421,7 @@ def chain_future(source, destination):
             _safe_callback(destination, source, source.cancel)
 
     def _safe_copy_state(source):
-        _copy_func = lambda: _copy_state(source, destination)
+        _copy_func = lambda: Future._copy_state(source, destination)
         _safe_callback(source, destination, _copy_func)
 
     destination.add_done_callback(_check_cancel_other)

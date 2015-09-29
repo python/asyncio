@@ -17,6 +17,7 @@ RGX_REPR = re.compile(STR_RGX_REPR)
 
 
 class LockTests(test_utils.TestCase):
+
     def setUp(self):
         self.loop = self.new_test_loop()
 
@@ -232,6 +233,7 @@ class LockTests(test_utils.TestCase):
 
 
 class EventTests(test_utils.TestCase):
+
     def setUp(self):
         self.loop = self.new_test_loop()
 
@@ -360,6 +362,7 @@ class EventTests(test_utils.TestCase):
 
 
 class ConditionTests(test_utils.TestCase):
+
     def setUp(self):
         self.loop = self.new_test_loop()
 

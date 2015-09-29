@@ -432,12 +432,13 @@ class Semaphore(_ContextManagerMixin):
         called release() to make it larger than 0, and then return
         True.
         """
-        while self._value == 0:
+        while self._value <= 0:
             fut = futures.Future(loop=self._loop)
             self._waiters.append(fut)
             try:
                 yield from fut
             except:
+                # See the similar code in Queue.get.
                 fut.cancel()
                 if self._value > 0 and not fut.cancelled():
                     self._wake_up_next()

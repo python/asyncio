@@ -1,5 +1,5 @@
-PYTHON=~/prog/python/default
-ASYNCIO=.
+PYTHON=${PYTHON:-~/prog/python/default}
+ASYNCIO=${ASYNCIO:-.}
 
 echo "Sync from $PYTHON to $ASYNCIO"
 set -e -x

@@ -391,20 +391,6 @@ def _copy_state(source, destination):
             destination.set_result(result)
 
 
-def _safe_callback(origin, affected, callback):
-    """Run a callback safely.
-
-    If the callback is generated from a concurrent.futures.Futres
-    and it affects an asyncio.Future, the execution is safely scheduled.
-    Otherwise, it is executed directly.
-    """
-    if isinstance(origin, concurrent.futures.Future) and \
-       isinstance(affected, Future):
-        affected._loop.call_soon_threadsafe(callback)
-    else:
-        callback()
-
-
 def chain_future(source, destination):
     """Connect a future to another future.
 
@@ -415,13 +401,20 @@ def chain_future(source, destination):
     if not isinstance(destination, (Future, concurrent.futures.Future)):
         raise TypeError('A future is required for destination argument')
 
+    def _safe_call(origin, affected, callback):
+        if isinstance(origin, concurrent.futures.Future) and \
+           isinstance(affected, Future):
+            affected._loop.call_soon_threadsafe(callback)
+        else:
+            callback()
+
     def _check_cancel_other(destination):
         if destination.cancelled():
-            _safe_callback(destination, source, source.cancel)
+            _safe_call(destination, source, source.cancel)
 
     def _safe_copy_state(source):
         _copy_func = lambda: _copy_state(source, destination)
-        _safe_callback(source, destination, _copy_func)
+        _safe_call(source, destination, _copy_func)
 
     destination.add_done_callback(_check_cancel_other)
     source.add_done_callback(_safe_copy_state)

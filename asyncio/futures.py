@@ -402,9 +402,10 @@ def chain_future(source, destination):
         raise TypeError('A future is required for destination argument')
 
     def _safe_call(origin, affected, callback):
-        if isinstance(origin, concurrent.futures.Future) and \
-           isinstance(affected, Future):
-            affected._loop.call_soon_threadsafe(callback)
+        origin_loop = getattr(origin, '_loop', None)
+        affected_loop = getattr(affected, '_loop', None)
+        if affected_loop and affected_loop != origin_loop:
+            affected_loop.call_soon_threadsafe(callback)
         else:
             callback()
 

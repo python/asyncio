@@ -64,6 +64,14 @@ do
     then
         continue
     fi
+    if [ $i == test_pep492.py ]
+    then
+        if [ "`(cd $CPYTHON; hg branch)`" == "3.4" ]
+        then
+            echo "Destination is 3.4 branch -- ignoring test_pep492.py"
+            continue
+        fi
+    fi
     maybe_copy tests/$i Lib/test/test_asyncio/$i
 done
 

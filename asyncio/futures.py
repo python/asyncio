@@ -398,9 +398,11 @@ class Future:
 
 def _safe_callback(origin, affected, callback):
     """Run a callback safely.
+
     If the callback is generated from a concurrent.futures.Futres
     and it affects an asyncio.Future, the execution is safely scheduled.
-    Otherwise, it is executed directly."""
+    Otherwise, it is executed directly.
+    """
     if isinstance(origin, concurrent.futures.Future) and \
        isinstance(affected, Future):
         affected._loop.call_soon_threadsafe(callback)
@@ -410,7 +412,9 @@ def _safe_callback(origin, affected, callback):
 
 def chain_future(source, destination):
     """Connect a future to another future.
-    Compatible with both asyncio.Future and concurrent.futures.Future."""
+
+    Compatible with both asyncio.Future and concurrent.futures.Future.
+    """
     if not isinstance(source, (Future, concurrent.futures.Future)):
         raise TypeError('A future is required for source argument')
     if not isinstance(destination, (Future, concurrent.futures.Future)):
@@ -443,7 +447,9 @@ def wrap_future(future, *, loop=None):
 
 def _schedule(coro, *, loop=None, destination=None):
     """Schedule a coroutine execution and return a future.
-    Connect the result to an optional destination future."""
+
+    Connect the result to an optional destination future.
+    """
     future = asyncio.ensure_future(coro, loop=loop)
     if destination is not None:
         chain_future(future, destination)
@@ -452,7 +458,9 @@ def _schedule(coro, *, loop=None, destination=None):
 
 def submit_to_loop(coro, loop):
     """Submit a coroutine to a given event loop.
-    Return a concurrent.futures.Future."""
+
+    Return a concurrent.futures.Future to access the result.
+    """
     if not asyncio.iscoroutine(coro):
         raise TypeError('A coroutine is required')
     future = concurrent.futures.Future()

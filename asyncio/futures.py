@@ -3,7 +3,6 @@
 __all__ = ['CancelledError', 'TimeoutError',
            'InvalidStateError',
            'Future', 'chain_future', 'wrap_future',
-           'submit_to_loop',
            ]
 
 import concurrent.futures._base
@@ -11,11 +10,9 @@ import logging
 import reprlib
 import sys
 import traceback
-import functools
 
 from . import compat
 from . import events
-import asyncio
 
 # States for Future.
 _PENDING = 'PENDING'
@@ -441,30 +438,3 @@ def wrap_future(future, *, loop=None):
     new_future = Future(loop=loop)
     chain_future(future, new_future)
     return new_future
-
-
-# Submission of a coroutine to an event loop
-
-def _schedule(coro, *, loop=None, destination=None):
-    """Schedule a coroutine execution and return a future.
-
-    Connect the result to an optional destination future.
-    """
-    future = asyncio.ensure_future(coro, loop=loop)
-    if destination is not None:
-        chain_future(future, destination)
-    return future
-
-
-def submit_to_loop(coro, loop):
-    """Submit a coroutine to a given event loop.
-
-    Return a concurrent.futures.Future to access the result.
-    """
-    if not asyncio.iscoroutine(coro):
-        raise TypeError('A coroutine is required')
-    future = concurrent.futures.Future()
-    callback = functools.partial(_schedule, coro, loop=loop,
-                                 destination=future)
-    loop.call_soon_threadsafe(callback)
-    return future

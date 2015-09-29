@@ -3,7 +3,7 @@
 __all__ = ['Task',
            'FIRST_COMPLETED', 'FIRST_EXCEPTION', 'ALL_COMPLETED',
            'wait', 'wait_for', 'as_completed', 'sleep', 'async',
-           'gather', 'shield', 'ensure_future',
+           'gather', 'shield', 'ensure_future', 'submit_to_loop',
            ]
 
 import concurrent.futures
@@ -680,3 +680,19 @@ def shield(arg, *, loop=None):
 
     inner.add_done_callback(_done_callback)
     return outer
+
+
+def submit_to_loop(coro, loop):
+    """Submit a coroutine to a given event loop.
+
+    Return a concurrent.futures.Future to access the result.
+    """
+    if not coroutines.iscoroutine(coro):
+        raise TypeError('A coroutine is required')
+    future = concurrent.futures.Future()
+
+    def callback():
+        futures.chain_future(ensure_future(coro, loop=loop), future)
+
+    loop.call_soon_threadsafe(callback)
+    return future

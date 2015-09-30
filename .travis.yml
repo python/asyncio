@@ -2,12 +2,11 @@ language: python
 
 os:
   - linux
-  - osx
 
 python:
     - 3.3
     - 3.4
-    - "nightly"
+    - 3.5
 
 install:
     - pip install asyncio

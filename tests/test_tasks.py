@@ -2082,7 +2082,7 @@ class CoroutineGatherTests(GatherTestsBase, test_utils.TestCase):
         self.assertIsInstance(f.exception(), RuntimeError)
 
 
-class SubmitToLoopTests(test_utils.TestCase):
+class SubmitCoroutineTests(test_utils.TestCase):
     """Test case for futures.submit_to_loop."""
 
     def setUp(self):
@@ -2104,7 +2104,7 @@ class SubmitToLoopTests(test_utils.TestCase):
     def target(self, fail=False, timeout=None):
         """Run add coroutine in the event loop."""
         coro = self.add(1, 2, fail=fail)
-        future = asyncio.tasks.submit_to_loop(coro, self.loop)
+        future = asyncio.tasks.submit_coroutine(coro, self.loop)
         try:
             return future.result(timeout)
         finally:

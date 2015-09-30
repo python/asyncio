@@ -376,8 +376,9 @@ def _copy_state(source, destination):
     """
     assert source.done()
     if isinstance(destination, concurrent.futures.Future):
-        destination.set_running_or_notify_cancel()
-    if destination.cancelled():
+        if not destination.set_running_or_notify_cancel():
+            return
+    elif destination.cancelled():
         return
     if source.cancelled():
         destination.cancel()

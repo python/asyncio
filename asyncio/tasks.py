@@ -688,7 +688,7 @@ def submit_coroutine(coro, loop):
     Return a concurrent.futures.Future to access the result.
     """
     if not coroutines.iscoroutine(coro):
-        raise TypeError('A coroutine is required')
+        raise TypeError('A coroutine object is required')
     future = concurrent.futures.Future()
 
     def callback():

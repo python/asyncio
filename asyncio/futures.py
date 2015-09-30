@@ -375,9 +375,10 @@ def _copy_state(source, destination):
     Compatible with both asyncio.Future and concurrent.futures.Future.
     """
     assert source.done()
+    if isinstance(destination, concurrent.futures.Future):
+        destination.set_running_or_notify_cancel()
     if destination.cancelled():
         return
-    assert not destination.done()
     if source.cancelled():
         destination.cancel()
     else:

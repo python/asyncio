@@ -973,7 +973,7 @@ class _SelectorSslTransport(_SelectorTransport):
         return False
 
 
-class _SelectorDatagramTransport(_SelectorTransport):
+class _SelectorDatagramTransport(_SelectorTransport, transports.DatagramTransport):
 
     _buffer_factory = collections.deque
 

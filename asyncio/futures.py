@@ -358,8 +358,6 @@ class Future:
             # have had a chance to call result() or exception().
             self._loop.call_soon(self._tb_logger.activate)
 
-    # Truly internal methods.
-
     def __iter__(self):
         if not self.done():
             self._blocking = True
@@ -368,7 +366,7 @@ class Future:
         return self.result()  # May raise too.
 
     if compat.PY35:
-        __await__ = __iter__  # make compatible with 'await' expression
+        __await__ = __iter__ # make compatible with 'await' expression
 
 
 def _copy_state(source, destination):
@@ -407,16 +405,16 @@ def chain_future(source, destination):
 
     def _check_cancel_other(destination):
         if destination.cancelled():
-            if source_loop is not None and source_loop != dest_loop:
-                source_loop.call_soon_threadsafe(source.cancel)
-            else:
+            if source_loop is None or source_loop is dest_loop:
                 source.cancel()
+            else:
+                source_loop.call_soon_threadsafe(source.cancel)
 
     def _safe_copy_state(source):
-        if dest_loop is not None and dest_loop != source_loop:
-            dest_loop.call_soon_threadsafe(_copy_state, source, destination)
-        else:
+        if dest_loop is None or dest_loop is source_loop:
             _copy_state(source, destination)
+        else:
+            dest_loop.call_soon_threadsafe(_copy_state, source, destination)
 
     destination.add_done_callback(_check_cancel_other)
     source.add_done_callback(_safe_copy_state)

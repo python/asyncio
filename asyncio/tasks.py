@@ -3,7 +3,7 @@
 __all__ = ['Task',
            'FIRST_COMPLETED', 'FIRST_EXCEPTION', 'ALL_COMPLETED',
            'wait', 'wait_for', 'as_completed', 'sleep', 'async',
-           'gather', 'shield', 'ensure_future', 'run_coroutine_threadsafe'
+           'gather', 'shield', 'ensure_future', 'run_coroutine_threadsafe',
            ]
 
 import concurrent.futures

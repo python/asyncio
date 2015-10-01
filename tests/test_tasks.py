@@ -2082,7 +2082,7 @@ class CoroutineGatherTests(GatherTestsBase, test_utils.TestCase):
         self.assertIsInstance(f.exception(), RuntimeError)
 
 
-class SubmitCoroutineTests(test_utils.TestCase):
+class RunCoroutineThreadsafeTests(test_utils.TestCase):
     """Test case for futures.submit_to_loop."""
 
     def setUp(self):
@@ -2107,19 +2107,19 @@ class SubmitCoroutineTests(test_utils.TestCase):
     def target(self, fail=False, cancel=False, timeout=None):
         """Run add coroutine in the event loop."""
         coro = self.add(1, 2, fail=fail, cancel=cancel)
-        future = asyncio.tasks.submit_coroutine(coro, self.loop)
+        future = asyncio.run_coroutine_threadsafe(coro, self.loop)
         try:
             return future.result(timeout)
         finally:
             future.done() or future.cancel()
 
-    def test_submit_to_loop(self):
+    def test_run_coroutine_threadsafe(self):
         """Test coroutine submission from a thread to an event loop."""
         future = self.loop.run_in_executor(None, self.target)
         result = self.loop.run_until_complete(future)
         self.assertEqual(result, 3)
 
-    def test_submit_to_loop_with_exception(self):
+    def test_run_coroutine_threadsafe_with_exception(self):
         """Test coroutine submission from a thread to an event loop
         when an exception is raised."""
         future = self.loop.run_in_executor(None, self.target, True)
@@ -2127,7 +2127,7 @@ class SubmitCoroutineTests(test_utils.TestCase):
             self.loop.run_until_complete(future)
         self.assertIn("Fail!", exc_context.exception.args)
 
-    def test_submit_to_loop_with_timeout(self):
+    def test_run_coroutine_threadsafe_with_timeout(self):
         """Test coroutine submission from a thread to an event loop
         when a timeout is raised."""
         callback = lambda: self.target(timeout=0)
@@ -2140,7 +2140,7 @@ class SubmitCoroutineTests(test_utils.TestCase):
         for task in asyncio.Task.all_tasks(self.loop):
             self.assertTrue(task.done())
 
-    def test_submit_to_loop_task_cancelled(self):
+    def test_run_coroutine_threadsafe_task_cancelled(self):
         """Test coroutine submission from a tread to an event loop
         when the task is cancelled."""
         callback = lambda: self.target(cancel=True)

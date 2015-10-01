@@ -3,7 +3,7 @@
 __all__ = ['Task',
            'FIRST_COMPLETED', 'FIRST_EXCEPTION', 'ALL_COMPLETED',
            'wait', 'wait_for', 'as_completed', 'sleep', 'async',
-           'gather', 'shield', 'ensure_future', 'submit_coroutine',
+           'gather', 'shield', 'ensure_future', 'run_coroutine_threadsafe'
            ]
 
 import concurrent.futures
@@ -682,7 +682,7 @@ def shield(arg, *, loop=None):
     return outer
 
 
-def submit_coroutine(coro, loop):
+def run_coroutine_threadsafe(coro, loop):
     """Submit a coroutine object to a given event loop.
 
     Return a concurrent.futures.Future to access the result.

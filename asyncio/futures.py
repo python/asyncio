@@ -374,22 +374,25 @@ def _copy_state(source, destination):
 
     Compatible with both asyncio.Future and concurrent.futures.Future.
     """
+    # Check source cancellation
     assert source.done()
+    if source.cancelled():
+        destination.cancel()
+        return
+    # Check destination cancellation
     if isinstance(destination, concurrent.futures.Future):
         if not destination.set_running_or_notify_cancel():
             return
     elif destination.cancelled():
         return
     assert not destination.done()
-    if source.cancelled():
-        destination.cancel()
+    # Set exception or result
+    exception = source.exception()
+    if exception is not None:
+        destination.set_exception(exception)
     else:
-        exception = source.exception()
-        if exception is not None:
-            destination.set_exception(exception)
-        else:
-            result = source.result()
-            destination.set_result(result)
+        result = source.result()
+        destination.set_result(result)
 
 
 def chain_future(source, destination):

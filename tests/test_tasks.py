@@ -2094,16 +2094,19 @@ class SubmitCoroutineTests(test_utils.TestCase):
         yield 1  # second
 
     @asyncio.coroutine
-    def add(self, a, b, fail=False):
+    def add(self, a, b, fail=False, cancel=False):
         """Wait 1 second and return a + b."""
         yield from asyncio.sleep(1, loop=self.loop)
         if fail:
             raise RuntimeError("Fail!")
+        if cancel:
+            asyncio.tasks.Task.current_task(self.loop).cancel()
+            yield
         return a + b
 
-    def target(self, fail=False, timeout=None):
+    def target(self, fail=False, cancel=False, timeout=None):
         """Run add coroutine in the event loop."""
-        coro = self.add(1, 2, fail=fail)
+        coro = self.add(1, 2, fail=fail, cancel=cancel)
         future = asyncio.tasks.submit_coroutine(coro, self.loop)
         try:
             return future.result(timeout)
@@ -2111,13 +2114,13 @@ class SubmitCoroutineTests(test_utils.TestCase):
             future.done() or future.cancel()
 
     def test_submit_to_loop(self):
-        """Test coroutine submission from a tread to an event loop."""
+        """Test coroutine submission from a thread to an event loop."""
         future = self.loop.run_in_executor(None, self.target)
         result = self.loop.run_until_complete(future)
         self.assertEqual(result, 3)
 
     def test_submit_to_loop_with_exception(self):
-        """Test coroutine submission from a tread to an event loop
+        """Test coroutine submission from a thread to an event loop
         when an exception is raised."""
         future = self.loop.run_in_executor(None, self.target, True)
         with self.assertRaises(RuntimeError) as exc_context:
@@ -2125,7 +2128,7 @@ class SubmitCoroutineTests(test_utils.TestCase):
         self.assertIn("Fail!", exc_context.exception.args)
 
     def test_submit_to_loop_with_timeout(self):
-        """Test coroutine submission from a tread to an event loop
+        """Test coroutine submission from a thread to an event loop
         when a timeout is raised."""
         callback = lambda: self.target(timeout=0)
         future = self.loop.run_in_executor(None, callback)
@@ -2136,6 +2139,14 @@ class SubmitCoroutineTests(test_utils.TestCase):
         # Check that there's no pending task (add has been cancelled)
         for task in asyncio.Task.all_tasks(self.loop):
             self.assertTrue(task.done())
+
+    def test_submit_to_loop_task_cancelled(self):
+        """Test coroutine submission from a tread to an event loop
+        when the task is cancelled."""
+        callback = lambda: self.target(cancel=True)
+        future = self.loop.run_in_executor(None, callback)
+        with self.assertRaises(asyncio.CancelledError):
+            self.loop.run_until_complete(future)
 
 
 if __name__ == '__main__':

@@ -692,7 +692,7 @@ def submit_coroutine(coro, loop):
     future = concurrent.futures.Future()
 
     def callback():
-        futures.chain_future(ensure_future(coro, loop=loop), future)
+        futures._chain_future(ensure_future(coro, loop=loop), future)
 
     loop.call_soon_threadsafe(callback)
     return future

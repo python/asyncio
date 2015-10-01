@@ -395,7 +395,7 @@ def _copy_state(source, destination):
         destination.set_result(result)
 
 
-def chain_future(source, destination):
+def _chain_future(source, destination):
     """Chain two futures so that when one completes, so does the other.
 
     The result (or exception) of source will be copied to destination.
@@ -433,5 +433,5 @@ def wrap_future(future, *, loop=None):
     assert isinstance(future, concurrent.futures.Future), \
         'concurrent.futures.Future is expected, got {!r}'.format(future)
     new_future = Future(loop=loop)
-    chain_future(future, new_future)
+    _chain_future(future, new_future)
     return new_future

@@ -380,6 +380,7 @@ def _copy_state(source, destination):
             return
     elif destination.cancelled():
         return
+    assert not destination.done()
     if source.cancelled():
         destination.cancel()
     else:

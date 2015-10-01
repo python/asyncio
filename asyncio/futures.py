@@ -2,7 +2,7 @@
 
 __all__ = ['CancelledError', 'TimeoutError',
            'InvalidStateError',
-           'Future', 'chain_future', 'wrap_future',
+           'Future', 'wrap_future',
            ]
 
 import concurrent.futures._base

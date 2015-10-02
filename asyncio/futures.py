@@ -418,21 +418,27 @@ def _chain_future(source, destination):
     source_loop = source._loop if isinstance(source, Future) else None
     dest_loop = destination._loop if isinstance(destination, Future) else None
 
-    def _check_cancel_other(destination):
+    def _copy_state(source, destination):
+        if isinstance(destination, Future):
+            destination._copy_state(source)
+        else:
+            _copy_state_to_concurrent_future(source, destination)
+
+    def _check_cancel_callback(destination):
         if destination.cancelled():
             if source_loop is None or source_loop is dest_loop:
                 source.cancel()
             else:
                 source_loop.call_soon_threadsafe(source.cancel)
 
-    def _safe_copy_state(source):
+    def _copy_state_callback(source):
         if dest_loop is None or dest_loop is source_loop:
             _copy_state(source, destination)
         else:
             dest_loop.call_soon_threadsafe(_copy_state, source, destination)
 
-    destination.add_done_callback(_check_cancel_other)
-    source.add_done_callback(_safe_copy_state)
+    destination.add_done_callback(_check_cancel_callback)
+    source.add_done_callback(_copy_state_callback)
 
 
 def wrap_future(future, *, loop=None):

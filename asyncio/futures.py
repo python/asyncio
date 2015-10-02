@@ -389,24 +389,13 @@ class Future:
         __await__ = __iter__ # make compatible with 'await' expression
 
 
-def _copy_state(source, destination):
-    """Copy state from a future to another future.
-
-    Compatible with both asyncio.Future and concurrent.futures.Future.
-    """
-    # Check source cancellation
+def _copy_state_to_concurrent_future(source, destination):
+    """Copy state from a future to a concurrent.futures.Future."""
     assert source.done()
     if source.cancelled():
         destination.cancel()
+    if not destination.set_running_or_notify_cancel():
         return
-    # Check destination cancellation
-    if isinstance(destination, concurrent.futures.Future):
-        if not destination.set_running_or_notify_cancel():
-            return
-    elif destination.cancelled():
-        return
-    assert not destination.done()
-    # Set exception or result
     exception = source.exception()
     if exception is not None:
         destination.set_exception(exception)

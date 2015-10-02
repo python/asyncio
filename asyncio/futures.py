@@ -390,18 +390,18 @@ class Future:
         __await__ = __iter__ # make compatible with 'await' expression
 
 
-def _set_concurrent_future_state(concurrent, other):
+def _set_concurrent_future_state(concurrent, source):
     """Copy state from a future to a concurrent.futures.Future."""
-    assert other.done()
-    if other.cancelled():
+    assert source.done()
+    if source.cancelled():
         concurrent.cancel()
     if not concurrent.set_running_or_notify_cancel():
         return
-    exception = other.exception()
+    exception = source.exception()
     if exception is not None:
         concurrent.set_exception(exception)
     else:
-        result = other.result()
+        result = source.result()
         concurrent.set_result(result)
 
 

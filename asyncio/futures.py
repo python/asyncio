@@ -362,6 +362,7 @@ class Future:
 
     def _copy_state(self, other):
         """Internal helper to copy state from another Future.
+
         The other Future may be a concurrent.futures.Future.
         """
         assert other.done()

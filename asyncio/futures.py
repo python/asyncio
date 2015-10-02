@@ -389,19 +389,19 @@ class Future:
         __await__ = __iter__ # make compatible with 'await' expression
 
 
-def _copy_state_to_concurrent_future(source, destination):
+def _set_concurrent_future_state(concurrent, other):
     """Copy state from a future to a concurrent.futures.Future."""
-    assert source.done()
-    if source.cancelled():
-        destination.cancel()
-    if not destination.set_running_or_notify_cancel():
+    assert other.done()
+    if other.cancelled():
+        concurrent.cancel()
+    if not concurrent.set_running_or_notify_cancel():
         return
-    exception = source.exception()
+    exception = other.exception()
     if exception is not None:
-        destination.set_exception(exception)
+        concurrent.set_exception(exception)
     else:
-        result = source.result()
-        destination.set_result(result)
+        result = other.result()
+        concurrent.set_result(result)
 
 
 def _chain_future(source, destination):
@@ -422,7 +422,7 @@ def _chain_future(source, destination):
         if isinstance(destination, Future):
             destination._copy_state(source)
         else:
-            _copy_state_to_concurrent_future(source, destination)
+            _set_concurrent_future_state(destination, source)
 
     def _check_cancel_callback(destination):
         if destination.cancelled():

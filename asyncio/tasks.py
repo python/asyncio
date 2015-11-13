@@ -247,7 +247,8 @@ class Task(futures.Future):
             self.set_exception(exc)
             raise
         else:
-            if isinstance(result, futures.Future):
+            # Use duck-typing here. `isinstance(result, Future)` is slow.
+            if hasattr(result, 'add_done_callback'):
                 # Yielded Future must come from Future.__iter__().
                 if result._blocking:
                     result._blocking = False
@@ -290,7 +291,15 @@ class Task(futures.Future):
             # This may also be a cancellation.
             self._step(None, exc)
         else:
-            self._step(value, None)
+            # We don't need to pass the `value` to `_step` here.
+            # When `_step` is called, it will call `coro.send(None)`,
+            # which will, in turn, call Future's iterator (returned from
+            # Future.__iter__ or Future.__await__) __next__.  If you push
+            # a non-None value here, 'send' method of that iterator
+            # would be called (instead of __next__) -- this is slow for
+            # Future implementations that do not return a generator from
+            # their __iter__.
+            self._step()
         self = None  # Needed to break cycles when an exception occurs.
 
 

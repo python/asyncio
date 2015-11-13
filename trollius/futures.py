@@ -371,7 +371,7 @@ class Future(object):
         if exc_tb is not None:
             self._exception_tb = exc_tb
             exc_tb = None
-        elif self._loop.get_debug() and not six.PY3:
+        elif not six.PY3:
             self._exception_tb = sys.exc_info()[2]
         self._state = _FINISHED
         self._schedule_callbacks()

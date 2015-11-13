@@ -235,6 +235,7 @@ class Task(futures.Future):
     def _step(self, value=None, exc=None, exc_tb=None):
         assert not self.done(), \
             '_step(): already done: {0!r}, {1!r}, {2!r}'.format(self, value, exc)
+
         if self._must_cancel:
             if not isinstance(exc, futures.CancelledError):
                 exc = futures.CancelledError()
@@ -250,7 +251,10 @@ class Task(futures.Future):
         # Call either coro.throw(exc) or coro.send(value).
         try:
             if exc is not None:
-                result = coro.throw(exc)
+                if exc_tb is not None:
+                   result = coro.throw(exc, None, exc_tb)
+                else:
+                   result = coro.throw(exc)
             else:
                 result = coro.send(value)
         except StopIteration as exc:

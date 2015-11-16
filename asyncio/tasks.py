@@ -26,12 +26,12 @@ class Task(futures.Future):
 
     # An important invariant maintained while a Task not done:
     #
-    # - Either _fut_waiter is None, and _step() is scheduled;
-    # - or _fut_waiter is some Future, and _step() is *not* scheduled.
+    # - Either _fut_waiter is None, and __step() is scheduled;
+    # - or _fut_waiter is some Future, and __step() is *not* scheduled.
     #
     # The only transition from the latter to the former is through
-    # _wakeup().  When _fut_waiter is not None, one of its callbacks
-    # must be _wakeup().
+    # __wakeup().  When _fut_waiter is not None, one of its callbacks
+    # must be __wakeup().
 
     # Weak set containing all tasks alive.
     _all_tasks = weakref.WeakSet()
@@ -74,7 +74,7 @@ class Task(futures.Future):
         self._coro = coro
         self._fut_waiter = None
         self._must_cancel = False
-        self._loop.call_soon(self._step)
+        self._loop.call_soon(self.__step)
         self.__class__._all_tasks.add(self)
 
     # On Python 3.3 or older, objects with a destructor that are part of a
@@ -217,14 +217,14 @@ class Task(futures.Future):
                 # catches and ignores the cancellation so we may have
                 # to cancel it again later.
                 return True
-        # It must be the case that self._step is already scheduled.
+        # It must be the case that self.__step is already scheduled.
         self._must_cancel = True
         return True
 
-    def _step(self, value=None, exc=None):
+    def __step(self, value=None, exc=None):
         # Private to the asyncio module; unsafe to use in subclasses.
         assert not self.done(), \
-            '_step(): already done: {!r}, {!r}, {!r}'.format(self, value, exc)
+            '__step(): already done: {!r}, {!r}, {!r}'.format(self, value, exc)
         if self._must_cancel:
             if not isinstance(exc, futures.CancelledError):
                 exc = futures.CancelledError()
@@ -253,24 +253,24 @@ class Task(futures.Future):
                 # Yielded Future must come from Future.__iter__().
                 if result._blocking:
                     result._blocking = False
-                    result.add_done_callback(self._wakeup)
+                    result.add_done_callback(self.__wakeup)
                     self._fut_waiter = result
                     if self._must_cancel:
                         if self._fut_waiter.cancel():
                             self._must_cancel = False
                 else:
                     self._loop.call_soon(
-                        self._step, None,
+                        self.__step, None,
                         RuntimeError(
                             'yield was used instead of yield from '
                             'in task {!r} with {!r}'.format(self, result)))
             elif result is None:
                 # Bare yield relinquishes control for one event loop iteration.
-                self._loop.call_soon(self._step)
+                self._loop.call_soon(self.__step)
             elif inspect.isgenerator(result):
                 # Yielding a generator is just wrong.
                 self._loop.call_soon(
-                    self._step, None,
+                    self.__step, None,
                     RuntimeError(
                         'yield was used instead of yield from for '
                         'generator in task {!r} with {}'.format(
@@ -278,22 +278,22 @@ class Task(futures.Future):
             else:
                 # Yielding something else is an error.
                 self._loop.call_soon(
-                    self._step, None,
+                    self.__step, None,
                     RuntimeError(
                         'Task got bad yield: {!r}'.format(result)))
         finally:
             self.__class__._current_tasks.pop(self._loop)
             self = None  # Needed to break cycles when an exception occurs.
 
-    def _wakeup(self, future):
+    def __wakeup(self, future):
         # Private to the asyncio module; unsafe to use in subclasses.
         try:
             value = future.result()
         except Exception as exc:
             # This may also be a cancellation.
-            self._step(None, exc)
+            self.__step(None, exc)
         else:
-            self._step(value, None)
+            self.__step(value, None)
         self = None  # Needed to break cycles when an exception occurs.
 
 

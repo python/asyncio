@@ -1244,7 +1244,7 @@ class TaskTests(test_utils.TestCase):
         task = asyncio.Task(gen, loop=self.loop)
         task.set_result('ok')
 
-        self.assertRaises(AssertionError, task._Task__step)
+        self.assertRaises(AssertionError, task._step)
         gen.close()
 
     def test_step_result(self):
@@ -1294,7 +1294,7 @@ class TaskTests(test_utils.TestCase):
             raise BaseException()
 
         task = asyncio.Task(notmutch(), loop=self.loop)
-        self.assertRaises(BaseException, task._Task__step)
+        self.assertRaises(BaseException, task._step)
 
         self.assertTrue(task.done())
         self.assertIsInstance(task.exception(), BaseException)

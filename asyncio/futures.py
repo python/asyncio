@@ -155,7 +155,7 @@ class Future:
             self._source_traceback = traceback.extract_stack(sys._getframe(1))
 
     def __format_callbacks(self):
-        # Private method, do not rely on its existence.
+        # Private to the asyncio module; unsafe to use in subclasses.
         cb = self._callbacks
         size = len(cb)
         if not size:
@@ -175,7 +175,7 @@ class Future:
         return 'cb=[%s]' % cb
 
     def _repr_info(self):
-        # Private method, do not rely on its existence.
+        # Private to the asyncio module; unsafe to use in subclasses.
         info = [self._state.lower()]
         if self._state == _FINISHED:
             if self._exception is not None:
@@ -230,7 +230,7 @@ class Future:
         return True
 
     def _schedule_callbacks(self):
-        # Private method, do not rely on its existence.
+        # Private to the asyncio module; unsafe to use in subclasses.
         """Internal: Ask the event loop to call all callbacks.
 
         The callbacks are scheduled to be called as soon as possible. Also

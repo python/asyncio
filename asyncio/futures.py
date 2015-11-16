@@ -20,7 +20,7 @@ _CANCELLED = 'CANCELLED'
 _FINISHED = 'FINISHED'
 
 Error = concurrent.futures._base.Error
-CancelledError = concurrent.futures._base.CancelledError
+CancelledError = concurrent.futures.CancelledError
 TimeoutError = concurrent.futures.TimeoutError
 
 STACK_DEBUG = logging.DEBUG - 1  # heavy-duty debugging
@@ -154,7 +154,7 @@ class Future:
         if self._loop.get_debug():
             self._source_traceback = traceback.extract_stack(sys._getframe(1))
 
-    def _format_callbacks(self):
+    def __format_callbacks(self):
         # Private method, do not rely on its existence.
         cb = self._callbacks
         size = len(cb)
@@ -186,7 +186,7 @@ class Future:
                 result = reprlib.repr(self._result)
                 info.append('result={}'.format(result))
         if self._callbacks:
-            info.append(self._format_callbacks())
+            info.append(self.__format_callbacks())
         if self._source_traceback:
             frame = self._source_traceback[-1]
             info.append('created at %s:%s' % (frame[0], frame[1]))
@@ -355,8 +355,6 @@ class Future:
             # have had a chance to call result() or exception().
             self._loop.call_soon(self._tb_logger.activate)
 
-    # Truly internal methods.
-
     def __iter__(self):
         if not self.done():
             self._blocking = True
@@ -390,7 +388,7 @@ def _set_concurrent_future_state(concurrent, source):
         concurrent.set_result(result)
 
 
-def _apply_future_state(source, dest):
+def _copy_future_state(source, dest):
     """Internal helper to copy state from another Future.
 
     The other Future may be a concurrent.futures.Future.
@@ -426,7 +424,7 @@ def _chain_future(source, destination):
 
     def _set_state(future, other):
         if isinstance(future, Future):
-            _apply_future_state(other, future)
+            _copy_future_state(other, future)
         else:
             _set_concurrent_future_state(future, other)
 

@@ -93,6 +93,7 @@ class Task(futures.Future):
             futures.Future.__del__(self)
 
     def _repr_info(self):
+        # Private to the asyncio module; unsafe to use in subclasses.
         info = super()._repr_info()
 
         if self._must_cancel:
@@ -221,6 +222,7 @@ class Task(futures.Future):
         return True
 
     def _step(self, value=None, exc=None):
+        # Private to the asyncio module; unsafe to use in subclasses.
         assert not self.done(), \
             '_step(): already done: {!r}, {!r}, {!r}'.format(self, value, exc)
         if self._must_cancel:
@@ -284,6 +286,7 @@ class Task(futures.Future):
             self = None  # Needed to break cycles when an exception occurs.
 
     def _wakeup(self, future):
+        # Private to the asyncio module; unsafe to use in subclasses.
         try:
             future.result()
         except Exception as exc:
@@ -500,7 +503,8 @@ def sleep(delay, result=None, *, loop=None):
 
     future = futures.Future(loop=loop)
     h = future._loop.call_later(delay,
-                                future._set_result_unless_cancelled, result)
+                                futures._set_result_unless_cancelled,
+                                future, result)
     try:
         return (yield from future)
     finally:

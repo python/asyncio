@@ -175,6 +175,7 @@ class Future:
         return 'cb=[%s]' % cb
 
     def _repr_info(self):
+        # Private method, do not rely on its existence.
         info = [self._state.lower()]
         if self._state == _FINISHED:
             if self._exception is not None:
@@ -321,12 +322,6 @@ class Future:
 
     # So-called internal methods (note: no set_running_or_notify_cancel()).
 
-    def _set_result_unless_cancelled(self, result):
-        """Helper setting the result only if the future was not cancelled."""
-        if self.cancelled():
-            return
-        self.set_result(result)
-
     def set_result(self, result):
         """Mark the future done and set its result.
 
@@ -371,6 +366,13 @@ class Future:
 
     if compat.PY35:
         __await__ = __iter__ # make compatible with 'await' expression
+
+
+def _set_result_unless_cancelled(fut, result):
+    """Helper setting the result only if the future was not cancelled."""
+    if fut.cancelled():
+        return
+    fut.set_result(result)
 
 
 def _set_concurrent_future_state(concurrent, source):

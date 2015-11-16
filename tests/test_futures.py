@@ -384,9 +384,10 @@ class FutureTests(test_utils.TestCase):
         self.check_future_exception_never_retrieved(True)
 
     def test_set_result_unless_cancelled(self):
+        from asyncio import futures
         fut = asyncio.Future(loop=self.loop)
         fut.cancel()
-        fut._set_result_unless_cancelled(2)
+        futures._set_result_unless_cancelled(fut, 2)
         self.assertTrue(fut.cancelled())
 
 

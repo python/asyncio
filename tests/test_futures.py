@@ -174,11 +174,13 @@ class FutureTests(test_utils.TestCase):
                          '<Future cancelled>')
 
     def test_copy_state(self):
+        from asyncio.futures import _apply_future_state
+
         f = asyncio.Future(loop=self.loop)
         f.set_result(10)
 
         newf = asyncio.Future(loop=self.loop)
-        newf._copy_state(f)
+        _apply_future_state(f, newf)
         self.assertTrue(newf.done())
         self.assertEqual(newf.result(), 10)
 
@@ -186,7 +188,7 @@ class FutureTests(test_utils.TestCase):
         f_exception.set_exception(RuntimeError())
 
         newf_exception = asyncio.Future(loop=self.loop)
-        newf_exception._copy_state(f_exception)
+        _apply_future_state(f_exception, newf_exception)
         self.assertTrue(newf_exception.done())
         self.assertRaises(RuntimeError, newf_exception.result)
 
@@ -194,7 +196,7 @@ class FutureTests(test_utils.TestCase):
         f_cancelled.cancel()
 
         newf_cancelled = asyncio.Future(loop=self.loop)
-        newf_cancelled._copy_state(f_cancelled)
+        _apply_future_state(f_cancelled, newf_cancelled)
         self.assertTrue(newf_cancelled.cancelled())
 
     def test_iter(self):

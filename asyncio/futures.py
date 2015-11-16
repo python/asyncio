@@ -20,7 +20,7 @@ _CANCELLED = 'CANCELLED'
 _FINISHED = 'FINISHED'
 
 Error = concurrent.futures._base.Error
-CancelledError = concurrent.futures.CancelledError
+CancelledError = concurrent.futures._base.CancelledError
 TimeoutError = concurrent.futures.TimeoutError
 
 STACK_DEBUG = logging.DEBUG - 1  # heavy-duty debugging
@@ -155,6 +155,7 @@ class Future:
             self._source_traceback = traceback.extract_stack(sys._getframe(1))
 
     def _format_callbacks(self):
+        # Private method, do not rely on its existence.
         cb = self._callbacks
         size = len(cb)
         if not size:
@@ -228,6 +229,7 @@ class Future:
         return True
 
     def _schedule_callbacks(self):
+        # Private method, do not rely on its existence.
         """Internal: Ask the event loop to call all callbacks.
 
         The callbacks are scheduled to be called as soon as possible. Also
@@ -360,25 +362,6 @@ class Future:
 
     # Truly internal methods.
 
-    def _copy_state(self, other):
-        """Internal helper to copy state from another Future.
-
-        The other Future may be a concurrent.futures.Future.
-        """
-        assert other.done()
-        if self.cancelled():
-            return
-        assert not self.done()
-        if other.cancelled():
-            self.cancel()
-        else:
-            exception = other.exception()
-            if exception is not None:
-                self.set_exception(exception)
-            else:
-                result = other.result()
-                self.set_result(result)
-
     def __iter__(self):
         if not self.done():
             self._blocking = True
@@ -405,6 +388,26 @@ def _set_concurrent_future_state(concurrent, source):
         concurrent.set_result(result)
 
 
+def _apply_future_state(source, dest):
+    """Internal helper to copy state from another Future.
+
+    The other Future may be a concurrent.futures.Future.
+    """
+    assert source.done()
+    if dest.cancelled():
+        return
+    assert not dest.done()
+    if source.cancelled():
+        dest.cancel()
+    else:
+        exception = source.exception()
+        if exception is not None:
+            dest.set_exception(exception)
+        else:
+            result = source.result()
+            dest.set_result(result)
+
+
 def _chain_future(source, destination):
     """Chain two futures so that when one completes, so does the other.
 
@@ -421,7 +424,7 @@ def _chain_future(source, destination):
 
     def _set_state(future, other):
         if isinstance(future, Future):
-            future._copy_state(other)
+            _apply_future_state(other, future)
         else:
             _set_concurrent_future_state(future, other)
 

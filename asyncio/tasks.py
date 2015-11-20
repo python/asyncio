@@ -234,6 +234,8 @@ class Task(futures.Future):
         # Call either coro.throw(exc) or coro.send(None).
         try:
             if exc is None:
+                # We use the `send` method directly, because coroutines
+                # don't have `__iter__` and `__next__` methods.
                 result = coro.send(None)
             else:
                 result = coro.throw(exc)

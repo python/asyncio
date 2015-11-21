@@ -7,6 +7,7 @@ FLAGS=
 
 test:
 	$(PYTHON) runtests.py -v $(VERBOSE) $(FLAGS)
+	PYTHONASYNCIODEBUG=1 $(PYTHON) runtests.py -v $(VERBOSE) $(FLAGS)
 
 vtest:
 	$(PYTHON) runtests.py -v 1 $(FLAGS)

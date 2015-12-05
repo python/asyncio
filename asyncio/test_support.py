@@ -14,6 +14,7 @@ import socket
 import subprocess
 import sys
 import time
+import unittest
 import warnings
 
 
@@ -23,6 +24,15 @@ import warnings
 # 64 KiB pipe buffer size or 16 * PAGE_SIZE: take a few megs to be sure.
 # (see issue #17835 for a discussion of this number).
 PIPE_MAX_SIZE = 4 * 1024 * 1024 + 1
+
+
+class Error(Exception):
+    """Base class for regression test exceptions."""
+
+
+class TestFailed(Error):
+    """Test failed."""
+
 
 def strip_python_stderr(stderr):
     """Strip the stderr of a Python process from potential debug output

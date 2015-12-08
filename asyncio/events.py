@@ -123,7 +123,7 @@ class Handle:
     def _run(self):
         try:
             self._callback(*self._args)
-        except Exception as exc:
+        except BaseException as exc:
             cb = _format_callback_source(self._callback, self._args)
             msg = 'Exception in callback {}'.format(cb)
             context = {

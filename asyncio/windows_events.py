@@ -373,7 +373,7 @@ class ProactorEventLoop(proactor_events.BaseProactorEventLoop):
                                              **kwargs)
         try:
             yield from waiter
-        except Exception as exc:
+        except BaseException as exc:
             # Workaround CPython bug #23353: using yield/yield-from in an
             # except block of a generator doesn't clear properly sys.exc_info()
             err = exc

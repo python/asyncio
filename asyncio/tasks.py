@@ -243,11 +243,8 @@ class Task(futures.Future):
             self.set_result(exc.value)
         except futures.CancelledError as exc:
             super().cancel()  # I.e., Future.cancel(self).
-        except Exception as exc:
-            self.set_exception(exc)
         except BaseException as exc:
             self.set_exception(exc)
-            raise
         else:
             if isinstance(result, futures.Future):
                 # Yielded Future must come from Future.__iter__().
@@ -288,7 +285,7 @@ class Task(futures.Future):
     def _wakeup(self, future):
         try:
             future.result()
-        except Exception as exc:
+        except BaseException as exc:
             # This may also be a cancellation.
             self._step(exc)
         else:
@@ -719,7 +716,7 @@ def run_coroutine_threadsafe(coro, loop):
     def callback():
         try:
             futures._chain_future(ensure_future(coro, loop=loop), future)
-        except Exception as exc:
+        except BaseException as exc:
             if future.set_running_or_notify_cancel():
                 future.set_exception(exc)
             raise

@@ -116,12 +116,6 @@ def _check_resolved_address(sock, address):
 
 
 def _run_until_complete_cb(fut):
-    exc = fut._exception
-    if (isinstance(exc, BaseException)
-    and not isinstance(exc, Exception)):
-        # Issue #22429: run_forever() already finished, no need to
-        # stop it.
-        return
     fut._loop.stop()
 
 
@@ -321,15 +315,7 @@ class BaseEventLoop(events.AbstractEventLoop):
             future._log_destroy_pending = False
 
         future.add_done_callback(_run_until_complete_cb)
-        try:
-            self.run_forever()
-        except:
-            if new_task and future.done() and not future.cancelled():
-                # The coroutine raised a BaseException. Consume the exception
-                # to not log a warning, the caller doesn't have access to the
-                # local task.
-                future.exception()
-            raise
+        self.run_forever()
         future.remove_done_callback(_run_until_complete_cb)
         if not future.done():
             raise RuntimeError('Event loop stopped before Future completed.')

@@ -482,7 +482,7 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
         except futures.CancelledError:
             # _close_self_pipe() has been called, stop waiting for data
             return
-        except Exception as exc:
+        except BaseException as exc:
             self.call_exception_handler({
                 'message': 'Error on reading from the event loop self pipe',
                 'exception': exc,

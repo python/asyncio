@@ -1018,6 +1018,30 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
         self.assertTrue(str(cm.exception).startswith('Multiple exceptions: '))
         self.assertTrue(m_socket.socket.return_value.close.called)
 
+    @mock.patch('asyncio.base_events.socket')
+    def test_create_connection_ip_addr(self, m_socket):
+        def getaddrinfo(*args, **kw):
+            self.fail('should not have called getaddrinfo')
+
+        m_socket.getaddrinfo = getaddrinfo
+        m_socket.socket.return_value.gettimeout.return_value = 0
+        m_socket.socket.return_value.connect = connect = mock.Mock()
+
+        coro = self.loop.create_connection(MyProto, '1.2.3.4', 80)
+        self.loop.run_until_complete(coro)
+        connect.assert_called_with(('1.2.3.4', 80))
+        m_socket.socket.assert_called_with(family=m_socket.AF_INET,
+                                           proto=m_socket.IPPROTO_TCP,
+                                           type=m_socket.SOCK_STREAM)
+
+        coro = self.loop.create_connection(MyProto, '::2', 80)
+
+        self.loop.run_until_complete(coro)
+        connect.assert_called_with(('::2', 80))
+        m_socket.socket.assert_called_with(family=m_socket.AF_INET6,
+                                           proto=m_socket.IPPROTO_TCP,
+                                           type=m_socket.SOCK_STREAM)
+
     def test_create_connection_no_local_addr(self):
         @asyncio.coroutine
         def getaddrinfo(host, *args, **kw):
@@ -1384,6 +1408,26 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
             reuse_port=True)
 
         self.assertRaises(ValueError, self.loop.run_until_complete, coro)
+
+    @mock.patch('asyncio.base_events.socket')
+    def test_create_datagram_endpoint_ip_addr(self, m_socket):
+        def getaddrinfo(*args, **kw):
+            self.fail('should not have called getaddrinfo')
+
+        m_socket.getaddrinfo = getaddrinfo
+        m_socket.socket.return_value.bind = bind = mock.Mock()
+
+        coro = self.loop.create_datagram_endpoint(
+            lambda: MyDatagramProto(loop=self.loop),
+            local_addr=('1.2.3.4', 0),
+            reuse_address=False,
+            reuse_port=True)
+
+        self.loop.run_until_complete(coro)
+        bind.assert_called_with(('1.2.3.4', 0))
+        m_socket.socket.assert_called_with(family=m_socket.AF_INET,
+                                           proto=m_socket.IPPROTO_UDP,
+                                           type=m_socket.SOCK_DGRAM)
 
     def test_accept_connection_retry(self):
         sock = mock.Mock()

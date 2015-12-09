@@ -18,6 +18,7 @@ import collections
 import concurrent.futures
 import heapq
 import inspect
+import ipaddress
 import itertools
 import logging
 import os
@@ -533,9 +534,34 @@ class BaseEventLoop(events.AbstractEventLoop):
             logger.debug(msg)
         return addrinfo
 
+    def _ipaddr_infos(self, host, port, family, type, proto):
+        """Try to skip getaddrinfo if "host" is already an IP address."""
+        if proto == 0:
+            if type == socket.SOCK_STREAM:
+                proto = socket.IPPROTO_TCP
+            elif type == socket.SOCK_DGRAM:
+                proto = socket.IPPROTO_UDP
+            else:
+                return None
+
+        try:
+            addr = ipaddress.ip_address(host)
+        except ValueError:
+            return None
+        else:
+            af = socket.AF_INET if addr.version == 4 else socket.AF_INET6
+            infos = [(af, type, proto, '', (host, port))]
+            fut = futures.Future(loop=self)
+            fut.set_result(infos)
+            return fut
+
     def getaddrinfo(self, host, port, *,
                     family=0, type=0, proto=0, flags=0):
-        if self._debug:
+
+        infos = self._ipaddr_infos(host, port, family, type, proto)
+        if infos:
+            return infos
+        elif self._debug:
             return self.run_in_executor(None, self._getaddrinfo_debug,
                                         host, port, family, type, proto, flags)
         else:

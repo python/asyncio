@@ -24,7 +24,7 @@ from .coroutines import coroutine
 class Task(futures.Future):
     """A coroutine wrapped in a Future."""
 
-    # An important invariant maintained while a Task not done:
+    # An important invariant maintained while a Task is not done:
     #
     # - Either _fut_waiter is None, and _step() is scheduled;
     # - or _fut_waiter is some Future, and _step() is *not* scheduled.
@@ -291,10 +291,6 @@ class Task(futures.Future):
         else:
             # Don't pass the value of `future.result()` explicitly,
             # as `Future.__iter__` and `Future.__await__` don't need it.
-            # If we call `_step(value, None)` instead of `_step()`,
-            # Python eval loop would use `.send(value)` method call,
-            # instead of `__next__()`, which is slower for futures
-            # that return non-generator iterators from their `__iter__`.
             self._step()
         self = None  # Needed to break cycles when an exception occurs.
 

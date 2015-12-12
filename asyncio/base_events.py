@@ -16,6 +16,7 @@ to modify the meaning of the API call itself.
 
 import collections
 import concurrent.futures
+import functools
 import heapq
 import inspect
 import ipaddress
@@ -534,15 +535,18 @@ class BaseEventLoop(events.AbstractEventLoop):
             logger.debug(msg)
         return addrinfo
 
+    @functools.lru_cache()
     def _ipaddr_infos(self, host, port, family, type, proto):
         """Try to skip getaddrinfo if "host" is already an IP address."""
-        if proto == 0:
-            if type == socket.SOCK_STREAM:
-                proto = socket.IPPROTO_TCP
-            elif type == socket.SOCK_DGRAM:
-                proto = socket.IPPROTO_UDP
-            else:
-                return None
+        if proto not in {0, socket.IPPROTO_TCP, socket.IPPROTO_UDP}:
+            return None
+
+        if type == socket.SOCK_STREAM:
+            proto = socket.IPPROTO_TCP
+        elif type == socket.SOCK_DGRAM:
+            proto = socket.IPPROTO_UDP
+        else:
+            return None
 
         try:
             addr = ipaddress.ip_address(host)

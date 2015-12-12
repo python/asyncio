@@ -117,6 +117,28 @@ def _check_resolved_address(sock, address):
                              % (host, err))
 
 
+@functools.lru_cache(maxsize=1024)
+def _ipaddr_infos(host, port, family, type, proto):
+    # Try to skip getaddrinfo if "host" is already an IP address.
+    if proto not in {0, socket.IPPROTO_TCP, socket.IPPROTO_UDP}:
+        return None
+
+    if type == socket.SOCK_STREAM:
+        proto = socket.IPPROTO_TCP
+    elif type == socket.SOCK_DGRAM:
+        proto = socket.IPPROTO_UDP
+    else:
+        return None
+
+    try:
+        addr = ipaddress.ip_address(host)
+    except ValueError:
+        return None
+    else:
+        af = socket.AF_INET if addr.version == 4 else socket.AF_INET6
+        return [(af, type, proto, '', (host, port))]
+
+
 def _run_until_complete_cb(fut):
     exc = fut._exception
     if (isinstance(exc, BaseException)
@@ -535,36 +557,13 @@ class BaseEventLoop(events.AbstractEventLoop):
             logger.debug(msg)
         return addrinfo
 
-    @functools.lru_cache()
-    def _ipaddr_infos(self, host, port, family, type, proto):
-        """Try to skip getaddrinfo if "host" is already an IP address."""
-        if proto not in {0, socket.IPPROTO_TCP, socket.IPPROTO_UDP}:
-            return None
-
-        if type == socket.SOCK_STREAM:
-            proto = socket.IPPROTO_TCP
-        elif type == socket.SOCK_DGRAM:
-            proto = socket.IPPROTO_UDP
-        else:
-            return None
-
-        try:
-            addr = ipaddress.ip_address(host)
-        except ValueError:
-            return None
-        else:
-            af = socket.AF_INET if addr.version == 4 else socket.AF_INET6
-            infos = [(af, type, proto, '', (host, port))]
+    def getaddrinfo(self, host, port, *,
+                    family=0, type=0, proto=0, flags=0):
+        infos = _ipaddr_infos(host, port, family, type, proto)
+        if infos:
             fut = futures.Future(loop=self)
             fut.set_result(infos)
             return fut
-
-    def getaddrinfo(self, host, port, *,
-                    family=0, type=0, proto=0, flags=0):
-
-        infos = self._ipaddr_infos(host, port, family, type, proto)
-        if infos:
-            return infos
         elif self._debug:
             return self.run_in_executor(None, self._getaddrinfo_debug,
                                         host, port, family, type, proto, flags)

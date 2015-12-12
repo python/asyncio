@@ -875,6 +875,11 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
         self.loop = asyncio.new_event_loop()
         self.set_event_loop(self.loop)
 
+    def tearDown(self):
+        # Clear mocked constants like AF_INET from the cache.
+        base_events._ipaddr_infos.cache_clear()
+        super().tearDown()
+
     @mock.patch('asyncio.base_events.socket')
     def test_create_connection_multiple_errors(self, m_socket):
 

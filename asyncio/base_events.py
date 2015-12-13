@@ -136,7 +136,7 @@ def _ipaddr_infos(host, port, family, type, proto):
         return None
     else:
         af = socket.AF_INET if addr.version == 4 else socket.AF_INET6
-        return [(af, type, proto, '', (host, port))]
+        return ((af, type, proto, '', (host, port)), )
 
 
 def _run_until_complete_cb(fut):
@@ -562,7 +562,8 @@ class BaseEventLoop(events.AbstractEventLoop):
         infos = _ipaddr_infos(host, port, family, type, proto)
         if infos:
             fut = futures.Future(loop=self)
-            fut.set_result(infos)
+            # Copy the _ipaddr_infos result so we never mutate the cached value.
+            fut.set_result(list(infos))
             return fut
         elif self._debug:
             return self.run_in_executor(None, self._getaddrinfo_debug,

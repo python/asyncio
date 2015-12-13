@@ -118,7 +118,7 @@ def _check_resolved_address(sock, address):
 
 
 @functools.lru_cache(maxsize=1024)
-def _ipaddr_infos(host, port, family, type, proto):
+def _ipaddr_info(host, port, family, type, proto):
     # Try to skip getaddrinfo if "host" is already an IP address.
     if proto not in {0, socket.IPPROTO_TCP, socket.IPPROTO_UDP}:
         return None
@@ -136,7 +136,7 @@ def _ipaddr_infos(host, port, family, type, proto):
         return None
     else:
         af = socket.AF_INET if addr.version == 4 else socket.AF_INET6
-        return ((af, type, proto, '', (host, port)), )
+        return af, type, proto, '', (host, port)
 
 
 def _run_until_complete_cb(fut):
@@ -559,11 +559,10 @@ class BaseEventLoop(events.AbstractEventLoop):
 
     def getaddrinfo(self, host, port, *,
                     family=0, type=0, proto=0, flags=0):
-        infos = _ipaddr_infos(host, port, family, type, proto)
-        if infos:
+        info = _ipaddr_info(host, port, family, type, proto)
+        if info:
             fut = futures.Future(loop=self)
-            # Copy the _ipaddr_infos result so we never mutate the cached value.
-            fut.set_result(list(infos))
+            fut.set_result([info])
             return fut
         elif self._debug:
             return self.run_in_executor(None, self._getaddrinfo_debug,

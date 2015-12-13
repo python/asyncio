@@ -877,7 +877,7 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
 
     def tearDown(self):
         # Clear mocked constants like AF_INET from the cache.
-        base_events._ipaddr_infos.cache_clear()
+        base_events._ipaddr_info.cache_clear()
         super().tearDown()
 
     @mock.patch('asyncio.base_events.socket')

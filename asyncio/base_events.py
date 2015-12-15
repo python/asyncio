@@ -95,33 +95,29 @@ def _ipaddr_info(host, port, family, type, proto):
     # On Windows, socket.inet_pton() is only available since Python 3.4.
     if hasattr(socket, 'inet_pton'):
         if family == socket.AF_UNSPEC:
-            try:
-                socket.inet_pton(socket.AF_INET, host)
-                af = socket.AF_INET
-            except OSError:
-                try:
-                    socket.inet_pton(socket.AF_INET6, host)
-                    af = socket.AF_INET6
-                except OSError:
-                    # "host" is not an IP address.
-                    return None
+            afs = socket.AF_INET, socket.AF_INET6
         else:
+            afs = (family, )
+
+        for af in afs:
             try:
-                socket.inet_pton(family, host)
-                af = family
+                socket.inet_pton(af, host)
+                break
             except OSError:
-                return None
+                pass
+        else:
+            # "host" is not an IP address.
+            return None
     else:
         try:
-            ipaddress.IPv4Address(host)
-            af = socket.AF_INET
+            addr = ipaddress.IPv4Address(host)
         except ValueError:
             try:
-                ipaddress.IPv6Address(_zone_index_pat.sub('', host))
-                af = socket.AF_INET6
+                addr = ipaddress.IPv6Address(_zone_index_pat.sub('', host))
             except ValueError:
                 return None
 
+        af = socket.AF_INET if addr.version == 4 else socket.AF_INET6
         if family not in (socket.AF_UNSPEC, af):
             # "host" is wrong IP version for "family".
             return None

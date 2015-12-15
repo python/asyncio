@@ -80,9 +80,9 @@ def _ipaddr_info(host, port, family, type, proto):
     if proto not in {0, socket.IPPROTO_TCP, socket.IPPROTO_UDP} or host is None:
         return None
 
-    if type == socket.SOCK_STREAM:
+    if type & socket.SOCK_STREAM:
         proto = socket.IPPROTO_TCP
-    elif type == socket.SOCK_DGRAM:
+    elif type & socket.SOCK_DGRAM:
         proto = socket.IPPROTO_UDP
     else:
         return None
@@ -95,6 +95,11 @@ def _ipaddr_info(host, port, family, type, proto):
             afs = (family, )
 
         for af in afs:
+            # Cut off IPv6 zone index (appended to host, separated by '%').
+            # If we happen to make an invalid address look valid, the code
+            # will fail later on sock.connect or sock.bind.
+            if af == socket.AF_INET6:
+                host = host.partition('%')[0]
             try:
                 socket.inet_pton(af, host)
                 return af, type, proto, '', (host, port)
@@ -107,11 +112,9 @@ def _ipaddr_info(host, port, family, type, proto):
     try:
         addr = ipaddress.IPv4Address(host)
     except ValueError:
+        host = host.partition('%')[0]
         try:
-            # Cut off IPv6 zone index (appended to host, separated by '%').
-            # If we happen to make an invalid address look valid, the code
-            # will fail later on sock.connect or sock.bind.
-            addr = ipaddress.IPv6Address(host.partition('%')[0])
+            addr = ipaddress.IPv6Address(host)
         except ValueError:
             return None
 

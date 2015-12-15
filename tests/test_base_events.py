@@ -117,13 +117,33 @@ class BaseEventTests(test_utils.TestCase):
 
         # IPv6 address with zone index.
         self.assertEqual(
-            (INET6, STREAM, TCP, '', ('::3%lo0', 1)),
+            (INET6, STREAM, TCP, '', ('::3', 1)),
             base_events._ipaddr_info('::3%lo0', 1, INET6, STREAM, TCP))
 
     @patch_socket
     def test_ipaddr_info_no_inet_pton(self, m_socket):
         del m_socket.inet_pton
         self.test_ipaddr_info()
+
+    def test_check_resolved_address(self):
+        # sock = socket.socket(socket.AF_INET)
+        # base_events._check_resolved_address(sock, ('1.2.3.4', 1))
+        #
+        sock = socket.socket(socket.AF_INET6)
+        base_events._check_resolved_address(sock, ('::3', 1))
+        base_events._check_resolved_address(sock, ('::3%lo0', 1))
+        self.assertRaises(ValueError,
+                          base_events._check_resolved_address, sock, ('foo', 1))
+
+    def test_check_resolved_sock_type(self):
+        # Ensure we ignore extra flags in sock.type.
+        if hasattr(socket, 'SOCK_NONBLOCK'):
+            sock = socket.socket(type=socket.SOCK_STREAM | socket.SOCK_NONBLOCK)
+            base_events._check_resolved_address(sock, ('1.2.3.4', 1))
+
+        if hasattr(socket, 'SOCK_CLOEXEC'):
+            sock = socket.socket(type=socket.SOCK_STREAM | socket.SOCK_CLOEXEC)
+            base_events._check_resolved_address(sock, ('1.2.3.4', 1))
 
 
 class BaseEventLoopTests(test_utils.TestCase):

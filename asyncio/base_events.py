@@ -23,6 +23,7 @@ import ipaddress
 import itertools
 import logging
 import os
+import re
 import socket
 import subprocess
 import threading
@@ -72,55 +73,16 @@ def _format_pipe(fd):
         return repr(fd)
 
 
-def _check_resolved_address(sock, address):
-    # Ensure that the address is already resolved to avoid the trap of hanging
-    # the entire event loop when the address requires doing a DNS lookup.
-    #
-    # getaddrinfo() is slow (around 10 us per call): this function should only
-    # be called in debug mode
-    family = sock.family
-
-    if family == socket.AF_INET:
-        host, port = address
-    elif family == socket.AF_INET6:
-        host, port = address[:2]
-    else:
-        return
-
-    # On Windows, socket.inet_pton() is only available since Python 3.4
-    if hasattr(socket, 'inet_pton'):
-        # getaddrinfo() is slow and has known issue: prefer inet_pton()
-        # if available
-        try:
-            socket.inet_pton(family, host)
-        except OSError as exc:
-            raise ValueError("address must be resolved (IP address), "
-                             "got host %r: %s"
-                             % (host, exc))
-    else:
-        # Use getaddrinfo(flags=AI_NUMERICHOST) to ensure that the address is
-        # already resolved.
-        type_mask = 0
-        if hasattr(socket, 'SOCK_NONBLOCK'):
-            type_mask |= socket.SOCK_NONBLOCK
-        if hasattr(socket, 'SOCK_CLOEXEC'):
-            type_mask |= socket.SOCK_CLOEXEC
-        try:
-            socket.getaddrinfo(host, port,
-                               family=family,
-                               type=(sock.type & ~type_mask),
-                               proto=sock.proto,
-                               flags=socket.AI_NUMERICHOST)
-        except socket.gaierror as err:
-            raise ValueError("address must be resolved (IP address), "
-                             "got host %r: %s"
-                             % (host, err))
+# Match "zone index" at end of IPv6 address, e.g. "fe80::1%lo0" for localhost.
+_zone_index_pat = re.compile(r'%\w+$')
 
 
 @functools.lru_cache(maxsize=1024)
 def _ipaddr_info(host, port, family, type, proto):
-    # Try to skip getaddrinfo if "host" is already an IP address.
-    if proto not in {0, socket.IPPROTO_TCP, socket.IPPROTO_UDP}:
+    # Try to skip getaddrinfo if "host" is already an IP. Since getaddrinfo is
+    # slow and, on some platforms, single-threaded, users might handle name
+    # resolution in their own code and pass in resolved IPs.
+    if proto not in {0, socket.IPPROTO_TCP, socket.IPPROTO_UDP} or host is None:
         return None
 
     if type == socket.SOCK_STREAM:
@@ -130,13 +92,63 @@ def _ipaddr_info(host, port, family, type, proto):
     else:
         return None
 
-    try:
-        addr = ipaddress.ip_address(host)
-    except ValueError:
-        return None
+    # On Windows, socket.inet_pton() is only available since Python 3.4.
+    if hasattr(socket, 'inet_pton'):
+        if family == socket.AF_UNSPEC:
+            try:
+                socket.inet_pton(socket.AF_INET, host)
+                af = socket.AF_INET
+            except OSError:
+                try:
+                    socket.inet_pton(socket.AF_INET6, host)
+                    af = socket.AF_INET6
+                except OSError:
+                    # "host" is not an IP address.
+                    return None
+        else:
+            try:
+                socket.inet_pton(family, host)
+                af = family
+            except OSError:
+                return None
     else:
-        af = socket.AF_INET if addr.version == 4 else socket.AF_INET6
-        return af, type, proto, '', (host, port)
+        try:
+            ipaddress.IPv4Address(host)
+            af = socket.AF_INET
+        except ValueError:
+            try:
+                ipaddress.IPv6Address(_zone_index_pat.sub('', host))
+                af = socket.AF_INET6
+            except ValueError:
+                return None
+
+        if family not in (socket.AF_UNSPEC, af):
+            # "host" is wrong IP version for "family".
+            return None
+
+    return af, type, proto, '', (host, port)
+
+
+def _check_resolved_address(sock, address):
+    # Ensure that the address is already resolved to avoid the trap of hanging
+    # the entire event loop when the address requires doing a DNS lookup.
+
+    if hasattr(socket, 'AF_UNIX') and sock.family == socket.AF_UNIX:
+        return
+
+    type_mask = 0
+    if hasattr(socket, 'SOCK_NONBLOCK'):
+        type_mask |= socket.SOCK_NONBLOCK
+    if hasattr(socket, 'SOCK_CLOEXEC'):
+        type_mask |= socket.SOCK_CLOEXEC
+
+    host, port = address[:2]
+    info = _ipaddr_info(host, port, sock.family, sock.type & ~type_mask,
+                        sock.proto)
+
+    if info is None:
+        raise ValueError("address must be resolved (IP address),"
+                         " got host %r" % host)
 
 
 def _run_until_complete_cb(fut):
@@ -560,7 +572,7 @@ class BaseEventLoop(events.AbstractEventLoop):
     def getaddrinfo(self, host, port, *,
                     family=0, type=0, proto=0, flags=0):
         info = _ipaddr_info(host, port, family, type, proto)
-        if info:
+        if info is not None:
             fut = futures.Future(loop=self)
             fut.set_result([info])
             return fut

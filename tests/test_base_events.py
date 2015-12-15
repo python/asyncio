@@ -32,6 +32,100 @@ MOCK_ANY = mock.ANY
 PY34 = sys.version_info >= (3, 4)
 
 
+def mock_socket_module():
+    m_socket = mock.MagicMock(spec=socket)
+    for name in (
+        'AF_INET', 'AF_INET6', 'AF_UNSPEC', 'IPPROTO_TCP', 'IPPROTO_UDP',
+        'SOCK_STREAM', 'SOCK_DGRAM', 'SOL_SOCKET', 'SO_REUSEADDR', 'inet_pton'
+    ):
+        if hasattr(socket, name):
+            setattr(m_socket, name, getattr(socket, name))
+        else:
+            delattr(m_socket, name)
+
+    m_socket.socket = mock.MagicMock()
+    m_socket.socket.return_value = test_utils.mock_nonblocking_socket()
+
+    return m_socket
+
+
+def patch_socket(f):
+    return mock.patch('asyncio.base_events.socket',
+                      new_callable=mock_socket_module)(f)
+
+
+class BaseEventTests(test_utils.TestCase):
+
+    def setUp(self):
+        super().setUp()
+        base_events._ipaddr_info.cache_clear()
+
+    def tearDown(self):
+        base_events._ipaddr_info.cache_clear()
+        super().tearDown()
+
+    def test_ipaddr_info(self):
+        UNSPEC = socket.AF_UNSPEC
+        INET = socket.AF_INET
+        INET6 = socket.AF_INET6
+        STREAM = socket.SOCK_STREAM
+        DGRAM = socket.SOCK_DGRAM
+        TCP = socket.IPPROTO_TCP
+        UDP = socket.IPPROTO_UDP
+
+        self.assertEqual(
+            (INET, STREAM, TCP, '', ('1.2.3.4', 1)),
+            base_events._ipaddr_info('1.2.3.4', 1, INET, STREAM, TCP))
+
+        self.assertEqual(
+            (INET, STREAM, TCP, '', ('1.2.3.4', 1)),
+            base_events._ipaddr_info('1.2.3.4', 1, UNSPEC, STREAM, TCP))
+
+        self.assertEqual(
+            (INET, DGRAM, UDP, '', ('1.2.3.4', 1)),
+            base_events._ipaddr_info('1.2.3.4', 1, UNSPEC, DGRAM, UDP))
+
+        # Socket type STREAM implies TCP protocol.
+        self.assertEqual(
+            (INET, STREAM, TCP, '', ('1.2.3.4', 1)),
+            base_events._ipaddr_info('1.2.3.4', 1, UNSPEC, STREAM, 0))
+
+        # Socket type DGRAM implies UDP protocol.
+        self.assertEqual(
+            (INET, DGRAM, UDP, '', ('1.2.3.4', 1)),
+            base_events._ipaddr_info('1.2.3.4', 1, UNSPEC, DGRAM, 0))
+
+        # No socket type.
+        self.assertIsNone(
+            base_events._ipaddr_info('1.2.3.4', 1, UNSPEC, 0, 0))
+
+        # IPv4 address with family IPv6.
+        self.assertIsNone(
+            base_events._ipaddr_info('1.2.3.4', 1, INET6, STREAM, TCP))
+
+        self.assertEqual(
+            (INET6, STREAM, TCP, '', ('::3', 1)),
+            base_events._ipaddr_info('::3', 1, INET6, STREAM, TCP))
+
+        self.assertEqual(
+            (INET6, STREAM, TCP, '', ('::3', 1)),
+            base_events._ipaddr_info('::3', 1, UNSPEC, STREAM, TCP))
+
+        # IPv6 address with family IPv4.
+        self.assertIsNone(
+            base_events._ipaddr_info('::3', 1, INET, STREAM, TCP))
+
+        # IPv6 address with zone index.
+        self.assertEqual(
+            (INET6, STREAM, TCP, '', ('::3%lo0', 1)),
+            base_events._ipaddr_info('::3%lo0', 1, INET6, STREAM, TCP))
+
+    @patch_socket
+    def test_ipaddr_info_no_inet_pton(self, m_socket):
+        del m_socket.inet_pton
+        self.test_ipaddr_info()
+
+
 class BaseEventLoopTests(test_utils.TestCase):
 
     def setUp(self):
@@ -867,29 +961,6 @@ class MyDatagramProto(asyncio.DatagramProtocol):
         self.state = 'CLOSED'
         if self.done:
             self.done.set_result(None)
-
-
-def mock_socket_module():
-    m_socket = mock.MagicMock(spec=socket)
-    for name in (
-        'AF_INET', 'AF_INET6', 'AF_UNSPEC', 'IPPROTO_TCP', 'IPPROTO_UDP',
-        'SOCK_STREAM', 'SOCK_DGRAM', 'SOCK_NONBLOCK', 'SOCK_CLOEXEC',
-        'SOL_SOCKET', 'SO_REUSEADDR', 'inet_pton'
-    ):
-        if hasattr(socket, name):
-            setattr(m_socket, name, getattr(socket, name))
-        else:
-            delattr(m_socket, name)
-
-    m_socket.socket = mock.MagicMock()
-    m_socket.socket.return_value = test_utils.mock_nonblocking_socket()
-
-    return m_socket
-
-
-def patch_socket(f):
-    return mock.patch('asyncio.base_events.socket',
-                      new_callable=mock_socket_module)(f)
 
 
 class BaseEventLoopWithSelectorTests(test_utils.TestCase):

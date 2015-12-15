@@ -23,7 +23,6 @@ import ipaddress
 import itertools
 import logging
 import os
-import re
 import socket
 import subprocess
 import threading
@@ -73,14 +72,10 @@ def _format_pipe(fd):
         return repr(fd)
 
 
-# Match "zone index" at end of IPv6 address, e.g. "fe80::1%lo0" for localhost.
-_zone_index_pat = re.compile(r'%\w+$')
-
-
 @functools.lru_cache(maxsize=1024)
 def _ipaddr_info(host, port, family, type, proto):
-    # Try to skip getaddrinfo if "host" is already an IP. Since getaddrinfo is
-    # slow and, on some platforms, single-threaded, users might handle name
+    # Try to skip getaddrinfo if "host" is already an IP. Since getaddrinfo
+    # blocks on an exclusive lock on some platforms, users might handle name
     # resolution in their own code and pass in resolved IPs.
     if proto not in {0, socket.IPPROTO_TCP, socket.IPPROTO_UDP} or host is None:
         return None
@@ -102,25 +97,28 @@ def _ipaddr_info(host, port, family, type, proto):
         for af in afs:
             try:
                 socket.inet_pton(af, host)
-                break
+                return af, type, proto, '', (host, port)
             except OSError:
                 pass
         else:
             # "host" is not an IP address.
             return None
-    else:
-        try:
-            addr = ipaddress.IPv4Address(host)
-        except ValueError:
-            try:
-                addr = ipaddress.IPv6Address(_zone_index_pat.sub('', host))
-            except ValueError:
-                return None
 
-        af = socket.AF_INET if addr.version == 4 else socket.AF_INET6
-        if family not in (socket.AF_UNSPEC, af):
-            # "host" is wrong IP version for "family".
+    try:
+        addr = ipaddress.IPv4Address(host)
+    except ValueError:
+        try:
+            # Cut off IPv6 zone index (appended to host, separated by '%').
+            # If we happen to make an invalid address look valid, the code
+            # will fail later on sock.connect or sock.bind.
+            addr = ipaddress.IPv6Address(host.partition('%')[0])
+        except ValueError:
             return None
+
+    af = socket.AF_INET if addr.version == 4 else socket.AF_INET6
+    if family not in (socket.AF_UNSPEC, af):
+        # "host" is wrong IP version for "family".
+        return None
 
     return af, type, proto, '', (host, port)
 
@@ -128,21 +126,15 @@ def _ipaddr_info(host, port, family, type, proto):
 def _check_resolved_address(sock, address):
     # Ensure that the address is already resolved to avoid the trap of hanging
     # the entire event loop when the address requires doing a DNS lookup.
+    # Even though getaddrinfo with AI_NUMERICHOST would be non-blocking, it
+    # still requires a lock on some platforms, and waiting for that lock could
+    # block the event loop.
 
     if hasattr(socket, 'AF_UNIX') and sock.family == socket.AF_UNIX:
         return
 
-    type_mask = 0
-    if hasattr(socket, 'SOCK_NONBLOCK'):
-        type_mask |= socket.SOCK_NONBLOCK
-    if hasattr(socket, 'SOCK_CLOEXEC'):
-        type_mask |= socket.SOCK_CLOEXEC
-
     host, port = address[:2]
-    info = _ipaddr_info(host, port, sock.family, sock.type & ~type_mask,
-                        sock.proto)
-
-    if info is None:
+    if _ipaddr_info(host, port, sock.family, sock.type, sock.proto) is None:
         raise ValueError("address must be resolved (IP address),"
                          " got host %r" % host)
 

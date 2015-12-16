@@ -126,9 +126,9 @@ class BaseEventTests(test_utils.TestCase):
         self.test_ipaddr_info()
 
     def test_check_resolved_address(self):
-        # sock = socket.socket(socket.AF_INET)
-        # base_events._check_resolved_address(sock, ('1.2.3.4', 1))
-        #
+        sock = socket.socket(socket.AF_INET)
+        base_events._check_resolved_address(sock, ('1.2.3.4', 1))
+
         sock = socket.socket(socket.AF_INET6)
         base_events._check_resolved_address(sock, ('::3', 1))
         base_events._check_resolved_address(sock, ('::3%lo0', 1))

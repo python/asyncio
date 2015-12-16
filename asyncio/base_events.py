@@ -80,6 +80,7 @@ def _ipaddr_info(host, port, family, type, proto):
     if proto not in {0, socket.IPPROTO_TCP, socket.IPPROTO_UDP} or host is None:
         return None
 
+    # Linux's sock.type is a bitmask, can include SOCK_NONBLOCK or SOCK_CLOEXEC.
     if type & socket.SOCK_STREAM:
         proto = socket.IPPROTO_TCP
     elif type & socket.SOCK_DGRAM:

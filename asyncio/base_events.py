@@ -72,6 +72,14 @@ def _format_pipe(fd):
         return repr(fd)
 
 
+# Linux's sock.type is a bitmask that can include extra info about socket.
+_SOCKET_TYPE_MASK = 0
+if hasattr(socket, 'SOCK_NONBLOCK'):
+    _SOCKET_TYPE_MASK |= socket.SOCK_NONBLOCK
+if hasattr(socket, 'SOCK_CLOEXEC'):
+    _SOCKET_TYPE_MASK |= socket.SOCK_CLOEXEC
+
+
 @functools.lru_cache(maxsize=1024)
 def _ipaddr_info(host, port, family, type, proto):
     # Try to skip getaddrinfo if "host" is already an IP. Since getaddrinfo
@@ -80,10 +88,10 @@ def _ipaddr_info(host, port, family, type, proto):
     if proto not in {0, socket.IPPROTO_TCP, socket.IPPROTO_UDP} or host is None:
         return None
 
-    # Linux's sock.type is a bitmask, can include SOCK_NONBLOCK or SOCK_CLOEXEC.
-    if type & socket.SOCK_STREAM:
+    type &= ~_SOCKET_TYPE_MASK
+    if type == socket.SOCK_STREAM:
         proto = socket.IPPROTO_TCP
-    elif type & socket.SOCK_DGRAM:
+    elif type == socket.SOCK_DGRAM:
         proto = socket.IPPROTO_UDP
     else:
         return None

@@ -88,12 +88,11 @@ def _ipaddr_info(host, port, family, type, proto):
     else:
         return None
 
-    # On Windows, socket.inet_pton() is only available since Python 3.4.
     if hasattr(socket, 'inet_pton'):
         if family == socket.AF_UNSPEC:
-            afs = socket.AF_INET, socket.AF_INET6
+            afs = [socket.AF_INET, socket.AF_INET6]
         else:
-            afs = (family, )
+            afs = [family]
 
         for af in afs:
             # Linux's inet_pton doesn't accept an IPv6 zone index after host,
@@ -107,10 +106,11 @@ def _ipaddr_info(host, port, family, type, proto):
                 return af, type, proto, '', (host, port)
             except OSError:
                 pass
-        else:
-            # "host" is not an IP address.
-            return None
 
+        # "host" is not an IP address.
+        return None
+
+    # No inet_pton. (On Windows it's only available since Python 3.4.)
     # Even though getaddrinfo with AI_NUMERICHOST would be non-blocking, it
     # still requires a lock on some platforms, and waiting for that lock could
     # block the event loop. Use ipaddress instead, it's just text parsing.

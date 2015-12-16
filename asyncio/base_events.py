@@ -111,6 +111,9 @@ def _ipaddr_info(host, port, family, type, proto):
             # "host" is not an IP address.
             return None
 
+    # Even though getaddrinfo with AI_NUMERICHOST would be non-blocking, it
+    # still requires a lock on some platforms, and waiting for that lock could
+    # block the event loop. Use ipaddress instead, it's just text parsing.
     try:
         addr = ipaddress.IPv4Address(host)
     except ValueError:
@@ -130,9 +133,6 @@ def _ipaddr_info(host, port, family, type, proto):
 def _check_resolved_address(sock, address):
     # Ensure that the address is already resolved to avoid the trap of hanging
     # the entire event loop when the address requires doing a DNS lookup.
-    # Even though getaddrinfo with AI_NUMERICHOST would be non-blocking, it
-    # still requires a lock on some platforms, and waiting for that lock could
-    # block the event loop.
 
     if hasattr(socket, 'AF_UNIX') and sock.family == socket.AF_UNIX:
         return

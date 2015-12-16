@@ -95,13 +95,14 @@ def _ipaddr_info(host, port, family, type, proto):
             afs = (family, )
 
         for af in afs:
-            # Cut off IPv6 zone index (appended to host, separated by '%').
-            # If we happen to make an invalid address look valid, the code
-            # will fail later on sock.connect or sock.bind.
-            if af == socket.AF_INET6:
-                host = host.partition('%')[0]
+            # Linux's inet_pton doesn't accept an IPv6 zone index after host,
+            # like '::1%lo0', so strip it. If we happen to make an invalid
+            # address look valid, we fail later in sock.connect or sock.bind.
             try:
-                socket.inet_pton(af, host)
+                if af == socket.AF_INET6:
+                    socket.inet_pton(af, host.partition('%')[0])
+                else:
+                    socket.inet_pton(af, host)
                 return af, type, proto, '', (host, port)
             except OSError:
                 pass
@@ -112,9 +113,8 @@ def _ipaddr_info(host, port, family, type, proto):
     try:
         addr = ipaddress.IPv4Address(host)
     except ValueError:
-        host = host.partition('%')[0]
         try:
-            addr = ipaddress.IPv6Address(host)
+            addr = ipaddress.IPv6Address(host.partition('%')[0])
         except ValueError:
             return None
 

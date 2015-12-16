@@ -117,7 +117,7 @@ class BaseEventTests(test_utils.TestCase):
 
         # IPv6 address with zone index.
         self.assertEqual(
-            (INET6, STREAM, TCP, '', ('::3', 1)),
+            (INET6, STREAM, TCP, '', ('::3%lo0', 1)),
             base_events._ipaddr_info('::3%lo0', 1, INET6, STREAM, TCP))
 
     @patch_socket

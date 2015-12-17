@@ -29,6 +29,7 @@ import re
 import sys
 import unittest
 import textwrap
+import warnings
 import importlib.machinery
 try:
     import coverage
@@ -222,6 +223,9 @@ def _runtests(args, tests):
 
 
 def runtests():
+    # Print all warnings to the stdout.
+    warnings.simplefilter("always")
+
     args = ARGS.parse_args()
 
     if args.coverage and coverage is None:

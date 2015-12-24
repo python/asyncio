@@ -521,6 +521,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         self._write_to_self()
         return handle
 
+    @coroutine
     def run_in_executor(self, executor, func, *args):
         if (coroutines.iscoroutine(func)
         or coroutines.iscoroutinefunction(func)):
@@ -539,7 +540,7 @@ class BaseEventLoop(events.AbstractEventLoop):
             if executor is None:
                 executor = concurrent.futures.ThreadPoolExecutor(_MAX_WORKERS)
                 self._default_executor = executor
-        return futures.wrap_future(executor.submit(func, *args), loop=self)
+        return (yield from futures.wrap_future(executor.submit(func, *args), loop=self))
 
     def set_default_executor(self, executor):
         self._default_executor = executor

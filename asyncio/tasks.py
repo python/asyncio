@@ -1,6 +1,6 @@
 """Support for tasks, coroutines and the scheduler."""
 
-__all__ = ['Task',
+__all__ = ['Task', 'Timeout',
            'FIRST_COMPLETED', 'FIRST_EXCEPTION', 'ALL_COMPLETED',
            'wait', 'wait_for', 'as_completed', 'sleep', 'async',
            'gather', 'shield', 'ensure_future', 'run_coroutine_threadsafe',
@@ -732,3 +732,47 @@ def run_coroutine_threadsafe(coro, loop):
 
     loop.call_soon_threadsafe(callback)
     return future
+
+
+class Timeout:
+    """Timeout context manager.
+
+    Useful in cases when you want to apply timeout logic around block
+    of code or in cases when asyncio.wait_for is not suitable. For example:
+
+    >>> with aiohttp.Timeout(0.001):
+    >>>     yield from coro()
+
+
+    timeout -- timeout value in seconds
+    loop -- asyncio compatible event loop
+    """
+    def __init__(self, timeout, *, loop=None):
+        self._timeout = timeout
+        if loop is None:
+            loop = events.get_event_loop()
+        self._loop = loop
+        self._task = None
+        self._cancelled = False
+        self._cancel_handler = None
+
+    def __enter__(self):
+        self._task = Task.current_task(loop=self._loop)
+        if self._task is None:
+            raise RuntimeError('Timeout context manager should be used '
+                               'inside a task')
+        self._cancel_handler = self._loop.call_later(
+            self._timeout, self._cancel_task)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is futures.CancelledError and self._cancelled:
+            self._cancel_handler = None
+            self._task = None
+            raise futures.TimeoutError
+        self._cancel_handler.cancel()
+        self._cancel_handler = None
+        self._task = None
+
+    def _cancel_task(self):
+        self._cancelled = self._task.cancel()

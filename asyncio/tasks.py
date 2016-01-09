@@ -738,14 +738,16 @@ class Timeout:
     """Timeout context manager.
 
     Useful in cases when you want to apply timeout logic around block
-    of code or in cases when asyncio.wait_for is not suitable. For example:
+    of code or in cases when asyncio.wait_for is not suitable.
 
-    >>> with aiohttp.Timeout(0.001):
+    For example:
+
+    >>> with asyncio.Timeout(0.001):
     >>>     yield from coro()
 
 
-    timeout -- timeout value in seconds
-    loop -- asyncio compatible event loop
+    timeout: timeout value in seconds
+    loop: asyncio compatible event loop
     """
     def __init__(self, timeout, *, loop=None):
         self._timeout = timeout

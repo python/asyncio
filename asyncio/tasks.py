@@ -1,9 +1,10 @@
 """Support for tasks, coroutines and the scheduler."""
 
-__all__ = ['Task', 'Timeout',
+__all__ = ['Task',
            'FIRST_COMPLETED', 'FIRST_EXCEPTION', 'ALL_COMPLETED',
            'wait', 'wait_for', 'as_completed', 'sleep', 'async',
            'gather', 'shield', 'ensure_future', 'run_coroutine_threadsafe',
+           'timeout',
            ]
 
 import concurrent.futures
@@ -734,25 +735,29 @@ def run_coroutine_threadsafe(coro, loop):
     return future
 
 
-class Timeout:
-    """Timeout context manager.
+def timeout(timeout, *, loop=None):
+    """A factory which produce a context manager with timeout.
 
     Useful in cases when you want to apply timeout logic around block
     of code or in cases when asyncio.wait_for is not suitable.
 
     For example:
 
-    >>> with asyncio.Timeout(0.001):
+    >>> with asyncio.timeout(0.001):
     >>>     yield from coro()
 
 
     timeout: timeout value in seconds
     loop: asyncio compatible event loop
     """
-    def __init__(self, timeout, *, loop=None):
+    if loop is None:
+        loop = events.get_event_loop()
+    return _Timeout(timeout, loop=loop)
+
+
+class _Timeout:
+    def __init__(self, timeout, *, loop):
         self._timeout = timeout
-        if loop is None:
-            loop = events.get_event_loop()
         self._loop = loop
         self._task = None
         self._cancelled = False

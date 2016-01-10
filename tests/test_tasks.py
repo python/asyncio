@@ -2259,7 +2259,7 @@ class TimeoutTests(test_utils.TestCase):
         @asyncio.coroutine
         def go():
             with self.assertRaises(asyncio.TimeoutError):
-                with asyncio.Timeout(0.01, loop=self.loop) as t:
+                with asyncio.timeout(0.01, loop=self.loop) as t:
                     yield from long_running_task()
                     self.assertIs(t._loop, self.loop)
 
@@ -2274,7 +2274,7 @@ class TimeoutTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def go():
-            with asyncio.Timeout(0.1, loop=self.loop):
+            with asyncio.timeout(0.1, loop=self.loop):
                 resp = yield from long_running_task()
             self.assertEqual(resp, 'done')
 
@@ -2285,7 +2285,7 @@ class TimeoutTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def run():
-            with asyncio.Timeout(0.1) as t:
+            with asyncio.timeout(0.1) as t:
                 yield from asyncio.sleep(0.01)
                 self.assertIs(t._loop, self.loop)
 
@@ -2296,7 +2296,7 @@ class TimeoutTests(test_utils.TestCase):
         def go():
             yield from asyncio.sleep(0, loop=self.loop)
             with self.assertRaises(KeyError):
-                with asyncio.Timeout(0.1, loop=self.loop):
+                with asyncio.timeout(0.1, loop=self.loop):
                     raise KeyError
 
         self.loop.run_until_complete(go())
@@ -2306,7 +2306,7 @@ class TimeoutTests(test_utils.TestCase):
         def go():
             yield from asyncio.sleep(0, loop=self.loop)
             with self.assertRaises(asyncio.CancelledError):
-                with asyncio.Timeout(0.001, loop=self.loop):
+                with asyncio.timeout(0.001, loop=self.loop):
                     raise asyncio.CancelledError
 
         self.loop.run_until_complete(go())
@@ -2319,7 +2319,7 @@ class TimeoutTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def go():
-            with asyncio.Timeout(0.01, loop=self.loop):
+            with asyncio.timeout(0.01, loop=self.loop):
                 result = yield from long_running_task()
             self.assertEqual(result, 'done')
 
@@ -2331,7 +2331,7 @@ class TimeoutTests(test_utils.TestCase):
 
         @asyncio.coroutine
         def go():
-            with asyncio.Timeout(0.2, loop=self.loop):
+            with asyncio.timeout(0.2, loop=self.loop):
                 resp = yield from fut
             self.assertEqual(resp, 'done')
 
@@ -2344,7 +2344,7 @@ class TimeoutTests(test_utils.TestCase):
 
             start = self.loop.time()
             with self.assertRaises(asyncio.TimeoutError):
-                with asyncio.Timeout(0.1, loop=self.loop):
+                with asyncio.timeout(0.1, loop=self.loop):
                     foo_running = True
                     try:
                         yield from asyncio.sleep(0.2, loop=self.loop)
@@ -2359,7 +2359,7 @@ class TimeoutTests(test_utils.TestCase):
 
     def test_raise_runtimeerror_if_no_task(self):
         with self.assertRaises(RuntimeError):
-            with asyncio.Timeout(0.1, loop=self.loop):
+            with asyncio.timeout(0.1, loop=self.loop):
                 pass
 
     def test_outer_coro_is_not_cancelled(self):
@@ -2369,7 +2369,7 @@ class TimeoutTests(test_utils.TestCase):
         @asyncio.coroutine
         def outer():
             try:
-                with asyncio.Timeout(0.001, loop=self.loop):
+                with asyncio.timeout(0.001, loop=self.loop):
                     yield from asyncio.sleep(1, loop=self.loop)
             except asyncio.TimeoutError:
                 has_timeout[0] = True

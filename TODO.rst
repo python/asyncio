@@ -1,5 +1,7 @@
 Unsorted "TODO" tasks:
 
+* Python 3.5: Fix test_task_repr()
+* Python 3.4: Fix test_asyncio()
 * Drop platform without ssl module?
 * streams.py:FIXME: should we support __aiter__ and __anext__ in Trollius?
 * replace selectors.py with selectors34:

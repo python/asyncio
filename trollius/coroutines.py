@@ -7,6 +7,7 @@ import inspect
 import opcode
 import os
 import sys
+import textwrap
 import traceback
 import types
 
@@ -77,14 +78,50 @@ else:
     _YIELD_FROM_BUG = False
 
 
-if compat.PY33:
-    # Don't use the Return class on Python 3.3 and later to support asyncio
+if compat.PY35:
+    return_base_class = Exception
+else:
+    return_base_class = StopIteration
+
+class ReturnException(return_base_class):
+    def __init__(self, *args):
+        return_base_class.__init__(self)
+        if not args:
+            self.value = None
+        elif len(args) == 1:
+            self.value = args[0]
+        else:
+            self.value = args
+        self.raised = False
+        if _DEBUG:
+            frame = sys._getframe(1)
+            self._source_traceback = traceback.extract_stack(frame)
+            # explicitly clear the reference to avoid reference cycles
+            frame = None
+        else:
+            self._source_traceback = None
+
+    def __del__(self):
+        if self.raised:
+            return
+
+        fmt = 'Return(%r) used without raise'
+        if self._source_traceback:
+            fmt += '\nReturn created at (most recent call last):\n'
+            tb = ''.join(traceback.format_list(self._source_traceback))
+            fmt += tb.rstrip()
+        logger.error(fmt, self.value)
+
+
+if compat.PY33 and not compat.PY35:
+    # Don't use the Return class on Python 3.3 and 3.4 to support asyncio
     # coroutines (to avoid the warning emited in Return destructor).
     #
-    # The problem is that Return inherits from StopIteration.  "yield from
-    # trollius_coroutine". Task._step() does not receive the Return exception,
-    # because "yield from" handles it internally. So it's not possible to set
-    # the raised attribute to True to avoid the warning in Return destructor.
+    # The problem is that ReturnException inherits from StopIteration.
+    # "yield from trollius_coroutine". Task._step() does not receive the Return
+    # exception, because "yield from" handles it internally. So it's not
+    # possible to set the raised attribute to True to avoid the warning in
+    # Return destructor.
     def Return(*args):
         if not args:
             value = None
@@ -94,34 +131,7 @@ if compat.PY33:
             value = args
         return StopIteration(value)
 else:
-    class Return(StopIteration):
-        def __init__(self, *args):
-            StopIteration.__init__(self)
-            if not args:
-                self.value = None
-            elif len(args) == 1:
-                self.value = args[0]
-            else:
-                self.value = args
-            self.raised = False
-            if _DEBUG:
-                frame = sys._getframe(1)
-                self._source_traceback = traceback.extract_stack(frame)
-                # explicitly clear the reference to avoid reference cycles
-                frame = None
-            else:
-                self._source_traceback = None
-
-        def __del__(self):
-            if self.raised:
-                return
-
-            fmt = 'Return(%r) used without raise'
-            if self._source_traceback:
-                fmt += '\nReturn created at (most recent call last):\n'
-                tb = ''.join(traceback.format_list(self._source_traceback))
-                fmt += tb.rstrip()
-            logger.error(fmt, self.value)
+    Return = ReturnException
 
 
 def debug_wrapper(gen):
@@ -297,6 +307,47 @@ if not compat.PY34:
 else:
     _wraps = functools.wraps
 
+_PEP479 = (sys.version_info >= (3, 5))
+if _PEP479:
+    # Need exec() because yield+return raises a SyntaxError on Python 2
+    exec(textwrap.dedent('''
+        def pep479_wrapper(func, coro_func):
+            @_wraps(func)
+            def pep479_wrapped(*args, **kw):
+                coro = coro_func(*args, **kw)
+                value = None
+                error = None
+                while True:
+                    try:
+                        if error is not None:
+                            value = coro.throw(error)
+                        elif value is not None:
+                            value = coro.send(value)
+                        else:
+                            value = next(coro)
+                    except RuntimeError:
+                        # FIXME: special case for
+                        # FIXME: "isinstance(exc.__context__, StopIteration)"?
+                        raise
+                    except StopIteration as exc:
+                        return exc.value
+                    except Return as exc:
+                        exc.raised = True
+                        return exc.value
+                    except BaseException as exc:
+                        raise
+
+                    try:
+                        value = yield value
+                        error = None
+                    except BaseException as exc:
+                        value = None
+                        error = exc
+
+            return pep479_wrapped
+        '''))
+
+
 def coroutine(func):
     """Decorator to mark coroutines.
 
@@ -330,6 +381,11 @@ def coroutine(func):
                     if isinstance(res, _AwaitableABC):
                         res = yield From(await_meth())
             raise Return(res)
+
+    if _PEP479:
+        # FIXME: use @_wraps
+        coro = pep479_wrapper(func, coro)
+        coro = _wraps(func)(coro)
 
     if not _DEBUG:
         if _types_coroutine is None:

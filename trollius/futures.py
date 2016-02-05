@@ -423,9 +423,6 @@ class Future(object):
                 result = other.result()
                 self.set_result(result)
 
-    if compat.PY35:
-        __await__ = __iter__ # make compatible with 'await' expression
-
 if events.asyncio is not None:
     # Accept also asyncio Future objects for interoperability
     _FUTURE_CLASSES = (Future, events.asyncio.Future)

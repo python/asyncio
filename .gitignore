@@ -16,3 +16,4 @@ dist
 .tox
 .idea/
 *.iml
+trollius/_overlapped.pyd

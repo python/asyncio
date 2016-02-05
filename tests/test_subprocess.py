@@ -432,7 +432,7 @@ class SubprocessMixin:
         # Issue #24763: check that the subprocess transport is closed
         # when BaseSubprocessTransport fails
         if sys.platform == 'win32':
-            target = 'asyncio.windows_utils.Popen'
+            target = 'trollius.windows_utils.Popen'
         else:
             target = 'subprocess.Popen'
         with mock.patch(target) as popen:

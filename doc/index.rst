@@ -1,6 +1,9 @@
 Trollius
 ========
 
+.. warning::
+   :ref:`The Trollius project is now deprecated! <deprecated>`
+
 .. image:: trollius.jpg
    :alt: Trollius altaicus from Khangai Mountains (Mongòlia)
    :align: right
@@ -58,6 +61,7 @@ Table Of Contents
 
 .. toctree::
 
+   deprecated
    using
    install
    libraries

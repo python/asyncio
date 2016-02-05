@@ -2,6 +2,9 @@
 Install Trollius
 ++++++++++++++++
 
+.. warning::
+   :ref:`The Trollius project is now deprecated! <deprecated>`
+
 Trollius supports Python 2.7, 3.3 and 3.4.
 
 There is an experimental support of Python 3.5. Issues with Python 3.5:
@@ -94,6 +97,7 @@ extension using::
 
     C:\Python27\python.exe setup.py build_ext
 
+.. _backports:
 
 Backports
 =========

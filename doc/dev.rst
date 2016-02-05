@@ -1,6 +1,9 @@
 Run tests
 =========
 
+.. warning::
+   :ref:`The Trollius project is now deprecated! <deprecated>`
+
 Run tests with tox
 ------------------
 

@@ -1,6 +1,11 @@
+.. _libraries:
+
 ++++++++++++++++++
 Trollius Libraries
 ++++++++++++++++++
+
+.. warning::
+   :ref:`The Trollius project is now deprecated! <deprecated>`
 
 Libraries compatible with asyncio and trollius
 ==============================================

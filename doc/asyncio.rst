@@ -2,6 +2,9 @@
 Trollius and asyncio
 ++++++++++++++++++++
 
+.. warning::
+   :ref:`The Trollius project is now deprecated! <deprecated>`
+
 Differences between Trollius and asyncio
 ========================================
 

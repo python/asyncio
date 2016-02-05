@@ -79,4 +79,10 @@ install_options = {
 if SETUPTOOLS:
     install_options['install_requires'] = requirements
 
+print("!!! WARNING !!! The Trollius project is now deprecated!")
+print("")
+
 setup(**install_options)
+
+print("")
+print("!!! WARNING !!! The Trollius project is now deprecated!")

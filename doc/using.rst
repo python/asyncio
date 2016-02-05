@@ -2,6 +2,9 @@
 Using Trollius
 ++++++++++++++
 
+.. warning::
+   :ref:`The Trollius project is now deprecated! <deprecated>`
+
 Documentation of the asyncio module
 ===================================
 

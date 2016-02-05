@@ -11,6 +11,7 @@ Changes:
   not supported on Python 3.5.
 * Better exception traceback. Patch written by Dhawal Yogesh Bhanushali.
 * Drop support for Python 2.6 and 3.2.
+* Fix tests on Windows with Python 2. Patch written by Gabi Davar.
 
 
 Version 2.0 (2015-07-13)

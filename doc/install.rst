@@ -2,6 +2,17 @@
 Install Trollius
 ++++++++++++++++
 
+Trollius supports Python 2.7, 3.3 and 3.4.
+
+There is an experimental support of Python 3.5. Issues with Python 3.5:
+
+* don't support asyncio coroutines
+* ``Task.get_task()`` is broken
+* ``repr(Task)`` is broken
+
+Support of Python 2.6 and 3.2 was dropped in Trollius 2.1.
+
+
 Packages for Linux
 ==================
 
@@ -67,11 +78,8 @@ Dependencies
 
 Trollius requires the `six <https://pypi.python.org/pypi/six>`_ module.
 
-On Python older than 3.2, the `futures <https://pypi.python.org/pypi/futures>`_
-project is needed to get a backport of ``concurrent.futures``.
-
-Python 2.6 requires also `ordereddict
-<https://pypi.python.org/pypi/ordereddict>`_.
+Python 2.7 requires `futures <https://pypi.python.org/pypi/futures>`_ to get a
+backport of ``concurrent.futures``.
 
 
 Build manually Trollius on Windows
@@ -90,8 +98,8 @@ extension using::
 Backports
 =========
 
-To support Python 2.6-3.4, many Python modules of the standard library have
-been backported:
+To support old Python versions, many Python modules of the standard library
+have been backported:
 
 ========================  =========  =======================
 Name                      Python     Backport

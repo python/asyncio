@@ -8,6 +8,7 @@ Version 2.1
 Changes:
 
 * Better exception traceback. Patch written by Dhawal Yogesh Bhanushali.
+* Drop support for Python 2.6 and 3.2.
 
 
 Version 2.0 (2015-07-13)

@@ -1,6 +1,5 @@
 Unsorted "TODO" tasks:
 
-* Drop Python 2.6 and 3.2 support
 * Drop platform without ssl module?
 * streams.py:FIXME: should we support __aiter__ and __anext__ in Trollius?
 * replace selectors.py with selectors34:

@@ -6,7 +6,7 @@ Run tests with tox
 
 The `tox project <https://testrun.org/tox/latest/>`_ can be used to build a
 virtual environment with all runtime and test dependencies and run tests
-against different Python versions (2.6, 2.7, 3.2, 3.3).
+against different Python versions (2.7, 3.3, 3.4).
 
 For example, to run tests with Python 2.7, just type::
 
@@ -14,10 +14,9 @@ For example, to run tests with Python 2.7, just type::
 
 To run tests against other Python versions:
 
-* ``py26``: Python 2.6
 * ``py27``: Python 2.7
-* ``py32``: Python 3.2
 * ``py33``: Python 3.3
+* ``py34``: Python 3.4
 
 
 Test Dependencies

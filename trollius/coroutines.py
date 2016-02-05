@@ -198,8 +198,8 @@ class CoroWrapper:
         def send(self, value):
             return self.gen.send(value)
 
-    def throw(self, exc):
-        return self.gen.throw(exc)
+    def throw(self, exc_type, exc_value=None, exc_tb=None):
+        return self.gen.throw(exc_type, exc_value, exc_tb)
 
     def close(self):
         return self.gen.close()

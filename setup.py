@@ -1,7 +1,9 @@
-# Release procedure:
+# Prepare a release:
+#
 #  - fill trollius changelog
 #  - run maybe ./update-asyncio-step1.sh
-#  - run all tests: tox
+#  - run all tests on Linux: tox
+#  - run tests on Windows
 #  - test examples
 #  - check that "python setup.py sdist" contains all files tracked by
 #    the SCM (Mercurial): update MANIFEST.in if needed
@@ -9,13 +11,19 @@
 #  - update version in setup.py (version) and doc/conf.py (version, release)
 #  - set release date in doc/changelog.rst
 #  - git commit
+#  - git push
+#
+# Release a new version:
+#
 #  - git tag trollius-VERSION
 #  - git push --tags
-#  - git push
 #  - On Linux: python setup.py register sdist upload
 #    FIXME: don't use bdist_wheel because of
 #    FIXME: https://github.com/haypo/trollius/issues/1
 #  - On Windows: python releaser.py release
+#
+# After the release:
+#
 #  - increment version in setup.py (version) and doc/conf.py (version, release)
 #  - git commit -a && git push
 
@@ -48,7 +56,7 @@ if sys.version_info < (3,):
 
 install_options = {
     "name": "trollius",
-    "version": "2.0.1",
+    "version": "2.1",
     "license": "Apache License 2.0",
     "author": 'Victor Stinner',
     "author_email": 'victor.stinner@gmail.com',

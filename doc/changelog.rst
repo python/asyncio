@@ -2,6 +2,14 @@
 Change log
 ++++++++++
 
+Version 2.1
+===========
+
+Changes:
+
+* Better exception traceback. Patch written by Dhawal Yogesh Bhanushali.
+
+
 Version 2.0 (2015-07-13)
 ========================
 

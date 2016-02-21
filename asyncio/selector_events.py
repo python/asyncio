@@ -315,10 +315,27 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         if self._debug and sock.gettimeout() != 0:
             raise ValueError("the socket must be non-blocking")
         fut = futures.Future(loop=self)
-        self._sock_recv(fut, False, sock, n)
+        self._sock_recv(sock.recv, fut, False, sock, n)
         return fut
 
-    def _sock_recv(self, fut, registered, sock, n):
+    def sock_recvfrom(self, sock, n):
+        """Receive data from the socket.
+
+        Receive data from the socket. The return value is a pair (bytes, address)
+        where bytes is a bytes object representing the data received and address
+        is the address of the socket sending the data.
+        The maximum amount of data to be received at once is specified by
+        nbytes.
+
+        This method is a coroutine.
+        """
+        if self._debug and sock.gettimeout() != 0:
+            raise ValueError("the socket must be non-blocking")
+        fut = futures.Future(loop=self)
+        self._sock_recv(sock.recvfrom, fut, False, sock, n)
+        return fut
+
+    def _sock_recv(self, method, fut, registered, sock, n):
         # _sock_recv() can add itself as an I/O callback if the operation can't
         # be done immediately. Don't use it directly, call sock_recv().
         fd = sock.fileno()
@@ -331,9 +348,9 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         if fut.cancelled():
             return
         try:
-            data = sock.recv(n)
+            data = method(n)
         except (BlockingIOError, InterruptedError):
-            self.add_reader(fd, self._sock_recv, fut, True, sock, n)
+            self.add_reader(fd, self._sock_recv, method, fut, True, sock, n)
         except Exception as exc:
             fut.set_exception(exc)
         else:
@@ -381,6 +398,42 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             if n:
                 data = data[n:]
             self.add_writer(fd, self._sock_sendall, fut, True, sock, data)
+
+    def sock_sendto(self, sock, data, address):
+        """Send data to the socket.
+
+        The socket should not be connected to a remote socket, since the
+        destination socket is specified by address.
+
+        This method is a coroutine.
+        """
+        if self._debug and sock.gettimeout() != 0:
+            raise ValueError("the socket must be non-blocking")
+        fut = futures.Future(loop=self)
+        if data:
+            self._sock_sendto(fut, False, sock, data, address)
+        else:
+            fut.set_result(None)
+        return fut
+
+    def _sock_sendto(self, fut, registered, sock, data, address):
+        fd = sock.fileno()
+
+        if registered:
+            self.remove_writer(fd)
+        if fut.cancelled():
+            return
+
+        try:
+            sock.sendto(data, address)
+        except (BlockingIOError, InterruptedError):
+            # if sendto blocks, wait for it to be ready
+            self.add_writer(fd, self._sock_sendto, fut, True, sock, data, address)
+        except Exception as exc:
+            fut.set_exception(exc)
+            return
+        else:
+            fut.set_result(None)
 
     def sock_connect(self, sock, address):
         """Connect to a remote socket at address.

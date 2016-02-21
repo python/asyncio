@@ -341,6 +341,8 @@ class Future:
             raise InvalidStateError('{}: {!r}'.format(self._state, self))
         if isinstance(exception, type):
             exception = exception()
+        if isinstance(exception, StopIteration):
+            raise TypeError("StopException interacts badly with generators and cannot be raised into a Future")
         self._exception = exception
         self._state = _FINISHED
         self._schedule_callbacks()

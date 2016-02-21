@@ -76,6 +76,9 @@ class FutureTests(test_utils.TestCase):
         f = asyncio.Future(loop=self.loop)
         self.assertRaises(asyncio.InvalidStateError, f.exception)
 
+        # StopIteration cannot be raised into a Future - CPython issue26221
+        self.assertRaises(TypeError, f.set_exception, StopIteration)
+
         f.set_exception(exc)
         self.assertFalse(f.cancelled())
         self.assertTrue(f.done())

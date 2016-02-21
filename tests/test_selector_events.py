@@ -183,7 +183,15 @@ class BaseSelectorEventLoopTests(test_utils.TestCase):
 
         f = self.loop.sock_recv(sock, 1024)
         self.assertIsInstance(f, asyncio.Future)
-        self.loop._sock_recv.assert_called_with(f, False, sock, 1024)
+        self.loop._sock_recv.assert_called_with(sock.recv, f, False, sock, 1024)
+
+    def test_sock_recfrom(self):
+        sock = test_utils.mock_nonblocking_socket()
+        self.loop._sock_recv = mock.Mock()
+
+        f = self.loop.sock_recvfrom(sock, 1024)
+        self.assertIsInstance(f, asyncio.Future)
+        self.loop._sock_recv.assert_called_with(sock.recvfrom, f, False, sock, 1024)
 
     def test__sock_recv_canceled_fut(self):
         sock = mock.Mock()
@@ -191,7 +199,7 @@ class BaseSelectorEventLoopTests(test_utils.TestCase):
         f = asyncio.Future(loop=self.loop)
         f.cancel()
 
-        self.loop._sock_recv(f, False, sock, 1024)
+        self.loop._sock_recv(sock.recv, f, False, sock, 1024)
         self.assertFalse(sock.recv.called)
 
     def test__sock_recv_unregister(self):
@@ -202,7 +210,7 @@ class BaseSelectorEventLoopTests(test_utils.TestCase):
         f.cancel()
 
         self.loop.remove_reader = mock.Mock()
-        self.loop._sock_recv(f, True, sock, 1024)
+        self.loop._sock_recv(sock.recv, f, True, sock, 1024)
         self.assertEqual((10,), self.loop.remove_reader.call_args[0])
 
     def test__sock_recv_tryagain(self):
@@ -212,8 +220,8 @@ class BaseSelectorEventLoopTests(test_utils.TestCase):
         sock.recv.side_effect = BlockingIOError
 
         self.loop.add_reader = mock.Mock()
-        self.loop._sock_recv(f, False, sock, 1024)
-        self.assertEqual((10, self.loop._sock_recv, f, True, sock, 1024),
+        self.loop._sock_recv(sock.recv, f, False, sock, 1024)
+        self.assertEqual((10, self.loop._sock_recv, sock.recv, f, True, sock, 1024),
                          self.loop.add_reader.call_args[0])
 
     def test__sock_recv_exception(self):
@@ -222,7 +230,7 @@ class BaseSelectorEventLoopTests(test_utils.TestCase):
         sock.fileno.return_value = 10
         err = sock.recv.side_effect = OSError()
 
-        self.loop._sock_recv(f, False, sock, 1024)
+        self.loop._sock_recv(sock.recv, f, False, sock, 1024)
         self.assertIs(err, f.exception())
 
     def test_sock_sendall(self):
@@ -336,6 +344,90 @@ class BaseSelectorEventLoopTests(test_utils.TestCase):
         self.assertEqual(
             (10, self.loop._sock_sendall, f, True, sock, b'data'),
             self.loop.add_writer.call_args[0])
+
+    def test_sock_sendto(self):
+        sock = test_utils.mock_nonblocking_socket()
+        self.loop._sock_sendto = mock.Mock()
+
+        f = self.loop.sock_sendto(sock, b'data', ('localhost', 80))
+        self.assertIsInstance(f, asyncio.Future)
+        self.assertEqual(
+            (f, False, sock, b'data', ('localhost', 80)),
+            self.loop._sock_sendto.call_args[0])
+
+    def test_sock_sendto_nodata(self):
+        sock = test_utils.mock_nonblocking_socket()
+        self.loop._sock_sendto = mock.Mock()
+
+        f = self.loop.sock_sendto(sock, b'', ('localhost', 80))
+        self.assertIsInstance(f, asyncio.Future)
+        self.assertTrue(f.done())
+        self.assertIsNone(f.result())
+        self.assertFalse(self.loop._sock_sendto.called)
+
+    def test__sock_sendto_canceled_fut(self):
+        sock = mock.Mock()
+
+        f = asyncio.Future(loop=self.loop)
+        f.cancel()
+
+        self.loop._sock_sendto(f, False, sock, b'data', ('localhost', 80))
+        self.assertFalse(sock.sendto.called)
+
+    def test__sock_sendto_unregister(self):
+        sock = mock.Mock()
+        sock.fileno.return_value = 10
+
+        f = asyncio.Future(loop=self.loop)
+        f.cancel()
+
+        self.loop.remove_writer = mock.Mock()
+        self.loop._sock_sendto(f, True, sock, b'data', ('localhost', 80))
+        self.assertEqual((10,), self.loop.remove_writer.call_args[0])
+
+    def test__sock_sendto_tryagain(self):
+        f = asyncio.Future(loop=self.loop)
+        sock = mock.Mock()
+        sock.fileno.return_value = 10
+        sock.sendto.side_effect = BlockingIOError
+
+        self.loop.add_writer = mock.Mock()
+        self.loop._sock_sendto(f, False, sock, b'data', ('localhost', 80))
+        self.assertEqual(
+            (10, self.loop._sock_sendto, f, True, sock, b'data', ('localhost', 80)),
+            self.loop.add_writer.call_args[0])
+
+    def test__sock_sendto_interrupted(self):
+        f = asyncio.Future(loop=self.loop)
+        sock = mock.Mock()
+        sock.fileno.return_value = 10
+        sock.sendto.side_effect = InterruptedError
+
+        self.loop.add_writer = mock.Mock()
+        self.loop._sock_sendto(f, False, sock, b'data', ('localhost', 80))
+        self.assertEqual(
+            (10, self.loop._sock_sendto, f, True, sock, b'data', ('localhost', 80)),
+            self.loop.add_writer.call_args[0])
+
+    def test__sock_sendto_exception(self):
+        f = asyncio.Future(loop=self.loop)
+        sock = mock.Mock()
+        sock.fileno.return_value = 10
+        err = sock.sendto.side_effect = OSError()
+
+        self.loop._sock_sendto(f, False, sock, b'data', ('localhost', 80))
+        self.assertIs(f.exception(), err)
+
+    def test__sock_sendto(self):
+        sock = mock.Mock()
+
+        f = asyncio.Future(loop=self.loop)
+        sock.fileno.return_value = 10
+        sock.sendto.return_value = 4
+
+        self.loop._sock_sendto(f, False, sock, b'data', ('localhost', 80))
+        self.assertTrue(f.done())
+        self.assertIsNone(f.result())
 
     def test_sock_connect(self):
         sock = test_utils.mock_nonblocking_socket()

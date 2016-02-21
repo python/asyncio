@@ -343,7 +343,7 @@ class Future:
             exception = exception()
         if type(exception) is StopIteration:
             raise TypeError("StopException interacts badly with generators "
-                    "and cannot be raised into a Future")
+                            "and cannot be raised into a Future")
         self._exception = exception
         self._state = _FINISHED
         self._schedule_callbacks()

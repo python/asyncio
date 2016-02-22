@@ -77,7 +77,8 @@ class FutureTests(test_utils.TestCase):
         self.assertRaises(asyncio.InvalidStateError, f.exception)
 
         # StopIteration cannot be raised into a Future - CPython issue26221
-        self.assertRaises(TypeError, f.set_exception, StopIteration)
+        self.assertRaisesRegex(TypeError, "StopIteration .* cannot be raised",
+                               f.set_exception, StopIteration)
 
         f.set_exception(exc)
         self.assertFalse(f.cancelled())

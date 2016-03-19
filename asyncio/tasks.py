@@ -401,7 +401,7 @@ def wait_for(fut, timeout, *, loop=None):
 
 @coroutine
 def _wait(fs, timeout, return_when, loop):
-    """Internal helper for wait() and _wait_for().
+    """Internal helper for wait() and wait_for().
 
     The fs argument must be a collection of Futures.
     """

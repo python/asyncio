@@ -329,7 +329,8 @@ class _UnixReadPipeTransport(transports.ReadTransport):
         elif self._closing:
             info.append('closing')
         info.append('fd=%s' % self._fileno)
-        if self._pipe is not None:
+        if self._pipe is not None and \
+           self._loop._selector is not None:
             polling = selector_events._test_selector_event(
                           self._loop._selector,
                           self._fileno, selectors.EVENT_READ)
@@ -337,6 +338,8 @@ class _UnixReadPipeTransport(transports.ReadTransport):
                 info.append('polling')
             else:
                 info.append('idle')
+        elif self._pipe is not None:
+            info.append('open')
         else:
             info.append('closed')
         return '<%s>' % ' '.join(info)
@@ -453,7 +456,8 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
         elif self._closing:
             info.append('closing')
         info.append('fd=%s' % self._fileno)
-        if self._pipe is not None:
+        if self._pipe is not None and \
+           self._loop._selector is not None:
             polling = selector_events._test_selector_event(
                           self._loop._selector,
                           self._fileno, selectors.EVENT_WRITE)
@@ -464,6 +468,8 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
 
             bufsize = self.get_write_buffer_size()
             info.append('bufsize=%s' % bufsize)
+        elif self._pipe is not None:
+            info.append('open')
         else:
             info.append('closed')
         return '<%s>' % ' '.join(info)

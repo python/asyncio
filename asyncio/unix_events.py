@@ -329,10 +329,10 @@ class _UnixReadPipeTransport(transports.ReadTransport):
         elif self._closing:
             info.append('closing')
         info.append('fd=%s' % self._fileno)
-        if self._pipe is not None and \
-           self._loop._selector is not None:
+        selector = getattr(self._loop, '_selector', None)
+        if self._pipe is not None and selector is not None:
             polling = selector_events._test_selector_event(
-                          self._loop._selector,
+                          selector,
                           self._fileno, selectors.EVENT_READ)
             if polling:
                 info.append('polling')
@@ -456,10 +456,10 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
         elif self._closing:
             info.append('closing')
         info.append('fd=%s' % self._fileno)
-        if self._pipe is not None and \
-           self._loop._selector is not None:
+        selector = getattr(self._loop, '_selector', None)
+        if self._pipe is not None and selector is not None:
             polling = selector_events._test_selector_event(
-                          self._loop._selector,
+                          selector,
                           self._fileno, selectors.EVENT_WRITE)
             if polling:
                 info.append('polling')

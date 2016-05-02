@@ -584,6 +584,8 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
             self._buffer.appendleft(chunk)
             self._buffer_size += len(chunk)
 
+        self._maybe_resume_protocol()  # May append to buffer.
+
         if self._buffer:
             assert self._buffer_size > 0
             return
@@ -591,8 +593,8 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
         assert self._buffer_size == 0
 
         self._loop.remove_writer(self._fileno)
-        self._maybe_resume_protocol()  # May append to buffer.
-        if not self._buffer and self._closing:
+
+        if self._closing:
             self._loop.remove_reader(self._fileno)
             self._call_connection_lost(None)
 

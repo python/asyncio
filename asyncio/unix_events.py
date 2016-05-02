@@ -1,6 +1,8 @@
 """Selector event loop for Unix with signal handling."""
 
+import collections
 import errno
+import itertools
 import os
 import signal
 import socket
@@ -430,7 +432,8 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
                              "pipes, sockets and character devices")
         _set_nonblocking(self._fileno)
         self._protocol = protocol
-        self._buffer = []
+        self._buffer = collections.deque()
+        self._buffer_size = 0  # Cached count of bytes in buffer
         self._conn_lost = 0
         self._closing = False  # Set when close() or write_eof() called.
 
@@ -475,21 +478,21 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
         return '<%s>' % ' '.join(info)
 
     def get_write_buffer_size(self):
-        return sum(len(data) for data in self._buffer)
+        return self._buffer_size
 
     def _read_ready(self):
         # Pipe was closed by peer.
         if self._loop.get_debug():
             logger.info("%r was closed by peer", self)
         if self._buffer:
+            assert self._buffer_size > 0
             self._close(BrokenPipeError())
         else:
             self._close()
 
     def write(self, data):
         assert isinstance(data, (bytes, bytearray, memoryview)), repr(data)
-        if isinstance(data, bytearray):
-            data = memoryview(data)
+
         if not data:
             return
 
@@ -501,6 +504,7 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
             return
 
         if not self._buffer:
+            assert self._buffer_size == 0
             # Attempt to send it right away first.
             try:
                 n = os.write(self._fileno, data)
@@ -513,39 +517,84 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
             if n == len(data):
                 return
             elif n > 0:
+                # memoryview is required to eliminate memory copying while
+                # slicing. "unused" memory will be freed when this chunk is
+                # completely written
+                if not isinstance(data, memoryview):
+                    data = memoryview(data)
                 data = data[n:]
             self._loop.add_writer(self._fileno, self._write_ready)
 
         self._buffer.append(data)
+        self._buffer_size += len(data)
         self._maybe_pause_protocol()
 
     def _write_ready(self):
-        data = b''.join(self._buffer)
-        assert data, 'Data should not be empty'
+        # writing empty chunks to buffer is disallowed earlier
+        assert self._buffer and self._buffer_size > 0, 'Data must not be empty'
 
-        self._buffer.clear()
         try:
-            n = os.write(self._fileno, data)
+            # Note, this is not length in bytes, it is count of chunks in
+            # buffer
+            if len(self._buffer) > compat.SC_IOV_MAX:
+                # In order to minimize syscalls used for IO, we should call
+                # writev() again and again until self._buffer is sent,
+                # or writev() say that only part of requested data is sent.
+                # This will make code more complex. Instead, we assume that
+                # unsent part of self._buffer will be sent on next event loop
+                # iteration, even if one can be sent right now.
+                # According to benchmarking, this minor misoptimization does
+                # not hurt much.
+                buffers = itertools.islice(self._buffer, 0, compat.SC_IOV_MAX)
+
+                # Unfortunatelly, Python 3.5 have the BUG - writev() does not
+                # accept generators. So, we wrap it in a list.
+                # http://bugs.python.org/issue27020
+                buffers = list(buffers)
+            else:
+                buffers = self._buffer
+            n = os.writev(self._fileno, buffers)
         except (BlockingIOError, InterruptedError):
-            self._buffer.append(data)
+            return
         except Exception as exc:
             self._conn_lost += 1
             # Remove writer here, _fatal_error() doesn't it
             # because _buffer is empty.
             self._loop.remove_writer(self._fileno)
             self._fatal_error(exc, 'Fatal write error on pipe transport')
-        else:
-            if n == len(data):
-                self._loop.remove_writer(self._fileno)
-                self._maybe_resume_protocol()  # May append to buffer.
-                if not self._buffer and self._closing:
-                    self._loop.remove_reader(self._fileno)
-                    self._call_connection_lost(None)
-                return
-            elif n > 0:
-                data = data[n:]
+            return
 
-            self._buffer.append(data)  # Try again later.
+        assert 0 <= n <= self._buffer_size
+
+        while n > 0:
+            chunk = self._buffer.popleft()
+            chunk_length = len(chunk)
+            self._buffer_size -= chunk_length
+            n -= chunk_length
+
+        if n < 0:
+            # only part of chunk was written, so push unread part of it
+            # back to _buffer.
+            # memoryview is required to eliminate memory copying while
+            # slicing. "unused" memory will be freed when this chunk is
+            # completely written
+            if not isinstance(chunk, memoryview):
+                chunk = memoryview(chunk)
+            chunk = chunk[n:]
+            self._buffer.appendleft(chunk)
+            self._buffer_size += len(chunk)
+
+        if self._buffer:
+            assert self._buffer_size > 0
+            return
+
+        assert self._buffer_size == 0
+
+        self._loop.remove_writer(self._fileno)
+        self._maybe_resume_protocol()  # May append to buffer.
+        if not self._buffer and self._closing:
+            self._loop.remove_reader(self._fileno)
+            self._call_connection_lost(None)
 
     def can_write_eof(self):
         return True
@@ -556,6 +605,7 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
         assert self._pipe
         self._closing = True
         if not self._buffer:
+            assert self._buffer_size == 0
             self._loop.remove_reader(self._fileno)
             self._loop.call_soon(self._call_connection_lost, None)
 
@@ -596,8 +646,10 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
     def _close(self, exc=None):
         self._closing = True
         if self._buffer:
+            assert self._buffer_size > 0
             self._loop.remove_writer(self._fileno)
         self._buffer.clear()
+        self._buffer_size = 0
         self._loop.remove_reader(self._fileno)
         self._loop.call_soon(self._call_connection_lost, exc)
 

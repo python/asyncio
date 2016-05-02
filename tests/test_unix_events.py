@@ -1,6 +1,7 @@
 """Tests for unix_events.py."""
 
 import collections
+import contextlib
 import errno
 import io
 import os
@@ -33,6 +34,54 @@ def close_pipe_transport(transport):
         return
     transport._pipe.close()
     transport._pipe = None
+
+
+@contextlib.contextmanager
+def patched_os_writev():
+    """Patch os.writev() in a specific way.
+
+    The unittest.mock stores arguments by reference. So if argument is mutable
+    and changed after tested call, we can not check arguments values correctly.
+
+    Example:
+
+        buf = [1, 2, 3]
+        writev(buf) # mock remembers reference to buf, not contents.
+        buf.pop()
+        ...
+        writev.assert_called_with([1, 2, 3]) # will fail
+
+    Note, that writev() was called with [1,2,3], but mock see (in assert) that
+    buf is [1, 2]
+    """
+
+    class Wrapper:
+        def __init__(self, wrapped):
+            self._wrapped = wrapped
+
+        def __call__(self, fd, buffers):
+            return self._wrapped(fd, list(buffers))
+
+        def __getattr__(self, name):
+            if name.startswith('_'):
+                return object.__getattr__(self, name)
+            else:
+                return getattr(self._wrapped, name)
+
+        def __setattr__(self, name, val):
+            if name.startswith('_'):
+                object.__setattr__(self, name, val)
+            else:
+                setattr(self._wrapped, name, val)
+
+    m_writev = Wrapper(mock.Mock())
+    with mock.patch('os.writev', m_writev):
+        yield m_writev
+
+
+def pipe_prefill_buffer(stream, data):
+    stream._buffer.append(data)
+    stream._buffer_size += len(data)
 
 
 @unittest.skipUnless(signal, 'Signals are not supported')
@@ -518,7 +567,7 @@ class UnixWritePipeTransportTests(test_utils.TestCase):
         tr.write(b'data')
         m_write.assert_called_with(5, b'data')
         self.assertFalse(self.loop.writers)
-        self.assertEqual([], tr._buffer)
+        self.assertSequenceEqual([], tr._buffer)
 
     @mock.patch('os.write')
     def test_write_no_data(self, m_write):
@@ -526,7 +575,7 @@ class UnixWritePipeTransportTests(test_utils.TestCase):
         tr.write(b'')
         self.assertFalse(m_write.called)
         self.assertFalse(self.loop.writers)
-        self.assertEqual([], tr._buffer)
+        self.assertSequenceEqual([], tr._buffer)
 
     @mock.patch('os.write')
     def test_write_partial(self, m_write):
@@ -535,17 +584,17 @@ class UnixWritePipeTransportTests(test_utils.TestCase):
         tr.write(b'data')
         m_write.assert_called_with(5, b'data')
         self.loop.assert_writer(5, tr._write_ready)
-        self.assertEqual([b'ta'], tr._buffer)
+        self.assertSequenceEqual([b'ta'], tr._buffer)
 
     @mock.patch('os.write')
     def test_write_buffer(self, m_write):
         tr = self.write_pipe_transport()
         self.loop.add_writer(5, tr._write_ready)
-        tr._buffer = [b'previous']
+        pipe_prefill_buffer(tr, b'previous')
         tr.write(b'data')
         self.assertFalse(m_write.called)
         self.loop.assert_writer(5, tr._write_ready)
-        self.assertEqual([b'previous', b'data'], tr._buffer)
+        self.assertSequenceEqual([b'previous', b'data'], tr._buffer)
 
     @mock.patch('os.write')
     def test_write_again(self, m_write):
@@ -554,7 +603,7 @@ class UnixWritePipeTransportTests(test_utils.TestCase):
         tr.write(b'data')
         m_write.assert_called_with(5, b'data')
         self.loop.assert_writer(5, tr._write_ready)
-        self.assertEqual([b'data'], tr._buffer)
+        self.assertSequenceEqual([b'data'], tr._buffer)
 
     @mock.patch('asyncio.unix_events.logger')
     @mock.patch('os.write')
@@ -566,7 +615,7 @@ class UnixWritePipeTransportTests(test_utils.TestCase):
         tr.write(b'data')
         m_write.assert_called_with(5, b'data')
         self.assertFalse(self.loop.writers)
-        self.assertEqual([], tr._buffer)
+        self.assertSequenceEqual([], tr._buffer)
         tr._fatal_error.assert_called_with(
                             err,
                             'Fatal write error on pipe transport')
@@ -602,98 +651,105 @@ class UnixWritePipeTransportTests(test_utils.TestCase):
         test_utils.run_briefly(self.loop)
         self.protocol.connection_lost.assert_called_with(None)
 
-    @mock.patch('os.write')
-    def test__write_ready(self, m_write):
-        tr = self.write_pipe_transport()
-        self.loop.add_writer(5, tr._write_ready)
-        tr._buffer = [b'da', b'ta']
-        m_write.return_value = 4
-        tr._write_ready()
-        m_write.assert_called_with(5, b'data')
-        self.assertFalse(self.loop.writers)
-        self.assertEqual([], tr._buffer)
+    def test__write_ready(self):
+        with patched_os_writev() as m_writev:
+            tr = self.write_pipe_transport()
+            self.loop.add_writer(5, tr._write_ready)
+            pipe_prefill_buffer(tr, b'da')
+            pipe_prefill_buffer(tr, b'ta')
+            m_writev.return_value = 4
+            tr._write_ready()
+            m_writev.assert_called_with(5, [b'da', b'ta'])
+            self.assertFalse(self.loop.writers)
+            self.assertSequenceEqual([], tr._buffer)
 
-    @mock.patch('os.write')
-    def test__write_ready_partial(self, m_write):
-        tr = self.write_pipe_transport()
-        self.loop.add_writer(5, tr._write_ready)
-        tr._buffer = [b'da', b'ta']
-        m_write.return_value = 3
-        tr._write_ready()
-        m_write.assert_called_with(5, b'data')
-        self.loop.assert_writer(5, tr._write_ready)
-        self.assertEqual([b'a'], tr._buffer)
+    def test__write_ready_partial(self):
+        with patched_os_writev() as m_writev:
+            tr = self.write_pipe_transport()
+            self.loop.add_writer(5, tr._write_ready)
+            pipe_prefill_buffer(tr, b'da')
+            pipe_prefill_buffer(tr, b'ta')
+            m_writev.return_value = 3
+            tr._write_ready()
+            m_writev.assert_called_with(5, [b'da', b'ta'])
+            self.loop.assert_writer(5, tr._write_ready)
+            self.assertSequenceEqual([b'a'], tr._buffer)
 
-    @mock.patch('os.write')
-    def test__write_ready_again(self, m_write):
-        tr = self.write_pipe_transport()
-        self.loop.add_writer(5, tr._write_ready)
-        tr._buffer = [b'da', b'ta']
-        m_write.side_effect = BlockingIOError()
-        tr._write_ready()
-        m_write.assert_called_with(5, b'data')
-        self.loop.assert_writer(5, tr._write_ready)
-        self.assertEqual([b'data'], tr._buffer)
+    def test__write_ready_again(self):
+        with patched_os_writev() as m_writev:
+            tr = self.write_pipe_transport()
+            self.loop.add_writer(5, tr._write_ready)
+            pipe_prefill_buffer(tr, b'da')
+            pipe_prefill_buffer(tr, b'ta')
+            m_writev.side_effect = BlockingIOError()
+            tr._write_ready()
+            m_writev.assert_called_with(5, [b'da', b'ta'])
+            self.loop.assert_writer(5, tr._write_ready)
+            self.assertSequenceEqual([b'da', b'ta'], tr._buffer)
 
-    @mock.patch('os.write')
-    def test__write_ready_empty(self, m_write):
-        tr = self.write_pipe_transport()
-        self.loop.add_writer(5, tr._write_ready)
-        tr._buffer = [b'da', b'ta']
-        m_write.return_value = 0
-        tr._write_ready()
-        m_write.assert_called_with(5, b'data')
-        self.loop.assert_writer(5, tr._write_ready)
-        self.assertEqual([b'data'], tr._buffer)
+    def test__write_ready_empty(self):
+        with patched_os_writev() as m_writev:
+            tr = self.write_pipe_transport()
+            self.loop.add_writer(5, tr._write_ready)
+            pipe_prefill_buffer(tr, b'da')
+            pipe_prefill_buffer(tr, b'ta')
+            m_writev.return_value = 0
+            tr._write_ready()
+            m_writev.assert_called_with(5, [b'da', b'ta'])
+            self.loop.assert_writer(5, tr._write_ready)
+            self.assertSequenceEqual([b'da', b'ta'], tr._buffer)
 
     @mock.patch('asyncio.log.logger.error')
-    @mock.patch('os.write')
-    def test__write_ready_err(self, m_write, m_logexc):
-        tr = self.write_pipe_transport()
-        self.loop.add_writer(5, tr._write_ready)
-        tr._buffer = [b'da', b'ta']
-        m_write.side_effect = err = OSError()
-        tr._write_ready()
-        m_write.assert_called_with(5, b'data')
-        self.assertFalse(self.loop.writers)
-        self.assertFalse(self.loop.readers)
-        self.assertEqual([], tr._buffer)
-        self.assertTrue(tr.is_closing())
-        m_logexc.assert_called_with(
-            test_utils.MockPattern(
-                'Fatal write error on pipe transport'
-                '\nprotocol:.*\ntransport:.*'),
-            exc_info=(OSError, MOCK_ANY, MOCK_ANY))
-        self.assertEqual(1, tr._conn_lost)
-        test_utils.run_briefly(self.loop)
-        self.protocol.connection_lost.assert_called_with(err)
+    def test__write_ready_err(self, m_logexc):
+        with patched_os_writev() as m_writev:
+            tr = self.write_pipe_transport()
+            self.loop.add_writer(5, tr._write_ready)
+            pipe_prefill_buffer(tr, b'da')
+            pipe_prefill_buffer(tr, b'ta')
+            m_writev.side_effect = err = OSError()
+            tr._write_ready()
+            m_writev.assert_called_with(5, [b'da', b'ta'])
+            self.assertFalse(self.loop.writers)
+            self.assertFalse(self.loop.readers)
+            self.assertSequenceEqual([], tr._buffer)
+            self.assertTrue(tr.is_closing())
+            m_logexc.assert_called_with(
+                test_utils.MockPattern(
+                    'Fatal write error on pipe transport'
+                    '\nprotocol:.*\ntransport:.*'),
+                exc_info=(OSError, MOCK_ANY, MOCK_ANY))
+            self.assertEqual(1, tr._conn_lost)
+            test_utils.run_briefly(self.loop)
+            self.protocol.connection_lost.assert_called_with(err)
 
-    @mock.patch('os.write')
-    def test__write_ready_closing(self, m_write):
-        tr = self.write_pipe_transport()
-        self.loop.add_writer(5, tr._write_ready)
-        tr._closing = True
-        tr._buffer = [b'da', b'ta']
-        m_write.return_value = 4
-        tr._write_ready()
-        m_write.assert_called_with(5, b'data')
-        self.assertFalse(self.loop.writers)
-        self.assertFalse(self.loop.readers)
-        self.assertEqual([], tr._buffer)
-        self.protocol.connection_lost.assert_called_with(None)
-        self.pipe.close.assert_called_with()
+    def test__write_ready_closing(self):
+        with patched_os_writev() as m_writev:
+            tr = self.write_pipe_transport()
+            self.loop.add_writer(5, tr._write_ready)
+            tr._closing = True
+            pipe_prefill_buffer(tr, b'da')
+            pipe_prefill_buffer(tr, b'ta')
+            m_writev.return_value = 4
+            tr._write_ready()
+            m_writev.assert_called_with(5, [b'da', b'ta'])
+            self.assertFalse(self.loop.writers)
+            self.assertFalse(self.loop.readers)
+            self.assertSequenceEqual([], tr._buffer)
+            self.protocol.connection_lost.assert_called_with(None)
+            self.pipe.close.assert_called_with()
 
     @mock.patch('os.write')
     def test_abort(self, m_write):
         tr = self.write_pipe_transport()
         self.loop.add_writer(5, tr._write_ready)
         self.loop.add_reader(5, tr._read_ready)
-        tr._buffer = [b'da', b'ta']
+        pipe_prefill_buffer(tr, b'da')
+        pipe_prefill_buffer(tr, b'ta')
         tr.abort()
         self.assertFalse(m_write.called)
         self.assertFalse(self.loop.readers)
         self.assertFalse(self.loop.writers)
-        self.assertEqual([], tr._buffer)
+        self.assertSequenceEqual([], tr._buffer)
         self.assertTrue(tr.is_closing())
         test_utils.run_briefly(self.loop)
         self.protocol.connection_lost.assert_called_with(None)
@@ -750,7 +806,7 @@ class UnixWritePipeTransportTests(test_utils.TestCase):
 
     def test_write_eof_pending(self):
         tr = self.write_pipe_transport()
-        tr._buffer = [b'data']
+        pipe_prefill_buffer(tr, b'data')
         tr.write_eof()
         self.assertTrue(tr.is_closing())
         self.assertFalse(self.protocol.connection_lost.called)

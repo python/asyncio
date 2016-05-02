@@ -39,6 +39,21 @@ def list_to_buffer(l=()):
     return bytearray().join(l)
 
 
+def dgram_prefill_buffer(stream, data, addr):
+    stream._buffer.append((data, addr))
+    stream._buffer_size += len(data)
+
+
+def ssl_prefill_buffer(stream, data):
+    stream._buffer.extend(data)
+    stream._buffer_size += len(data)
+
+
+def sock_prefill_buffer(stream, data):
+    stream._buffer.append(data)
+    stream._buffer_size += len(data)
+
+
 def close_transport(transport):
     # Don't call transport.close() because the event loop and the selector
     # are mocked
@@ -730,7 +745,7 @@ class SelectorTransportTests(test_utils.TestCase):
 
     def test_close_write_buffer(self):
         tr = self.create_transport()
-        tr._buffer.extend(b'data')
+        sock_prefill_buffer(tr, b'data')
         tr.close()
 
         self.assertFalse(self.loop.readers)
@@ -739,13 +754,13 @@ class SelectorTransportTests(test_utils.TestCase):
 
     def test_force_close(self):
         tr = self.create_transport()
-        tr._buffer.extend(b'1')
+        sock_prefill_buffer(tr, b'1')
         self.loop.add_reader(7, mock.sentinel)
         self.loop.add_writer(7, mock.sentinel)
         tr._force_close(None)
 
         self.assertTrue(tr.is_closing())
-        self.assertEqual(tr._buffer, list_to_buffer())
+        self.assertSequenceEqual([], tr._buffer)
         self.assertFalse(self.loop.readers)
         self.assertFalse(self.loop.writers)
 
@@ -925,18 +940,17 @@ class SelectorSocketTransportTests(test_utils.TestCase):
 
     def test_write_no_data(self):
         transport = self.socket_transport()
-        transport._buffer.extend(b'data')
+        sock_prefill_buffer(transport, b'data')
         transport.write(b'')
         self.assertFalse(self.sock.send.called)
-        self.assertEqual(list_to_buffer([b'data']), transport._buffer)
+        self.assertSequenceEqual([b'data'], transport._buffer)
 
     def test_write_buffer(self):
         transport = self.socket_transport()
-        transport._buffer.extend(b'data1')
+        sock_prefill_buffer(transport, b'data1')
         transport.write(b'data2')
         self.assertFalse(self.sock.send.called)
-        self.assertEqual(list_to_buffer([b'data1', b'data2']),
-                         transport._buffer)
+        self.assertSequenceEqual([b'data1', b'data2'], transport._buffer)
 
     def test_write_partial(self):
         data = b'data'
@@ -946,7 +960,7 @@ class SelectorSocketTransportTests(test_utils.TestCase):
         transport.write(data)
 
         self.loop.assert_writer(7, transport._write_ready)
-        self.assertEqual(list_to_buffer([b'ta']), transport._buffer)
+        self.assertSequenceEqual([b'ta'], transport._buffer)
 
     def test_write_partial_bytearray(self):
         data = bytearray(b'data')
@@ -956,7 +970,7 @@ class SelectorSocketTransportTests(test_utils.TestCase):
         transport.write(data)
 
         self.loop.assert_writer(7, transport._write_ready)
-        self.assertEqual(list_to_buffer([b'ta']), transport._buffer)
+        self.assertSequenceEqual([b'ta'], transport._buffer)
         self.assertEqual(data, bytearray(b'data'))  # Hasn't been mutated.
 
     def test_write_partial_memoryview(self):
@@ -967,7 +981,7 @@ class SelectorSocketTransportTests(test_utils.TestCase):
         transport.write(data)
 
         self.loop.assert_writer(7, transport._write_ready)
-        self.assertEqual(list_to_buffer([b'ta']), transport._buffer)
+        self.assertSequenceEqual([b'ta'], transport._buffer)
 
     def test_write_partial_none(self):
         data = b'data'
@@ -978,7 +992,7 @@ class SelectorSocketTransportTests(test_utils.TestCase):
         transport.write(data)
 
         self.loop.assert_writer(7, transport._write_ready)
-        self.assertEqual(list_to_buffer([b'data']), transport._buffer)
+        self.assertSequenceEqual([b'data'], transport._buffer)
 
     def test_write_tryagain(self):
         self.sock.send.side_effect = BlockingIOError
@@ -988,7 +1002,7 @@ class SelectorSocketTransportTests(test_utils.TestCase):
         transport.write(data)
 
         self.loop.assert_writer(7, transport._write_ready)
-        self.assertEqual(list_to_buffer([b'data']), transport._buffer)
+        self.assertSequenceEqual([b'data'], transport._buffer)
 
     @mock.patch('asyncio.selector_events.logger')
     def test_write_exception(self, m_log):
@@ -1026,25 +1040,25 @@ class SelectorSocketTransportTests(test_utils.TestCase):
 
     def test_write_ready(self):
         data = b'data'
-        self.sock.send.return_value = len(data)
+        self.sock.sendmsg.return_value = len(data)
 
         transport = self.socket_transport()
-        transport._buffer.extend(data)
+        sock_prefill_buffer(transport, data)
         self.loop.add_writer(7, transport._write_ready)
         transport._write_ready()
-        self.assertTrue(self.sock.send.called)
+        self.assertTrue(self.sock.sendmsg.called)
         self.assertFalse(self.loop.writers)
 
     def test_write_ready_closing(self):
         data = b'data'
-        self.sock.send.return_value = len(data)
+        self.sock.sendmsg.return_value = len(data)
 
         transport = self.socket_transport()
         transport._closing = True
-        transport._buffer.extend(data)
+        sock_prefill_buffer(transport, data)
         self.loop.add_writer(7, transport._write_ready)
         transport._write_ready()
-        self.assertTrue(self.sock.send.called)
+        self.assertTrue(self.sock.sendmsg.called)
         self.assertFalse(self.loop.writers)
         self.sock.close.assert_called_with()
         self.protocol.connection_lost.assert_called_with(None)
@@ -1056,43 +1070,44 @@ class SelectorSocketTransportTests(test_utils.TestCase):
 
     def test_write_ready_partial(self):
         data = b'data'
-        self.sock.send.return_value = 2
+        self.sock.sendmsg.return_value = 2
 
         transport = self.socket_transport()
-        transport._buffer.extend(data)
+        sock_prefill_buffer(transport, data)
         self.loop.add_writer(7, transport._write_ready)
         transport._write_ready()
         self.loop.assert_writer(7, transport._write_ready)
-        self.assertEqual(list_to_buffer([b'ta']), transport._buffer)
+        self.assertSequenceEqual([b'ta'], transport._buffer)
 
     def test_write_ready_partial_none(self):
         data = b'data'
-        self.sock.send.return_value = 0
+        self.sock.sendmsg.return_value = 0
 
         transport = self.socket_transport()
-        transport._buffer.extend(data)
+        sock_prefill_buffer(transport, data)
         self.loop.add_writer(7, transport._write_ready)
         transport._write_ready()
         self.loop.assert_writer(7, transport._write_ready)
-        self.assertEqual(list_to_buffer([b'data']), transport._buffer)
+        self.assertSequenceEqual([b'data'], transport._buffer)
 
     def test_write_ready_tryagain(self):
-        self.sock.send.side_effect = BlockingIOError
+        self.sock.sendmsg.side_effect = BlockingIOError
 
         transport = self.socket_transport()
-        transport._buffer = list_to_buffer([b'data1', b'data2'])
+        sock_prefill_buffer(transport, b'data1')
+        sock_prefill_buffer(transport, b'data2')
         self.loop.add_writer(7, transport._write_ready)
         transport._write_ready()
 
         self.loop.assert_writer(7, transport._write_ready)
-        self.assertEqual(list_to_buffer([b'data1data2']), transport._buffer)
+        self.assertSequenceEqual([b'data1', b'data2'], transport._buffer)
 
     def test_write_ready_exception(self):
-        err = self.sock.send.side_effect = OSError()
+        err = self.sock.sendmsg.side_effect = OSError()
 
         transport = self.socket_transport()
         transport._fatal_error = mock.Mock()
-        transport._buffer.extend(b'data')
+        sock_prefill_buffer(transport, b'data')
         transport._write_ready()
         transport._fatal_error.assert_called_with(
                                    err,
@@ -1112,12 +1127,12 @@ class SelectorSocketTransportTests(test_utils.TestCase):
         self.sock.send.side_effect = BlockingIOError
         tr.write(b'data')
         tr.write_eof()
-        self.assertEqual(tr._buffer, list_to_buffer([b'data']))
+        self.assertSequenceEqual([b'data'], tr._buffer)
         self.assertTrue(tr._eof)
         self.assertFalse(self.sock.shutdown.called)
-        self.sock.send.side_effect = lambda _: 4
+        self.sock.sendmsg.side_effect = lambda _: 4
         tr._write_ready()
-        self.assertTrue(self.sock.send.called)
+        self.assertTrue(self.sock.sendmsg.called)
         self.sock.shutdown.assert_called_with(socket.SHUT_WR)
         tr.close()
 
@@ -1246,7 +1261,7 @@ class SelectorSslTransportTests(test_utils.TestCase):
 
     def test_write_no_data(self):
         transport = self._make_one()
-        transport._buffer.extend(b'data')
+        ssl_prefill_buffer(transport, b'data')
         transport.write(b'')
         self.assertEqual(list_to_buffer([b'data']), transport._buffer)
 
@@ -1286,7 +1301,7 @@ class SelectorSslTransportTests(test_utils.TestCase):
         transport = self._make_one()
         transport._write_wants_read = True
         transport._write_ready = mock.Mock()
-        transport._buffer.extend(b'data')
+        ssl_prefill_buffer(transport, b'data')
         transport._read_ready()
 
         self.assertFalse(transport._write_wants_read)
@@ -1350,7 +1365,7 @@ class SelectorSslTransportTests(test_utils.TestCase):
     def test_write_ready_send(self):
         self.sslsock.send.return_value = 4
         transport = self._make_one()
-        transport._buffer = list_to_buffer([b'data'])
+        ssl_prefill_buffer(transport, b'data')
         transport._write_ready()
         self.assertEqual(list_to_buffer(), transport._buffer)
         self.assertTrue(self.sslsock.send.called)
@@ -1358,7 +1373,8 @@ class SelectorSslTransportTests(test_utils.TestCase):
     def test_write_ready_send_none(self):
         self.sslsock.send.return_value = 0
         transport = self._make_one()
-        transport._buffer = list_to_buffer([b'data1', b'data2'])
+        ssl_prefill_buffer(transport, b'data1')
+        ssl_prefill_buffer(transport, b'data2')
         transport._write_ready()
         self.assertTrue(self.sslsock.send.called)
         self.assertEqual(list_to_buffer([b'data1data2']), transport._buffer)
@@ -1366,7 +1382,8 @@ class SelectorSslTransportTests(test_utils.TestCase):
     def test_write_ready_send_partial(self):
         self.sslsock.send.return_value = 2
         transport = self._make_one()
-        transport._buffer = list_to_buffer([b'data1', b'data2'])
+        ssl_prefill_buffer(transport, b'data1')
+        ssl_prefill_buffer(transport, b'data2')
         transport._write_ready()
         self.assertTrue(self.sslsock.send.called)
         self.assertEqual(list_to_buffer([b'ta1data2']), transport._buffer)
@@ -1374,7 +1391,8 @@ class SelectorSslTransportTests(test_utils.TestCase):
     def test_write_ready_send_closing_partial(self):
         self.sslsock.send.return_value = 2
         transport = self._make_one()
-        transport._buffer = list_to_buffer([b'data1', b'data2'])
+        ssl_prefill_buffer(transport, b'data1')
+        ssl_prefill_buffer(transport, b'data2')
         transport._write_ready()
         self.assertTrue(self.sslsock.send.called)
         self.assertFalse(self.sslsock.close.called)
@@ -1382,7 +1400,7 @@ class SelectorSslTransportTests(test_utils.TestCase):
     def test_write_ready_send_closing(self):
         self.sslsock.send.return_value = 4
         transport = self._make_one()
-        transport._buffer = list_to_buffer([b'data'])
+        ssl_prefill_buffer(transport, b'data')
         transport.close()
         transport._write_ready()
         self.protocol.connection_lost.assert_called_with(None)
@@ -1391,14 +1409,13 @@ class SelectorSslTransportTests(test_utils.TestCase):
         self.sslsock.send.return_value = 4
         call_soon = self.loop.call_soon = mock.Mock()
         transport = self._make_one()
-        transport._buffer = list_to_buffer()
         transport.close()
         transport._write_ready()
         call_soon.assert_called_with(transport._call_connection_lost, None)
 
     def test_write_ready_send_retry(self):
         transport = self._make_one()
-        transport._buffer = list_to_buffer([b'data'])
+        ssl_prefill_buffer(transport, b'data')
 
         self.sslsock.send.side_effect = ssl.SSLWantWriteError
         transport._write_ready()
@@ -1410,7 +1427,7 @@ class SelectorSslTransportTests(test_utils.TestCase):
 
     def test_write_ready_send_read(self):
         transport = self._make_one()
-        transport._buffer = list_to_buffer([b'data'])
+        ssl_prefill_buffer(transport, b'data')
 
         self.loop.remove_writer = mock.Mock()
         self.sslsock.send.side_effect = ssl.SSLWantReadError
@@ -1423,7 +1440,7 @@ class SelectorSslTransportTests(test_utils.TestCase):
         err = self.sslsock.send.side_effect = OSError()
 
         transport = self._make_one()
-        transport._buffer = list_to_buffer([b'data'])
+        ssl_prefill_buffer(transport, b'data')
         transport._fatal_error = mock.Mock()
         transport._write_ready()
         transport._fatal_error.assert_called_with(
@@ -1571,45 +1588,45 @@ class SelectorDatagramTransportTests(test_utils.TestCase):
 
     def test_sendto_no_data(self):
         transport = self.datagram_transport()
-        transport._buffer.append((b'data', ('0.0.0.0', 12345)))
+        dgram_prefill_buffer(transport, b'data', ('0.0.0.0', 12345))
         transport.sendto(b'', ())
         self.assertFalse(self.sock.sendto.called)
-        self.assertEqual(
-            [(b'data', ('0.0.0.0', 12345))], list(transport._buffer))
+        self.assertSequenceEqual(
+            [(b'data', ('0.0.0.0', 12345))], transport._buffer)
 
     def test_sendto_buffer(self):
         transport = self.datagram_transport()
-        transport._buffer.append((b'data1', ('0.0.0.0', 12345)))
+        dgram_prefill_buffer(transport, b'data1', ('0.0.0.0', 12345))
         transport.sendto(b'data2', ('0.0.0.0', 12345))
         self.assertFalse(self.sock.sendto.called)
-        self.assertEqual(
+        self.assertSequenceEqual(
             [(b'data1', ('0.0.0.0', 12345)),
              (b'data2', ('0.0.0.0', 12345))],
-            list(transport._buffer))
+            transport._buffer)
 
     def test_sendto_buffer_bytearray(self):
         data2 = bytearray(b'data2')
         transport = self.datagram_transport()
-        transport._buffer.append((b'data1', ('0.0.0.0', 12345)))
+        dgram_prefill_buffer(transport, b'data1', ('0.0.0.0', 12345))
         transport.sendto(data2, ('0.0.0.0', 12345))
         self.assertFalse(self.sock.sendto.called)
-        self.assertEqual(
+        self.assertSequenceEqual(
             [(b'data1', ('0.0.0.0', 12345)),
              (b'data2', ('0.0.0.0', 12345))],
-            list(transport._buffer))
-        self.assertIsInstance(transport._buffer[1][0], bytes)
+            transport._buffer)
+        self.assertIsInstance(transport._buffer[1][0], bytearray)
 
     def test_sendto_buffer_memoryview(self):
         data2 = memoryview(b'data2')
         transport = self.datagram_transport()
-        transport._buffer.append((b'data1', ('0.0.0.0', 12345)))
+        dgram_prefill_buffer(transport, b'data1', ('0.0.0.0', 12345))
         transport.sendto(data2, ('0.0.0.0', 12345))
         self.assertFalse(self.sock.sendto.called)
-        self.assertEqual(
+        self.assertSequenceEqual(
             [(b'data1', ('0.0.0.0', 12345)),
              (b'data2', ('0.0.0.0', 12345))],
-            list(transport._buffer))
-        self.assertIsInstance(transport._buffer[1][0], bytes)
+            transport._buffer)
+        self.assertIsInstance(transport._buffer[1][0], memoryview)
 
     def test_sendto_tryagain(self):
         data = b'data'
@@ -1620,8 +1637,8 @@ class SelectorDatagramTransportTests(test_utils.TestCase):
         transport.sendto(data, ('0.0.0.0', 12345))
 
         self.loop.assert_writer(7, transport._sendto_ready)
-        self.assertEqual(
-            [(b'data', ('0.0.0.0', 12345))], list(transport._buffer))
+        self.assertSequenceEqual(
+            [(b'data', ('0.0.0.0', 12345))], transport._buffer)
 
     @mock.patch('asyncio.selector_events.logger')
     def test_sendto_exception(self, m_log):
@@ -1691,7 +1708,7 @@ class SelectorDatagramTransportTests(test_utils.TestCase):
         self.sock.sendto.return_value = len(data)
 
         transport = self.datagram_transport()
-        transport._buffer.append((data, ('0.0.0.0', 12345)))
+        dgram_prefill_buffer(transport, data, ('0.0.0.0', 12345))
         self.loop.add_writer(7, transport._sendto_ready)
         transport._sendto_ready()
         self.assertTrue(self.sock.sendto.called)
@@ -1705,7 +1722,7 @@ class SelectorDatagramTransportTests(test_utils.TestCase):
 
         transport = self.datagram_transport()
         transport._closing = True
-        transport._buffer.append((data, ()))
+        dgram_prefill_buffer(transport, data, ())
         self.loop.add_writer(7, transport._sendto_ready)
         transport._sendto_ready()
         self.sock.sendto.assert_called_with(data, ())
@@ -1724,21 +1741,22 @@ class SelectorDatagramTransportTests(test_utils.TestCase):
         self.sock.sendto.side_effect = BlockingIOError
 
         transport = self.datagram_transport()
-        transport._buffer.extend([(b'data1', ()), (b'data2', ())])
+        dgram_prefill_buffer(transport, b'data1', ())
+        dgram_prefill_buffer(transport, b'data2', ())
         self.loop.add_writer(7, transport._sendto_ready)
         transport._sendto_ready()
 
         self.loop.assert_writer(7, transport._sendto_ready)
-        self.assertEqual(
+        self.assertSequenceEqual(
             [(b'data1', ()), (b'data2', ())],
-            list(transport._buffer))
+            transport._buffer)
 
     def test_sendto_ready_exception(self):
         err = self.sock.sendto.side_effect = RuntimeError()
 
         transport = self.datagram_transport()
         transport._fatal_error = mock.Mock()
-        transport._buffer.append((b'data', ()))
+        dgram_prefill_buffer(transport, b'data', ())
         transport._sendto_ready()
 
         transport._fatal_error.assert_called_with(
@@ -1750,7 +1768,7 @@ class SelectorDatagramTransportTests(test_utils.TestCase):
 
         transport = self.datagram_transport()
         transport._fatal_error = mock.Mock()
-        transport._buffer.append((b'data', ()))
+        dgram_prefill_buffer(transport, b'data', ())
         transport._sendto_ready()
 
         self.assertFalse(transport._fatal_error.called)
@@ -1760,7 +1778,7 @@ class SelectorDatagramTransportTests(test_utils.TestCase):
 
         transport = self.datagram_transport(address=('0.0.0.0', 1))
         transport._fatal_error = mock.Mock()
-        transport._buffer.append((b'data', ()))
+        dgram_prefill_buffer(transport, b'data', ())
         transport._sendto_ready()
 
         self.assertFalse(transport._fatal_error.called)

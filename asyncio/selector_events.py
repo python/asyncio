@@ -9,6 +9,7 @@ __all__ = ['BaseSelectorEventLoop']
 import collections
 import errno
 import functools
+import itertools
 import socket
 import warnings
 try:
@@ -502,7 +503,8 @@ class _SelectorTransport(transports._FlowControlMixin,
 
     max_size = 256 * 1024  # Buffer size passed to recv().
 
-    _buffer_factory = bytearray  # Constructs initial value for self._buffer.
+    # Constructs initial value for self._buffer.
+    _buffer_factory = collections.deque
 
     # Attribute used in the destructor: it must be set even if the constructor
     # is not called (see _SelectorSslTransport which may start by raising an
@@ -524,6 +526,7 @@ class _SelectorTransport(transports._FlowControlMixin,
         self._protocol_connected = True
         self._server = server
         self._buffer = self._buffer_factory()
+        self._buffer_size = 0  # Cached count of bytes in buffer
         self._conn_lost = 0  # Set when call to connection_lost scheduled.
         self._closing = False  # Set when close() called.
         if self._server is not None:
@@ -569,6 +572,7 @@ class _SelectorTransport(transports._FlowControlMixin,
         self._closing = True
         self._loop.remove_reader(self._sock_fd)
         if not self._buffer:
+            assert self._buffer_size == 0
             self._conn_lost += 1
             self._loop.remove_writer(self._sock_fd)
             self._loop.call_soon(self._call_connection_lost, None)
@@ -600,7 +604,9 @@ class _SelectorTransport(transports._FlowControlMixin,
         if self._conn_lost:
             return
         if self._buffer:
+            assert self._buffer_size > 0
             self._buffer.clear()
+            self._buffer_size = 0
             self._loop.remove_writer(self._sock_fd)
         if not self._closing:
             self._closing = True
@@ -623,7 +629,7 @@ class _SelectorTransport(transports._FlowControlMixin,
                 self._server = None
 
     def get_write_buffer_size(self):
-        return len(self._buffer)
+        return self._buffer_size
 
 
 class _SelectorSocketTransport(_SelectorTransport):
@@ -703,6 +709,7 @@ class _SelectorSocketTransport(_SelectorTransport):
             return
 
         if not self._buffer:
+            assert self._buffer_size == 0
             # Optimization: try to send now.
             try:
                 n = self._sock.send(data)
@@ -712,45 +719,94 @@ class _SelectorSocketTransport(_SelectorTransport):
                 self._fatal_error(exc, 'Fatal write error on socket transport')
                 return
             else:
-                data = data[n:]
-                if not data:
+                if n == len(data):
                     return
+                if n > 0:
+                    # memoryview is required to eliminate memory copying while
+                    # slicing. "unused" memory will be freed when this chunk is
+                    # completely written
+                    if not isinstance(data, memoryview):
+                        data = memoryview(data)
+                    data = data[n:]
+
             # Not all was written; register write handler.
             self._loop.add_writer(self._sock_fd, self._write_ready)
 
         # Add it to the buffer.
-        self._buffer.extend(data)
+        self._buffer.append(data)
+        self._buffer_size += len(data)
         self._maybe_pause_protocol()
 
     def _write_ready(self):
-        assert self._buffer, 'Data should not be empty'
+        assert self._buffer and self._buffer_size > 0, 'Data must not be empty'
 
         if self._conn_lost:
             return
         try:
-            n = self._sock.send(self._buffer)
+            # Note, this is not length in bytes, it is count of chunks in
+            # buffer
+            if len(self._buffer) > compat.SC_IOV_MAX:
+                # In order to minimize syscalls used for IO, we should call
+                # sendmsg() again and again until self._buffer is sent,
+                # or sendmsg() say that only part of requested data is sent.
+                # This will make code more complex. Instead, we assume that
+                # unsent part of self._buffer will be sent on next event loop
+                # iteration, even if one can be sent right now.
+                # According to benchmarking, this minor misoptimization does
+                # not hurt much.
+                buffers = itertools.islice(self._buffer, 0, compat.SC_IOV_MAX)
+            else:
+                buffers = self._buffer
+            n = self._sock.sendmsg(buffers)
         except (BlockingIOError, InterruptedError):
-            pass
+            return
         except Exception as exc:
             self._loop.remove_writer(self._sock_fd)
             self._buffer.clear()
+            self._buffer_size = 0
             self._fatal_error(exc, 'Fatal write error on socket transport')
-        else:
-            if n:
-                del self._buffer[:n]
-            self._maybe_resume_protocol()  # May append to buffer.
-            if not self._buffer:
-                self._loop.remove_writer(self._sock_fd)
-                if self._closing:
-                    self._call_connection_lost(None)
-                elif self._eof:
-                    self._sock.shutdown(socket.SHUT_WR)
+            return
+
+        assert 0 <= n <= self._buffer_size
+
+        while n > 0:
+            chunk = self._buffer.popleft()
+            chunk_len = len(chunk)
+            self._buffer_size -= chunk_len
+            n -= chunk_len
+
+        if n < 0:
+            # only part of chunk was written, so push unread part of it
+            # back to _buffer.
+            # memoryview is required to eliminate memory copying while
+            # slicing. "unused" memory will be freed when this chunk is
+            # completely written
+            if not isinstance(chunk, memoryview):
+                chunk = memoryview(chunk)
+            chunk = chunk[n:]
+            self._buffer.appendleft(chunk)
+            self._buffer_size += len(chunk)
+
+        self._maybe_resume_protocol()  # May append to buffer.
+
+        if self._buffer:
+            assert self._buffer_size > 0
+            return
+
+        assert self._buffer_size == 0
+
+        self._loop.remove_writer(self._sock_fd)
+        if self._closing:
+            self._call_connection_lost(None)
+        elif self._eof:
+            self._sock.shutdown(socket.SHUT_WR)
 
     def write_eof(self):
         if self._eof:
             return
         self._eof = True
         if not self._buffer:
+            assert self._buffer_size == 0
             self._sock.shutdown(socket.SHUT_WR)
 
     def can_write_eof(self):
@@ -759,6 +815,8 @@ class _SelectorSocketTransport(_SelectorTransport):
 
 class _SelectorSslTransport(_SelectorTransport):
 
+    # Unfortunatelly, SSLSocket does not provide neither sendmsg() nor writev()
+    # TODO: benchmark merging buffers in SSL socket as opposed to in Python
     _buffer_factory = bytearray
 
     def __init__(self, loop, rawsock, protocol, sslcontext, waiter=None,
@@ -904,6 +962,7 @@ class _SelectorSslTransport(_SelectorTransport):
             self._write_ready()
 
             if self._buffer:
+                assert self._buffer_size > 0
                 self._loop.add_writer(self._sock_fd, self._write_ready)
 
         try:
@@ -941,6 +1000,7 @@ class _SelectorSslTransport(_SelectorTransport):
                 self._loop.add_reader(self._sock_fd, self._read_ready)
 
         if self._buffer:
+            assert self._buffer_size > 0
             try:
                 n = self._sock.send(self._buffer)
             except (BlockingIOError, InterruptedError, ssl.SSLWantWriteError):
@@ -952,15 +1012,20 @@ class _SelectorSslTransport(_SelectorTransport):
             except Exception as exc:
                 self._loop.remove_writer(self._sock_fd)
                 self._buffer.clear()
+                self._buffer_size = 0
                 self._fatal_error(exc, 'Fatal write error on SSL transport')
                 return
 
+            assert 0 <= n <= self._buffer_size
+
             if n:
                 del self._buffer[:n]
+                self._buffer_size -= n
 
         self._maybe_resume_protocol()  # May append to buffer.
 
         if not self._buffer:
+            assert self._buffer_size == 0
             self._loop.remove_writer(self._sock_fd)
             if self._closing:
                 self._call_connection_lost(None)
@@ -979,10 +1044,12 @@ class _SelectorSslTransport(_SelectorTransport):
             return
 
         if not self._buffer:
+            assert self._buffer_size == 0
             self._loop.add_writer(self._sock_fd, self._write_ready)
 
         # Add it to the buffer.
         self._buffer.extend(data)
+        self._buffer_size += len(data)
         self._maybe_pause_protocol()
 
     def can_write_eof(self):
@@ -990,8 +1057,6 @@ class _SelectorSslTransport(_SelectorTransport):
 
 
 class _SelectorDatagramTransport(_SelectorTransport):
-
-    _buffer_factory = collections.deque
 
     def __init__(self, loop, sock, protocol, address=None,
                  waiter=None, extra=None):
@@ -1005,9 +1070,6 @@ class _SelectorDatagramTransport(_SelectorTransport):
             # only wake up the waiter when connection_made() has been called
             self._loop.call_soon(futures._set_result_unless_cancelled,
                                  waiter, None)
-
-    def get_write_buffer_size(self):
-        return sum(len(data) for data, _ in self._buffer)
 
     def _read_ready(self):
         if self._conn_lost:
@@ -1041,6 +1103,7 @@ class _SelectorDatagramTransport(_SelectorTransport):
             return
 
         if not self._buffer:
+            assert self._buffer_size == 0
             # Attempt to send it right away first.
             try:
                 if self._address:
@@ -1058,13 +1121,18 @@ class _SelectorDatagramTransport(_SelectorTransport):
                                   'Fatal write error on datagram transport')
                 return
 
-        # Ensure that what we buffer is immutable.
-        self._buffer.append((bytes(data), addr))
+        self._buffer.append((data, addr))
+        self._buffer_size += len(data)
         self._maybe_pause_protocol()
 
     def _sendto_ready(self):
+        # Python 3.5 does not exports sendmmsg() syscall
+        # http://bugs.python.org/issue27022
+        # So we use own loop instead of in-kernel one.
         while self._buffer:
+            assert self._buffer_size > 0
             data, addr = self._buffer.popleft()
+            self._buffer_size -= len(data)
             try:
                 if self._address:
                     self._sock.send(data)
@@ -1072,6 +1140,7 @@ class _SelectorDatagramTransport(_SelectorTransport):
                     self._sock.sendto(data, addr)
             except (BlockingIOError, InterruptedError):
                 self._buffer.appendleft((data, addr))  # Try again later.
+                self._buffer_size += len(data)
                 break
             except OSError as exc:
                 self._protocol.error_received(exc)
@@ -1083,6 +1152,7 @@ class _SelectorDatagramTransport(_SelectorTransport):
 
         self._maybe_resume_protocol()  # May append to buffer.
         if not self._buffer:
+            assert self._buffer_size == 0
             self._loop.remove_writer(self._sock_fd)
             if self._closing:
                 self._call_connection_lost(None)

@@ -16,6 +16,9 @@ import sys
 EVENT_READ = (1 << 0)
 EVENT_WRITE = (1 << 1)
 
+# flag used by bitwise OR.  It may be ignored in unsupported platforms.
+EVENT_EXCLUSIVE = (1 << 2)
+
 
 def _fileobj_to_fd(fileobj):
     """Return a file descriptor from a file object.
@@ -391,6 +394,8 @@ if hasattr(select, 'poll'):
 
 if hasattr(select, 'epoll'):
 
+    _EPOLLEXCLUSIVE = (1 << 28)  # old Linux (~4.4) ignores this flag.
+
     class EpollSelector(_BaseSelectorImpl):
         """Epoll-based selector."""
 
@@ -408,6 +413,8 @@ if hasattr(select, 'epoll'):
                 epoll_events |= select.EPOLLIN
             if events & EVENT_WRITE:
                 epoll_events |= select.EPOLLOUT
+            if events & EVENT_EXCLUSIVE:
+                epoll_events |= _EPOLLEXCLUSIVE
             self._epoll.register(key.fd, epoll_events)
             return key
 

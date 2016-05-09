@@ -64,6 +64,30 @@ class BaseSelectorTestCase(unittest.TestCase):
         self.assertRaises(KeyError, s.register, rd.fileno(),
                           selectors.EVENT_READ)
 
+    def test_register_exclusive(self):
+        s = self.SELECTOR()
+        self.addCleanup(s.close)
+
+        rd, wr = self.make_socketpair()
+
+        key = s.register(rd, selectors.EVENT_READ | selectors.EVENT_EXCLUSIVE,
+                         "data")
+        self.assertIsInstance(key, selectors.SelectorKey)
+        self.assertEqual(key.fileobj, rd)
+        self.assertEqual(key.fd, rd.fileno())
+        self.assertEqual(key.events,
+                         selectors.EVENT_READ | selectors.EVENT_EXCLUSIVE)
+        self.assertEqual(key.data, "data")
+
+        key = s.register(wr, selectors.EVENT_WRITE | selectors.EVENT_EXCLUSIVE,
+                         "data2")
+        self.assertIsInstance(key, selectors.SelectorKey)
+        self.assertEqual(key.fileobj, wr)
+        self.assertEqual(key.fd, wr.fileno())
+        self.assertEqual(key.events,
+                         selectors.EVENT_WRITE | selectors.EVENT_EXCLUSIVE)
+        self.assertEqual(key.data, "data2")
+
     def test_unregister(self):
         s = self.SELECTOR()
         self.addCleanup(s.close)

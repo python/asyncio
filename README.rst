@@ -69,13 +69,13 @@ To run coverage (coverage package is required)::
 
     make coverage
 
-On Windows, things are a little more complicated.  Assume 'P' is your
-Python binary (for example C:\Python33\python.exe).
+On Windows, things are a little more complicated.  Assume ``P`` is your
+Python binary (for example ``C:\Python33\python.exe``).
 
 You must first build the _overlapped.pyd extension and have it placed
-in the asyncio directory, as follows:
+in the asyncio directory, as follows::
 
-    C> P setup.py build_ext --inplace
+    C:\> P setup.py build_ext --inplace
 
 If this complains about vcvars.bat, you probably don't have the
 required version of Visual Studio installed.  Compiling extensions for
@@ -85,11 +85,10 @@ http://www.visualstudio.com/downloads (scroll down to Visual C++ 2010
 Express).
 
 Once you have built the _overlapped.pyd extension successfully you can
-run the tests as follows:
+run the tests as follows::
 
-    C> P runtests.py
+    C:\> P runtests.py
 
-And coverage as follows:
+And coverage as follows::
 
-    C> P runtests.py --coverage
-
+    C:\> P runtests.py --coverage

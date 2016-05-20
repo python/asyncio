@@ -138,6 +138,10 @@ class BaseEventTests(test_utils.TestCase):
             (INET, STREAM, TCP, '', ('1.2.3.4', 1)),
             base_events._ipaddr_info('1.2.3.4', '1', INET, STREAM, TCP))
 
+        self.assertEqual(
+            (INET, STREAM, TCP, '', ('1.2.3.4', 1)),
+            base_events._ipaddr_info('1.2.3.4', b'1', INET, STREAM, TCP))
+
     @patch_socket
     def test_ipaddr_info_no_inet_pton(self, m_socket):
         del m_socket.inet_pton

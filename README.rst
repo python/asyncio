@@ -1,3 +1,6 @@
+.. image:: https://travis-ci.org/python/asyncio.svg?branch=master
+    :target: https://travis-ci.org/python/asyncio
+
 The asyncio module provides infrastructure for writing single-threaded
 concurrent code using coroutines, multiplexing I/O access over sockets and
 other resources, running network clients and servers, and other related

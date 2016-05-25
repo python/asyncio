@@ -16,6 +16,8 @@ import subprocess
 import sys
 import threading
 import traceback
+import warnings
+import contextlib
 
 from asyncio import compat
 
@@ -507,28 +509,52 @@ class AbstractEventLoop:
     def set_debug(self, enabled):
         raise NotImplementedError
 
+    # Running context
+
+    def _running_context(self):
+        return get_event_loop_policy().running_loop_context(self)
+
 
 class AbstractEventLoopPolicy:
     """Abstract policy for accessing the event loop."""
 
-    def get_event_loop(self):
-        """Get the event loop for the current context.
+    def get_default_loop(self):
+        """Get the default event loop for the current context.
 
         Returns an event loop object implementing the BaseEventLoop interface,
         or raises an exception in case no event loop has been set for the
         current context and the current policy does not specify to create one.
 
-        It should never return None."""
+        It should never return None.
+        """
         raise NotImplementedError
 
-    def set_event_loop(self, loop):
-        """Set the event loop for the current context to loop."""
+    def set_default_loop(self, loop):
+        """Set the default event loop for the current context to loop."""
+        raise NotImplementedError
+
+    def get_running_loop(self):
+        """Get the running event loop running for the current context, if any.
+
+        Returns an event loop object implementing the BaseEventLoop interface.
+        If no running loop is set, it returns None.
+        """
+        raise NotImplementedError
+
+    def set_running_loop(self, loop):
+        """Set the running event loop for the current context.
+
+        The loop argument can be None to clear the former running loop.
+        This method should be called by the event loop itself to set the
+        running loop when it starts, and clear it when it's done.
+        """
         raise NotImplementedError
 
     def new_event_loop(self):
         """Create and return a new event loop object according to this
-        policy's rules. If there's need to set this loop as the event loop for
-        the current context, set_event_loop must be called explicitly."""
+        policy's rules. If there's need to set this loop as the default loop
+        for the current context, set_event_loop must be called explicitly.
+        """
         raise NotImplementedError
 
     # Child processes handling (Unix only).
@@ -540,6 +566,37 @@ class AbstractEventLoopPolicy:
     def set_child_watcher(self, watcher):
         """Set the watcher for child processes."""
         raise NotImplementedError
+
+    # Non-abstract methods
+
+    def get_event_loop(self):
+        """Return the running event loop if any, and the default event
+        loop otherwise.
+        """
+        running_loop = self.get_running_loop()
+        if running_loop is not None:
+            return running_loop
+        return self.get_default_loop()
+
+    def set_event_loop(self, loop):
+        """Set the default event loop if the former loop is not currently
+        running.
+        """
+        if self.get_running_loop() is not None:
+            raise RuntimeError('The former loop is currently running')
+        self.set_default_loop(loop)
+
+    @contextlib.contextmanager
+    def running_loop_context(self, loop):
+        """Convenience context to set and clear the given loop as running
+        loop. It is meant to be used inside the loop run methods.
+        """
+        assert isinstance(loop, AbstractEventLoop)
+        self.set_running_loop(loop)
+        try:
+            yield
+        finally:
+            self.set_running_loop(None)
 
 
 class BaseDefaultEventLoopPolicy(AbstractEventLoopPolicy):
@@ -556,16 +613,23 @@ class BaseDefaultEventLoopPolicy(AbstractEventLoopPolicy):
     """
 
     _loop_factory = None
+    _warnings = True
 
     class _Local(threading.local):
         _loop = None
+        _running_loop = None
         _set_called = False
 
     def __init__(self):
         self._local = self._Local()
 
-    def get_event_loop(self):
-        """Get the event loop.
+    def warn(self, *args):
+        if self._warnings:
+            raise RuntimeError(*args)
+            warnings.warn(*args)
+
+    def get_default_loop(self):
+        """Get the default event loop for the current thread.
 
         This may be None or an instance of EventLoop.
         """
@@ -578,11 +642,37 @@ class BaseDefaultEventLoopPolicy(AbstractEventLoopPolicy):
                                % threading.current_thread().name)
         return self._local._loop
 
-    def set_event_loop(self, loop):
-        """Set the event loop."""
+    def set_default_loop(self, loop):
+        """Set the default event loop for the current thread."""
         self._local._set_called = True
         assert loop is None or isinstance(loop, AbstractEventLoop)
         self._local._loop = loop
+
+    def get_running_loop(self):
+        """Get the running event loop for the current thread if any.
+
+        This may be None or an instance of EventLoop.
+        """
+        return self._local._running_loop
+
+    def set_running_loop(self, loop):
+        """Set the running event loop for the current thread."""
+        assert loop is None or isinstance(loop, AbstractEventLoop)
+        default_loop = self._local._loop
+        running_loop = self._local._running_loop
+        if running_loop is not None and loop is not None:
+            raise RuntimeError('A loop is already running')
+        # Warnings
+        if loop is not None:
+            if default_loop is None:
+                self.warn(
+                    'Running a loop with no default loop set',
+                    RuntimeWarning)
+            elif loop != default_loop:
+                self.warn(
+                    'Running a loop different from the default loop',
+                    RuntimeWarning)
+        self._local._running_loop = loop
 
     def new_event_loop(self):
         """Create a new event loop.

@@ -342,10 +342,11 @@ class BaseEventLoop(events.AbstractEventLoop):
         self._set_coroutine_wrapper(self._debug)
         self._thread_id = threading.get_ident()
         try:
-            while True:
-                self._run_once()
-                if self._stopping:
-                    break
+            with self._running_context():
+                while True:
+                    self._run_once()
+                    if self._stopping:
+                        break
         finally:
             self._stopping = False
             self._thread_id = None

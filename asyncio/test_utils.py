@@ -407,6 +407,8 @@ class TestCase(unittest.TestCase):
         assert loop is not None
         # ensure that the event loop is passed explicitly in asyncio
         events.set_event_loop(None)
+        # Disable event loop policy warnings
+        events.get_event_loop_policy()._warnings = False
         if cleanup:
             self.addCleanup(loop.close)
 
@@ -417,6 +419,8 @@ class TestCase(unittest.TestCase):
 
     def tearDown(self):
         events.set_event_loop(None)
+        # Enable event loop policy warnings
+        events.get_event_loop_policy()._warnings = True
 
         # Detect CPython bug #23353: ensure that yield/yield-from is not used
         # in an except block of a generator

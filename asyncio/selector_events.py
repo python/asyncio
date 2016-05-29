@@ -743,21 +743,33 @@ class _SelectorSocketTransport(_SelectorTransport):
         if self._conn_lost:
             return
         try:
-            # Note, this is not length in bytes, it is count of chunks in
-            # buffer
-            if len(self._buffer) > compat.SC_IOV_MAX:
-                # In order to minimize syscalls used for IO, we should call
-                # sendmsg() again and again until self._buffer is sent,
-                # or sendmsg() say that only part of requested data is sent.
-                # This will make code more complex. Instead, we assume that
-                # unsent part of self._buffer will be sent on next event loop
-                # iteration, even if one can be sent right now.
-                # According to benchmarking, this minor misoptimization does
-                # not hurt much.
-                buffers = itertools.islice(self._buffer, 0, compat.SC_IOV_MAX)
+            if compat.HAS_SENDMSG:
+                # Note, this is not length in bytes, it is count of chunks in
+                # buffer
+                if len(self._buffer) > compat.SC_IOV_MAX:
+                    # In order to minimize syscalls used for IO, we should call
+                    # sendmsg() again and again until self._buffer is sent,
+                    # or sendmsg() say that only part of requested data is sent.
+                    # This will make code more complex. Instead, we assume that
+                    # unsent part of self._buffer will be sent on next event loop
+                    # iteration, even if one can be sent right now.
+                    # According to benchmarking, this minor misoptimization does
+                    # not hurt much.
+                    buffers = itertools.islice(self._buffer, 0, compat.SC_IOV_MAX)
+                else:
+                    buffers = self._buffer
+                n = self._sock.sendmsg(buffers)
             else:
-                buffers = self._buffer
-            n = self._sock.sendmsg(buffers)
+                if len(self._buffer) > 1:
+                    # 1. Flattening buffers here in order not to copy memory
+                    #    everytime chunk is added.
+                    # 2. Also it is possible to remove flattening, and send just
+                    #    first chunk, but this will be probably slower.
+                    data = compat.flatten_list_bytes(self._buffer)
+                    # self._buffer_size is not changed in that operation
+                    self._buffer.clear()
+                    self._buffer.append(data)
+                n = self._sock.send(self._buffer[0])
         except (BlockingIOError, InterruptedError):
             return
         except Exception as exc:

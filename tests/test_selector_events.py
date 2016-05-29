@@ -21,6 +21,7 @@ from asyncio.selector_events import _SelectorDatagramTransport
 
 MOCK_ANY = mock.ANY
 
+HAS_SENDMSG = hasattr(socket.socket, 'sendmsg')
 
 class TestBaseSelectorEventLoop(BaseSelectorEventLoop):
 
@@ -1040,25 +1041,33 @@ class SelectorSocketTransportTests(test_utils.TestCase):
 
     def test_write_ready(self):
         data = b'data'
-        self.sock.sendmsg.return_value = len(data)
+        if HAS_SENDMSG:
+            sendfun = self.sock.sendmsg
+        else:
+            sendfun = self.sock.send
+        sendfun.return_value = len(data)
 
         transport = self.socket_transport()
         sock_prefill_buffer(transport, data)
         self.loop.add_writer(7, transport._write_ready)
         transport._write_ready()
-        self.assertTrue(self.sock.sendmsg.called)
+        self.assertTrue(sendfun.called)
         self.assertFalse(self.loop.writers)
 
     def test_write_ready_closing(self):
         data = b'data'
-        self.sock.sendmsg.return_value = len(data)
+        if HAS_SENDMSG:
+            sendfun = self.sock.sendmsg
+        else:
+            sendfun = self.sock.send
+        sendfun.return_value = len(data)
 
         transport = self.socket_transport()
         transport._closing = True
         sock_prefill_buffer(transport, data)
         self.loop.add_writer(7, transport._write_ready)
         transport._write_ready()
-        self.assertTrue(self.sock.sendmsg.called)
+        self.assertTrue(sendfun.called)
         self.assertFalse(self.loop.writers)
         self.sock.close.assert_called_with()
         self.protocol.connection_lost.assert_called_with(None)
@@ -1070,7 +1079,11 @@ class SelectorSocketTransportTests(test_utils.TestCase):
 
     def test_write_ready_partial(self):
         data = b'data'
-        self.sock.sendmsg.return_value = 2
+        if HAS_SENDMSG:
+            sendfun = self.sock.sendmsg
+        else:
+            sendfun = self.sock.send
+        sendfun.return_value = 2
 
         transport = self.socket_transport()
         sock_prefill_buffer(transport, data)
@@ -1081,7 +1094,11 @@ class SelectorSocketTransportTests(test_utils.TestCase):
 
     def test_write_ready_partial_none(self):
         data = b'data'
-        self.sock.sendmsg.return_value = 0
+        if HAS_SENDMSG:
+            sendfun = self.sock.sendmsg
+        else:
+            sendfun = self.sock.send
+        sendfun.return_value = 0
 
         transport = self.socket_transport()
         sock_prefill_buffer(transport, data)
@@ -1091,7 +1108,11 @@ class SelectorSocketTransportTests(test_utils.TestCase):
         self.assertSequenceEqual([b'data'], transport._buffer)
 
     def test_write_ready_tryagain(self):
-        self.sock.sendmsg.side_effect = BlockingIOError
+        if HAS_SENDMSG:
+            sendfun = self.sock.sendmsg
+        else:
+            sendfun = self.sock.send
+        sendfun.side_effect = BlockingIOError
 
         transport = self.socket_transport()
         sock_prefill_buffer(transport, b'data1')
@@ -1100,10 +1121,17 @@ class SelectorSocketTransportTests(test_utils.TestCase):
         transport._write_ready()
 
         self.loop.assert_writer(7, transport._write_ready)
-        self.assertSequenceEqual([b'data1', b'data2'], transport._buffer)
+        if HAS_SENDMSG:
+            self.assertSequenceEqual([b'data1', b'data2'], transport._buffer)
+        else:
+            self.assertSequenceEqual([b'data1data2'], transport._buffer)
 
     def test_write_ready_exception(self):
-        err = self.sock.sendmsg.side_effect = OSError()
+        if HAS_SENDMSG:
+            sendfun = self.sock.sendmsg
+        else:
+            sendfun = self.sock.send
+        err = sendfun.side_effect = OSError()
 
         transport = self.socket_transport()
         transport._fatal_error = mock.Mock()
@@ -1124,15 +1152,23 @@ class SelectorSocketTransportTests(test_utils.TestCase):
 
     def test_write_eof_buffer(self):
         tr = self.socket_transport()
-        self.sock.send.side_effect = BlockingIOError
+        if HAS_SENDMSG:
+            sendfun1 = self.sock.send
+            sendfun2 = self.sock.sendmsg
+        else:
+            sendfun1 = self.sock.send
+            sendfun2 = self.sock.send
+        sendfun1.side_effect = BlockingIOError
+
         tr.write(b'data')
         tr.write_eof()
         self.assertSequenceEqual([b'data'], tr._buffer)
         self.assertTrue(tr._eof)
         self.assertFalse(self.sock.shutdown.called)
-        self.sock.sendmsg.side_effect = lambda _: 4
+
+        sendfun2.side_effect = lambda _: 4
         tr._write_ready()
-        self.assertTrue(self.sock.sendmsg.called)
+        self.assertTrue(sendfun2.called)
         self.sock.shutdown.assert_called_with(socket.SHUT_WR)
         tr.close()
 

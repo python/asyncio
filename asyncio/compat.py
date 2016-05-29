@@ -1,6 +1,7 @@
 """Compatibility helpers for the different Python versions."""
 
 import os
+import socket
 import sys
 
 PY34 = sys.version_info >= (3, 4)
@@ -29,3 +30,8 @@ except (KeyError, AttributeError):
     SC_IOV_MAX = 16
 
 assert SC_IOV_MAX >= 16
+
+
+# Python for Windows still have no socket.sendmsg()
+# http://bugs.python.org/issue27149
+HAS_SENDMSG = hasattr(socket.socket, 'sendmsg')

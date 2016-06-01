@@ -1166,7 +1166,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         - 'transport' (optional): Transport instance;
         - 'socket' (optional): Socket instance.
 
-        New keys maybe introduced in the future.
+        New keys may be introduced in the future.
 
         Note: do not overload this method in an event loop subclass.
         For custom exception handling, use the

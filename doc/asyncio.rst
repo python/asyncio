@@ -168,7 +168,7 @@ This option is used by the following projects which work on Trollius and asyncio
   module if available, or import ``trollius``.
 * `Tornado <http://www.tornadoweb.org/>`_ supports asyncio and Trollius since
   Tornado 3.2: `tornado.platform.asyncio — Bridge between asyncio and Tornado
-  <http://tornado.readthedocs.org/en/latest/asyncio.html>`_. It tries to import
+  <https://tornado.readthedocs.io/en/latest/asyncio.html>`_. It tries to import
   asyncio or fallback on importing trollius.
 
 Another option is to provide functions returning ``Future`` objects, so the

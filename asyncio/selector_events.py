@@ -396,7 +396,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         if self._debug and sock.gettimeout() != 0:
             raise ValueError("the socket must be non-blocking")
         fut = self.create_future()
-        resolved = self._ensure_resolved(*address)
+        resolved = base_events._ensure_resolved(*address, loop=self)
         resolved.add_done_callback(
             lambda resolved: self._sock_connect(fut, sock, resolved))
 

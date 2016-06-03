@@ -178,6 +178,19 @@ def _check_resolved_address(sock, address):
                          " got host %r" % host)
 
 
+def _ensure_resolved(host, port, *, family=0, type=socket.SOCK_STREAM, proto=0,
+                     flags=0, loop):
+    info = _ipaddr_info(host, port, family, type, proto)
+    if info is not None:
+        # "host" is already a resolved IP.
+        fut = loop.create_future()
+        fut.set_result([info])
+        return fut
+    else:
+        return loop.getaddrinfo(host, port, family=family, type=type,
+                                proto=proto, flags=flags)
+
+
 def _run_until_complete_cb(fut):
     exc = fut._exception
     if (isinstance(exc, BaseException)
@@ -609,18 +622,6 @@ class BaseEventLoop(events.AbstractEventLoop):
             return self.run_in_executor(None, socket.getaddrinfo,
                                         host, port, family, type, proto, flags)
 
-    def _ensure_resolved(self, host, port, *,
-                         family=0, type=socket.SOCK_STREAM, proto=0, flags=0):
-        info = _ipaddr_info(host, port, family, type, proto)
-        if info is not None:
-            # "host" is already a resolved IP.
-            fut = self.create_future()
-            fut.set_result([info])
-            return fut
-        else:
-            return self.getaddrinfo(host, port, family=family, type=type,
-                                    proto=proto, flags=flags)
-
     def getnameinfo(self, sockaddr, flags=0):
         return self.run_in_executor(None, socket.getnameinfo, sockaddr, flags)
 
@@ -663,14 +664,14 @@ class BaseEventLoop(events.AbstractEventLoop):
                 raise ValueError(
                     'host/port and sock can not be specified at the same time')
 
-            f1 = self._ensure_resolved(
-                host, port, family=family,
-                type=socket.SOCK_STREAM, proto=proto, flags=flags)
+            f1 = _ensure_resolved(host, port, family=family,
+                                  type=socket.SOCK_STREAM, proto=proto,
+                                  flags=flags, loop=self)
             fs = [f1]
             if local_addr is not None:
-                f2 = self._ensure_resolved(
-                    *local_addr, family=family,
-                    type=socket.SOCK_STREAM, proto=proto, flags=flags)
+                f2 = _ensure_resolved(*local_addr, family=family,
+                                      type=socket.SOCK_STREAM, proto=proto,
+                                      flags=flags, loop=self)
                 fs.append(f2)
             else:
                 f2 = None

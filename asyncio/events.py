@@ -523,7 +523,7 @@ class AbstractEventLoopPolicy:
         raise NotImplementedError
 
     def set_default_loop(self, loop):
-        """Set the default event loop for the current context to loop."""
+        """Set the default event loop for the current context."""
         raise NotImplementedError
 
     def get_running_loop(self):
@@ -563,20 +563,14 @@ class AbstractEventLoopPolicy:
     # Non-abstract methods
 
     def get_event_loop(self):
-        """Return the running event loop if any, and the default event
-        loop otherwise.
-        """
+        """Return the running loop if any, and the default loop otherwise."""
         running_loop = self.get_running_loop()
         if running_loop is not None:
             return running_loop
         return self.get_default_loop()
 
     def set_event_loop(self, loop):
-        """Set the default event loop if the former loop is not currently
-        running.
-        """
-        if self.get_running_loop() is not None:
-            raise RuntimeError('The former loop is currently running')
+        """Set the default event loop for the current context."""
         self.set_default_loop(loop)
 
 

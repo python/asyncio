@@ -403,9 +403,25 @@ def get_function_source(func):
 
 
 class TestCase(unittest.TestCase):
+    def disable_get_event_loop(self):
+        policy = events.get_event_loop_policy()
+        if hasattr(policy, '_patched_get_event_loop'):
+            return
+
+        def reset_event_loop_method():
+            policy.get_running_loop = old_get_running_loop
+            del policy._patched_get_event_loop
+
+        old_get_running_loop = policy.get_running_loop
+        policy.get_running_loop = lambda: None
+        policy._patched_get_event_loop = True
+
+        self.addCleanup(reset_event_loop_method)
+
     def set_event_loop(self, loop, *, cleanup=True):
         assert loop is not None
         # ensure that the event loop is passed explicitly in asyncio
+        self.disable_get_event_loop()
         events.set_event_loop(None)
         if cleanup:
             self.addCleanup(loop.close)

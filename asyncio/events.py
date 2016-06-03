@@ -16,8 +16,6 @@ import subprocess
 import sys
 import threading
 import traceback
-import warnings
-import contextlib
 
 from asyncio import compat
 
@@ -509,11 +507,6 @@ class AbstractEventLoop:
     def set_debug(self, enabled):
         raise NotImplementedError
 
-    # Running context
-
-    def _running_context(self):
-        return get_event_loop_policy().running_loop_context(self)
-
 
 class AbstractEventLoopPolicy:
     """Abstract policy for accessing the event loop."""
@@ -586,18 +579,6 @@ class AbstractEventLoopPolicy:
             raise RuntimeError('The former loop is currently running')
         self.set_default_loop(loop)
 
-    @contextlib.contextmanager
-    def running_loop_context(self, loop):
-        """Convenience context to set and clear the given loop as running
-        loop. It is meant to be used inside the loop run methods.
-        """
-        assert isinstance(loop, AbstractEventLoop)
-        self.set_running_loop(loop)
-        try:
-            yield
-        finally:
-            self.set_running_loop(None)
-
 
 class BaseDefaultEventLoopPolicy(AbstractEventLoopPolicy):
     """Default policy implementation for accessing the event loop.
@@ -613,7 +594,6 @@ class BaseDefaultEventLoopPolicy(AbstractEventLoopPolicy):
     """
 
     _loop_factory = None
-    _warnings = True
 
     class _Local(threading.local):
         _loop = None
@@ -622,11 +602,6 @@ class BaseDefaultEventLoopPolicy(AbstractEventLoopPolicy):
 
     def __init__(self):
         self._local = self._Local()
-
-    def warn(self, *args):
-        if self._warnings:
-            raise RuntimeError(*args)
-            warnings.warn(*args)
 
     def get_default_loop(self):
         """Get the default event loop for the current thread.
@@ -662,16 +637,6 @@ class BaseDefaultEventLoopPolicy(AbstractEventLoopPolicy):
         running_loop = self._local._running_loop
         if running_loop is not None and loop is not None:
             raise RuntimeError('A loop is already running')
-        # Warnings
-        if loop is not None:
-            if default_loop is None:
-                self.warn(
-                    'Running a loop with no default loop set',
-                    RuntimeWarning)
-            elif loop != default_loop:
-                self.warn(
-                    'Running a loop different from the default loop',
-                    RuntimeWarning)
         self._local._running_loop = loop
 
     def new_event_loop(self):

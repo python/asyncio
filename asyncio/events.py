@@ -607,7 +607,7 @@ class BaseDefaultEventLoopPolicy(AbstractEventLoopPolicy):
         return self._local._loop
 
     def set_event_loop(self, loop):
-        """Set the default event loop for the current thread."""
+        """Set the event loop for the current thread."""
         self._local._set_called = True
         assert loop is None or isinstance(loop, AbstractEventLoop)
         self._local._loop = loop

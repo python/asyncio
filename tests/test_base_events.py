@@ -1256,6 +1256,21 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
         self.assertRaises(
             OSError, self.loop.run_until_complete, coro)
 
+    @patch_socket
+    def test_create_connection_bluetooth(self, m_socket):
+        # See http://bugs.python.org/issue27136, fallback to getaddrinfo when
+        # we can't recognize an address is resolved, e.g. a Bluetooth address.
+        addr = ('00:01:02:03:04:05', 1)
+
+        def getaddrinfo(host, port, *args, **kw):
+            assert (host, port) == addr
+            return [(999, 1, 999, '', (addr, 1))]
+
+        m_socket.getaddrinfo = getaddrinfo
+        sock = m_socket.socket()
+        coro = self.loop.sock_connect(sock, addr)
+        self.loop.run_until_complete(coro)
+
     def test_create_connection_ssl_server_hostname_default(self):
         self.loop.getaddrinfo = mock.Mock()
 

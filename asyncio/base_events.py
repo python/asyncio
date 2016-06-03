@@ -339,22 +339,20 @@ class BaseEventLoop(events.AbstractEventLoop):
         self._check_closed()
         if self.is_running():
             raise RuntimeError('Event loop is running.')
+        policy = events.get_event_loop_policy()
+        policy.set_running_loop(self)
         self._set_coroutine_wrapper(self._debug)
         self._thread_id = threading.get_ident()
         try:
-            policy = events.get_event_loop_policy()
-            policy.set_running_loop(self)
-            try:
-                while True:
-                    self._run_once()
-                    if self._stopping:
-                        break
-            finally:
-                policy.set_running_loop(None)
+            while True:
+                self._run_once()
+                if self._stopping:
+                    break
         finally:
             self._stopping = False
             self._thread_id = None
             self._set_coroutine_wrapper(False)
+            policy.set_running_loop(None)
 
     def run_until_complete(self, future):
         """Run until the Future is done.

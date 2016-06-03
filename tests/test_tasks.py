@@ -2235,7 +2235,11 @@ class RunCoroutineThreadsafeTests(test_utils.TestCase):
 class SleepTests(test_utils.TestCase):
     def setUp(self):
         self.loop = asyncio.new_event_loop()
-        self.set_event_loop(self.loop)
+        asyncio.set_event_loop(None)
+
+    def tearDown(self):
+        self.loop.close()
+        self.loop = None
 
     def test_sleep_zero(self):
         result = 0
@@ -2259,7 +2263,11 @@ class SleepTests(test_utils.TestCase):
 class TimeoutTests(test_utils.TestCase):
     def setUp(self):
         self.loop = asyncio.new_event_loop()
-        self.set_event_loop(self.loop)
+        asyncio.set_event_loop(None)
+
+    def tearDown(self):
+        self.loop.close()
+        self.loop = None
 
     def test_timeout(self):
         canceled_raised = [False]

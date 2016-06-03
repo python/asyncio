@@ -602,17 +602,24 @@ class BaseEventLoop(events.AbstractEventLoop):
 
     def getaddrinfo(self, host, port, *,
                     family=0, type=0, proto=0, flags=0):
-        info = _ipaddr_info(host, port, family, type, proto)
-        if info is not None:
-            fut = self.create_future()
-            fut.set_result([info])
-            return fut
-        elif self._debug:
+        if self._debug:
             return self.run_in_executor(None, self._getaddrinfo_debug,
                                         host, port, family, type, proto, flags)
         else:
             return self.run_in_executor(None, socket.getaddrinfo,
                                         host, port, family, type, proto, flags)
+
+    def _ensure_resolved(self, host, port, *,
+                         family=0, type=socket.SOCK_STREAM, proto=0, flags=0):
+        info = _ipaddr_info(host, port, family, type, proto)
+        if info is not None:
+            # "host" is already a resolved IP.
+            fut = self.create_future()
+            fut.set_result([info])
+            return fut
+        else:
+            return self.getaddrinfo(host, port, family=family, type=type,
+                                    proto=proto, flags=flags)
 
     def getnameinfo(self, sockaddr, flags=0):
         return self.run_in_executor(None, socket.getnameinfo, sockaddr, flags)
@@ -656,12 +663,12 @@ class BaseEventLoop(events.AbstractEventLoop):
                 raise ValueError(
                     'host/port and sock can not be specified at the same time')
 
-            f1 = self.getaddrinfo(
+            f1 = self._ensure_resolved(
                 host, port, family=family,
                 type=socket.SOCK_STREAM, proto=proto, flags=flags)
             fs = [f1]
             if local_addr is not None:
-                f2 = self.getaddrinfo(
+                f2 = self._ensure_resolved(
                     *local_addr, family=family,
                     type=socket.SOCK_STREAM, proto=proto, flags=flags)
                 fs.append(f2)

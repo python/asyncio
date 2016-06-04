@@ -547,9 +547,11 @@ class AbstractEventLoopPolicy:
         raise NotImplementedError
 
     def new_event_loop(self):
-        """Create and return a new event loop object according to this
-        policy's rules. If there's need to set this loop as the event loop for
-        the current context, set_event_loop must be called explicitly.
+        """Create and return a new event loop object.
+
+        The loop is created according to the policy's rules.
+        If there is need to set this loop as the event loop for the
+        current context, set_event_loop must be called explicitly.
         """
         raise NotImplementedError
 

@@ -165,21 +165,9 @@ def _ipaddr_info(host, port, family, type, proto):
     return af, type, proto, '', (host, port)
 
 
-def _check_resolved_address(sock, address):
-    # Ensure that the address is already resolved to avoid the trap of hanging
-    # the entire event loop when the address requires doing a DNS lookup.
-
-    if hasattr(socket, 'AF_UNIX') and sock.family == socket.AF_UNIX:
-        return
-
-    host, port = address[:2]
-    if _ipaddr_info(host, port, sock.family, sock.type, sock.proto) is None:
-        raise ValueError("address must be resolved (IP address),"
-                         " got host %r" % host)
-
-
-def _ensure_resolved(host, port, *, family=0, type=socket.SOCK_STREAM, proto=0,
+def _ensure_resolved(address, *, family=0, type=socket.SOCK_STREAM, proto=0,
                      flags=0, loop):
+    host, port = address[:2]
     info = _ipaddr_info(host, port, family, type, proto)
     if info is not None:
         # "host" is already a resolved IP.
@@ -664,12 +652,12 @@ class BaseEventLoop(events.AbstractEventLoop):
                 raise ValueError(
                     'host/port and sock can not be specified at the same time')
 
-            f1 = _ensure_resolved(host, port, family=family,
+            f1 = _ensure_resolved((host, port), family=family,
                                   type=socket.SOCK_STREAM, proto=proto,
                                   flags=flags, loop=self)
             fs = [f1]
             if local_addr is not None:
-                f2 = _ensure_resolved(*local_addr, family=family,
+                f2 = _ensure_resolved(local_addr, family=family,
                                       type=socket.SOCK_STREAM, proto=proto,
                                       flags=flags, loop=self)
                 fs.append(f2)
@@ -807,7 +795,7 @@ class BaseEventLoop(events.AbstractEventLoop):
                             '2-tuple is expected')
 
                         infos = yield from _ensure_resolved(
-                            *addr, family=family, type=socket.SOCK_DGRAM,
+                            addr, family=family, type=socket.SOCK_DGRAM,
                             proto=proto, flags=flags, loop=self)
                         if not infos:
                             raise OSError('getaddrinfo() returned empty list')

@@ -344,13 +344,10 @@ class BaseSelectorEventLoopTests(test_utils.TestCase):
         f = self.loop.sock_connect(sock, ('127.0.0.1', 8080))
         self.assertIsInstance(f, asyncio.Future)
         self.loop._run_once()
-        future_in, sock_in, resolved_in = self.loop._sock_connect.call_args[0]
+        future_in, sock_in, address_in = self.loop._sock_connect.call_args[0]
         self.assertEqual(future_in, f)
         self.assertEqual(sock_in, sock)
-        self.assertEqual(
-            resolved_in.result(),
-            [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, '',
-              ('127.0.0.1', 8080))])
+        self.assertEqual(address_in, ('127.0.0.1', 8080))
 
     def test_sock_connect_timeout(self):
         # asyncio issue #205: sock_connect() must unregister the socket on

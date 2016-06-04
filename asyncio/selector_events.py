@@ -395,21 +395,26 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         """
         if self._debug and sock.gettimeout() != 0:
             raise ValueError("the socket must be non-blocking")
+
         fut = self.create_future()
-        resolved = base_events._ensure_resolved(*address, loop=self)
-        resolved.add_done_callback(
-            lambda resolved: self._sock_connect(fut, sock, resolved))
+        if hasattr(socket, 'AF_UNIX') and sock.family == socket.AF_UNIX:
+            self._sock_connect(fut, sock, address)
+        else:
+            resolved = base_events._ensure_resolved(address, loop=self)
+            resolved.add_done_callback(
+                lambda resolved: self._on_resolved(fut, sock, resolved))
 
         return fut
 
-    def _sock_connect(self, fut, sock, resolved):
+    def _on_resolved(self, fut, sock, resolved):
         try:
             _, _, _, _, address = resolved.result()[0]
         except Exception as exc:
             fut.set_exception(exc)
-            sock.close()
-            return
+        else:
+            self._sock_connect(fut, sock, address)
 
+    def _sock_connect(self, fut, sock, address):
         fd = sock.fileno()
         try:
             sock.connect(address)

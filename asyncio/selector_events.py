@@ -404,7 +404,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
 
     def _sock_connect(self, fut, sock, resolved):
         try:
-            address = resolved.result()[0]
+            _, _, _, _, address = resolved.result()[0]
         except Exception as exc:
             fut.set_exception(exc)
             sock.close()

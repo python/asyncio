@@ -2467,6 +2467,9 @@ class PolicyTests(unittest.TestCase):
         self.assertRaises(NotImplementedError, policy.get_event_loop)
         self.assertRaises(NotImplementedError, policy.set_event_loop, object())
         self.assertRaises(NotImplementedError, policy.new_event_loop)
+        self.assertRaises(NotImplementedError, policy.get_running_loop)
+        self.assertRaises(NotImplementedError, policy.set_running_loop,
+                          object())
         self.assertRaises(NotImplementedError, policy.get_child_watcher)
         self.assertRaises(NotImplementedError, policy.set_child_watcher,
                           object())
@@ -2533,6 +2536,27 @@ class PolicyTests(unittest.TestCase):
         self.assertIsNot(old_loop, policy.get_event_loop())
         loop.close()
         old_loop.close()
+
+    def test_set_running_loop(self):
+        policy = asyncio.DefaultEventLoopPolicy()
+        self.assertIsNone(policy._local._running_loop)
+        self.assertIsNone(policy.get_running_loop())
+
+        self.assertRaises(AssertionError, policy.set_running_loop, object())
+
+        loop = policy.new_event_loop()
+        policy.set_running_loop(loop)
+
+        self.assertIs(policy._local._running_loop, loop)
+        self.assertIs(policy.get_running_loop(), loop)
+        loop.close()
+
+        loop2 = policy.new_event_loop()
+        self.assertRaises(RuntimeError, policy.set_running_loop, loop2)
+        loop2.close()
+
+        policy.set_running_loop(None)
+        self.assertIsNone(policy._local._running_loop)
 
     def test_get_event_loop_policy(self):
         policy = asyncio.get_event_loop_policy()

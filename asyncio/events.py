@@ -624,7 +624,6 @@ class BaseDefaultEventLoopPolicy(AbstractEventLoopPolicy):
     def set_running_loop(self, loop):
         """Set the running event loop for the current thread."""
         assert loop is None or isinstance(loop, AbstractEventLoop)
-        default_loop = self._local._loop
         running_loop = self._local._running_loop
         if running_loop is not None and loop is not None:
             raise RuntimeError('A loop is already running')

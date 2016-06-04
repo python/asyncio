@@ -518,10 +518,9 @@ class AbstractEventLoopPolicy:
         - the running loop if it has been set (using set_running_loop)
         - the loop for the current context otherwise.
 
-        It may also raise an exception in case no event loop has been set for the
-        current context and the current policy does not specify to create one.
-
-        It should never return None.
+        It may also raise an exception in case no event loop has been set for
+        the current context and the current policy does not specify to create
+        one. It should never return None.
         """
         raise NotImplementedError
 

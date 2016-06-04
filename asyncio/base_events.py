@@ -806,9 +806,9 @@ class BaseEventLoop(events.AbstractEventLoop):
                         assert isinstance(addr, tuple) and len(addr) == 2, (
                             '2-tuple is expected')
 
-                        infos = yield from self.getaddrinfo(
+                        infos = yield from _ensure_resolved(
                             *addr, family=family, type=socket.SOCK_DGRAM,
-                            proto=proto, flags=flags)
+                            proto=proto, flags=flags, loop=self)
                         if not infos:
                             raise OSError('getaddrinfo() returned empty list')
 

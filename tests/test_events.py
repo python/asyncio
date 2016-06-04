@@ -2558,6 +2558,33 @@ class PolicyTests(unittest.TestCase):
         policy.set_running_loop(None)
         self.assertIsNone(policy._local._running_loop)
 
+    def test_get_event_loop_after_set_running_loop(self):
+        policy = asyncio.DefaultEventLoopPolicy()
+
+        running_loop = policy.new_event_loop()
+        policy.set_running_loop(running_loop)
+
+        self.assertIsNone(policy._local._loop)
+        self.assertIs(policy.get_event_loop(), running_loop)
+
+        loop = policy.new_event_loop()
+        policy.set_event_loop(loop)
+
+        self.assertIs(policy._local._loop, loop)
+        self.assertIs(policy.get_event_loop(), running_loop)
+
+        policy.set_running_loop(None)
+        running_loop.close()
+
+        self.assertIs(policy._local._loop, loop)
+        self.assertIs(policy.get_event_loop(), loop)
+
+        policy.set_event_loop(None)
+        loop.close()
+
+        self.assertIsNone(policy._local._loop)
+        self.assertRaises(RuntimeError, policy.get_event_loop)
+
     def test_get_event_loop_policy(self):
         policy = asyncio.get_event_loop_policy()
         self.assertIsInstance(policy, asyncio.AbstractEventLoopPolicy)

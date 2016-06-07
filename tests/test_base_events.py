@@ -1173,9 +1173,9 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
         t, p = self.loop.run_until_complete(coro)
         try:
             sock.connect.assert_called_with(('1.2.3.4', 80))
-            m_socket.socket.assert_called_with(family=m_socket.AF_INET,
-                                               proto=m_socket.IPPROTO_TCP,
-                                               type=m_socket.SOCK_STREAM)
+            _, kwargs = m_socket.socket.call_args
+            self.assertEqual(kwargs['family'], m_socket.AF_INET)
+            self.assertEqual(kwargs['type'], m_socket.SOCK_STREAM)
         finally:
             t.close()
             test_utils.run_briefly(self.loop)  # allow transport to close
@@ -1190,9 +1190,9 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
             host, port = address[:2]
             self.assertRegex(host, r'::(0\.)*2')
             self.assertEqual(port, 80)
-            m_socket.socket.assert_called_with(family=m_socket.AF_INET6,
-                                               proto=m_socket.IPPROTO_TCP,
-                                               type=m_socket.SOCK_STREAM)
+            _, kwargs = m_socket.socket.call_args
+            self.assertEqual(kwargs['family'], m_socket.AF_INET6)
+            self.assertEqual(kwargs['type'], m_socket.SOCK_STREAM)
         finally:
             t.close()
             test_utils.run_briefly(self.loop)  # allow transport to close

@@ -45,6 +45,7 @@ def mock_socket_module():
 
     m_socket.socket = mock.MagicMock()
     m_socket.socket.return_value = test_utils.mock_nonblocking_socket()
+    m_socket.getaddrinfo._is_coroutine = False
 
     return m_socket
 
@@ -55,14 +56,6 @@ def patch_socket(f):
 
 
 class BaseEventTests(test_utils.TestCase):
-
-    def setUp(self):
-        super().setUp()
-        base_events._ipaddr_info.cache_clear()
-
-    def tearDown(self):
-        base_events._ipaddr_info.cache_clear()
-        super().tearDown()
 
     def test_ipaddr_info(self):
         UNSPEC = socket.AF_UNSPEC
@@ -169,7 +162,10 @@ class BaseEventTests(test_utils.TestCase):
     @patch_socket
     def test_ipaddr_info_no_inet_pton(self, m_socket):
         del m_socket.inet_pton
-        self.test_ipaddr_info()
+        self.assertIsNone(base_events._ipaddr_info('1.2.3.4', 1,
+                                                   socket.AF_INET,
+                                                   socket.SOCK_STREAM,
+                                                   socket.IPPROTO_TCP))
 
 
 class BaseEventLoopTests(test_utils.TestCase):
@@ -1018,11 +1014,6 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
         self.loop = asyncio.new_event_loop()
         self.set_event_loop(self.loop)
 
-    def tearDown(self):
-        # Clear mocked constants like AF_INET from the cache.
-        base_events._ipaddr_info.cache_clear()
-        super().tearDown()
-
     @patch_socket
     def test_create_connection_multiple_errors(self, m_socket):
 
@@ -1171,10 +1162,7 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
         if not allow_inet_pton:
             del m_socket.inet_pton
 
-        def getaddrinfo(*args, **kw):
-            self.fail('should not have called getaddrinfo')
-
-        m_socket.getaddrinfo = getaddrinfo
+        m_socket.getaddrinfo = socket.getaddrinfo
         sock = m_socket.socket.return_value
 
         self.loop.add_reader = mock.Mock()
@@ -1197,7 +1185,12 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
         coro = self.loop.create_connection(asyncio.Protocol, '::2', 80)
         t, p = self.loop.run_until_complete(coro)
         try:
-            sock.connect.assert_called_with(('::2', 80))
+            # Without inet_pton we use getaddrinfo, which transforms ('::2', 80)
+            # to ('::0.0.0.2', 80, 0, 0). The last 0s are flow info, scope id.
+            [address] = sock.connect.call_args[0]
+            host, port = address[:2]
+            self.assertRegexpMatches(host, r'::(0\.)*2')
+            self.assertEqual(port, 80)
             m_socket.socket.assert_called_with(family=m_socket.AF_INET6,
                                                proto=m_socket.IPPROTO_TCP,
                                                type=m_socket.SOCK_STREAM)
@@ -1360,7 +1353,7 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
         getaddrinfo = self.loop.getaddrinfo = mock.Mock()
         getaddrinfo.return_value = []
 
-        f = self.loop.create_server(MyProto, '0.0.0.0', 0)
+        f = self.loop.create_server(MyProto, 'python.org', 0)
         self.assertRaises(OSError, self.loop.run_until_complete, f)
 
     @patch_socket

@@ -129,13 +129,13 @@ def _ipaddr_info(host, port, family, type, proto):
 
     for af in afs:
         # Linux's inet_pton doesn't accept an IPv6 zone index after host,
-        # like '::1%lo0', so strip it. If we happen to make an invalid
-        # address look valid, we fail later in sock.connect or sock.bind.
+        # like '::1%lo0'.
+        if '%' in host:
+            return None
+
         try:
-            if af == socket.AF_INET6:
-                socket.inet_pton(af, host.partition('%')[0])
-            else:
-                socket.inet_pton(af, host)
+            socket.inet_pton(af, host)
+            # The host has already been resolved.
             return af, type, proto, '', (host, port)
         except OSError:
             pass

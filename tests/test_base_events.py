@@ -109,8 +109,7 @@ class BaseEventTests(test_utils.TestCase):
             base_events._ipaddr_info('::3', 1, INET, STREAM, TCP))
 
         # IPv6 address with zone index.
-        self.assertEqual(
-            (INET6, STREAM, TCP, '', ('::3%lo0', 1)),
+        self.assertIsNone(
             base_events._ipaddr_info('::3%lo0', 1, INET6, STREAM, TCP))
 
     def test_port_parameter_types(self):

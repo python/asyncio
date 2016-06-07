@@ -1189,7 +1189,7 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
             # to ('::0.0.0.2', 80, 0, 0). The last 0s are flow info, scope id.
             [address] = sock.connect.call_args[0]
             host, port = address[:2]
-            self.assertRegexpMatches(host, r'::(0\.)*2')
+            self.assertRegex(host, r'::(0\.)*2')
             self.assertEqual(port, 80)
             m_socket.socket.assert_called_with(family=m_socket.AF_INET6,
                                                proto=m_socket.IPPROTO_TCP,

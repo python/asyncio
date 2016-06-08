@@ -72,6 +72,10 @@ class BaseEventTests(test_utils.TestCase):
 
         self.assertEqual(
             (INET, STREAM, TCP, '', ('1.2.3.4', 1)),
+            base_events._ipaddr_info(b'1.2.3.4', 1, INET, STREAM, TCP))
+
+        self.assertEqual(
+            (INET, STREAM, TCP, '', ('1.2.3.4', 1)),
             base_events._ipaddr_info('1.2.3.4', 1, UNSPEC, STREAM, TCP))
 
         self.assertEqual(

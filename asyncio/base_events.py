@@ -90,7 +90,8 @@ def _ipaddr_info(host, port, family, type, proto):
     if not hasattr(socket, 'inet_pton'):
         return
 
-    if proto not in {0, socket.IPPROTO_TCP, socket.IPPROTO_UDP} or host is None:
+    if proto not in {0, socket.IPPROTO_TCP, socket.IPPROTO_UDP} or \
+            host is None:
         return None
 
     type &= ~_SOCKET_TYPE_MASK
@@ -127,12 +128,14 @@ def _ipaddr_info(host, port, family, type, proto):
     else:
         afs = [family]
 
-    for af in afs:
+    if isinstance(host, bytes):
+        host = host.decode('idna')
+    if '%' in host:
         # Linux's inet_pton doesn't accept an IPv6 zone index after host,
         # like '::1%lo0'.
-        if '%' in host:
-            return None
+        return None
 
+    for af in afs:
         try:
             socket.inet_pton(af, host)
             # The host has already been resolved.

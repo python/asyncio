@@ -418,19 +418,15 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             # connection runs in background. We have to wait until the socket
             # becomes writable to be notified when the connection succeed or
             # fails.
-            fut.add_done_callback(functools.partial(self._sock_connect_done,
-                                                    fd))
             self.add_writer(fd, self._sock_connect_cb, fut, sock, address)
         except Exception as exc:
             fut.set_exception(exc)
         else:
             fut.set_result(None)
 
-    def _sock_connect_done(self, fd, fut):
-        self.remove_writer(fd)
-
     def _sock_connect_cb(self, fut, sock, address):
         if fut.cancelled():
+            self.remove_writer(sock.fileno())
             return
 
         try:
@@ -442,8 +438,10 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             # socket is still registered, the callback will be retried later
             pass
         except Exception as exc:
+            self.remove_writer(sock.fileno())
             fut.set_exception(exc)
         else:
+            self.remove_writer(sock.fileno())
             fut.set_result(None)
 
     def sock_accept(self, sock):

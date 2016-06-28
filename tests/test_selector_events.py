@@ -372,7 +372,8 @@ class BaseSelectorEventLoopTests(test_utils.TestCase):
         con = self.loop.create_task(self.loop.sock_connect(sock, addr))
         while not m_gai.called:
             self.loop._run_once()
-        m_gai.assert_called_with(*addr, sock.family, sock.type, sock.proto, 0)
+        m_gai.assert_called_with(
+            addr[0], addr[1], sock.family, sock.type, sock.proto, 0)
 
         con.cancel()
         with self.assertRaises(asyncio.CancelledError):
@@ -1814,14 +1815,23 @@ class SelectorLoopFunctionalTests(unittest.TestCase):
                                 break
                             buf.extend(pack)
 
-                        assert len(buf) == len(PAYLOAD)
-
         @asyncio.coroutine
         def client(addr):
             sock = socket.socket()
             with sock:
                 sock.setblocking(False)
-                yield from self.loop.sock_connect(sock, addr)
+
+                started = time.monotonic()
+                while True:
+                    if time.monotonic() - started > TIMEOUT:
+                        self.fail('unable to connect to the socket')
+                        return
+                    try:
+                        yield from self.loop.sock_connect(sock, addr)
+                    except OSError:
+                        yield from asyncio.sleep(0.05, loop=self.loop)
+                    else:
+                        break
 
                 # Give 'Server' thread a chance to accept and send b'helo'
                 time.sleep(0.1)

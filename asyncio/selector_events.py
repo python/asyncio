@@ -382,6 +382,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
                 data = data[n:]
             self.add_writer(fd, self._sock_sendall, fut, True, sock, data)
 
+    @coroutine
     def sock_connect(self, sock, address):
         """Connect to a remote socket at address.
 
@@ -390,24 +391,16 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         if self._debug and sock.gettimeout() != 0:
             raise ValueError("the socket must be non-blocking")
 
-        fut = self.create_future()
-        if hasattr(socket, 'AF_UNIX') and sock.family == socket.AF_UNIX:
-            self._sock_connect(fut, sock, address)
-        else:
+        if not hasattr(socket, 'AF_UNIX') or sock.family != socket.AF_UNIX:
             resolved = base_events._ensure_resolved(
                 address, family=sock.family, proto=sock.proto, loop=self)
-            resolved.add_done_callback(
-                lambda resolved: self._on_resolved(fut, sock, resolved))
-
-        return fut
-
-    def _on_resolved(self, fut, sock, resolved):
-        try:
+            if not resolved.done():
+                yield from resolved
             _, _, _, _, address = resolved.result()[0]
-        except Exception as exc:
-            fut.set_exception(exc)
-        else:
-            self._sock_connect(fut, sock, address)
+
+        fut = self.create_future()
+        self._sock_connect(fut, sock, address)
+        return (yield from fut)
 
     def _sock_connect(self, fut, sock, address):
         fd = sock.fileno()
@@ -418,15 +411,19 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             # connection runs in background. We have to wait until the socket
             # becomes writable to be notified when the connection succeed or
             # fails.
+            fut.add_done_callback(
+                functools.partial(self._sock_connect_done, fd))
             self.add_writer(fd, self._sock_connect_cb, fut, sock, address)
         except Exception as exc:
             fut.set_exception(exc)
         else:
             fut.set_result(None)
 
+    def _sock_connect_done(self, fd, fut):
+        self.remove_writer(fd)
+
     def _sock_connect_cb(self, fut, sock, address):
         if fut.cancelled():
-            self.remove_writer(sock.fileno())
             return
 
         try:
@@ -438,10 +435,8 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             # socket is still registered, the callback will be retried later
             pass
         except Exception as exc:
-            self.remove_writer(sock.fileno())
             fut.set_exception(exc)
         else:
-            self.remove_writer(sock.fileno())
             fut.set_result(None)
 
     def sock_accept(self, sock):

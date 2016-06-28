@@ -339,18 +339,6 @@ class BaseSelectorEventLoopTests(test_utils.TestCase):
             (10, self.loop._sock_sendall, f, True, sock, b'data'),
             self.loop.add_writer.call_args[0])
 
-    def test_sock_connect(self):
-        sock = test_utils.mock_nonblocking_socket()
-        self.loop._sock_connect = mock.Mock()
-
-        f = self.loop.sock_connect(sock, ('127.0.0.1', 8080))
-        self.assertIsInstance(f, asyncio.Future)
-        self.loop._run_once()
-        future_in, sock_in, address_in = self.loop._sock_connect.call_args[0]
-        self.assertEqual(future_in, f)
-        self.assertEqual(sock_in, sock)
-        self.assertEqual(address_in, ('127.0.0.1', 8080))
-
     def test_sock_connect_timeout(self):
         # asyncio issue #205: sock_connect() must unregister the socket on
         # timeout error
@@ -362,29 +350,33 @@ class BaseSelectorEventLoopTests(test_utils.TestCase):
         sock.connect.side_effect = BlockingIOError
 
         # first call to sock_connect() registers the socket
-        fut = self.loop.sock_connect(sock, ('127.0.0.1', 80))
+        fut = self.loop.create_task(
+            self.loop.sock_connect(sock, ('127.0.0.1', 80)))
         self.loop._run_once()
         self.assertTrue(sock.connect.called)
         self.assertTrue(self.loop.add_writer.called)
-        self.assertEqual(len(fut._callbacks), 1)
 
         # on timeout, the socket must be unregistered
         sock.connect.reset_mock()
-        fut.set_exception(asyncio.TimeoutError)
-        with self.assertRaises(asyncio.TimeoutError):
+        fut.cancel()
+        with self.assertRaises(asyncio.CancelledError):
             self.loop.run_until_complete(fut)
         self.assertTrue(self.loop.remove_writer.called)
 
-    def test_sock_connect_resolve_using_socket_params(self):
+    @mock.patch('socket.getaddrinfo')
+    def test_sock_connect_resolve_using_socket_params(self, m_gai):
         addr = ('need-resolution.com', 8080)
         sock = test_utils.mock_nonblocking_socket()
-        self.loop.getaddrinfo = mock.Mock()
-        self.loop.sock_connect(sock, addr)
-        while not self.loop.getaddrinfo.called:
+        m_gai.side_effect = (None, None, None, None, ('127.0.0.1', 0))
+        m_gai._is_coroutine = False
+        con = self.loop.create_task(self.loop.sock_connect(sock, addr))
+        while not m_gai.called:
             self.loop._run_once()
-        self.loop.getaddrinfo.assert_called_with(
-            *addr, type=sock.type, family=sock.family, proto=sock.proto,
-            flags=0)
+        m_gai.assert_called_with(*addr, sock.family, sock.type, sock.proto, 0)
+
+        con.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            self.loop.run_until_complete(con)
 
     def test__sock_connect(self):
         f = asyncio.Future(loop=self.loop)

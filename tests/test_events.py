@@ -623,12 +623,14 @@ class EventLoopTestsMixin:
 
             server_context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
             server_context.load_cert_chain(ONLYCERT, ONLYKEY)
-            server_context.check_hostname = False
+            if sys.version_info > (3, 3):
+                server_context.check_hostname = False
             server_context.verify_mode = ssl.CERT_NONE
 
             client_context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
             client_context = ssl.create_default_context()
-            client_context.check_hostname = False
+            if sys.version_info > (3, 3):
+                client_context.check_hostname = False
             client_context.verify_mode = ssl.CERT_NONE
 
             self.test_handle_connection(server_context, client_context)

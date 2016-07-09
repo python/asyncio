@@ -568,6 +568,70 @@ class EventLoopTestsMixin:
                 lambda: MyProto(loop=self.loop), *httpd.address)
             self._basetest_create_connection(conn_fut)
 
+    def test_handle_connection(self, server_ssl=None, client_ssl=None):
+        loop = self.loop
+
+        class MyProto(MyBaseProto):
+
+            def connection_lost(self, exc):
+                super().connection_lost(exc)
+                loop.call_soon(loop.stop)
+
+            def data_received(self, data):
+                super().data_received(data)
+                self.transport.write(expected_response)
+
+        lsock = socket.socket()
+        lsock.bind(('127.0.0.1', 0))
+        lsock.listen(1)
+        addr = lsock.getsockname()
+
+        message = b'test data'
+        reponse = None
+        expected_response = b'roger'
+
+        def client():
+            global response
+            csock = socket.socket()
+            if client_ssl is not None:
+                csock = client_ssl.wrap_socket(csock)
+            csock.connect(addr)
+            csock.sendall(message)
+            response = csock.recv(99)
+            csock.close()
+
+        thread = threading.Thread(target=client, daemon=True)
+        thread.start()
+
+        conn, _ = lsock.accept()
+        proto = MyProto(loop=loop)
+        proto.loop = loop
+        f = loop.create_task(
+            loop.handle_connection((lambda : proto), conn, ssl=server_ssl))
+        loop.run_forever()
+        conn.close()
+        lsock.close()
+
+        thread.join(1)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(proto.state, 'CLOSED')
+        self.assertEqual(proto.nbytes, len(message))
+        self.assertEqual(response, expected_response)
+
+    if ssl is not None:
+        def test_handle_ssl_connection(self):
+            server_context = ssl.create_default_context(
+                ssl.Purpose.CLIENT_AUTH)
+            server_context.load_cert_chain(ONLYCERT, ONLYKEY)
+            server_context.check_hostname = False
+            server_context.verify_mode = ssl.CERT_NONE
+
+            client_context = ssl.create_default_context()
+            client_context.check_hostname = False
+            client_context.verify_mode = ssl.CERT_NONE
+
+            self.test_handle_connection(server_context, client_context)
+
     @unittest.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
     def test_create_unix_connection(self):
         # Issue #20682: On Mac OS X Tiger, getsockname() returns a

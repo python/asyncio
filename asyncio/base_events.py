@@ -980,6 +980,36 @@ class BaseEventLoop(events.AbstractEventLoop):
         return server
 
     @coroutine
+    def handle_connection(self, protocol_factory, sock, ssl=None):
+        """Handle an accepted connection
+
+        This is used by servers that accept connections outside of
+        asyncio but that use asyncio to handle connections.
+
+        This method is a coroutine.  When completed, the coroutine
+        returns a (transport, protocol) pair.
+        """
+        sock.setblocking(False)
+
+        protocol = protocol_factory()
+        waiter = self.create_future()
+        if ssl:
+            sslcontext = None if isinstance(ssl, bool) else ssl
+            transport = self._make_ssl_transport(
+                sock, protocol, sslcontext, waiter,
+                server_side=True)
+        else:
+            transport = self._make_socket_transport(sock, protocol, waiter)
+
+        try:
+            yield from waiter
+        except:
+            transport.close()
+            raise
+
+        return transport, protocol
+
+    @coroutine
     def connect_read_pipe(self, protocol_factory, pipe):
         protocol = protocol_factory()
         waiter = self.create_future()

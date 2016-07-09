@@ -16,12 +16,13 @@ import subprocess
 import sys
 import threading
 import time
-import tty
 import errno
 import unittest
 from unittest import mock
 import weakref
 
+if sys.platform != 'win32':
+    import tty
 
 import asyncio
 from asyncio import proactor_events

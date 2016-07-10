@@ -14,4 +14,4 @@ install:
 
 script:
     - python runtests.py
-    - PYTHONASYNCIODEBUG=1 python runtests.py
+    - PYTHONASYNCIODEBUG=1 python -bb runtests.py

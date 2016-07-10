@@ -1368,6 +1368,41 @@ class EventLoopTestsMixin:
 
     @unittest.skipUnless(sys.platform != 'win32',
                          "Don't support pipes for Windows")
+    def test_unclosed_pipe_transport(self):
+        # This test reproduces the issue #314 on GitHub
+        loop = self.create_event_loop()
+        read_proto = MyReadPipeProto(loop=loop)
+        write_proto = MyWritePipeProto(loop=loop)
+
+        rpipe, wpipe = os.pipe()
+        rpipeobj = io.open(rpipe, 'rb', 1024)
+        wpipeobj = io.open(wpipe, 'w', 1024)
+
+        @asyncio.coroutine
+        def connect():
+            read_transport, _ = yield from loop.connect_read_pipe(
+                lambda: read_proto, rpipeobj)
+            write_transport, _ = yield from loop.connect_write_pipe(
+                lambda: write_proto, wpipeobj)
+            return read_transport, write_transport
+
+        # Run and close the loop without closing the transports
+        read_transport, write_transport = loop.run_until_complete(connect())
+        loop.close()
+
+        # These 'repr' calls used to raise an AttributeError
+        # See Issue #314 on GitHub
+        self.assertIn('open', repr(read_transport))
+        self.assertIn('open', repr(write_transport))
+
+        # Clean up (avoid ResourceWarning)
+        rpipeobj.close()
+        wpipeobj.close()
+        read_transport._pipe = None
+        write_transport._pipe = None
+
+    @unittest.skipUnless(sys.platform != 'win32',
+                         "Don't support pipes for Windows")
     # select, poll and kqueue don't support character devices (PTY) on Mac OS X
     # older than 10.6 (Snow Leopard)
     @support.requires_mac_ver(10, 6)
@@ -1574,25 +1609,6 @@ class EventLoopTestsMixin:
         self.assertLessEqual(self.loop._run_once_counter, 20,
             {'clock_resolution': self.loop._clock_resolution,
              'selector': self.loop._selector.__class__.__name__})
-
-    def test_sock_connect_address(self):
-        addresses = [(socket.AF_INET, ('www.python.org', 80))]
-        if support.IPV6_ENABLED:
-            addresses.extend((
-                (socket.AF_INET6, ('www.python.org', 80)),
-                (socket.AF_INET6, ('www.python.org', 80, 0, 0)),
-            ))
-
-        for family, address in addresses:
-            for sock_type in (socket.SOCK_STREAM, socket.SOCK_DGRAM):
-                sock = socket.socket(family, sock_type)
-                with sock:
-                    sock.setblocking(False)
-                    connect = self.loop.sock_connect(sock, address)
-                    with self.assertRaises(ValueError) as cm:
-                        self.loop.run_until_complete(connect)
-                    self.assertIn('address must be resolved',
-                                  str(cm.exception))
 
     def test_remove_fds_after_closing(self):
         loop = self.create_event_loop()

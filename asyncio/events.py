@@ -43,7 +43,7 @@ def _format_args_and_kwargs(args, kwargs):
     # use reprlib to limit the length of the output
     items = []
     if args:
-        items.extend(map(reprlib.repr, args))
+        items.extend(reprlib.repr(arg) for arg in args)
     if kwargs:
         items.extend('{}={}'.format(k, reprlib.repr(v))
                      for k, v in kwargs.items())

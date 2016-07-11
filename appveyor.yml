@@ -8,4 +8,4 @@ environment:
 build: false
 
 test_script:
-  - "%PYTHON%\\python.exe runtests.py"
+  - "%PYTHON%\\python.exe runtests.py -v"

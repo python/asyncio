@@ -800,21 +800,28 @@ class EventLoopTestsMixin:
         self.assertEqual(proto.nbytes, len(message))
         self.assertEqual(response, expected_response)
 
-    if ssl is not None:
-        def test_ssl_connect_accepted_socket(self):
+    @unittest.skipIf(ssl is None, 'No ssl module')
+    def test_ssl_connect_accepted_socket(self):
+        if (sys.platform == 'win32' and
+            sys.version_info < (3, 5) and
+            isinstance(self.loop, proactor_events.BaseProactorEventLoop)
+            ):
+            raise unittest.SkipTest(
+                'SSL not supported with proactor event loops before Python 3.5'
+                )
 
-            server_context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-            server_context.load_cert_chain(ONLYCERT, ONLYKEY)
-            if hasattr(server_context, 'check_hostname'):
-                server_context.check_hostname = False
-            server_context.verify_mode = ssl.CERT_NONE
+        server_context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+        server_context.load_cert_chain(ONLYCERT, ONLYKEY)
+        if hasattr(server_context, 'check_hostname'):
+            server_context.check_hostname = False
+        server_context.verify_mode = ssl.CERT_NONE
 
-            client_context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-            if hasattr(server_context, 'check_hostname'):
-                client_context.check_hostname = False
-            client_context.verify_mode = ssl.CERT_NONE
+        client_context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+        if hasattr(server_context, 'check_hostname'):
+            client_context.check_hostname = False
+        client_context.verify_mode = ssl.CERT_NONE
 
-            self.test_connect_accepted_socket(server_context, client_context)
+        self.test_connect_accepted_socket(server_context, client_context)
 
     @mock.patch('asyncio.base_events.socket')
     def create_server_multiple_hosts(self, family, hosts, mock_sock):

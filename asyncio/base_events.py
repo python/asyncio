@@ -981,8 +981,8 @@ class BaseEventLoop(events.AbstractEventLoop):
         return server
 
     @coroutine
-    def connect_accepted_socket(self, protocol_factory, sock, ssl=None):
-        """Handle an accepted connection
+    def connect_accepted_socket(self, protocol_factory, sock, *, ssl=None):
+        """Handle an accepted connection.
 
         This is used by servers that accept connections outside of
         asyncio but that use asyncio to handle connections.

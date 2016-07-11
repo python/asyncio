@@ -744,7 +744,7 @@ class EventLoopTestsMixin:
             self.assertEqual(cm.exception.errno, errno.EADDRINUSE)
             self.assertIn(str(httpd.address), cm.exception.strerror)
 
-    def test_handle_connection(self, server_ssl=None, client_ssl=None):
+    def test_connect_accepted_socket(self, server_ssl=None, client_ssl=None):
         loop = self.loop
 
         class MyProto(MyBaseProto):
@@ -783,7 +783,8 @@ class EventLoopTestsMixin:
         proto = MyProto(loop=loop)
         proto.loop = loop
         f = loop.create_task(
-            loop.handle_connection((lambda : proto), conn, ssl=server_ssl))
+            loop.connect_accepted_socket(
+                (lambda : proto), conn, ssl=server_ssl))
         loop.run_forever()
         conn.close()
         lsock.close()
@@ -795,7 +796,7 @@ class EventLoopTestsMixin:
         self.assertEqual(response, expected_response)
 
     if ssl is not None:
-        def test_handle_ssl_connection(self):
+        def test_ssl_connect_accepted_socket(self):
 
             server_context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
             server_context.load_cert_chain(ONLYCERT, ONLYKEY)
@@ -808,7 +809,7 @@ class EventLoopTestsMixin:
                 client_context.check_hostname = False
             client_context.verify_mode = ssl.CERT_NONE
 
-            self.test_handle_connection(server_context, client_context)
+            self.test_connect_accepted_socket(server_context, client_context)
 
     @mock.patch('asyncio.base_events.socket')
     def create_server_multiple_hosts(self, family, hosts, mock_sock):

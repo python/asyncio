@@ -981,7 +981,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         return server
 
     @coroutine
-    def handle_connection(self, protocol_factory, sock, ssl=None):
+    def connect_accepted_socket(self, protocol_factory, sock, ssl=None):
         """Handle an accepted connection
 
         This is used by servers that accept connections outside of

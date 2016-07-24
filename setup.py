@@ -11,12 +11,16 @@
 #  - hg ci && hg push
 
 import os
+import sys
 try:
     from setuptools import setup, Extension
 except ImportError:
     # Use distutils.core as a fallback.
     # We won't be able to build the Wheel file on Windows.
     from distutils.core import setup, Extension
+
+if sys.version_info < (3, 3, 0):
+    raise RuntimeError("asyncio requires Python 3.3.0+")
 
 extensions = []
 if os.name == 'nt':

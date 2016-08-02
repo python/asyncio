@@ -726,6 +726,7 @@ class BaseChildWatcher(AbstractChildWatcher):
 
     def __init__(self):
         self._loop = None
+        self._callbacks = {}
 
     def close(self):
         self.attach_loop(None)
@@ -738,6 +739,12 @@ class BaseChildWatcher(AbstractChildWatcher):
 
     def attach_loop(self, loop):
         assert loop is None or isinstance(loop, events.AbstractEventLoop)
+
+        if self._loop is not None and loop is None and self._callbacks:
+            warnings.warn(
+                'A loop is being detached '
+                'from a child watcher with pending handlers',
+                RuntimeWarning)
 
         if self._loop is not None:
             self._loop.remove_signal_handler(signal.SIGCHLD)
@@ -786,10 +793,6 @@ class SafeChildWatcher(BaseChildWatcher):
     This is a safe solution but it has a significant overhead when handling a
     big number of children (O(n) each time SIGCHLD is raised)
     """
-
-    def __init__(self):
-        super().__init__()
-        self._callbacks = {}
 
     def close(self):
         self._callbacks.clear()
@@ -871,7 +874,6 @@ class FastChildWatcher(BaseChildWatcher):
     """
     def __init__(self):
         super().__init__()
-        self._callbacks = {}
         self._lock = threading.Lock()
         self._zombies = {}
         self._forks = 0

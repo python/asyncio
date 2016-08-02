@@ -802,6 +802,11 @@ class SafeChildWatcher(BaseChildWatcher):
         pass
 
     def add_child_handler(self, pid, callback, *args):
+        if self._loop is None:
+            raise RuntimeError(
+                "Cannot add child handler, "
+                "the child watcher does not have a loop attached")
+
         self._callbacks[pid] = (callback, args)
 
         # Prevent a race condition in case the child is already terminated.
@@ -898,6 +903,12 @@ class FastChildWatcher(BaseChildWatcher):
 
     def add_child_handler(self, pid, callback, *args):
         assert self._forks, "Must use the context manager"
+
+        if self._loop is None:
+            raise RuntimeError(
+                "Cannot add child handler, "
+                "the child watcher does not have a loop attached")
+
         with self._lock:
             try:
                 returncode = self._zombies.pop(pid)

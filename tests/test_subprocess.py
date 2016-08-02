@@ -433,6 +433,10 @@ class SubprocessMixin:
         # the transport was not notified yet
         self.assertFalse(killed)
 
+        # Clear the handlers for FastChildWatcher to avoid a warning.
+        # Is that a bug?
+        asyncio.get_child_watcher()._callbacks.clear()
+
     def test_popen_error(self):
         # Issue #24763: check that the subprocess transport is closed
         # when BaseSubprocessTransport fails

@@ -435,7 +435,8 @@ class SubprocessMixin:
 
         # Clear the handlers for FastChildWatcher to avoid a warning.
         # Is that a bug?
-        asyncio.get_child_watcher()._callbacks.clear()
+        if sys.platform != 'win32':
+            asyncio.get_child_watcher()._callbacks.clear()
 
     def test_popen_error(self):
         # Issue #24763: check that the subprocess transport is closed

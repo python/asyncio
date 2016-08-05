@@ -87,7 +87,19 @@ class WriteTransport(BaseTransport):
 
         This does not block; it buffers the data and arranges for it
         to be sent out asynchronously.
+
+        If passed argument is bytearray, it is not allowed to change the size
+        of that object while write is in progress. Violation of that lead
+        to undefined behaviour.
         """
+
+        # In order to lock size of bytearray, we may wrap bytearray to
+        # memoryview, but this affects performance. Changing size of passed
+        # buffer after calling write() is very rare, obscure and suspicious
+        # logic, and even wrapping to memoryview will not help, since exception
+        # in user code will be raised when user changes size of passed
+        # bytearray.
+
         raise NotImplementedError
 
     def writelines(self, list_of_data):
@@ -140,7 +152,7 @@ class Transport(ReadTransport, WriteTransport):
     connection_made() method, passing it the transport.
 
     The implementation here raises NotImplemented for every method
-    except writelines(), which calls write() in a loop.
+    except writelines().
     """
 
 

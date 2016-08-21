@@ -29,9 +29,7 @@ class _ContextManager:
         self._lock = lock
 
     def __enter__(self):
-        # We have no use for the "as ..."  clause in the with
-        # statement for locks.
-        return None
+        return self._lock
 
     def __exit__(self, *args):
         try:
@@ -77,9 +75,7 @@ class _ContextManagerMixin:
         @coroutine
         def __aenter__(self):
             yield from self.acquire()
-            # We have no use for the "as ..."  clause in the with
-            # statement for locks.
-            return None
+            return self
 
         @coroutine
         def __aexit__(self, exc_type, exc, tb):

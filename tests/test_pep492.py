@@ -38,7 +38,7 @@ class LockTests(BaseTest):
             await asyncio.sleep(0.01, loop=self.loop)
             self.assertFalse(lock.locked())
             async with lock as _lock:
-                self.assertIs(_lock, None)
+                self.assertIs(_lock, lock)
                 self.assertTrue(lock.locked())
                 await asyncio.sleep(0.01, loop=self.loop)
                 self.assertTrue(lock.locked())
@@ -60,7 +60,7 @@ class LockTests(BaseTest):
             await asyncio.sleep(0.01, loop=self.loop)
             self.assertFalse(lock.locked())
             with await lock as _lock:
-                self.assertIs(_lock, None)
+                self.assertIs(_lock, lock)
                 self.assertTrue(lock.locked())
                 await asyncio.sleep(0.01, loop=self.loop)
                 self.assertTrue(lock.locked())

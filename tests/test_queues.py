@@ -521,6 +521,101 @@ class QueuePutTests(_QueueTestBase):
             asyncio.gather(getter(), t0, t1, t2, t3, loop=self.loop))
 
 
+class QueueDrainTests(_QueueTestBase):
+
+    def test_drain_with_get_and_empty_queue(self):
+        q = asyncio.Queue(loop=self.loop)
+
+        @asyncio.coroutine
+        def getter():
+            try:
+                yield from q.get()
+                raise Exception('Should have thrown asyncio.QueueClosed')
+            except asyncio.QueueClosed:
+                pass  # expected
+
+        self.loop.run_until_complete(
+            asyncio.gather(getter(), q.drain(), loop=self.loop))
+        assert q.is_closed
+        assert not q.is_draining
+
+    def test_drain_with_put_and_full_queue(self):
+        q = asyncio.Queue(1, loop=self.loop)
+        q.put_nowait(None)
+
+        @asyncio.coroutine
+        def putter():
+            try:
+                yield from q.put(None)
+                raise Exception('Should have thrown asyncio.QueueClosed')
+            except asyncio.QueueClosed:
+                pass  # expected
+
+        q.drain_nowait()
+        self.loop.run_until_complete(putter())
+        assert q.is_draining
+        assert not q.is_closed
+
+    def test_drain_with_get_and_full_queue(self):
+        q = asyncio.Queue(loop=self.loop)
+        q.put_nowait(0)
+        q.put_nowait(1)
+        q.put_nowait(2)
+        q.put_nowait(3)
+
+        @asyncio.coroutine
+        def getter():
+            try:
+                for i in range(5):
+                    a = yield from q.get()
+                    assert a == i
+                    q.task_done()
+                raise Exception('Should have thrown asyncio.QueueClosed')
+            except asyncio.QueueClosed:
+                assert i == 4
+
+        self.loop.run_until_complete(
+            asyncio.gather(getter(), q.drain(), loop=self.loop))
+        assert q.is_closed
+        assert not q.is_draining
+
+    def test_close_with_get_and_full_queue(self):
+        q = asyncio.Queue(loop=self.loop)
+        q.put_nowait(0)
+        q.put_nowait(1)
+
+        @asyncio.coroutine
+        def getter():
+            try:
+                yield from q.get()
+                raise Exception('Should have thrown asyncio.QueueClosed')
+            except asyncio.QueueClosed:
+                pass  # expected
+
+        q.close()
+        self.loop.run_until_complete(getter())
+        assert q.is_closed
+        assert not q.is_draining
+
+    def test_drain_nowait_with_get(self):
+        q = asyncio.Queue(loop=self.loop)
+        q.put_nowait(1)
+
+        @asyncio.coroutine
+        def getter():
+            try:
+                for i in range(2):
+                    yield from q.get()
+                raise Exception('Should have thrown asyncio.QueueClosed')
+            except asyncio.QueueClosed:
+                pass  # expected
+
+        q.drain_nowait()
+        self.loop.run_until_complete(getter())
+        assert q.is_closed
+        assert not q.is_draining
+
+
 class LifoQueueTests(_QueueTestBase):
 
     def test_order(self):

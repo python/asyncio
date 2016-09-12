@@ -877,8 +877,13 @@ class BaseEventLoop(events.AbstractEventLoop):
                             raise ValueError(
                                 'reuse_port not supported by socket module')
                         else:
-                            sock.setsockopt(
-                                socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+                            try:
+                                sock.setsockopt(
+                                    socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+                            except OSError:
+                                raise ValueError((
+                                    'reuse_port not supported by socket module, '
+                                    'SO_REUSEPORT defined but not implemented.'))
                     if allow_broadcast:
                         sock.setsockopt(
                             socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -1005,8 +1010,13 @@ class BaseEventLoop(events.AbstractEventLoop):
                             raise ValueError(
                                 'reuse_port not supported by socket module')
                         else:
-                            sock.setsockopt(
-                                socket.SOL_SOCKET, socket.SO_REUSEPORT, True)
+                            try:
+                                sock.setsockopt(
+                                    socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+                            except OSError:
+                                raise ValueError((
+                                    'reuse_port not supported by socket module, '
+                                    'SO_REUSEPORT defined but not implemented.'))
                     # Disable IPv4/IPv6 dual stack support (enabled by
                     # default on Linux) which makes a single socket
                     # listen on both address families.

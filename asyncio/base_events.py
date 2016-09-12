@@ -830,8 +830,8 @@ class BaseEventLoop(events.AbstractEventLoop):
                         sock.setsockopt(
                             socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                     if reuse_port:
-                        if not hasattr(socket, "SO_REUSEPORT") or \
-                           not _HAS_USABLE_SO_REUSEPORT:
+                        if (not _HAS_USABLE_SO_REUSEPORT or 
+                            not hasattr(socket, "SO_REUSEPORT")):
                             raise ValueError(
                                 'reuse_port not supported by socket module')
                         else:
@@ -959,8 +959,8 @@ class BaseEventLoop(events.AbstractEventLoop):
                         sock.setsockopt(
                             socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
                     if reuse_port:
-                        if not hasattr(socket, "SO_REUSEPORT") or \
-                           not _HAS_USABLE_SO_REUSEPORT:
+                        if (not _HAS_USABLE_SO_REUSEPORT or 
+                            not hasattr(socket, "SO_REUSEPORT")):
                             raise ValueError(
                                 'reuse_port not supported by socket module')
                         else:

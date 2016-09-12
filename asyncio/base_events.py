@@ -96,6 +96,7 @@ if hasattr(socket, "SO_REUSEPORT"):
     except OSError:
         pass
     finally:
+        _sock.close()
         _sock = None
       
 
@@ -957,7 +958,7 @@ class BaseEventLoop(events.AbstractEventLoop):
                         sock.setsockopt(
                             socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
                     if reuse_port:
-                        if not hasattr(socket, 'SO_REUSEPORT'):
+                        if not _HAS_SO_REUSEPORT:
                             raise ValueError(
                                 'reuse_port not supported by socket module')
                         else:

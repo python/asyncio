@@ -84,8 +84,8 @@ if hasattr(socket, 'SOCK_CLOEXEC'):
     _SOCKET_TYPE_MASK |= socket.SOCK_CLOEXEC
     
     
-# Tests to see if SO_REUSEPORT is both defined and usable.
-# as some platforms define SO_REUSEPORT but do not implement it.
+# Tests to see if SO_REUSEPORT is both defined and usable as
+# some platforms define SO_REUSEPORT but do not implement it.
 # See Python issue 26858 for more info: http://bugs.python.org/issue26858
 _HAS_USABLE_SO_REUSEPORT = False
 if hasattr(socket, "SO_REUSEPORT"):

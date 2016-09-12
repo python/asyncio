@@ -1362,7 +1362,8 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
     @patch_socket
     def test_create_server_nosoreuseport(self, m_socket):
         m_socket.getaddrinfo = socket.getaddrinfo
-        del m_socket.SO_REUSEPORT
+        if hasattr(m_socket, "SO_REUSEPORT"):
+            del m_socket.SO_REUSEPORT
         m_socket.socket.return_value = mock.Mock()
 
         f = self.loop.create_server(
@@ -1574,7 +1575,8 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
 
     @patch_socket
     def test_create_datagram_endpoint_nosoreuseport(self, m_socket):
-        del m_socket.SO_REUSEPORT
+        if hasattr(m_socket, "SO_REUSEPORT"):
+            del m_socket.SO_REUSEPORT
         m_socket.socket.return_value = mock.Mock()
 
         coro = self.loop.create_datagram_endpoint(

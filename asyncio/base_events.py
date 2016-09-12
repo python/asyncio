@@ -90,10 +90,13 @@ if hasattr(socket, 'SOCK_CLOEXEC'):
 _HAS_SO_REUSEPORT = False
 if hasattr(socket, "SO_REUSEPORT"):
     try:
-        socket.setsockopt(socket.socket(), socket.SO_REUSEPORT, 1)
+        _sock = socket.socket()
+        _sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
         _HAS_SO_REUSEPORT = True
     except OSError:
         pass
+    finally:
+        _sock = None
       
 
 def _ipaddr_info(host, port, family, type, proto):

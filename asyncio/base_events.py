@@ -87,12 +87,12 @@ if hasattr(socket, 'SOCK_CLOEXEC'):
 # Tests to see if SO_REUSEPORT is both defined and usable.
 # as some platforms define SO_REUSEPORT but do not implement it.
 # See Python issue 26858 for more info: http://bugs.python.org/issue26858
-_HAS_SO_REUSEPORT = False
+_HAS_USABLE_SO_REUSEPORT = False
 if hasattr(socket, "SO_REUSEPORT"):
     try:
         _sock = socket.socket()
         _sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-        _HAS_SO_REUSEPORT = True
+        _HAS_USABLE_SO_REUSEPORT = True
     except OSError:
         pass
     finally:
@@ -830,7 +830,7 @@ class BaseEventLoop(events.AbstractEventLoop):
                         sock.setsockopt(
                             socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                     if reuse_port:
-                        if not _HAS_SO_REUSEPORT:
+                        if not hasattr(socket, "SO_REUSEPORT") or not _HAS_USABLE_SO_REUSEPORT:
                             raise ValueError(
                                 'reuse_port not supported by socket module')
                         else:
@@ -958,7 +958,7 @@ class BaseEventLoop(events.AbstractEventLoop):
                         sock.setsockopt(
                             socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
                     if reuse_port:
-                        if not _HAS_SO_REUSEPORT:
+                        if not hasattr(socket, "SO_REUSEPORT") or not _HAS_USABLE_SO_REUSEPORT:
                             raise ValueError(
                                 'reuse_port not supported by socket module')
                         else:

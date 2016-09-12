@@ -82,22 +82,6 @@ if hasattr(socket, 'SOCK_NONBLOCK'):
     _SOCKET_TYPE_MASK |= socket.SOCK_NONBLOCK
 if hasattr(socket, 'SOCK_CLOEXEC'):
     _SOCKET_TYPE_MASK |= socket.SOCK_CLOEXEC
-    
-    
-# Tests to see if SO_REUSEPORT is both defined and usable as
-# some platforms define SO_REUSEPORT but do not implement it.
-# See Python issue 26858 for more info: http://bugs.python.org/issue26858
-_HAS_USABLE_SO_REUSEPORT = False
-if hasattr(socket, "SO_REUSEPORT"):
-    try:
-        _sock = socket.socket()
-        _sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-        _HAS_USABLE_SO_REUSEPORT = True
-    except OSError:
-        pass
-    finally:
-        _sock.close()
-        _sock = None
       
 
 def _ipaddr_info(host, port, family, type, proto):
@@ -830,13 +814,17 @@ class BaseEventLoop(events.AbstractEventLoop):
                         sock.setsockopt(
                             socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                     if reuse_port:
-                        if (not _HAS_USABLE_SO_REUSEPORT or 
-                            not hasattr(socket, "SO_REUSEPORT")):
+                        if not hasattr(socket, "SO_REUSEPORT"):
                             raise ValueError(
                                 'reuse_port not supported by socket module')
                         else:
-                            sock.setsockopt(
-                                socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+                            try:
+                                sock.setsockopt(
+                                    socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+                            except OSError:
+                                raise ValueError((
+                                    'reuse_port not supported by socket module, '
+                                    'SO_REUSEPORT defined but not implemented.'))
                     if allow_broadcast:
                         sock.setsockopt(
                             socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -959,13 +947,17 @@ class BaseEventLoop(events.AbstractEventLoop):
                         sock.setsockopt(
                             socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
                     if reuse_port:
-                        if (not _HAS_USABLE_SO_REUSEPORT or 
-                            not hasattr(socket, "SO_REUSEPORT")):
+                        if not hasattr(socket, "SO_REUSEPORT"):
                             raise ValueError(
                                 'reuse_port not supported by socket module')
                         else:
-                            sock.setsockopt(
-                                socket.SOL_SOCKET, socket.SO_REUSEPORT, True)
+                            try:
+                                sock.setsockopt(
+                                    socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+                            except OSError:
+                                raise ValueError((
+                                    'reuse_port not supported by socket module, '
+                                    'SO_REUSEPORT defined but not implemented.'))
                     # Disable IPv4/IPv6 dual stack support (enabled by
                     # default on Linux) which makes a single socket
                     # listen on both address families.

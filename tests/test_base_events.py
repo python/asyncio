@@ -36,7 +36,7 @@ def mock_socket_module():
     m_socket = mock.MagicMock(spec=socket)
     for name in (
         'AF_INET', 'AF_INET6', 'AF_UNSPEC', 'IPPROTO_TCP', 'IPPROTO_UDP',
-        'SOCK_STREAM', 'SOCK_DGRAM', 'SOL_SOCKET', 'SO_REUSEADDR', 'inet_pton'
+        'SOCK_STREAM', 'SOCK_DGRAM', 'SOL_SOCKET', 'SO_REUSEADDR', 'SO_REUSEPORT', 'inet_pton'
     ):
         if hasattr(socket, name):
             setattr(m_socket, name, getattr(socket, name))

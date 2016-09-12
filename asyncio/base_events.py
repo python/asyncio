@@ -82,7 +82,7 @@ if hasattr(socket, 'SOCK_NONBLOCK'):
     _SOCKET_TYPE_MASK |= socket.SOCK_NONBLOCK
 if hasattr(socket, 'SOCK_CLOEXEC'):
     _SOCKET_TYPE_MASK |= socket.SOCK_CLOEXEC
-      
+
 
 def _ipaddr_info(host, port, family, type, proto):
     # Try to skip getaddrinfo if "host" is already an IP. Users might have
@@ -814,7 +814,7 @@ class BaseEventLoop(events.AbstractEventLoop):
                         sock.setsockopt(
                             socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                     if reuse_port:
-                        if not hasattr(socket, "SO_REUSEPORT"):
+                        if not hasattr(socket, 'SO_REUSEPORT'):
                             raise ValueError(
                                 'reuse_port not supported by socket module')
                         else:
@@ -947,7 +947,7 @@ class BaseEventLoop(events.AbstractEventLoop):
                         sock.setsockopt(
                             socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
                     if reuse_port:
-                        if not hasattr(socket, "SO_REUSEPORT"):
+                        if not hasattr(socket, 'SO_REUSEPORT'):
                             raise ValueError(
                                 'reuse_port not supported by socket module')
                         else:

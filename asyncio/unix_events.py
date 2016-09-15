@@ -187,7 +187,7 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
                                       self._child_watcher_callback, transp)
             try:
                 yield from waiter
-            except Exception as exc:
+            except BaseException as exc:
                 # Workaround CPython bug #23353: using yield/yield-from in an
                 # except block of a generator doesn't clear properly
                 # sys.exc_info()
@@ -523,7 +523,7 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
                 n = os.write(self._fileno, data)
             except (BlockingIOError, InterruptedError):
                 n = 0
-            except Exception as exc:
+            except BaseException as exc:
                 self._conn_lost += 1
                 self._fatal_error(exc, 'Fatal write error on pipe transport')
                 return
@@ -545,7 +545,7 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
             n = os.write(self._fileno, data)
         except (BlockingIOError, InterruptedError):
             self._buffer.append(data)
-        except Exception as exc:
+        except BaseException as exc:
             self._conn_lost += 1
             # Remove writer here, _fatal_error() doesn't it
             # because _buffer is empty.
@@ -776,7 +776,7 @@ class BaseChildWatcher(AbstractChildWatcher):
     def _sig_chld(self):
         try:
             self._do_waitpid_all()
-        except Exception as exc:
+        except BaseException as exc:
             # self._loop should always be available here
             # as '_sig_chld' is added as a signal handler
             # in 'attach_loop'

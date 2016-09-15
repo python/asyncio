@@ -1310,7 +1310,7 @@ class TaskTests(test_utils.TestCase):
             raise BaseException()
 
         task = asyncio.Task(notmutch(), loop=self.loop)
-        self.assertRaises(BaseException, task._step)
+        task._step()
 
         self.assertTrue(task.done())
         self.assertIsInstance(task.exception(), BaseException)
@@ -1343,7 +1343,7 @@ class TaskTests(test_utils.TestCase):
         task.cancel()
         self.assertFalse(task.done())
 
-        self.assertRaises(BaseException, test_utils.run_briefly, loop)
+        test_utils.run_briefly(loop)
 
         self.assertTrue(task.done())
         self.assertFalse(task.cancelled())

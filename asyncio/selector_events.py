@@ -231,7 +231,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
                 raise
 
             # It's now up to the protocol to handle the connection.
-        except Exception as exc:
+        except BaseException as exc:
             if self._debug:
                 context = {
                     'message': ('Error on transport creation '
@@ -352,7 +352,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             data = sock.recv(n)
         except (BlockingIOError, InterruptedError):
             self.add_reader(fd, self._sock_recv, fut, True, sock, n)
-        except Exception as exc:
+        except BaseException as exc:
             fut.set_exception(exc)
         else:
             fut.set_result(data)
@@ -389,7 +389,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             n = sock.send(data)
         except (BlockingIOError, InterruptedError):
             n = 0
-        except Exception as exc:
+        except BaseException as exc:
             fut.set_exception(exc)
             return
 
@@ -439,7 +439,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             fut.add_done_callback(functools.partial(self._sock_connect_done,
                                                     fd))
             self.add_writer(fd, self._sock_connect_cb, fut, sock, address)
-        except Exception as exc:
+        except BaseException as exc:
             fut.set_exception(exc)
         else:
             fut.set_result(None)
@@ -459,7 +459,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         except (BlockingIOError, InterruptedError):
             # socket is still registered, the callback will be retried later
             pass
-        except Exception as exc:
+        except BaseException as exc:
             fut.set_exception(exc)
         else:
             fut.set_result(None)
@@ -491,7 +491,7 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
             conn.setblocking(False)
         except (BlockingIOError, InterruptedError):
             self.add_reader(fd, self._sock_accept, fut, True, sock)
-        except Exception as exc:
+        except BaseException as exc:
             fut.set_exception(exc)
         else:
             fut.set_result((conn, address))
@@ -699,7 +699,7 @@ class _SelectorSocketTransport(_SelectorTransport):
             data = self._sock.recv(self.max_size)
         except (BlockingIOError, InterruptedError):
             pass
-        except Exception as exc:
+        except BaseException as exc:
             self._fatal_error(exc, 'Fatal read error on socket transport')
         else:
             if data:
@@ -737,7 +737,7 @@ class _SelectorSocketTransport(_SelectorTransport):
                 n = self._sock.send(data)
             except (BlockingIOError, InterruptedError):
                 pass
-            except Exception as exc:
+            except BaseException as exc:
                 self._fatal_error(exc, 'Fatal write error on socket transport')
                 return
             else:
@@ -760,7 +760,7 @@ class _SelectorSocketTransport(_SelectorTransport):
             n = self._sock.send(self._buffer)
         except (BlockingIOError, InterruptedError):
             pass
-        except Exception as exc:
+        except BaseException as exc:
             self._loop.remove_writer(self._sock_fd)
             self._buffer.clear()
             self._fatal_error(exc, 'Fatal write error on socket transport')
@@ -855,10 +855,6 @@ class _SelectorSslTransport(_SelectorTransport):
             self._loop.remove_writer(self._sock_fd)
             self._sock.close()
             self._wakeup_waiter(exc)
-            if isinstance(exc, Exception):
-                return
-            else:
-                raise
 
         self._loop.remove_reader(self._sock_fd)
         self._loop.remove_writer(self._sock_fd)
@@ -871,7 +867,7 @@ class _SelectorSslTransport(_SelectorTransport):
                 self._sslcontext.verify_mode != ssl.CERT_NONE):
                 try:
                     ssl.match_hostname(peercert, self._server_hostname)
-                except Exception as exc:
+                except BaseException as exc:
                     if self._loop.get_debug():
                         logger.warning("%r: SSL handshake failed "
                                        "on matching the hostname",
@@ -943,7 +939,7 @@ class _SelectorSslTransport(_SelectorTransport):
             self._read_wants_write = True
             self._loop.remove_reader(self._sock_fd)
             self._loop.add_writer(self._sock_fd, self._write_ready)
-        except Exception as exc:
+        except BaseException as exc:
             self._fatal_error(exc, 'Fatal read error on SSL transport')
         else:
             if data:
@@ -978,7 +974,7 @@ class _SelectorSslTransport(_SelectorTransport):
                 n = 0
                 self._loop.remove_writer(self._sock_fd)
                 self._write_wants_read = True
-            except Exception as exc:
+            except BaseException as exc:
                 self._loop.remove_writer(self._sock_fd)
                 self._buffer.clear()
                 self._fatal_error(exc, 'Fatal write error on SSL transport')
@@ -1047,7 +1043,7 @@ class _SelectorDatagramTransport(_SelectorTransport):
             pass
         except OSError as exc:
             self._protocol.error_received(exc)
-        except Exception as exc:
+        except BaseException as exc:
             self._fatal_error(exc, 'Fatal read error on datagram transport')
         else:
             self._protocol.datagram_received(data, addr)
@@ -1082,7 +1078,7 @@ class _SelectorDatagramTransport(_SelectorTransport):
             except OSError as exc:
                 self._protocol.error_received(exc)
                 return
-            except Exception as exc:
+            except BaseException as exc:
                 self._fatal_error(exc,
                                   'Fatal write error on datagram transport')
                 return
@@ -1105,7 +1101,7 @@ class _SelectorDatagramTransport(_SelectorTransport):
             except OSError as exc:
                 self._protocol.error_received(exc)
                 return
-            except Exception as exc:
+            except BaseException as exc:
                 self._fatal_error(exc,
                                   'Fatal write error on datagram transport')
                 return

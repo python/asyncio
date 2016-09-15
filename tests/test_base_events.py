@@ -869,6 +869,8 @@ class BaseEventLoopTests(test_utils.TestCase):
             self.loop.run_until_complete(raise_keyboard_interrupt())
         except KeyboardInterrupt:
             pass
+        else:
+            raise Exception("Expected KeyboardInterrupt")
         self.loop.close()
         support.gc_collect()
 
@@ -887,16 +889,15 @@ class BaseEventLoopTests(test_utils.TestCase):
             self.loop.run_until_complete(raise_keyboard_interrupt())
         except KeyboardInterrupt:
             pass
+        else:
+            raise Exception("Expected KeyboardInterrupt")
 
         def func():
             self.loop.stop()
             func.called = True
         func.called = False
-        try:
-            self.loop.call_soon(func)
-            self.loop.run_forever()
-        except KeyboardInterrupt:
-            pass
+        self.loop.call_soon(func)
+        self.loop.run_forever()
         self.assertTrue(func.called)
 
     def test_single_selecter_event_callback_after_stopping(self):

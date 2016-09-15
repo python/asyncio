@@ -1208,7 +1208,7 @@ class SelectorSslTransportTests(test_utils.TestCase):
         exc = BaseException()
         self.sslsock.do_handshake.side_effect = exc
         with test_utils.disable_logger():
-            self.assertRaises(BaseException, transport._on_handshake, 0)
+            transport._on_handshake(0)
         self.assertTrue(self.sslsock.close.called)
         self.assertTrue(waiter.done())
         self.assertIs(exc, waiter.exception())

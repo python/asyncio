@@ -590,11 +590,8 @@ class SSLProtocol(protocols.Protocol):
                     logger.warning("%r: SSL handshake failed",
                                    self, exc_info=True)
             self._transport.close()
-            if isinstance(exc, Exception):
-                self._wakeup_waiter(exc)
-                return
-            else:
-                raise
+            self._wakeup_waiter(exc)
+            return
 
         if self._loop.get_debug():
             dt = self._loop.time() - self._handshake_start_time
@@ -652,13 +649,9 @@ class SSLProtocol(protocols.Protocol):
                 self._write_buffer_size -= len(data)
         except BaseException as exc:
             if self._in_handshake:
-                # BaseExceptions will be re-raised in _on_handshake_complete.
                 self._on_handshake_complete(exc)
             else:
                 self._fatal_error(exc, 'Fatal error on SSL transport')
-            if not isinstance(exc, Exception):
-                # BaseException
-                raise
 
     def _fatal_error(self, exc, message='Fatal error on transport'):
         # Should be called from exception handler only.

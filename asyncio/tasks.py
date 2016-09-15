@@ -24,7 +24,7 @@ from .coroutines import coroutine
 class Task(futures.Future):
     """A coroutine wrapped in a Future."""
 
-    # An important invariant maintained while a Task not done:
+    # An important invariant maintained while a Task is not done:
     #
     # - Either _fut_waiter is None, and _step() is scheduled;
     # - or _fut_waiter is some Future, and _step() is *not* scheduled.
@@ -243,11 +243,8 @@ class Task(futures.Future):
             self.set_result(exc.value)
         except futures.CancelledError as exc:
             super().cancel()  # I.e., Future.cancel(self).
-        except Exception as exc:
-            self.set_exception(exc)
         except BaseException as exc:
             self.set_exception(exc)
-            raise
         else:
             blocking = getattr(result, '_asyncio_future_blocking', None)
             if blocking is not None:
@@ -295,16 +292,12 @@ class Task(futures.Future):
     def _wakeup(self, future):
         try:
             future.result()
-        except Exception as exc:
+        except BaseException as exc:
             # This may also be a cancellation.
             self._step(exc)
         else:
             # Don't pass the value of `future.result()` explicitly,
             # as `Future.__iter__` and `Future.__await__` don't need it.
-            # If we call `_step(value, None)` instead of `_step()`,
-            # Python eval loop would use `.send(value)` method call,
-            # instead of `__next__()`, which is slower for futures
-            # that return non-generator iterators from their `__iter__`.
             self._step()
         self = None  # Needed to break cycles when an exception occurs.
 
@@ -735,7 +728,7 @@ def run_coroutine_threadsafe(coro, loop):
     def callback():
         try:
             futures._chain_future(ensure_future(coro, loop=loop), future)
-        except Exception as exc:
+        except BaseException as exc:
             if future.set_running_or_notify_cancel():
                 future.set_exception(exc)
             raise

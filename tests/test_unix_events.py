@@ -1397,11 +1397,9 @@ class ChildWatcherTestsMixin:
         with mock.patch.object(
                 old_loop, "remove_signal_handler") as m_remove_signal_handler:
 
-            with warnings.catch_warnings(record=True) as warns:
+            with self.assertWarnsRegex(
+                    RuntimeWarning, 'A loop is being detached'):
                 self.watcher.attach_loop(None)
-            self.assertEqual(len(warns), 1)
-            self.assertEqual(warns[0].category, RuntimeWarning)
-            self.assertIn('A loop is being detached', warns[0].message.args[0])
 
             m_remove_signal_handler.assert_called_once_with(
                 signal.SIGCHLD)

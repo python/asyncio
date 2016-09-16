@@ -312,13 +312,18 @@ class SelectSelector(_BaseSelectorImpl):
 
     def _select(self, r, w, _, timeout=None):
         try:
-            r, w, _ = select.select(r, w, [], timeout)
-            return r, w, []
+            r, w, x = select.select(r, w, w, timeout)
+            return r, w + x, []
         except OSError:
             stale_fds = []
-            for fd in r | w:
+            for fd in r:
                 try:
-                    select.select([fd], [fd], [], timeout)
+                    select.select([fd], [], [], timeout)
+                except OSError:
+                    stale_fds.append(fd)
+            for fd in w:
+                try:
+                    select.select([], [fd], [fd], timeout)
                 except OSError:
                     stale_fds.append(fd)
             for fd in stale_fds:

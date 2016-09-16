@@ -1168,10 +1168,10 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
         m_socket.getaddrinfo = socket.getaddrinfo
         sock = m_socket.socket.return_value
 
-        self.loop.add_reader = mock.Mock()
-        self.loop.add_reader._is_coroutine = False
-        self.loop.add_writer = mock.Mock()
-        self.loop.add_writer._is_coroutine = False
+        self.loop._add_reader = mock.Mock()
+        self.loop._add_reader._is_coroutine = False
+        self.loop._add_writer = mock.Mock()
+        self.loop._add_writer._is_coroutine = False
 
         coro = self.loop.create_connection(asyncio.Protocol, '1.2.3.4', 80)
         t, p = self.loop.run_until_complete(coro)
@@ -1603,8 +1603,8 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
 
         m_socket.getaddrinfo = getaddrinfo
         m_socket.socket.return_value.bind = bind = mock.Mock()
-        self.loop.add_reader = mock.Mock()
-        self.loop.add_reader._is_coroutine = False
+        self.loop._add_reader = mock.Mock()
+        self.loop._add_reader._is_coroutine = False
 
         reuseport_supported = hasattr(socket, 'SO_REUSEPORT')
         coro = self.loop.create_datagram_endpoint(

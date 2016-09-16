@@ -304,6 +304,19 @@ class BaseSelectorTestCase(unittest.TestCase):
 
         self.assertEqual(bufs, [MSG] * NUM_SOCKETS)
 
+    def test_stale_select(self):
+        s = self.SELECTOR()
+        self.addCleanup(s.close)
+
+        rd, wr = self.make_socketpair()
+        s.register(rd, selectors.EVENT_READ)
+        s.register(wr, selectors.EVENT_WRITE)
+        wr.send(b"Test")
+        rd.close()
+        wr.close()
+
+        self.assertEqual(s.select(), [])
+
     @unittest.skipIf(sys.platform == 'win32',
                      'select.select() cannot be used with empty fd sets')
     def test_empty_select(self):

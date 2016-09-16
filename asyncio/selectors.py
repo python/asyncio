@@ -56,6 +56,7 @@ if sys.version_info >= (3, 5):
     SelectorKey.data.__doc__ = ('''Optional opaque data associated to this file object.
     For example, this could be used to store a per-client session ID.''')
 
+
 class _SelectorMapping(Mapping):
     """Mapping of file objects to selector keys."""
 
@@ -309,12 +310,20 @@ class SelectSelector(_BaseSelectorImpl):
         self._writers.discard(key.fd)
         return key
 
-    if sys.platform == 'win32':
-        def _select(self, r, w, _, timeout=None):
+    def _select(self, r, w, _, timeout=None):
+        try:
             r, w, x = select.select(r, w, w, timeout)
             return r, w + x, []
-    else:
-        _select = select.select
+        except OSError:
+            stale_fds = []
+            for fd in r | w:
+                try:
+                    select.select([fd], [fd], [], 0)
+                except OSError:
+                    stale_fds.append(fd)
+            for fd in stale_fds:
+                self.unregister(fd)
+            return self._select(r, w, w, timeout)
 
     def select(self, timeout=None):
         timeout = None if timeout is None else max(timeout, 0)

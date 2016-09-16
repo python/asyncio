@@ -318,12 +318,21 @@ class SelectSelector(_BaseSelectorImpl):
             stale_fds = []
             for fd in r | w:
                 try:
-                    select.select([fd], [fd], [], 0)
+                    select.select([fd], [fd], [], timeout)
                 except OSError:
                     stale_fds.append(fd)
             for fd in stale_fds:
+                if fd in r:
+                    r.remove(fd)
+                if fd in w:
+                    w.remove(fd)
                 self.unregister(fd)
-            return self._select(r, w, w, timeout)
+
+            # If all fds were stale, then we don't need to try again.
+            if not r | w:
+                return [], [], []
+
+            return self._select(r, w, [], timeout)
 
     def select(self, timeout=None):
         timeout = None if timeout is None else max(timeout, 0)

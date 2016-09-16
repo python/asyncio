@@ -252,9 +252,10 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
         except KeyError:
             pass
         else:
-            raise RuntimeError(
-                'File descriptor {!r} is used by transport {!r}'.format(
-                    fd, transport))
+            if not transport.is_closing():
+                raise RuntimeError(
+                    'File descriptor {!r} is used by transport {!r}'.format(
+                        fd, transport))
 
     def _add_reader(self, fd, callback, *args):
         self._check_closed()

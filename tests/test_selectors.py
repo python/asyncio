@@ -309,8 +309,8 @@ class BaseSelectorTestCase(unittest.TestCase):
         self.addCleanup(s.close)
 
         rd, wr = self.make_socketpair()
-        s.register(rd, selectors.EVENT_READ)
-        s.register(wr, selectors.EVENT_WRITE)
+        s.register(rd.fileno(), selectors.EVENT_READ)
+        s.register(wr.fileno(), selectors.EVENT_WRITE)
         wr.send(b"Test")
         rd.close()
         wr.close()

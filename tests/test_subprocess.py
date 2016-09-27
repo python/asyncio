@@ -1,14 +1,13 @@
 import multiprocessing
 import signal
 import sys
-import time
 import unittest
 import warnings
 from unittest import mock
-from subprocess import SubprocessError
 
 import asyncio
 from asyncio import base_subprocess
+from asyncio import compat
 from asyncio import subprocess
 from asyncio import test_utils
 try:
@@ -175,8 +174,16 @@ class SubprocessMixin:
         args = PROGRAM_BLOCKED
         create = asyncio.create_subprocess_exec(
             *args, preexec_fn=raise_exception, loop=self.loop)
-        with self.assertRaises(SubprocessError):
+        with self.assertRaises(Exception) as ctx:
             self.loop.run_until_complete(create)
+
+        if compat.PY34:
+            from subprocess import SubprocessError
+            self.assertIsInstance(ctx.exception, SubprocessError)
+        else:
+            self.assertIsInstance(ctx.exception, RuntimeError)
+            self.assertEqual("Exception occurred in preexec_fn.",
+                             str(ctx.exception))
 
     def test_cancel_during_preexec(self):
         lock = multiprocessing.Lock()

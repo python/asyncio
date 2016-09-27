@@ -25,7 +25,11 @@ from .coroutines import coroutine
 from .log import logger
 
 # XXX temporary: a monkey-patched subprocess.Popen
-from . import tmp_subprocess
+if compat.PY34:
+    from . import tmp_subprocess
+else:
+    # Python 3.3 has a different version of Popen
+    from . import tmp_subprocess33 as tmp_subprocess
 
 
 __all__ = ['SelectorEventLoop',
@@ -678,6 +682,7 @@ class _NonBlockingPopen(tmp_subprocess._Popen):
 
     def _get_exec_err_pipe(self):
         errpipe_read, errpipe_write = self._loop._socketpair()
+        _set_inheritable(errpipe_write.fileno(), False)
         return errpipe_read.detach(), errpipe_write.detach()
 
     def _wait_exec_done(self, orig_executable, cwd, errpipe_read):

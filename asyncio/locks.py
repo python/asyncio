@@ -264,8 +264,12 @@ class Event:
             yield from fut
             return True
         finally:
-            self._waiters.remove(fut)
-
+            # popleft all finished futures up to the first pending one
+            while self._waiters:
+                if not self._waiters[0].done():
+                    break
+                else:
+                    self._waiters.popleft()
 
 class Condition(_ContextManagerMixin):
     """Asynchronous equivalent to threading.Condition.

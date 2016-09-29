@@ -388,6 +388,12 @@ class ProactorEventLoop(proactor_events.BaseProactorEventLoop):
         return transp
 
 
+def _get_accept_socket(family):
+    s = socket.socket(family)
+    s.settimeout(0)
+    return s
+
+
 class IocpProactor:
     """Proactor implementation using IOCP."""
 
@@ -464,7 +470,7 @@ class IocpProactor:
 
     def accept(self, listener):
         self._register_with_iocp(listener)
-        conn = self._get_accept_socket(listener.family)
+        conn = _get_accept_socket(listener.family)
         ov = _overlapped.Overlapped(NULL)
         ov.AcceptEx(listener.fileno(), conn.fileno())
 
@@ -646,11 +652,6 @@ class IocpProactor:
         safe if the event is never signalled (because it was cancelled).
         """
         self._unregistered.append(ov)
-
-    def _get_accept_socket(self, family):
-        s = socket.socket(family)
-        s.settimeout(0)
-        return s
 
     def _poll(self, timeout=None):
         if timeout is None:

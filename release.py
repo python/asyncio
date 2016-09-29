@@ -39,6 +39,17 @@ def get_architecture_bits():
     return int(arch[:2])
 
 
+def quote(arg):
+    if not re.search("[ '\"]", arg):
+        return arg
+    # FIXME: should we escape "?
+    return '"%s"' % arg
+
+
+def quote_args(args):
+    return ' '.join(quote(arg) for arg in args)
+
+
 class PythonVersion:
     def __init__(self, major, minor, bits):
         self.major = major
@@ -198,7 +209,8 @@ class Release(object):
                 print("Remove file: %s" % name)
             os.unlink(path)
 
-    def windows_sdk_setenv(self, pyver):
+    @staticmethod
+    def windows_sdk_setenv(pyver):
         if (pyver.major, pyver.minor) >= (3, 3):
             path = "v7.1"
             sdkver = (7, 1)
@@ -218,15 +230,6 @@ class Release(object):
             arch = '/x86'
         cmd = ["CALL", setenv, "/release", arch]
         return (cmd, sdkver)
-
-    def quote(self, arg):
-        if not re.search("[ '\"]", arg):
-            return arg
-        # FIXME: should we escape "?
-        return '"%s"' % arg
-
-    def quote_args(self, args):
-        return ' '.join(self.quote(arg) for arg in args)
 
     def cleanup(self):
         if self.verbose:
@@ -295,15 +298,15 @@ class Release(object):
                                            delete=False)
         with temp:
             temp.write("SETLOCAL EnableDelayedExpansion\n")
-            temp.write(self.quote_args(setenv) + "\n")
+            temp.write(quote_args(setenv) + "\n")
             temp.write(BATCH_FAIL_ON_ERROR + "\n")
             # Restore console colors: lightgrey on black
             temp.write("COLOR 07\n")
             temp.write("\n")
             temp.write("SET DISTUTILS_USE_SDK=1\n")
             temp.write("SET MSSDK=1\n")
-            temp.write("CD %s\n" % self.quote(self.root))
-            temp.write(self.quote_args(cmd) + "\n")
+            temp.write("CD %s\n" % quote(self.root))
+            temp.write(quote_args(cmd) + "\n")
             temp.write(BATCH_FAIL_ON_ERROR + "\n")
 
         try:

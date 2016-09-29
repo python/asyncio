@@ -151,7 +151,8 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
 
         return True
 
-    def _check_signal(self, sig):
+    @staticmethod
+    def _check_signal(sig):
         """Internal helper to validate a signal.
 
         Raise ValueError if the signal number is invalid or uncatchable.
@@ -782,18 +783,19 @@ class BaseChildWatcher(AbstractChildWatcher):
                 'exception': exc,
             })
 
-    def _compute_returncode(self, status):
-        if os.WIFSIGNALED(status):
-            # The child process died because of a signal.
-            return -os.WTERMSIG(status)
-        elif os.WIFEXITED(status):
-            # The child process exited (e.g sys.exit()).
-            return os.WEXITSTATUS(status)
-        else:
-            # The child exited, but we don't understand its status.
-            # This shouldn't happen, but if it does, let's just
-            # return that status; perhaps that helps debug it.
-            return status
+
+def _compute_returncode(status):
+    if os.WIFSIGNALED(status):
+        # The child process died because of a signal.
+        return -os.WTERMSIG(status)
+    elif os.WIFEXITED(status):
+        # The child process exited (e.g sys.exit()).
+        return os.WEXITSTATUS(status)
+    else:
+        # The child exited, but we don't understand its status.
+        # This shouldn't happen, but if it does, let's just
+        # return that status; perhaps that helps debug it.
+        return status
 
 
 class SafeChildWatcher(BaseChildWatcher):
@@ -857,7 +859,7 @@ class SafeChildWatcher(BaseChildWatcher):
                 # The child process is still alive.
                 return
 
-            returncode = self._compute_returncode(status)
+            returncode = _compute_returncode(status)
             if self._loop.get_debug():
                 logger.debug('process %s exited with returncode %s',
                              expected_pid, returncode)
@@ -950,7 +952,7 @@ class FastChildWatcher(BaseChildWatcher):
                     # A child process is still alive.
                     return
 
-                returncode = self._compute_returncode(status)
+                returncode = _compute_returncode(status)
 
             with self._lock:
                 try:

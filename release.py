@@ -20,7 +20,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import textwrap
 
 PROJECT = 'asyncio'
 DEBUG_ENV_VAR = 'PYTHONASYNCIODEBUG'

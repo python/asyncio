@@ -167,6 +167,7 @@ class SubprocessMixin:
         else:
             self.assertEqual(-signal.SIGTERM, returncode)
 
+    @unittest.skipIf(sys.platform == 'win32', "Don't support preexec_fn")
     def test_exception_in_preexec(self):
         def raise_exception():
             raise Exception("custom exception")
@@ -185,6 +186,7 @@ class SubprocessMixin:
             self.assertEqual("Exception occurred in preexec_fn.",
                              str(ctx.exception))
 
+    @unittest.skipIf(sys.platform == 'win32', "Don't support preexec_fn")
     def test_cancel_during_preexec(self):
         lock = multiprocessing.Lock()
         lock.acquire()

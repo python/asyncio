@@ -731,10 +731,6 @@ class _NonBlockingPopen(tmp_subprocess._Popen):
 
 
 class _UnixSubprocessTransport(base_subprocess.BaseSubprocessTransport):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._failed_before_exec = False
-
     @coroutine
     def _start(self, args, shell, stdin, stdout, stderr, bufsize, **kwargs):
         with events.get_child_watcher() as watcher:
@@ -760,7 +756,7 @@ class _UnixSubprocessTransport(base_subprocess.BaseSubprocessTransport):
                     universal_newlines=False, bufsize=bufsize, **kwargs)
                 yield from exec_waiter
             except:
-                self._failed_before_exec = True
+                self._failed_before_start = True
                 # TODO stdin is probably closed by proc, but what about stdin_w
                 # so far? check this
                 if stdin_w is not None:
@@ -775,17 +771,6 @@ class _UnixSubprocessTransport(base_subprocess.BaseSubprocessTransport):
 
     def _child_watcher_callback(self, pid, returncode):
         self._loop.call_soon_threadsafe(self._process_exited, returncode)
-
-    @coroutine
-    def _wait(self):
-        if self._failed_before_exec:
-            # let loop._make_subprocess_transport() call transport._wait() when
-            # an excpetion is raised asynchronously during the setup of the
-            # transport, which garantees that necessary cleanup will be
-            # performed
-            return
-        else:
-            return (yield from super()._wait())
 
 
 class AbstractChildWatcher:

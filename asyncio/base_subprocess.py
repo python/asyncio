@@ -25,6 +25,7 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
         self._pending_calls = collections.deque()
         self._pipes = {}
         self._finished = False
+        self._failed_before_start = False
 
         if stdin == subprocess.PIPE:
             self._pipes[0] = None
@@ -46,7 +47,12 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
                 start = self._start(args=args, shell=shell, stdin=stdin,
                                     stdout=stdout, stderr=stderr,
                                     bufsize=bufsize, **start_kwargs)
+            except:
+                self._failed_before_start = True
+                self.close()
+                raise
 
+            try:
                 if start is not None:
                     # _start is not required to be a coroutine
                     yield from start
@@ -254,6 +260,12 @@ class BaseSubprocessTransport(transports.SubprocessTransport):
         """Wait until the process exit and return the process return code.
 
         This method is a coroutine."""
+        if self._failed_before_start:
+            # Let loop._make_subprocess_transport() call transport._wait() when
+            # an exception is raised asynchronously during the setup of the
+            # transport, it garantees that necessary cleanup will be performed.
+            return
+
         if self._returncode is not None:
             return self._returncode
 

@@ -241,11 +241,11 @@ class SelectorEventLoopUnixSocketTests(test_utils.TestCase):
         with test_utils.unix_socket_path() as path:
             sock = socket.socket(socket.AF_UNIX)
             sock.bind(path)
-            with sock:
-                coro = self.loop.create_unix_server(lambda: None, path)
-                with self.assertRaisesRegex(OSError,
-                                            'Address.*is already in use'):
-                    self.loop.run_until_complete(coro)
+            sock.listen(1)
+            sock.close()
+
+            coro = self.loop.create_unix_server(lambda: None, path)
+            self.loop.run_until_complete(coro)
 
     def test_create_unix_server_existing_path_nonsock(self):
         with tempfile.NamedTemporaryFile() as file:

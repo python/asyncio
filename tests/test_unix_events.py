@@ -245,7 +245,9 @@ class SelectorEventLoopUnixSocketTests(test_utils.TestCase):
             sock.close()
 
             coro = self.loop.create_unix_server(lambda: None, path)
-            self.loop.run_until_complete(coro)
+            srv = self.loop.run_until_complete(coro)
+            srv.close()
+            self.loop.run_until_complete(srv.wait_closed())
 
     def test_create_unix_server_existing_path_nonsock(self):
         with tempfile.NamedTemporaryFile() as file:

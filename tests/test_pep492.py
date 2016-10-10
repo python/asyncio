@@ -227,5 +227,27 @@ class CoroutineTests(BaseTest):
             self.loop.run_until_complete(runner())
 
 
+class QueueAsyncIteratorTests(BaseTest):
+    def test_get_iter(self):
+        async def iter_consumer(queue, num_expected):
+            cnt = 0
+            async for item in queue:
+                cnt += 1
+                if cnt == num_expected:
+                    break
+
+        async def producer(queue, num_items):
+            for i in range(num_items):
+                await queue.put(i)
+
+        q = asyncio.Queue(loop=self.loop)
+        num_items = 5
+        self.loop.run_until_complete(
+            asyncio.gather(producer(q, 5),
+                           iter_consumer(q, 5),
+                           loop=self.loop),
+            )
+
+
 if __name__ == '__main__':
     unittest.main()

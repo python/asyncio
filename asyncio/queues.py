@@ -9,6 +9,7 @@ from . import compat
 from . import events
 from . import locks
 from .coroutines import coroutine
+from .futures import CancelledError
 
 
 class QueueEmpty(Exception):
@@ -80,6 +81,16 @@ class Queue:
 
     def __str__(self):
         return '<{} {}>'.format(type(self).__name__, self._format())
+
+    def __aiter__(self):
+        return self
+
+    @coroutine
+    def __anext__(self):
+        try:
+            return (yield from self.get())
+        except CancelledError:
+            raise StopAsyncIteration
 
     def _format(self):
         result = 'maxsize={!r}'.format(self._maxsize)

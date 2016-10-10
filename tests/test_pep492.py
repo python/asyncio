@@ -229,7 +229,7 @@ class CoroutineTests(BaseTest):
 
 class QueueAsyncIteratorTests(BaseTest):
     def test_get_iter(self):
-        async def iter_consumer(queue, num_expected):
+        async def consumer(queue, num_expected):
             cnt = 0
             async for item in queue:
                 cnt += 1
@@ -244,8 +244,25 @@ class QueueAsyncIteratorTests(BaseTest):
         num_items = 5
         self.loop.run_until_complete(
             asyncio.gather(producer(q, 5),
-                           iter_consumer(q, 5),
+                           consumer(q, 5),
                            loop=self.loop),
+            )
+
+    def test_stops_on_sentinel(self):
+        async def consumer(queue):
+            async for item in queue:
+                pass
+
+        async def producer(queue):
+            for i in range(5):
+                await queue.put(i)
+            await queue.put(asyncio.queues.END_QUEUE)
+
+        q = asyncio.Queue(loop=self.loop)
+        self.loop.run_until_complete(
+            asyncio.gather(producer(q),
+                           asyncio.wait_for(consumer(q), 5, loop=self.loop),
+                           loop=self.loop)
             )
 
 

@@ -9,7 +9,6 @@ from . import compat
 from . import events
 from . import locks
 from .coroutines import coroutine
-from .futures import CancelledError
 
 END_QUEUE = object()
 

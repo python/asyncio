@@ -682,6 +682,7 @@ class _NonBlockingPopen(tmp_subprocess._Popen):
 
     def _get_exec_err_pipe(self):
         errpipe_read, errpipe_write = self._loop._socketpair()
+        errpipe_read.setblocking(False)
         _set_inheritable(errpipe_write.fileno(), False)
         return errpipe_read.detach(), errpipe_write.detach()
 

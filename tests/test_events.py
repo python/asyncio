@@ -1240,11 +1240,12 @@ class EventLoopTestsMixin:
         sock_ob = socket.socket(type=socket.SOCK_STREAM)
         sock_ob.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock_ob.bind(('0.0.0.0', 0))
+        sock_ob_fd = sock_ob.fileno()
 
         f = self.loop.create_server(TestMyProto, sock=sock_ob)
         server = self.loop.run_until_complete(f)
         sock = server.sockets[0]
-        self.assertIs(sock, sock_ob)
+        self.assertEqual(sock.fileno(), sock_ob_fd)
 
         host, port = sock.getsockname()
         self.assertEqual(host, '0.0.0.0')

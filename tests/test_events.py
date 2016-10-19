@@ -1246,6 +1246,7 @@ class EventLoopTestsMixin:
         server = self.loop.run_until_complete(f)
         sock = server.sockets[0]
         self.assertEqual(sock.fileno(), sock_ob_fd)
+        self.assertEqual(sock_ob.fileno(), -1)
 
         host, port = sock.getsockname()
         self.assertEqual(host, '0.0.0.0')

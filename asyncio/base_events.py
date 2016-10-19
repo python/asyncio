@@ -88,8 +88,8 @@ def _set_reuseport(sock):
 
 
 def _copy_and_detach_socket(sock):
-    new_sock = socket.socket(sock.family, sock.type, sock.proto, sock.fileno())
-    sock.detach()
+    fd = sock.detach()
+    new_sock = socket.socket(sock.family, sock.type, sock.proto, fd)
     return new_sock
 
 
@@ -835,8 +835,8 @@ class BaseEventLoop(events.AbstractEventLoop):
                 raise ValueError(
                     'socket modifier keyword arguments can not be used '
                     'when sock is specified. ({})'.format(problems))
-            sock = _copy_and_detach_socket(sock)
             sock.setblocking(False)
+            sock = _copy_and_detach_socket(sock)
             r_addr = None
         else:
             if not (local_addr or remote_addr):
@@ -1055,7 +1055,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         This method is a coroutine.  When completed, the coroutine
         returns a (transport, protocol) pair.
         """
-        sock = _copy_and_detach_socket(sock)
+
         transport, protocol = yield from self._create_connection_transport(
             sock, protocol_factory, ssl, '', server_side=True)
         if self._debug:

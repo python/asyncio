@@ -176,9 +176,15 @@ def _run_until_complete_cb(fut):
 
 class Server(events.AbstractServer):
 
-    def __init__(self, loop, sockets):
+    def __init__(self, loop, sockets, protocol_factory, ssl, backlog, *,
+                 max_connections=None):
         self._loop = loop
         self.sockets = sockets
+        self._protocol_factory = protocol_factory
+        self._ssl = ssl
+        self._backlog = backlog
+        self._max_connections = max_connections
+        self._paused = False
         self._active_count = 0
         self._waiters = []
 
@@ -188,14 +194,37 @@ class Server(events.AbstractServer):
     def _attach(self):
         assert self.sockets is not None
         self._active_count += 1
+        if self._max_connections is not None and \
+           not self._paused and \
+           self._active_count >= self._max_connections:
+            self.pause()
 
     def _detach(self):
         assert self._active_count > 0
         self._active_count -= 1
         if self._active_count == 0 and self.sockets is None:
             self._wakeup()
+        elif self._paused and self._max_connections is not None and \
+             self._active_count < self._max_connections:
+            self.resume()
+
+    def pause(self):
+        """Pause future calls to accept()."""
+        assert not self._paused
+        self._paused = True
+        for sock in self.sockets:
+            self._loop.remove_reader(sock.fileno())
+
+    def resume(self):
+        """Resume use of accept() on listening socket(s)."""
+        assert self._paused
+        self._paused = False
+        for sock in self.sockets:
+            self._loop._start_serving(self._protocol_factory, sock, self._ssl,
+                                      self, self._backlog)
 
     def close(self):
+        self._protocol_factory = None
         sockets = self.sockets
         if sockets is None:
             return
@@ -943,7 +972,8 @@ class BaseEventLoop(events.AbstractEventLoop):
                       backlog=100,
                       ssl=None,
                       reuse_address=None,
-                      reuse_port=None):
+                      reuse_port=None,
+                      max_connections=None):
         """Create a TCP server.
 
         The host parameter can be a string, in that case the TCP server is bound
@@ -1026,7 +1056,8 @@ class BaseEventLoop(events.AbstractEventLoop):
                 raise ValueError('Neither host/port nor sock were specified')
             sockets = [sock]
 
-        server = Server(self, sockets)
+        server = Server(self, sockets, protocol_factory, ssl, backlog,
+                        max_connections=max_connections)
         for sock in sockets:
             sock.listen(backlog)
             sock.setblocking(False)

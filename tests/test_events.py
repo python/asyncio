@@ -1327,34 +1327,59 @@ class EventLoopTestsMixin:
         f = self.loop.create_server(lambda: MaxConnTestProto(loop=self.loop),
                                     '0.0.0.0', 0, max_connections=2)
         server = self.loop.run_until_complete(f)
-        sock = server.sockets[0]
-        port = sock.getsockname()[1]
+        port = server.sockets[0].getsockname()[1]
+        self._test_create_server_max_connections(server, socket.socket,
+                                                 ('127.0.0.1', port),
+                                                 protos, on_data)
+
+    @unittest.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
+    def test_create_unix_server_max_connections(self):
+        protos = []
+        on_data = asyncio.Event(loop=self.loop)
+
+        class MaxConnTestProto(MyBaseProto):
+            def connection_made(self, transport):
+                super().connection_made(transport)
+                protos.append(self)
+            def data_received(self, data):
+                super().data_received(data)
+                on_data.set()
+
+        factory = lambda: MaxConnTestProto(loop=self.loop)
+        server, path = self._make_unix_server(factory, max_connections=2)
+        socket_factory = lambda: socket.socket(socket.AF_UNIX)
+        self._test_create_server_max_connections(server, socket_factory, path,
+                                                 protos, on_data)
+
+    def _test_create_server_max_connections(self, server, socket_factory,
+                                            connect_to, protos, on_data):
+        sock_fd = server.sockets[0].fileno()
 
         # Low water..
-        c1 = socket.socket()
-        c1.connect(('127.0.0.1', port))
+        c1 = socket_factory()
+        c1.connect(connect_to)
         c1.sendall(b'x')
         self.loop.run_until_complete(on_data.wait())
         on_data.clear()
         self.assertFalse(server._paused)
-        self.loop._selector.get_key(sock.fileno())  # has reader
+        self.loop._selector.get_key(sock_fd)  # has reader
 
         # High water..
-        c2 = socket.socket()
-        c2.connect(('127.0.0.1', port))
+        c2 = socket_factory()
+        c2.connect(connect_to)
         c2.sendall(b'x')
         self.loop.run_until_complete(on_data.wait())
         on_data.clear()
         self.assertEqual(server._active_count, 2)
         self.assertTrue(server._paused)
-        self.assertRaises(KeyError, self.loop._selector.get_key, sock.fileno())
+        self.assertRaises(KeyError, self.loop._selector.get_key, sock_fd)
 
         # Low water again..
         p = protos.pop(0)
         p.transport.close()
         self.loop.run_until_complete(p.done)
         self.assertFalse(server._paused)
-        self.loop._selector.get_key(sock.fileno())  # has reader
+        self.loop._selector.get_key(sock_fd)  # has reader
 
         # cleanup
         p = protos.pop(0)
@@ -1369,7 +1394,15 @@ class EventLoopTestsMixin:
         f = self.loop.create_server(lambda: None, '0.0.0.0', 0)
         server = self.loop.run_until_complete(f)
         sock_fd = server.sockets[0].fileno()
+        self._test_create_server_pause_resume(server, sock_fd)
 
+    @unittest.skipUnless(hasattr(socket, 'AF_UNIX'), 'No UNIX Sockets')
+    def test_create_unix_server_pause_resume(self):
+        server, path = self._make_unix_server(lambda: None)
+        sock_fd = server.sockets[0].fileno()
+        self._test_create_server_pause_resume(server, sock_fd)
+
+    def _test_create_server_pause_resume(self, server, sock_fd):
         server.pause()
         self.assertTrue(server._paused)
         self.assertRaises(KeyError, self.loop._selector.get_key, sock_fd)

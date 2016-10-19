@@ -2265,6 +2265,12 @@ if sys.platform == 'win32':
 
         def test_remove_fds_after_closing(self):
             raise unittest.SkipTest("IocpEventLoop does not have add_reader()")
+
+        def test_create_server_max_connections(self):
+            raise unittest.SkipTest("IocpEventLoop incompatible with max_connections")
+
+        def test_create_server_pause_resume(self):
+            raise unittest.SkipTest("IocpEventLoop incompatible with Server pause")
 else:
     from asyncio import selectors
 

@@ -1312,6 +1312,76 @@ class EventLoopTestsMixin:
 
         server.close()
 
+    def test_create_server_max_connections(self):
+        protos = []
+        on_data = asyncio.Event(loop=self.loop)
+
+        class MaxConnTestProto(MyBaseProto):
+            def connection_made(self, transport):
+                super().connection_made(transport)
+                protos.append(self)
+            def data_received(self, data):
+                super().data_received(data)
+                on_data.set()
+
+        f = self.loop.create_server(lambda: MaxConnTestProto(loop=self.loop),
+                                    '0.0.0.0', 0, max_connections=2)
+        server = self.loop.run_until_complete(f)
+        sock = server.sockets[0]
+        port = sock.getsockname()[1]
+
+        # Low water..
+        c1 = socket.socket()
+        c1.connect(('127.0.0.1', port))
+        c1.sendall(b'x')
+        self.loop.run_until_complete(on_data.wait())
+        on_data.clear()
+        self.assertFalse(server._paused)
+        self.loop._selector.get_key(sock.fileno())  # has reader
+
+        # High water..
+        c2 = socket.socket()
+        c2.connect(('127.0.0.1', port))
+        c2.sendall(b'x')
+        self.loop.run_until_complete(on_data.wait())
+        on_data.clear()
+        self.assertEqual(server._active_count, 2)
+        self.assertTrue(server._paused)
+        self.assertRaises(KeyError, self.loop._selector.get_key, sock.fileno())
+
+        # Low water again..
+        p = protos.pop(0)
+        p.transport.close()
+        self.loop.run_until_complete(p.done)
+        self.assertFalse(server._paused)
+        self.loop._selector.get_key(sock.fileno())  # has reader
+
+        # cleanup
+        p = protos.pop(0)
+        p.transport.close()
+        self.loop.run_until_complete(p.done)
+        c1.close()
+        c2.close()
+        server.close()
+        self.assertFalse(protos)
+
+    def test_create_server_pause_resume(self):
+        f = self.loop.create_server(lambda: None, '0.0.0.0', 0)
+        server = self.loop.run_until_complete(f)
+        sock_fd = server.sockets[0].fileno()
+
+        server.pause()
+        self.assertTrue(server._paused)
+        self.assertRaises(KeyError, self.loop._selector.get_key, sock_fd)
+        self.assertRaises(AssertionError, server.pause)
+
+        server.resume()
+        self.assertFalse(server._paused)
+        self.loop._selector.get_key(sock_fd)  # has reader
+        self.assertRaises(AssertionError, server.resume)
+
+        server.close()
+
     def test_server_close(self):
         f = self.loop.create_server(MyProto, '0.0.0.0', 0)
         server = self.loop.run_until_complete(f)

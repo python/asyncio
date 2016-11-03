@@ -531,12 +531,10 @@ class BaseEventLoop(events.AbstractEventLoop):
 
         Absolute time corresponds to the event loop's time() method.
         """
-        if (coroutines.iscoroutine(callback)
-        or coroutines.iscoroutinefunction(callback)):
-            raise TypeError("coroutines cannot be used with call_at()")
         self._check_closed()
         if self._debug:
             self._check_thread()
+            self._check_callback(callback, 'call_at')
         timer = events.TimerHandle(when, callback, args, self)
         if timer._source_traceback:
             del timer._source_traceback[-1]
@@ -554,18 +552,24 @@ class BaseEventLoop(events.AbstractEventLoop):
         Any positional arguments after the callback will be passed to
         the callback when it is called.
         """
+        self._check_closed()
         if self._debug:
             self._check_thread()
+            self._check_callback(callback, 'call_soon')
         handle = self._call_soon(callback, args)
         if handle._source_traceback:
             del handle._source_traceback[-1]
         return handle
 
+    def _check_callback(self, callback, method):
+        if (coroutines.iscoroutine(callback) or
+                coroutines.iscoroutinefunction(callback)):
+            raise TypeError(
+                "coroutines cannot be used with {}()".format(method))
+        if isinstance(callback, events.Handle):
+            raise TypeError('A Handle is not a callback')
+
     def _call_soon(self, callback, args):
-        if (coroutines.iscoroutine(callback)
-        or coroutines.iscoroutinefunction(callback)):
-            raise TypeError("coroutines cannot be used with call_soon()")
-        self._check_closed()
         handle = events.Handle(callback, args, self)
         if handle._source_traceback:
             del handle._source_traceback[-1]
@@ -591,6 +595,9 @@ class BaseEventLoop(events.AbstractEventLoop):
 
     def call_soon_threadsafe(self, callback, *args):
         """Like call_soon(), but thread-safe."""
+        self._check_closed()
+        if self._debug:
+            self._check_callback(callback, 'call_soon_threadsafe')
         handle = self._call_soon(callback, args)
         if handle._source_traceback:
             del handle._source_traceback[-1]
@@ -598,10 +605,9 @@ class BaseEventLoop(events.AbstractEventLoop):
         return handle
 
     def run_in_executor(self, executor, func, *args):
-        if (coroutines.iscoroutine(func)
-        or coroutines.iscoroutinefunction(func)):
-            raise TypeError("coroutines cannot be used with run_in_executor()")
         self._check_closed()
+        if self._debug:
+            self._check_callback(func, 'run_in_executor')
         if isinstance(func, events.Handle):
             assert not args
             assert not isinstance(func, events.TimerHandle)

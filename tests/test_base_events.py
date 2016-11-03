@@ -1666,6 +1666,7 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
         def simple_coroutine():
             pass
 
+        self.loop.set_debug(True)
         coro_func = simple_coroutine
         coro_obj = coro_func()
         self.addCleanup(coro_obj.close)

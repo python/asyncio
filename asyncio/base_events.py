@@ -566,8 +566,11 @@ class BaseEventLoop(events.AbstractEventLoop):
                 coroutines.iscoroutinefunction(callback)):
             raise TypeError(
                 "coroutines cannot be used with {}()".format(method))
-        if isinstance(callback, events.Handle):
-            raise TypeError('A Handle is not a callback')
+        if not callable(callback):
+            raise TypeError(
+                'a callable object was expected by {}(), got {!r}'.format(
+                    method, callback))
+
 
     def _call_soon(self, callback, args):
         handle = events.Handle(callback, args, self)
@@ -608,17 +611,6 @@ class BaseEventLoop(events.AbstractEventLoop):
         self._check_closed()
         if self._debug:
             self._check_callback(func, 'run_in_executor')
-        if isinstance(func, events.Handle):
-            assert not args
-            assert not isinstance(func, events.TimerHandle)
-            warnings.warn(
-                "Passing Handle to loop.run_in_executor() is deprecated",
-                DeprecationWarning)
-            if func._cancelled:
-                f = self.create_future()
-                f.set_result(None)
-                return f
-            func, args = func._callback, func._args
         if executor is None:
             executor = self._default_executor
             if executor is None:

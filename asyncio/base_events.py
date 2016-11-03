@@ -394,6 +394,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         self._check_closed()
         if self.is_running():
             raise RuntimeError('Event loop is running.')
+        policy = events.get_event_loop_policy()
         self._set_coroutine_wrapper(self._debug)
         self._thread_id = threading.get_ident()
         if self._asyncgens is not None:
@@ -401,6 +402,7 @@ class BaseEventLoop(events.AbstractEventLoop):
             sys.set_asyncgen_hooks(firstiter=self._asyncgen_firstiter_hook,
                                    finalizer=self._asyncgen_finalizer_hook)
         try:
+            policy.set_running_loop(self)
             while True:
                 self._run_once()
                 if self._stopping:
@@ -408,6 +410,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         finally:
             self._stopping = False
             self._thread_id = None
+            policy.set_running_loop(None)
             self._set_coroutine_wrapper(False)
             if self._asyncgens is not None:
                 sys.set_asyncgen_hooks(*old_agen_hooks)

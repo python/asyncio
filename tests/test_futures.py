@@ -113,7 +113,12 @@ class FutureTests(test_utils.TestCase):
 
         self.assertFalse(asyncio.isfuture(1))
         self.assertFalse(asyncio.isfuture(asyncio.Future))
+
+        # As `isinstance(Mock(), Future)` returns `False`
         self.assertFalse(asyncio.isfuture(mock.Mock()))
+
+        # As `isinstance(Mock(Future), Future)` returns `True`
+        self.assertTrue(asyncio.isfuture(mock.Mock(asyncio.Future)))
 
         f = asyncio.Future(loop=self.loop)
         self.assertTrue(asyncio.isfuture(f))

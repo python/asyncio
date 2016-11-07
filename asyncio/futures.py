@@ -117,7 +117,7 @@ def isfuture(obj):
     itself as duck-type compatible by setting _asyncio_future_blocking.
     See comment in Future for more details.
     """
-    return (hasattr(type(obj), '_asyncio_future_blocking') and
+    return (hasattr(obj.__class__, '_asyncio_future_blocking') and
             obj._asyncio_future_blocking is not None)
 
 

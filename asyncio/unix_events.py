@@ -144,7 +144,11 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
         if self._interpreter_shutting_down:
             # The interpreter is being shutdown.  `PyOS_FiniInterrupts`
             # was already called and it has restored all signals already.
-            return
+            if self._debug:
+                warnings.warn(
+                    "the loop was not closed properly; call loop.close()",
+                    ResourceWarning)
+            return False
 
         self._check_signal(sig)
         try:

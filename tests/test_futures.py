@@ -101,6 +101,24 @@ class FutureTests(test_utils.TestCase):
         self.loop = self.new_test_loop()
         self.addCleanup(self.loop.close)
 
+    def test_isfuture(self):
+        class MyFuture:
+            _asyncio_future_blocking = None
+
+            def __init__(self):
+                self._asyncio_future_blocking = False
+
+        self.assertFalse(asyncio.isfuture(MyFuture))
+        self.assertTrue(asyncio.isfuture(MyFuture()))
+
+        self.assertFalse(asyncio.isfuture(1))
+        self.assertFalse(asyncio.isfuture(asyncio.Future))
+        self.assertFalse(asyncio.isfuture(mock.Mock()))
+
+        f = asyncio.Future(loop=self.loop)
+        self.assertTrue(asyncio.isfuture(f))
+        f.cancel()
+
     def test_initial_state(self):
         f = asyncio.Future(loop=self.loop)
         self.assertFalse(f.cancelled())

@@ -1,5 +1,6 @@
 """Selector event loop for Unix with signal handling."""
 
+import atexit
 import errno
 import os
 import signal
@@ -9,6 +10,7 @@ import subprocess
 import sys
 import threading
 import warnings
+import weakref
 
 
 from . import base_events
@@ -39,6 +41,12 @@ def _sighandler_noop(signum, frame):
     pass
 
 
+def _loop_atexit_callback(loop_ref):
+    loop = loop_ref()
+    if loop is not None:
+        loop._interpreter_shutting_down = True
+
+
 class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
     """Unix event loop.
 
@@ -47,6 +55,15 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
 
     def __init__(self, selector=None):
         super().__init__(selector)
+
+        # atexit callbacks are fired before PyOS_FiniInterrupts, which
+        # allows us to workaround bugs in remove_signal_handler.
+        atexit.register(_loop_atexit_callback, weakref.ref(self))
+        # When _interpreter_shutting_down is True, PyOS_FiniInterrupts
+        # has already been called and signalmodule's internal state was
+        # cleaned up.
+        self._interpreter_shutting_down = False
+
         self._signal_handlers = {}
 
     def _socketpair(self):
@@ -124,6 +141,11 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
 
         Return True if a signal handler was removed, False if not.
         """
+        if self._interpreter_shutting_down:
+            # The interpreter is being shutdown.  `PyOS_FiniInterrupts`
+            # was already called and it has restored all signals already.
+            return
+
         self._check_signal(sig)
         try:
             del self._signal_handlers[sig]

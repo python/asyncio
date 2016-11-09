@@ -583,7 +583,7 @@ class StreamReaderTests(test_utils.TestCase):
                     asyncio.start_server(self.handle_client,
                                          sock=sock,
                                          loop=self.loop))
-                return sock.getsockname()
+                return self.server.sockets[0].getsockname()
 
             def handle_client_callback(self, client_reader, client_writer):
                 self.loop.create_task(self.handle_client(client_reader,

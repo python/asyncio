@@ -84,6 +84,12 @@ def _set_reuseport(sock):
                              'SO_REUSEPORT defined but not implemented.')
 
 
+def _copy_and_detach_socket(sock):
+    fd = sock.detach()
+    new_sock = socket.socket(sock.family, sock.type, sock.proto, fd)
+    return new_sock
+
+
 # Linux's sock.type is a bitmask that can include extra info about socket.
 _SOCKET_TYPE_MASK = 0
 if hasattr(socket, 'SOCK_NONBLOCK'):
@@ -771,9 +777,11 @@ class BaseEventLoop(events.AbstractEventLoop):
                     raise OSError('Multiple exceptions: {}'.format(
                         ', '.join(str(exc) for exc in exceptions)))
 
-        elif sock is None:
-            raise ValueError(
-                'host and port was not specified and no sock specified')
+        else:
+            if sock is None:
+                raise ValueError(
+                    'host and port was not specified and no sock specified')
+            sock = _copy_and_detach_socket(sock)
 
         transport, protocol = yield from self._create_connection_transport(
             sock, protocol_factory, ssl, server_hostname)
@@ -831,6 +839,7 @@ class BaseEventLoop(events.AbstractEventLoop):
                     'socket modifier keyword arguments can not be used '
                     'when sock is specified. ({})'.format(problems))
             sock.setblocking(False)
+            sock = _copy_and_detach_socket(sock)
             r_addr = None
         else:
             if not (local_addr or remote_addr):
@@ -1027,6 +1036,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         else:
             if sock is None:
                 raise ValueError('Neither host/port nor sock were specified')
+            sock = _copy_and_detach_socket(sock)
             sockets = [sock]
 
         server = Server(self, sockets)
@@ -1048,6 +1058,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         This method is a coroutine.  When completed, the coroutine
         returns a (transport, protocol) pair.
         """
+
         transport, protocol = yield from self._create_connection_transport(
             sock, protocol_factory, ssl, '', server_side=True)
         if self._debug:

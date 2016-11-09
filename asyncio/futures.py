@@ -178,18 +178,18 @@ class Future:
         size = len(cb)
         if not size:
             cb = ''
+        else:
+            def format_cb(callback):
+                return events._format_callback_source(callback, ())
 
-        def format_cb(callback):
-            return events._format_callback_source(callback, ())
-
-        if size == 1:
-            cb = format_cb(cb[0])
-        elif size == 2:
-            cb = '{}, {}'.format(format_cb(cb[0]), format_cb(cb[1]))
-        elif size > 2:
-            cb = '{}, <{} more>, {}'.format(format_cb(cb[0]),
-                                            size-2,
-                                            format_cb(cb[-1]))
+            if size == 1:
+                cb = format_cb(cb[0])
+            elif size == 2:
+                cb = '{}, {}'.format(format_cb(cb[0]), format_cb(cb[1]))
+            elif size > 2:
+                cb = '{}, <{} more>, {}'.format(format_cb(cb[0]),
+                                                size-2,
+                                                format_cb(cb[-1]))
         return 'cb=[%s]' % cb
 
     def _repr_info(self):

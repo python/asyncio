@@ -238,13 +238,17 @@ def coroutine(func):
             w.__qualname__ = getattr(func, '__qualname__', None)
             return w
 
-    wrapper._is_coroutine = True  # For iscoroutinefunction().
+    wrapper._is_coroutine = _is_coroutine  # For iscoroutinefunction().
     return wrapper
+
+
+# A marker for iscoroutinefunction.
+_is_coroutine = object()
 
 
 def iscoroutinefunction(func):
     """Return True if func is a decorated coroutine function."""
-    return (getattr(func, '_is_coroutine', False) or
+    return (getattr(func, '_is_coroutine', None) is _is_coroutine or
             _inspect_iscoroutinefunction(func))
 
 

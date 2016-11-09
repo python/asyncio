@@ -33,12 +33,16 @@ _DEBUG = (not sys.flags.ignore_environment and
 
 try:
     _types_coroutine = types.coroutine
+    _types_CoroutineType = types.CoroutineType
 except AttributeError:
+    # Python 3.4
     _types_coroutine = None
+    _types_CoroutineType = None
 
 try:
     _inspect_iscoroutinefunction = inspect.iscoroutinefunction
 except AttributeError:
+    # Python 3.4
     _inspect_iscoroutinefunction = lambda func: False
 
 try:
@@ -255,6 +259,10 @@ def iscoroutinefunction(func):
 _COROUTINE_TYPES = (types.GeneratorType, CoroWrapper)
 if _CoroutineABC is not None:
     _COROUTINE_TYPES += (_CoroutineABC,)
+if _types_CoroutineType is not None:
+    # Prioritize native coroutine check to speed-up
+    # asyncio.iscoroutine.
+    _COROUTINE_TYPES = (_types_CoroutineType,) + _COROUTINE_TYPES
 
 
 def iscoroutine(obj):

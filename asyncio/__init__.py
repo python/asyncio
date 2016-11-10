@@ -24,6 +24,7 @@ from .events import *
 from .futures import *
 from .locks import *
 from .protocols import *
+from .run import *
 from .queues import *
 from .streams import *
 from .subprocess import *

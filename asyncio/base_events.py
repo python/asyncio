@@ -37,6 +37,11 @@ from . import tasks
 from .coroutines import coroutine
 from .log import logger
 
+try:
+    import ssl
+except ImportError:
+    ssl = None
+
 
 __all__ = ['BaseEventLoop']
 
@@ -53,6 +58,8 @@ _MIN_CANCELLED_TIMER_HANDLES_FRACTION = 0.5
 # methods (_fatal_error())
 _FATAL_ERROR_IGNORE = (BrokenPipeError,
                        ConnectionResetError, ConnectionAbortedError)
+if ssl is not None:
+    _FATAL_ERROR_IGNORE = _FATAL_ERROR_IGNORE + (ssl.CertificateError,)
 
 
 def _format_handle(handle):

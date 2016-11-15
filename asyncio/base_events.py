@@ -294,9 +294,6 @@ class BaseEventLoop(events.AbstractEventLoop):
         # Set to True when `loop.shutdown_asyncgens` is called.
         self._asyncgens_shutdown_called = False
 
-        # Future that isn't resolved while the loop is running.
-        self._forever_fut = None
-
     def __repr__(self):
         return ('<%s running=%s closed=%s debug=%s>'
                 % (self.__class__.__name__, self.is_running(),
@@ -433,12 +430,8 @@ class BaseEventLoop(events.AbstractEventLoop):
                     'asyncgen': agen
                 })
 
-    def get_forever_future(self):
-        return self._forever_fut
-
     def run_forever(self):
         """Run until stop() is called."""
-        self._forever_fut = self.create_future()
         self._check_closed()
         if self.is_running():
             raise RuntimeError('This event loop is already running')
@@ -457,14 +450,7 @@ class BaseEventLoop(events.AbstractEventLoop):
                 self._run_once()
                 if self._stopping:
                     break
-        except BaseException as ex:
-            self._forever_fut.set_exception(ex)
-            self._forever_fut._log_traceback = False
-            raise ex
-        else:
-            self._forever_fut.set_result(None)
         finally:
-            self._forever_fut = None
             self._stopping = False
             self._thread_id = None
             events._set_running_loop(None)

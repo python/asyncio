@@ -41,7 +41,8 @@ __all__ = (base_events.__all__ +
            streams.__all__ +
            subprocess.__all__ +
            tasks.__all__ +
-           transports.__all__)
+           transports.__all__ +
+           ['run', 'forever'])  # Will fix this later.
 
 if sys.platform == 'win32':  # pragma: no cover
     from .windows_events import *

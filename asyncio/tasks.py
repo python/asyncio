@@ -302,7 +302,7 @@ class Task(futures.Future):
     def _wakeup(self, future):
         try:
             future.result()
-        except BaseException as exc:
+        except Exception as exc:
             # This may also be a cancellation.
             self._step(exc)
         else:

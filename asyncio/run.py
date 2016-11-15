@@ -1,6 +1,6 @@
 """asyncio.run() function."""
 
-__all__ = ['run', 'forever']
+__all__ = ['run']
 
 import inspect
 import threading
@@ -13,33 +13,6 @@ def _isasyncgen(obj):
     if hasattr(inspect, 'isasyncgen'):
         return inspect.isasyncgen(obj)
     return False
-
-
-@coroutines.coroutine
-def forever():
-    """Wait until the current event loop stops running.
-
-    The coroutine will return None if the loop is stopped by
-    calling the `loop.stop()` method.
-
-    The coroutine will propagate any exception that caused
-    the loop to stop;
-
-    It is recommended to use this coroutine with the asyncio.run()
-    function:
-
-        async def coro():
-            print('hi')
-            try:
-                await asyncio.forever()
-            except KeyboardInterrupt:
-                await asyncio.sleep(1)
-                print('bye')
-
-        asyncio.run(coro())
-    """
-    loop = events.get_event_loop()
-    return (yield from loop.get_forever_future())
 
 
 def run(coro, *, debug=False):

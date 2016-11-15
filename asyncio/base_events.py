@@ -38,7 +38,7 @@ from .coroutines import coroutine
 from .log import logger
 
 
-__all__ = ['BaseEventLoop', 'run_in_executor']
+__all__ = ['BaseEventLoop']
 
 
 # Minimum number of _scheduled timer handles before cleanup of
@@ -53,27 +53,6 @@ _MIN_CANCELLED_TIMER_HANDLES_FRACTION = 0.5
 # methods (_fatal_error())
 _FATAL_ERROR_IGNORE = (BrokenPipeError,
                        ConnectionResetError, ConnectionAbortedError)
-
-
-@coroutine
-def run_in_executor(executor, func, *args):
-    """Run the function in a thread or a process pool.
-
-    Any concurrent.futures executor can be passed to the
-    function.
-
-    If executor is None, the function will be run in
-    the default threadpool of the event loop.
-
-    Example:
-
-        async def coro():
-            await asyncio.run_in_executor(
-                None, long_calculation, 42)
-    """
-    loop = events.get_event_loop()
-    result = yield from loop.run_in_executor(executor, func, *args)
-    return result
 
 
 def _format_handle(handle):

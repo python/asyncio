@@ -3,8 +3,7 @@
 import argparse
 import sys
 
-from asyncio import *
-from asyncio import test_utils
+from asyncio import test_utils, get_event_loop, coroutine, Protocol, Future
 
 
 ARGS = argparse.ArgumentParser(description="TCP data sink example.")

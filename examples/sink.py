@@ -4,7 +4,7 @@ import argparse
 import os
 import sys
 
-from asyncio import *
+from asyncio import get_event_loop, coroutine, Protocol
 
 ARGS = argparse.ArgumentParser(description="TCP data sink example.")
 ARGS.add_argument(

@@ -1,7 +1,7 @@
 """Crude demo for print_stack()."""
 
 
-from asyncio import *
+from asyncio import get_event_loop, open_connection, coroutine, Task, async
 
 
 @coroutine

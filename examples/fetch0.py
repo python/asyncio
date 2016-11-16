@@ -2,7 +2,7 @@
 
 import sys
 
-from asyncio import *
+from asyncio import get_event_loop, open_connection, coroutine
 
 
 @coroutine

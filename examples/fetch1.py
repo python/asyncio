@@ -6,7 +6,7 @@ This version adds URL parsing (including SSL) and a Response object.
 import sys
 import urllib.parse
 
-from asyncio import *
+from asyncio import get_event_loop, open_connection, coroutine
 
 
 class Response:

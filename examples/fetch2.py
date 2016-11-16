@@ -7,7 +7,7 @@ import sys
 import urllib.parse
 from http.client import BadStatusLine
 
-from asyncio import *
+from asyncio import get_event_loop, open_connection, coroutine
 
 
 class Request:

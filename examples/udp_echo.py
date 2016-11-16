@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """UDP echo example."""
+
 import argparse
-import sys
 import asyncio
+import sys
+
+
 try:
     import signal
 except ImportError:

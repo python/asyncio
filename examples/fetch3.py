@@ -4,11 +4,10 @@ This version adds a primitive connection pool, redirect following and
 chunked transfer-encoding.  It also supports a --iocp flag.
 """
 
+import asyncio
+from http.client import BadStatusLine
 import sys
 import urllib.parse
-from http.client import BadStatusLine
-
-from asyncio import *
 
 
 class ConnectionPool:
@@ -22,10 +21,10 @@ class ConnectionPool:
         for _, writer in self.connections.values():
             writer.close()
 
-    @coroutine
+    @asyncio.coroutine
     def open_connection(self, host, port, ssl):
         port = port or (443 if ssl else 80)
-        ipaddrs = yield from get_event_loop().getaddrinfo(host, port)
+        ipaddrs = yield from asyncio.get_event_loop().getaddrinfo(host, port)
         if self.verbose:
             print('* %s resolves to %s' %
                   (host, ', '.join(ip[4][0] for ip in ipaddrs)),
@@ -41,7 +40,7 @@ class ConnectionPool:
                 if self.verbose:
                     print('* Reusing pooled connection', key, file=sys.stderr)
                 return conn
-        reader, writer = yield from open_connection(host, port, ssl=ssl)
+        reader, writer = yield from asyncio.open_connection(host, port, ssl=ssl)
         host, port, *_ = writer.get_extra_info('peername')
         key = host, port, ssl
         self.connections[key] = reader, writer
@@ -78,7 +77,7 @@ class Request:
         if self.verbose:
             print(*args, file=sys.stderr)
 
-    @coroutine
+    @asyncio.coroutine
     def connect(self, pool):
         self.vprint('* Connecting to %s:%s using %s' %
                     (self.hostname, self.port, 'ssl' if self.ssl else 'tcp'))
@@ -89,13 +88,13 @@ class Request:
         self.vprint('* Connected to %s' %
                     (self.writer.get_extra_info('peername'),))
 
-    @coroutine
+    @asyncio.coroutine
     def putline(self, line):
         self.vprint('>', line)
         self.writer.write(line.encode('latin-1') + b'\r\n')
-        ##yield from self.writer.drain()
+        # yield from self.writer.drain()
 
-    @coroutine
+    @asyncio.coroutine
     def send_request(self):
         request = '%s %s %s' % (self.method, self.full_path, self.http_version)
         yield from self.putline(request)
@@ -106,7 +105,7 @@ class Request:
             yield from self.putline(line)
         yield from self.putline('')
 
-    @coroutine
+    @asyncio.coroutine
     def get_response(self):
         response = Response(self.reader, self.verbose)
         yield from response.read_headers()
@@ -127,13 +126,13 @@ class Response:
         if self.verbose:
             print(*args, file=sys.stderr)
 
-    @coroutine
+    @asyncio.coroutine
     def getline(self):
         line = (yield from self.reader.readline()).decode('latin-1').rstrip()
         self.vprint('<', line)
         return line
 
-    @coroutine
+    @asyncio.coroutine
     def read_headers(self):
         status_line = yield from self.getline()
         status_parts = status_line.split(None, 2)
@@ -161,7 +160,7 @@ class Response:
                 return v
         return default
 
-    @coroutine
+    @asyncio.coroutine
     def read(self):
         nbytes = None
         for key, value in self.headers:
@@ -192,7 +191,7 @@ class Response:
         return body
 
 
-@coroutine
+@asyncio.coroutine
 def fetch(url, verbose=True, max_redirect=10):
     pool = ConnectionPool(verbose)
     try:
@@ -218,7 +217,7 @@ def main():
         loop = ProactorEventLoop()
         set_event_loop(loop)
     else:
-        loop = get_event_loop()
+        loop = asyncio.get_event_loop()
     try:
         body = loop.run_until_complete(fetch(sys.argv[1], '-v' in sys.argv))
     finally:

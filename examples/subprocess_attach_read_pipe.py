@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Example showing how to attach a read pipe to a subprocess."""
+
 import asyncio
-import os, sys
+import os
+import sys
+
 
 code = """
 import os, sys
@@ -11,6 +14,7 @@ os.close(fd)
 """
 
 loop = asyncio.get_event_loop()
+
 
 @asyncio.coroutine
 def task():
@@ -28,6 +32,7 @@ def task():
     os.close(wfd)
     data = yield from reader.read()
     print("read = %r" % data.decode())
+
 
 loop.run_until_complete(task())
 loop.close()

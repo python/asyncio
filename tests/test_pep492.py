@@ -71,6 +71,31 @@ class LockTests(BaseTest):
             self.loop.run_until_complete(test(primitive))
             self.assertFalse(primitive.locked())
 
+    def test_finished_waiter_cancelled(self):
+
+        async def create_waiter(lock, fut):
+            fut.set_result(True)
+            async with lock:
+                pass
+
+        async def runner():
+            lock = asyncio.Lock(loop=self.loop)
+
+            await lock.acquire()
+
+            fut = self.loop.create_future()
+            task = asyncio.ensure_future(create_waiter(lock, fut),
+                                             loop=self.loop)
+            await fut
+
+            lock.release()
+            task.cancel()
+
+            async with lock:
+                pass
+
+        self.loop.run_until_complete(runner())
+
 
 class StreamReaderTests(BaseTest):
 

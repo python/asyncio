@@ -2,18 +2,21 @@
 
 """Fuzz tester for as_completed(), by Glenn Langford."""
 
-import asyncio
 import itertools
 import random
 import sys
+
+import asyncio
+
 
 @asyncio.coroutine
 def sleeper(time):
     yield from asyncio.sleep(time)
     return time
 
+
 @asyncio.coroutine
-def watcher(tasks,delay=False):
+def watcher(tasks, delay=False):
     res = []
     for t in asyncio.as_completed(tasks):
         r = yield from t
@@ -22,8 +25,8 @@ def watcher(tasks,delay=False):
             # simulate processing delay
             process_time = random.random() / 10
             yield from asyncio.sleep(process_time)
-    #print(res)
-    #assert(sorted(res) == res)
+    # print(res)
+    # assert(sorted(res) == res)
     if sorted(res) != res:
         print('FAIL', res)
         print('------------')
@@ -31,25 +34,26 @@ def watcher(tasks,delay=False):
         print('.', end='')
         sys.stdout.flush()
 
+
 loop = asyncio.get_event_loop()
 
 print('Pass 1')
 # All permutations of discrete task running times must be returned
 # by as_completed in the correct order.
-task_times = [0, 0.1, 0.2, 0.3, 0.4 ] # 120 permutations
+task_times = [0, 0.1, 0.2, 0.3, 0.4]  # 120 permutations
 for times in itertools.permutations(task_times):
-    tasks = [ asyncio.Task(sleeper(t)) for t in times ]
+    tasks = [asyncio.Task(sleeper(t)) for t in times]
     loop.run_until_complete(asyncio.Task(watcher(tasks)))
 
 print()
 print('Pass 2')
 # Longer task times, with randomized duplicates. 100 tasks each time.
-longer_task_times = [x/10 for x in range(30)]
+longer_task_times = [x / 10 for x in range(30)]
 for i in range(20):
     task_times = longer_task_times * 10
     random.shuffle(task_times)
-    #print('Times', task_times[:500])
-    tasks = [ asyncio.Task(sleeper(t)) for t in task_times[:100] ]
+    # print('Times', task_times[:500])
+    tasks = [asyncio.Task(sleeper(t)) for t in task_times[:100]]
     loop.run_until_complete(asyncio.Task(watcher(tasks)))
 
 print()
@@ -61,8 +65,8 @@ print('Pass 3')
 for i in range(20):
     task_times = longer_task_times * 10
     random.shuffle(task_times)
-    #print('Times', task_times[:200])
-    tasks = [ asyncio.Task(sleeper(t)) for t in task_times[:200] ]
+    # print('Times', task_times[:200])
+    tasks = [asyncio.Task(sleeper(t)) for t in task_times[:200]]
     loop.run_until_complete(asyncio.Task(watcher(tasks, delay=True)))
 
 print()

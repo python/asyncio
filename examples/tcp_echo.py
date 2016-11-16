@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """TCP echo server example."""
+
 import argparse
-import asyncio
 import sys
+
+import asyncio
+
+
 try:
     import signal
 except ImportError:

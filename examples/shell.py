@@ -1,8 +1,11 @@
 """Examples using create_subprocess_exec() and create_subprocess_shell()."""
 
-import asyncio
+
 import signal
+
+import asyncio
 from asyncio.subprocess import PIPE
+
 
 @asyncio.coroutine
 def cat(loop):
@@ -20,6 +23,7 @@ def cat(loop):
     exitcode = yield from proc.wait()
     print("(exit code %s)" % exitcode)
 
+
 @asyncio.coroutine
 def ls(loop):
     proc = yield from asyncio.create_subprocess_exec("ls",
@@ -34,6 +38,7 @@ def ls(loop):
     except ProcessLookupError:
         pass
 
+
 @asyncio.coroutine
 def test_call(*args, timeout=None):
     proc = yield from asyncio.create_subprocess_exec(*args)
@@ -44,6 +49,7 @@ def test_call(*args, timeout=None):
         print("timeout! (%.1f sec)" % timeout)
         proc.kill()
         yield from proc.wait()
+
 
 loop = asyncio.get_event_loop()
 loop.run_until_complete(cat(loop))

@@ -7,7 +7,7 @@ import sys
 import urllib.parse
 from http.client import BadStatusLine
 
-from asyncio import get_event_loop, open_connection, coroutine
+import asyncio
 
 
 class Request:
@@ -34,13 +34,13 @@ class Request:
         self.reader = None
         self.writer = None
 
-    @coroutine
+    @asyncio.coroutine
     def connect(self):
         if self.verbose:
             print('* Connecting to %s:%s using %s' %
                   (self.hostname, self.port, 'ssl' if self.ssl else 'tcp'),
                   file=sys.stderr)
-        self.reader, self.writer = yield from open_connection(self.hostname,
+        self.reader, self.writer = yield from asyncio.open_connection(self.hostname,
                                                               self.port,
                                                               ssl=self.ssl)
         if self.verbose:
@@ -51,20 +51,22 @@ class Request:
     def putline(self, line):
         self.writer.write(line.encode('latin-1') + b'\r\n')
 
-    @coroutine
+    @asyncio.coroutine
     def send_request(self):
         request = '%s %s %s' % (self.method, self.full_path, self.http_version)
-        if self.verbose: print('>', request, file=sys.stderr)
+        if self.verbose:
+            print('>', request, file=sys.stderr)
         self.putline(request)
         if 'host' not in {key.lower() for key, _ in self.headers}:
             self.headers.insert(0, ('Host', self.netloc))
         for key, value in self.headers:
             line = '%s: %s' % (key, value)
-            if self.verbose: print('>', line, file=sys.stderr)
+            if self.verbose:
+                print('>', line, file=sys.stderr)
             self.putline(line)
         self.putline('')
 
-    @coroutine
+    @asyncio.coroutine
     def get_response(self):
         response = Response(self.reader, self.verbose)
         yield from response.read_headers()
@@ -81,14 +83,15 @@ class Response:
         self.reason = None  # 'Ok'
         self.headers = []  # [('Content-Type', 'text/html')]
 
-    @coroutine
+    @asyncio.coroutine
     def getline(self):
         return (yield from self.reader.readline()).decode('latin-1').rstrip()
 
-    @coroutine
+    @asyncio.coroutine
     def read_headers(self):
         status_line = yield from self.getline()
-        if self.verbose: print('<', status_line, file=sys.stderr)
+        if self.verbose:
+            print('<', status_line, file=sys.stderr)
         status_parts = status_line.split(None, 2)
         if len(status_parts) != 3:
             raise BadStatusLine(status_line)
@@ -98,13 +101,15 @@ class Response:
             header_line = yield from self.getline()
             if not header_line:
                 break
-            if self.verbose: print('<', header_line, file=sys.stderr)
+            if self.verbose:
+                print('<', header_line, file=sys.stderr)
             # TODO: Continuation lines.
             key, value = header_line.split(':', 1)
             self.headers.append((key, value.strip()))
-        if self.verbose: print(file=sys.stderr)
+        if self.verbose:
+            print(file=sys.stderr)
 
-    @coroutine
+    @asyncio.coroutine
     def read(self):
         nbytes = None
         for key, value in self.headers:
@@ -118,7 +123,7 @@ class Response:
         return body
 
 
-@coroutine
+@asyncio.coroutine
 def fetch(url, verbose=True):
     request = Request(url, verbose)
     yield from request.connect()
@@ -129,7 +134,7 @@ def fetch(url, verbose=True):
 
 
 def main():
-    loop = get_event_loop()
+    loop = asyncio.get_event_loop()
     try:
         body = loop.run_until_complete(fetch(sys.argv[1], '-v' in sys.argv))
     finally:

@@ -15,15 +15,16 @@
 # - Handle out of file descriptors directly?  (How?)
 
 import argparse
-import asyncio
-import asyncio.locks
-import cgi
-from http.client import BadStatusLine
 import logging
 import re
 import sys
 import time
 import urllib.parse
+import cgi
+from http.client import BadStatusLine
+
+import asyncio
+import asyncio.locks
 
 
 ARGS = argparse.ArgumentParser(description="Web crawler")
@@ -341,7 +342,7 @@ class Request:
         self.headers.append(('User-Agent', 'asyncio-example-crawl/0.0'))
         self.headers.append(('Host', self.netloc))
         self.headers.append(('Accept', '*/*'))
-        ##self.headers.append(('Accept-Encoding', 'gzip'))
+        # self.headers.append(('Accept-Encoding', 'gzip'))
         for key, value in self.headers:
             line = '%s: %s' % (key, value)
             yield from self.putline(line)
@@ -519,7 +520,7 @@ class Fetcher:
                 self.exceptions.append(exc)
                 self.log(1, 'try', self.tries, 'for', self.url,
                             'raised', repr(exc))
-                ##import pdb; pdb.set_trace()
+                # import pdb; pdb.set_trace()
                 # Don't reuse the connection in this case.
             finally:
                 if self.request is not None:
@@ -534,7 +535,7 @@ class Fetcher:
             self.next_url = urllib.parse.urljoin(self.url, next_url)
             if self.max_redirect > 0:
                 self.log(1, 'redirect to', self.next_url, 'from', self.url)
-                self.crawler.add_url(self.next_url, self.max_redirect-1)
+                self.crawler.add_url(self.next_url, self.max_redirect - 1)
             else:
                 self.log(0, 'redirect limit reached for', self.next_url,
                             'from', self.url)

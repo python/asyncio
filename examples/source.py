@@ -3,7 +3,7 @@
 import argparse
 import sys
 
-from asyncio import test_utils, get_event_loop, coroutine, Protocol, Future
+import asyncio
 
 
 ARGS = argparse.ArgumentParser(description="TCP data sink example.")
@@ -24,7 +24,7 @@ ARGS.add_argument(
     default=1111, type=int, help='Port number')
 ARGS.add_argument(
     '--size', action='store', dest='size',
-    default=16*1024, type=int, help='Data size')
+    default=16 * 1024, type=int, help='Data size')
 
 args = None
 
@@ -33,7 +33,7 @@ def dprint(*args):
     print('source:', *args, file=sys.stderr)
 
 
-class Client(Protocol):
+class Client(asyncio.Protocol):
 
     total = 0
 
@@ -42,13 +42,13 @@ class Client(Protocol):
         dprint('my socket is', tr.get_extra_info('sockname'))
         self.tr = tr
         self.lost = False
-        self.loop = get_event_loop()
-        self.waiter = Future()
+        self.loop = asyncio.get_event_loop()
+        self.waiter = asyncio.Future()
         if args.stop:
             self.tr.write(b'stop')
             self.tr.close()
         else:
-            self.data = b'x'*args.size
+            self.data = b'x' * args.size
             self.write_some_data()
 
     def write_some_data(self):
@@ -68,11 +68,11 @@ class Client(Protocol):
         self.waiter.set_result(None)
 
 
-@coroutine
+@asyncio.coroutine
 def start(loop, host, port):
     sslctx = None
     if args.tls:
-        sslctx = test_utils.dummy_ssl_context()
+        sslctx = asyncio.test_utils.dummy_ssl_context()
     tr, pr = yield from loop.create_connection(Client, host, port,
                                                ssl=sslctx)
     dprint('tr =', tr)
@@ -88,7 +88,7 @@ def main():
         loop = ProactorEventLoop()
         set_event_loop(loop)
     else:
-        loop = get_event_loop()
+        loop = asyncio.get_event_loop()
     try:
         loop.run_until_complete(start(loop, args.host, args.port))
     finally:

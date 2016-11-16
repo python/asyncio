@@ -1,8 +1,9 @@
 """Example writing to and reading from a subprocess at the same time using
 tasks."""
 
-import asyncio
 import os
+
+import asyncio
 from asyncio.subprocess import PIPE
 
 
@@ -23,6 +24,7 @@ def send_input(writer, input):
     except ConnectionResetError:
         print('stdin: connection reset error')
 
+
 @asyncio.coroutine
 def log_errors(reader):
     while True:
@@ -31,6 +33,7 @@ def log_errors(reader):
             break
         print('ERROR', repr(line))
 
+
 @asyncio.coroutine
 def read_stdout(stdout):
     while True:
@@ -38,6 +41,7 @@ def read_stdout(stdout):
         print('received', repr(line))
         if not line:
             break
+
 
 @asyncio.coroutine
 def start(cmd, input=None, **kwds):
@@ -79,7 +83,7 @@ def main():
     else:
         loop = asyncio.get_event_loop()
     loop.run_until_complete(start(
-        'sleep 2; wc', input=[b'foo bar baz\n'*300 for i in range(100)]))
+        'sleep 2; wc', input=[b'foo bar baz\n' * 300 for i in range(100)]))
     loop.close()
 
 

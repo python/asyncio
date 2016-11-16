@@ -4,7 +4,8 @@ import argparse
 import os
 import sys
 
-from asyncio import get_event_loop, coroutine, Protocol
+import asyncio
+
 
 ARGS = argparse.ArgumentParser(description="TCP data sink example.")
 ARGS.add_argument(
@@ -21,7 +22,7 @@ ARGS.add_argument(
     default=1111, type=int, help='Port number')
 ARGS.add_argument(
     '--maxsize', action='store', dest='maxsize',
-    default=16*1024*1024, type=int, help='Max total data size')
+    default=16 * 1024 * 1024, type=int, help='Max total data size')
 
 server = None
 args = None
@@ -31,7 +32,7 @@ def dprint(*args):
     print('sink:', *args, file=sys.stderr)
 
 
-class Service(Protocol):
+class Service(asyncio.Protocol):
 
     def connection_made(self, tr):
         dprint('connection from', tr.get_extra_info('peername'))
@@ -55,7 +56,7 @@ class Service(Protocol):
         dprint('closed', repr(how))
 
 
-@coroutine
+@asyncio.coroutine
 def start(loop, host, port):
     global server
     sslctx = None
@@ -83,7 +84,7 @@ def main():
         loop = ProactorEventLoop()
         set_event_loop(loop)
     else:
-        loop = get_event_loop()
+        loop = asyncio.get_event_loop()
     try:
         loop.run_until_complete(start(loop, args.host, args.port))
     finally:

@@ -24,7 +24,7 @@ from .events import *
 from .futures import *
 from .locks import *
 from .protocols import *
-from .run import *
+from .runners import *
 from .queues import *
 from .streams import *
 from .subprocess import *
@@ -37,12 +37,12 @@ __all__ = (base_events.__all__ +
            futures.__all__ +
            locks.__all__ +
            protocols.__all__ +
+           runners.__all__ +
            queues.__all__ +
            streams.__all__ +
            subprocess.__all__ +
            tasks.__all__ +
-           transports.__all__ +
-           ['run'])  # Will fix this later.
+           transports.__all__)
 
 if sys.platform == 'win32':  # pragma: no cover
     from .windows_events import *

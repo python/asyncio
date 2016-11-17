@@ -127,6 +127,20 @@ class RunForeverTests(BaseTest):
         with self.assertRaisesRegex(RuntimeError, 'one empty yield'):
             self.assertIsNone(asyncio.run_forever(main()))
 
+    def test_asyncio_run_forever_try_finally(self):
+        DONE = 0
+
+        async def main():
+            nonlocal DONE
+            self.stop_soon()
+            try:
+                yield
+            finally:
+                DONE += 1
+
+        asyncio.run_forever(main())
+        self.assertEqual(DONE, 1)
+
     def test_asyncio_run_forever_raises_before_yield(self):
         async def main():
             await asyncio.sleep(0)
@@ -192,14 +206,18 @@ class RunForeverTests(BaseTest):
             raise unittest.SkipTest(
                 'this test requires Python 3.6b4 or greater')
 
+        DONE = 0
+
         class MyExc(BaseException):
             pass
 
         async def main():
+            nonlocal DONE
             self.stop_soon(exc=MyExc)
             try:
                 yield
             except MyExc:
-                pass
+                DONE += 1
 
         asyncio.run_forever(main())
+        self.assertEqual(DONE, 1)

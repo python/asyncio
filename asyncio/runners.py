@@ -39,7 +39,7 @@ def run(main, *, debug=False):
     asyncio programs, and should not be used to call asynchronous
     APIs.
 
-    Example::
+    Example:
 
         async def main():
             await asyncio.sleep(1)

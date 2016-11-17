@@ -124,7 +124,7 @@ class RunForeverTests(BaseTest):
         async def main():
             yield 1
 
-        with self.assertRaisesRegex(RuntimeError, 'only empty'):
+        with self.assertRaisesRegex(RuntimeError, 'one empty yield'):
             self.assertIsNone(asyncio.run_forever(main()))
 
     def test_asyncio_run_forever_raises_before_yield(self):
@@ -152,7 +152,7 @@ class RunForeverTests(BaseTest):
             yield
             raise ValueError('spam')
 
-        with self.assertRaisesRegex(RuntimeError, 'only one yield'):
+        with self.assertRaisesRegex(RuntimeError, 'one empty yield'):
             asyncio.run_forever(main())
 
     def test_asyncio_run_forever_only_ag(self):

@@ -102,11 +102,13 @@ def run_forever(main, *, debug=False):
             "asyncio.run_forever() cannot be called from a running event loop")
     if not isinstance(threading.current_thread(), threading._MainThread):
         raise RuntimeError(
-            "asyncio.run() must be called from the main thread")
+            "asyncio.run_forever() must be called from the main thread")
     if not inspect.isasyncgen(main):
         raise ValueError(
             "an asynchronous generator was expected, got {!r}".format(main))
 
+    one_yield_msg = ("asyncio.run_forever() supports only "
+                     "asynchronous generators with one empty yield")
     loop = events.new_event_loop()
     try:
         events.set_event_loop(loop)
@@ -119,7 +121,7 @@ def run_forever(main, *, debug=False):
         except StopAsyncIteration as ex:
             return
         if ret is not None:
-            raise RuntimeError("only empty yield is supported")
+            raise RuntimeError(one_yield_msg)
 
         yielded_twice = False
         try:
@@ -140,7 +142,7 @@ def run_forever(main, *, debug=False):
                 yielded_twice = True
 
         if yielded_twice:
-            raise RuntimeError("only one yield is supported")
+            raise RuntimeError(one_yield_msg)
 
     finally:
         _cleanup(loop)

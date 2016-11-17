@@ -4,6 +4,7 @@ import argparse
 import sys
 
 import asyncio
+import asyncio.test_utils
 
 
 ARGS = argparse.ArgumentParser(description="TCP data sink example.")
@@ -56,7 +57,7 @@ def start(loop, args):
     sslctx = None
     if args.tls:
         d.print('using dummy SSLContext')
-        sslctx = asyncio.test_utils.dummy_ssl_context()
+        sslctx = test_utils.dummy_ssl_context()
     r, w = yield from asyncio.open_connection(args.host, args.port, ssl=sslctx)
     d.print('r =', r)
     d.print('w =', w)

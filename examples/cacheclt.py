@@ -8,6 +8,7 @@ import json
 import logging
 
 import asyncio
+import asyncio.test_utils
 
 
 ARGS = argparse.ArgumentParser(description='Cache client example.')
@@ -173,7 +174,7 @@ def main():
         loop = asyncio.new_event_loop()
     sslctx = None
     if args.tls:
-        sslctx = asyncio.test_utils.dummy_ssl_context()
+        sslctx = test_utils.dummy_ssl_context()
     cache = CacheClient(args.host, args.port, sslctx=sslctx, loop=loop)
     try:
         loop.run_until_complete(

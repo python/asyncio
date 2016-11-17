@@ -5,6 +5,7 @@ import os
 import sys
 
 import asyncio
+from asyncio.subprocess import PIPE
 
 code = """
 import os, sys
@@ -23,7 +24,7 @@ def task():
     proc = yield from asyncio.create_subprocess_exec(
                           *args,
                           pass_fds={rfd},
-                          stdout=asyncio.subprocess.PIPE)
+                          stdout=PIPE)
 
     pipe = open(wfd, 'wb', 0)
     transport, _ = yield from loop.connect_write_pipe(asyncio.Protocol,

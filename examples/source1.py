@@ -1,10 +1,9 @@
 """Like source.py, but uses streams."""
 
 import argparse
-import sys
-
 import asyncio
 import asyncio.test_utils
+import sys
 
 
 ARGS = argparse.ArgumentParser(description="TCP data sink example.")

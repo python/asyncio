@@ -57,13 +57,11 @@ form is returned, but the connection is not closed:
 """
 
 import argparse
+import asyncio
 import json
 import logging
 import os
 import random
-
-import asyncio
-
 
 ARGS = argparse.ArgumentParser(description='Cache server example.')
 ARGS.add_argument(

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Example showing how to attach a write pipe to a subprocess."""
 
+import asyncio
+from asyncio.subprocess import PIPE
 import os
 import sys
 
-import asyncio
-from asyncio.subprocess import PIPE
 
 code = """
 import os, sys

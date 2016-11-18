@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Example showing how to attach a read pipe to a subprocess."""
 
+import asyncio
 import os
 import sys
 
-import asyncio
 
 code = """
 import os, sys

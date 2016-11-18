@@ -1,8 +1,7 @@
 """Simplest possible HTTP client."""
 
-import sys
-
 import asyncio
+import sys
 
 
 @asyncio.coroutine

@@ -1,10 +1,9 @@
 """Examples using create_subprocess_exec() and create_subprocess_shell()."""
 
 
-import signal
-
 import asyncio
 from asyncio.subprocess import PIPE
+import signal
 
 
 @asyncio.coroutine

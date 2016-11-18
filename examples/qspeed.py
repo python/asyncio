@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """How fast is the queue implementation?"""
 
-import time
-
 import asyncio
+import time
 
 
 print(asyncio)

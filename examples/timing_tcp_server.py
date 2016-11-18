@@ -8,12 +8,11 @@ in the same process.  It listens on port 1234 on 127.0.0.1, so it will
 fail if this port is currently in use.
 """
 
-import sys
-import time
-import random
-
 import asyncio
 import asyncio.streams
+import random
+import sys
+import time
 
 
 class MyServer:

@@ -1,10 +1,9 @@
 """Test client that connects and sends infinite data."""
 
 import argparse
-import sys
-
 import asyncio
 import asyncio.test_utils
+import sys
 
 
 ARGS = argparse.ArgumentParser(description="TCP data sink example.")

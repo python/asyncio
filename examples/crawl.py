@@ -15,16 +15,15 @@
 # - Handle out of file descriptors directly?  (How?)
 
 import argparse
+import asyncio
+import asyncio.locks
+import cgi
+from http.client import BadStatusLine
 import logging
 import re
 import sys
 import time
 import urllib.parse
-import cgi
-from http.client import BadStatusLine
-
-import asyncio
-import asyncio.locks
 
 
 ARGS = argparse.ArgumentParser(description="Web crawler")

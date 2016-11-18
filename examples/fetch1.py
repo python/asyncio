@@ -3,10 +3,9 @@
 This version adds URL parsing (including SSL) and a Response object.
 """
 
+import asyncio
 import sys
 import urllib.parse
-
-import asyncio
 
 
 class Response:

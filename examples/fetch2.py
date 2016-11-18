@@ -3,11 +3,10 @@
 This version adds a Request object.
 """
 
+import asyncio
+from http.client import BadStatusLine
 import sys
 import urllib.parse
-from http.client import BadStatusLine
-
-import asyncio
 
 
 class Request:

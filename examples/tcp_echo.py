@@ -2,9 +2,8 @@
 """TCP echo server example."""
 
 import argparse
-import sys
-
 import asyncio
+import sys
 
 
 try:

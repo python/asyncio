@@ -4,11 +4,10 @@ See cachesvr.py for protocol description.
 """
 
 import argparse
-import json
-import logging
-
 import asyncio
 import asyncio.test_utils
+import json
+import logging
 
 
 ARGS = argparse.ArgumentParser(description='Cache client example.')

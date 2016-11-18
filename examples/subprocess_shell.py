@@ -1,10 +1,9 @@
 """Example writing to and reading from a subprocess at the same time using
 tasks."""
 
-import os
-
 import asyncio
 from asyncio.subprocess import PIPE
+import os
 
 
 @asyncio.coroutine

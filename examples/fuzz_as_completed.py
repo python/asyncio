@@ -2,11 +2,10 @@
 
 """Fuzz tester for as_completed(), by Glenn Langford."""
 
+import asyncio
 import itertools
 import random
 import sys
-
-import asyncio
 
 
 @asyncio.coroutine

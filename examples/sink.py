@@ -1,10 +1,9 @@
 """Test service that accepts connections and reads all data off them."""
 
 import argparse
+import asyncio
 import os
 import sys
-
-import asyncio
 
 
 ARGS = argparse.ArgumentParser(description="TCP data sink example.")

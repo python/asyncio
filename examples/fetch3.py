@@ -4,11 +4,10 @@ This version adds a primitive connection pool, redirect following and
 chunked transfer-encoding.  It also supports a --iocp flag.
 """
 
+import asyncio
+from http.client import BadStatusLine
 import sys
 import urllib.parse
-from http.client import BadStatusLine
-
-import asyncio
 
 
 class ConnectionPool:

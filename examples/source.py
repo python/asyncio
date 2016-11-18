@@ -2,7 +2,6 @@
 
 import argparse
 import asyncio
-import asyncio.test_utils
 import sys
 
 
@@ -72,7 +71,12 @@ class Client(asyncio.Protocol):
 def start(loop, host, port):
     sslctx = None
     if args.tls:
-        sslctx = test_utils.dummy_ssl_context()
+        try:
+            import ssl
+        except ImportError as exc:
+            print('SSL not available: %r' % exc)
+        else:
+            sslctx = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
     tr, pr = yield from loop.create_connection(Client, host, port,
                                                ssl=sslctx)
     dprint('tr =', tr)

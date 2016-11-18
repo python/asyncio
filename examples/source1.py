@@ -2,7 +2,6 @@
 
 import argparse
 import asyncio
-import asyncio.test_utils
 import sys
 
 
@@ -54,9 +53,14 @@ def start(loop, args):
     d = Debug()
     total = 0
     sslctx = None
-    if args.tls:
-        d.print('using dummy SSLContext')
-        sslctx = test_utils.dummy_ssl_context()
+    if args.tls:        
+        try:
+            import ssl
+        except ImportError as exc:
+            print('SSL not available: %r' % exc)
+        else:
+            d.print('using dummy SSLContext')
+            sslctx = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
     r, w = yield from asyncio.open_connection(args.host, args.port, ssl=sslctx)
     d.print('r =', r)
     d.print('w =', w)

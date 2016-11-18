@@ -5,7 +5,6 @@ See cachesvr.py for protocol description.
 
 import argparse
 import asyncio
-import asyncio.test_utils
 import json
 import logging
 
@@ -173,7 +172,12 @@ def main():
         loop = asyncio.new_event_loop()
     sslctx = None
     if args.tls:
-        sslctx = test_utils.dummy_ssl_context()
+        try:
+            import ssl
+        except ImportError as exc:
+            logging.info('SSL not available: %r' % exc)
+        else:
+            sslctx = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
     cache = CacheClient(args.host, args.port, sslctx=sslctx, loop=loop)
     try:
         loop.run_until_complete(

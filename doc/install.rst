@@ -91,7 +91,7 @@ Build manually Trollius on Windows
 On Windows, if you cannot use precompiled wheel packages, an extension module
 must be compiled: the ``_overlapped`` module (source code: ``overlapped.c``).
 Read `Compile Python extensions on Windows
-<http://haypo-notes.readthedocs.org/python.html#compile-python-extensions-on-windows>`_
+<https://haypo-notes.readthedocs.io/python.html#compile-python-extensions-on-windows>`_
 to prepare your environment to build the Python extension. Then build the
 extension using::
 

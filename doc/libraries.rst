@@ -10,7 +10,7 @@ Trollius Libraries
 Libraries compatible with asyncio and trollius
 ==============================================
 
-* `aioeventlet <https://aioeventlet.readthedocs.org/>`_: asyncio API
+* `aioeventlet <https://aioeventlet.readthedocs.io/>`_: asyncio API
   implemented on top of eventlet
 * `aiogevent <https://pypi.python.org/pypi/aiogevent>`_: asyncio API
   implemented on top of gevent
@@ -24,12 +24,12 @@ Libraries compatible with asyncio and trollius
   module if available, or import ``trollius``.
 * `Tornado <http://www.tornadoweb.org/>`_ supports asyncio and Trollius since
   Tornado 3.2: `tornado.platform.asyncio — Bridge between asyncio and Tornado
-  <http://tornado.readthedocs.org/en/latest/asyncio.html>`_. It tries to import
+  <https://tornado.readthedocs.io/en/latest/asyncio.html>`_. It tries to import
   asyncio or fallback on importing trollius.
 
 Specific Ports
 ==============
 
 * `trollius-redis <https://github.com/benjolitz/trollius-redis>`_:
-  A port of `asyncio-redis <http://asyncio-redis.readthedocs.org/>`_ to
+  A port of `asyncio-redis <https://asyncio-redis.readthedocs.io/>`_ to
   trollius

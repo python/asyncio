@@ -1463,6 +1463,18 @@ class BaseEventLoopWithSelectorTests(test_utils.TestCase):
         self.assertRaises(
             OSError, self.loop.run_until_complete, coro)
 
+    def test_create_datagram_endpoint_no_connect_when_broadcast_allowed(self):
+        self.loop.sock_connect = sock_connect = mock.Mock()
+        sock_connect.return_value = []
+
+        coro = self.loop.create_datagram_endpoint(
+            asyncio.DatagramProtocol,
+            remote_addr=('127.0.0.1', 0),
+            allow_broadcast=True)
+
+        self.loop.run_until_complete(coro)
+        self.assertFalse(sock_connect.called)
+
     @patch_socket
     def test_create_datagram_endpoint_socket_err(self, m_socket):
         m_socket.getaddrinfo = socket.getaddrinfo

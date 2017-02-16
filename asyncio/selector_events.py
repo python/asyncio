@@ -553,7 +553,10 @@ class _SelectorTransport(transports._FlowControlMixin,
     def __init__(self, loop, sock, protocol, extra=None, server=None):
         super().__init__(extra, loop)
         self._extra['socket'] = sock
-        self._extra['sockname'] = sock.getsockname()
+        try:
+            self._extra['sockname'] = sock.getsockname()
+        except socket.error:
+            self._extra['sockname'] = None
         if 'peername' not in self._extra:
             try:
                 self._extra['peername'] = sock.getpeername()

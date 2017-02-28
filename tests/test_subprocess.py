@@ -462,12 +462,12 @@ class SubprocessMixin:
     def test_read_stdout_after_process_exit(self):
         @asyncio.coroutine
         def execute():
-            code = '\n'.join(['import sys, time',
+            code = '\n'.join(['import sys',
                               'for _ in range(64):',
                               '    sys.stdout.write("x" * 4096)',
                               'sys.stdout.flush()',
                               'sys.exit(1)'])
-            #fut = asyncio.create_subprocess_exec('timeout', '0.1', 'cat', '/dev/urandom',
+
             fut = asyncio.create_subprocess_exec(sys.executable, '-c', code,            
                                      stdout=asyncio.subprocess.PIPE,
                                                  loop=self.loop)

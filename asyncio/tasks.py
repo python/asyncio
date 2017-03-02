@@ -4,6 +4,7 @@ __all__ = ['Task',
            'FIRST_COMPLETED', 'FIRST_EXCEPTION', 'ALL_COMPLETED',
            'wait', 'wait_for', 'as_completed', 'sleep', 'async',
            'gather', 'shield', 'ensure_future', 'run_coroutine_threadsafe',
+           'get_future',
            ]
 
 import concurrent.futures
@@ -565,6 +566,28 @@ def ensure_future(coro_or_future, *, loop=None):
         return ensure_future(_wrap_awaitable(coro_or_future), loop=loop)
     else:
         raise TypeError('A Future, a coroutine or an awaitable is required')
+
+
+def get_future():
+    """
+    Gets the future and returns it.
+
+    If ensure_future is not found then asyncio.async is returned.
+
+    Useful when the site packages uses this and has a
+    coverage system similar to that of aiohttp's and so doing this
+    would result in coverage failures but those are false positives.
+    Besides not only aiohttp would benefit from this every single asyncio
+    user would benefit from this as it removes some duck typing that can always be
+    changed. Ann the much more reason to have this function to return the
+    correct future.
+    """
+    e__future = None
+    if hasattr(__module__, 'ensure_future'):
+        e__future = ensure_future
+    else:
+        e__future = globals()['async']
+    return e__future
 
 
 @coroutine

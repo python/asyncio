@@ -5,9 +5,10 @@ See cachesvr.py for protocol description.
 
 import argparse
 import asyncio
-from asyncio import test_utils
+import asyncio.test_utils
 import json
 import logging
+
 
 ARGS = argparse.ArgumentParser(description='Cache client example.')
 ARGS.add_argument(
@@ -106,7 +107,7 @@ class CacheClient:
                 self.reader, self.writer = yield from asyncio.open_connection(
                     self.host, self.port, ssl=self.sslctx, loop=self.loop)
             except Exception as exc:
-                backoff = min(args.max_backoff, backoff + (backoff//2) + 1)
+                backoff = min(args.max_backoff, backoff + (backoff // 2) + 1)
                 logging.info('Error connecting: %r; sleep %s', exc, backoff)
                 yield from asyncio.sleep(backoff, loop=self.loop)
                 continue
@@ -191,7 +192,7 @@ def testing(label, cache, loop):
 
     key = 'foo-%s' % label
     while True:
-        logging.info('%s %s', label, '-'*20)
+        logging.info('%s %s', label, '-' * 20)
         try:
             ret = yield from w(cache.set(key, 'hello-%s-world' % label))
             logging.info('%s set %s', label, ret)

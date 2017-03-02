@@ -1,13 +1,12 @@
 """Simplest possible HTTP client."""
 
+import asyncio
 import sys
 
-from asyncio import *
 
-
-@coroutine
+@asyncio.coroutine
 def fetch():
-    r, w = yield from open_connection('python.org', 80)
+    r, w = yield from asyncio.open_connection('python.org', 80)
     request = 'GET / HTTP/1.0\r\n\r\n'
     print('>', request, file=sys.stderr)
     w.write(request.encode('latin-1'))
@@ -23,7 +22,7 @@ def fetch():
 
 
 def main():
-    loop = get_event_loop()
+    loop = asyncio.get_event_loop()
     try:
         body = loop.run_until_complete(fetch())
     finally:

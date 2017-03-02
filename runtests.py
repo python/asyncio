@@ -112,6 +112,10 @@ def load_modules(basedir, suffix='.py'):
             print("Skipping '{0}': need at least Python 3.5".format(modname),
                   file=sys.stderr)
             continue
+        if modname == 'test_runner' and (sys.version_info < (3, 6)):
+            print("Skipping '{0}': need at least Python 3.6".format(modname),
+                  file=sys.stderr)
+            continue
         try:
             loader = importlib.machinery.SourceFileLoader(modname, sourcefile)
             mods.append((loader.load_module(), sourcefile))

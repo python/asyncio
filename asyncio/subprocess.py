@@ -96,9 +96,9 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
     def _maybe_close_transport(self, fd):
         if fd in self._pipe_fds:
             self._pipe_fds.remove(fd)
-            if len(self._pipe_fds) == 0:
-                self._transport.close()
-                self._transport = None
+        if len(self._pipe_fds) == 0:
+            self._transport.close()
+            self._transport = None
 
 
 class Process:

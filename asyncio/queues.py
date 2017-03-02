@@ -10,6 +10,8 @@ from . import events
 from . import locks
 from .coroutines import coroutine
 
+END_QUEUE = object()
+
 
 class QueueEmpty(Exception):
     """Exception raised when Queue.get_nowait() is called on a Queue object
@@ -80,6 +82,16 @@ class Queue:
 
     def __str__(self):
         return '<{} {}>'.format(type(self).__name__, self._format())
+
+    def __aiter__(self):
+        return self
+
+    @coroutine
+    def __anext__(self):
+        val = yield from self.get()
+        if val is END_QUEUE:
+            raise StopAsyncIteration
+        return val
 
     def _format(self):
         result = 'maxsize={!r}'.format(self._maxsize)

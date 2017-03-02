@@ -254,7 +254,8 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
 
     @coroutine
     def create_unix_server(self, protocol_factory, path=None, *,
-                           sock=None, backlog=100, ssl=None):
+                           sock=None, backlog=100, ssl=None,
+                           max_connections=None):
         if isinstance(ssl, bool):
             raise TypeError('ssl argument must be an SSLContext or None')
 
@@ -302,7 +303,8 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
                     'A UNIX Domain Stream Socket was expected, got {!r}'
                     .format(sock))
 
-        server = base_events.Server(self, [sock])
+        server = base_events.Server(self, [sock], protocol_factory, ssl,
+                                    backlog, max_connections=max_connections)
         sock.listen(backlog)
         sock.setblocking(False)
         self._start_serving(protocol_factory, sock, ssl, server)

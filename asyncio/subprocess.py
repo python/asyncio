@@ -24,7 +24,8 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
         self._limit = limit
         self.stdin = self.stdout = self.stderr = None
         self._transport = None
-        self._pipe_fds = [-1]
+        self._process_exited = False
+        self._pipe_fds = []
 
     def __repr__(self):
         info = [self.__class__.__name__]
@@ -88,15 +89,17 @@ class SubprocessStreamProtocol(streams.FlowControlMixin,
                 reader.feed_eof()
             else:
                 reader.set_exception(exc)
-            self._maybe_close_transport(fd)
-
-    def process_exited(self):
-        self._maybe_close_transport(-1)
         
-    def _maybe_close_transport(self, fd):
         if fd in self._pipe_fds:
             self._pipe_fds.remove(fd)
-        if len(self._pipe_fds) == 0:
+        self._maybe_close_transport(fd)
+
+    def process_exited(self):
+        self._process_exited = True
+        self._maybe_close_transport()
+        
+    def _maybe_close_transport(self):
+        if len(self._pipe_fds) == 0 and self._process_exited:
             self._transport.close()
             self._transport = None
 

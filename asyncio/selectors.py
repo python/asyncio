@@ -310,7 +310,8 @@ class SelectSelector(_BaseSelectorImpl):
         return key
 
     if sys.platform == 'win32':
-        def _select(self, r, w, _, timeout=None):
+        @staticmethod
+        def _select(r, w, _, timeout=None):
             r, w, x = select.select(r, w, w, timeout)
             return r, w + x, []
     else:

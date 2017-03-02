@@ -66,7 +66,8 @@ class Queue:
 
     # End of the overridable methods.
 
-    def _wakeup_next(self, waiters):
+    @staticmethod
+    def _wakeup_next(waiters):
         # Wake up the next waiter (if any) that isn't cancelled.
         while waiters:
             waiter = waiters.popleft()

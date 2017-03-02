@@ -470,7 +470,8 @@ class BaseSelectorEventLoop(base_events.BaseEventLoop):
     def _sock_connect_done(self, fd, fut):
         self.remove_writer(fd)
 
-    def _sock_connect_cb(self, fut, sock, address):
+    @staticmethod
+    def _sock_connect_cb(fut, sock, address):
         if fut.cancelled():
             return
 

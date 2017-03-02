@@ -73,6 +73,20 @@ def _format_pipe(fd):
         return repr(fd)
 
 
+def _log_subprocess(msg, stdin, stdout, stderr):
+    info = [msg]
+    if stdin is not None:
+        info.append('stdin=%s' % _format_pipe(stdin))
+    if stdout is not None and stderr == subprocess.STDOUT:
+        info.append('stdout=stderr=%s' % _format_pipe(stdout))
+    else:
+        if stdout is not None:
+            info.append('stdout=%s' % _format_pipe(stdout))
+        if stderr is not None:
+            info.append('stderr=%s' % _format_pipe(stderr))
+    logger.debug(' '.join(info))
+
+
 def _set_reuseport(sock):
     if not hasattr(socket, 'SO_REUSEPORT'):
         raise ValueError('reuse_port not supported by socket module')
@@ -228,6 +242,9 @@ class Server(events.AbstractServer):
         waiter = self._loop.create_future()
         self._waiters.append(waiter)
         yield from waiter
+
+
+_AF_INET6 = getattr(socket, 'AF_INET6', 0)
 
 
 class BaseEventLoop(events.AbstractEventLoop):
@@ -994,7 +1011,6 @@ class BaseEventLoop(events.AbstractEventLoop):
                 raise ValueError(
                     'host/port and sock can not be specified at the same time')
 
-            AF_INET6 = getattr(socket, 'AF_INET6', 0)
             if reuse_address is None:
                 reuse_address = os.name == 'posix' and sys.platform != 'cygwin'
             sockets = []
@@ -1034,7 +1050,7 @@ class BaseEventLoop(events.AbstractEventLoop):
                     # Disable IPv4/IPv6 dual stack support (enabled by
                     # default on Linux) which makes a single socket
                     # listen on both address families.
-                    if af == AF_INET6 and hasattr(socket, 'IPPROTO_IPV6'):
+                    if af == _AF_INET6 and hasattr(socket, 'IPPROTO_IPV6'):
                         sock.setsockopt(socket.IPPROTO_IPV6,
                                         socket.IPV6_V6ONLY,
                                         True)
@@ -1123,18 +1139,6 @@ class BaseEventLoop(events.AbstractEventLoop):
                          pipe.fileno(), transport, protocol)
         return transport, protocol
 
-    def _log_subprocess(self, msg, stdin, stdout, stderr):
-        info = [msg]
-        if stdin is not None:
-            info.append('stdin=%s' % _format_pipe(stdin))
-        if stdout is not None and stderr == subprocess.STDOUT:
-            info.append('stdout=stderr=%s' % _format_pipe(stdout))
-        else:
-            if stdout is not None:
-                info.append('stdout=%s' % _format_pipe(stdout))
-            if stderr is not None:
-                info.append('stderr=%s' % _format_pipe(stderr))
-        logger.debug(' '.join(info))
 
     @coroutine
     def subprocess_shell(self, protocol_factory, cmd, *, stdin=subprocess.PIPE,
@@ -1154,7 +1158,7 @@ class BaseEventLoop(events.AbstractEventLoop):
             # don't log parameters: they may contain sensitive information
             # (password) and may be too long
             debug_log = 'run shell command %r' % cmd
-            self._log_subprocess(debug_log, stdin, stdout, stderr)
+            _log_subprocess(debug_log, stdin, stdout, stderr)
         transport = yield from self._make_subprocess_transport(
             protocol, cmd, True, stdin, stdout, stderr, bufsize, **kwargs)
         if self._debug:
@@ -1183,7 +1187,7 @@ class BaseEventLoop(events.AbstractEventLoop):
             # don't log parameters: they may contain sensitive information
             # (password) and may be too long
             debug_log = 'execute program %r' % program
-            self._log_subprocess(debug_log, stdin, stdout, stderr)
+            _log_subprocess(debug_log, stdin, stdout, stderr)
         transport = yield from self._make_subprocess_transport(
             protocol, popen_args, False, stdin, stdout, stderr,
             bufsize, **kwargs)

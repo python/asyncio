@@ -24,6 +24,14 @@ from . import transports
 from .coroutines import coroutine
 from .log import logger
 
+# XXX temporary: a monkey-patched subprocess.Popen
+if compat.PY34:
+    from .tmp_subprocess import _Popen
+else:
+    # shows that we can fallback to an older version of subprocess.Popen
+    # safely: it will block, but asyncio will still work.
+    _Popen = subprocess.Popen
+
 
 __all__ = ['SelectorEventLoop',
            'AbstractChildWatcher', 'SafeChildWatcher',
@@ -183,34 +191,27 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
     def _make_subprocess_transport(self, protocol, args, shell,
                                    stdin, stdout, stderr, bufsize,
                                    extra=None, **kwargs):
-        with events.get_child_watcher() as watcher:
-            waiter = self.create_future()
-            transp = _UnixSubprocessTransport(self, protocol, args, shell,
-                                              stdin, stdout, stderr, bufsize,
-                                              waiter=waiter, extra=extra,
-                                              **kwargs)
+        waiter = self.create_future()
+        transp = _UnixSubprocessTransport(
+            self, protocol, args, shell, stdin, stdout, stderr, bufsize,
+            waiter=waiter, extra=extra, **kwargs)
 
-            watcher.add_child_handler(transp.get_pid(),
-                                      self._child_watcher_callback, transp)
-            try:
-                yield from waiter
-            except Exception as exc:
-                # Workaround CPython bug #23353: using yield/yield-from in an
-                # except block of a generator doesn't clear properly
-                # sys.exc_info()
-                err = exc
-            else:
-                err = None
+        try:
+            yield from waiter
+        except Exception as exc:
+            # Workaround CPython bug #23353: using yield/yield-from in an
+            # except block of a generator doesn't clear properly
+            # sys.exc_info()
+            err = exc
+        else:
+            err = None
 
-            if err is not None:
-                transp.close()
-                yield from transp._wait()
-                raise err
+        if err is not None:
+            transp.close()
+            yield from transp._wait()
+            raise err
 
         return transp
-
-    def _child_watcher_callback(self, pid, returncode, transp):
-        self.call_soon_threadsafe(transp._process_exited, returncode)
 
     @coroutine
     def create_unix_connection(self, protocol_factory, path, *,
@@ -673,8 +674,78 @@ else:
             fcntl.fcntl(fd, fcntl.F_SETFD, old & ~cloexec_flag)
 
 
-class _UnixSubprocessTransport(base_subprocess.BaseSubprocessTransport):
+if hasattr(_Popen, "_wait_exec_done"):
+    class _NonBlockingPopen(_Popen):
+        """A modified Popen which performs IO operations using an event loop."""
+        def __init__(self, loop, exec_waiter, watcher, *args, **kwargs):
+            self._loop = loop
+            self._watcher = watcher
+            self._exec_waiter = exec_waiter
+            super().__init__(*args, **kwargs)
 
+        def _cleanup_on_exec_failure(self):
+            super()._cleanup_on_exec_failure()
+            self._exec_waiter = None
+            self._loop = None
+            self._watcher = None
+
+        def _get_exec_err_pipe(self):
+            errpipe_read, errpipe_write = self._loop._socketpair()
+            errpipe_read.setblocking(False)
+            _set_inheritable(errpipe_write.fileno(), False)
+            return errpipe_read.detach(), errpipe_write.detach()
+
+        def _wait_exec_done(self, orig_executable, cwd, errpipe_read):
+            errpipe_data = bytearray()
+            self._loop.add_reader(errpipe_read, self._read_errpipe,
+                                  orig_executable, cwd, errpipe_read,
+                                  errpipe_data)
+
+        def _read_errpipe(self, orig_executable, cwd, errpipe_read,
+                          errpipe_data):
+            try:
+                part = os.read(errpipe_read, 50000)
+            except BlockingIOError:
+                return
+            except Exception as exc:
+                self._loop.remove_reader(errpipe_read)
+                os.close(errpipe_read)
+                self._exec_waiter.set_exception(exc)
+                self._cleanup_on_exec_failure()
+            else:
+                if part and len(errpipe_data) <= 50000:
+                    errpipe_data.extend(part)
+                    return
+
+                self._loop.remove_reader(errpipe_read)
+                os.close(errpipe_read)
+
+                if errpipe_data:
+                    # asynchronously wait until the process terminated
+                    self._watcher.add_child_handler(
+                        self.pid, self._check_exec_result, orig_executable,
+                        cwd, errpipe_data)
+                else:
+                    if not self._exec_waiter.cancelled():
+                        self._exec_waiter.set_result(None)
+                    self._exec_waiter = None
+                    self._loop = None
+                    self._watcher = None
+
+        def _check_exec_result(self, pid, returncode, orig_executable, cwd,
+                            errpipe_data):
+            try:
+                super()._check_exec_result(orig_executable, cwd, errpipe_data)
+            except Exception as exc:
+                if not self._exec_waiter.cancelled():
+                    self._exec_waiter.set_exception(exc)
+                self._cleanup_on_exec_failure()
+else:
+    _NonBlockingPopen = None
+
+
+class _UnixSubprocessTransport(base_subprocess.BaseSubprocessTransport):
+    @coroutine
     def _start(self, args, shell, stdin, stdout, stderr, bufsize, **kwargs):
         stdin_w = None
         if stdin == subprocess.PIPE:
@@ -690,12 +761,38 @@ class _UnixSubprocessTransport(base_subprocess.BaseSubprocessTransport):
             # (Python 3.4 implements the PEP 446, socketpair returns
             # non-inheritable sockets)
             _set_inheritable(stdin_w.fileno(), False)
-        self._proc = subprocess.Popen(
-            args, shell=shell, stdin=stdin, stdout=stdout, stderr=stderr,
-            universal_newlines=False, bufsize=bufsize, **kwargs)
+
+        with events.get_child_watcher() as watcher:
+            try:
+                if _NonBlockingPopen:
+                    exec_waiter = self._loop.create_future()
+                    self._proc = _NonBlockingPopen(
+                        self._loop, exec_waiter, watcher, args, shell=shell,
+                        stdin=stdin, stdout=stdout, stderr=stderr,
+                        universal_newlines=False, bufsize=bufsize, **kwargs)
+                    yield from exec_waiter
+                else:
+                    self._proc = subprocess.Popen(
+                        args, shell=shell, stdin=stdin, stdout=stdout,
+                        stderr=stderr, universal_newlines=False,
+                        bufsize=bufsize, **kwargs)
+            except:
+                self._failed_before_start = True
+                # TODO stdin is probably closed by proc, but what about stdin_w
+                # so far? check this
+                if stdin_w is not None:
+                    stdin_w.close()
+                raise
+            else:
+                watcher.add_child_handler(self._proc.pid,
+                                          self._child_watcher_callback)
+
         if stdin_w is not None:
             stdin.close()
             self._proc.stdin = open(stdin_w.detach(), 'wb', buffering=bufsize)
+
+    def _child_watcher_callback(self, pid, returncode):
+        self._loop.call_soon_threadsafe(self._process_exited, returncode)
 
 
 class AbstractChildWatcher:

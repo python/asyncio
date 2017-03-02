@@ -1,3 +1,4 @@
+import multiprocessing
 import signal
 import sys
 import unittest
@@ -6,6 +7,7 @@ from unittest import mock
 
 import asyncio
 from asyncio import base_subprocess
+from asyncio import compat
 from asyncio import subprocess
 from asyncio import test_utils
 try:
@@ -52,8 +54,9 @@ class SubprocessTransportTests(test_utils.TestCase):
     def test_proc_exited(self):
         waiter = asyncio.Future(loop=self.loop)
         transport, protocol = self.create_transport(waiter)
-        transport._process_exited(6)
         self.loop.run_until_complete(waiter)
+        transport._process_exited(6)
+        test_utils.run_briefly(self.loop)
 
         self.assertEqual(transport.get_returncode(), 6)
 
@@ -163,6 +166,42 @@ class SubprocessMixin:
             # expect 1 but sometimes get 0
         else:
             self.assertEqual(-signal.SIGTERM, returncode)
+
+    @unittest.skipIf(sys.platform == 'win32', "Don't support preexec_fn")
+    def test_exception_in_preexec(self):
+        def raise_exception():
+            raise Exception("custom exception")
+
+        args = PROGRAM_BLOCKED
+        create = asyncio.create_subprocess_exec(
+            *args, preexec_fn=raise_exception, loop=self.loop)
+        with self.assertRaises(Exception) as ctx:
+            self.loop.run_until_complete(create)
+
+        if compat.PY34:
+            from subprocess import SubprocessError
+            self.assertIsInstance(ctx.exception, SubprocessError)
+        else:
+            self.assertIsInstance(ctx.exception, RuntimeError)
+            self.assertEqual("Exception occurred in preexec_fn.",
+                             str(ctx.exception))
+
+    @unittest.skipIf(sys.platform == 'win32', "Don't support preexec_fn")
+    def test_cancel_during_preexec(self):
+        lock = multiprocessing.Lock()
+        lock.acquire()
+
+        def block():
+            lock.acquire()
+            lock.release()
+
+        create = asyncio.create_subprocess_shell(
+            'exit 7', preexec_fn=block, loop=self.loop)
+        task = self.loop.create_task(create)
+        self.loop.call_soon(task.cancel)
+        self.loop.call_soon(lock.release)
+        with self.assertRaises(asyncio.CancelledError):
+            self.loop.run_until_complete(task)
 
     @unittest.skipIf(sys.platform == 'win32', "Don't have SIGHUP")
     def test_send_signal(self):
@@ -447,7 +486,7 @@ class SubprocessMixin:
         if sys.platform == 'win32':
             target = 'asyncio.windows_utils.Popen'
         else:
-            target = 'subprocess.Popen'
+            target = 'asyncio.unix_events._NonBlockingPopen'
         with mock.patch(target) as popen:
             exc = ZeroDivisionError
             popen.side_effect = exc

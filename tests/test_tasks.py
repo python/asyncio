@@ -2158,6 +2158,20 @@ class CoroutineGatherTests(GatherTestsBase, test_utils.TestCase):
         self._run_loop(self.one_loop)
         self.assertEqual(fut.result(), ['abc', 'abc', 'def', 'abc'])
 
+    def test_coroutine_execution_order(self):
+        order = []
+        coro = asyncio.coroutine(order.append)
+        asyncio.gather(coro(1), coro(2), coro(3), coro(4), coro(5))
+        self._run_loop(self.one_loop)
+        self.assertEqual(order, [1, 2, 3, 4, 5])
+
+        order_after_dedupe = []
+        coro = asyncio.coroutine(order_after_dedupe.append)
+        c1 = coro(1)
+        asyncio.gather(c1, coro(2), c1, coro(3), coro(4), coro(5))
+        self._run_loop(self.one_loop)
+        self.assertEqual(order_after_dedupe, [1, 2, 3, 4, 5])
+
     def test_cancellation_broadcast(self):
         # Cancelling outer() cancels all children.
         proof = 0

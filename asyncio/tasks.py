@@ -631,7 +631,11 @@ def gather(*coros_or_futures, loop=None, return_exceptions=False):
         return outer
 
     arg_to_fut = {}
-    for arg in set(coros_or_futures):
+    seen_args = set()
+    seen_args_add = seen_args.add
+    for arg in coros_or_futures:
+        if arg in seen_args or seen_args_add(arg):
+            continue
         if not futures.isfuture(arg):
             fut = ensure_future(arg, loop=loop)
             if loop is None:

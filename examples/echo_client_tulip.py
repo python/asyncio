@@ -1,6 +1,8 @@
 import asyncio
 
+
 END = b'Bye-bye!\n'
+
 
 @asyncio.coroutine
 def echo_client():
@@ -14,6 +16,7 @@ def echo_client():
         if line == END or not line:
             break
     writer.close()
+
 
 loop = asyncio.get_event_loop()
 loop.run_until_complete(echo_client())

@@ -8,9 +8,9 @@ in the same process.  It listens on port 12345 on 127.0.0.1, so it will
 fail if this port is currently in use.
 """
 
-import sys
 import asyncio
 import asyncio.streams
+import sys
 
 
 class MyServer:
@@ -24,13 +24,13 @@ class MyServer:
     """
 
     def __init__(self):
-        self.server = None # encapsulates the server sockets
+        self.server = None  # encapsulates the server sockets
 
         # this keeps track of all the clients that connected to our
         # server.  It can be useful in some cases, for instance to
         # kill client connections or to broadcast some data to all
         # clients...
-        self.clients = {} # task -> (reader, writer)
+        self.clients = {}  # task -> (reader, writer)
 
     def _accept_client(self, client_reader, client_writer):
         """
@@ -59,7 +59,7 @@ class MyServer:
         """
         while True:
             data = (yield from client_reader.readline()).decode("utf-8")
-            if not data: # an empty string means the client disconnected
+            if not data:  # an empty string means the client disconnected
                 break
             cmd, *args = data.rstrip().split(' ')
             if cmd == 'add':
@@ -72,7 +72,7 @@ class MyServer:
                 msg = args[1]
                 client_writer.write("begin\n".encode("utf-8"))
                 for idx in range(times):
-                    client_writer.write("{}. {}\n".format(idx+1, msg)
+                    client_writer.write("{}. {}\n".format(idx + 1, msg)
                                         .encode("utf-8"))
                 client_writer.write("end\n".encode("utf-8"))
             else:

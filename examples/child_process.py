@@ -26,6 +26,7 @@ else:
 # Return a write-only transport wrapping a writable pipe
 #
 
+
 @asyncio.coroutine
 def connect_write_pipe(file):
     loop = asyncio.get_event_loop()
@@ -36,10 +37,12 @@ def connect_write_pipe(file):
 # Wrap a readable pipe in a stream
 #
 
+
 @asyncio.coroutine
 def connect_read_pipe(file):
     loop = asyncio.get_event_loop()
     stream_reader = asyncio.StreamReader(loop=loop)
+
     def factory():
         return asyncio.StreamReaderProtocol(stream_reader)
     transport, _ = yield from loop.connect_read_pipe(factory, file)
@@ -85,7 +88,7 @@ def main(loop):
     stderr, stderr_transport = yield from connect_read_pipe(p.stderr)
 
     # interact with subprocess
-    name = {stdout:'OUT', stderr:'ERR'}
+    name = {stdout: 'OUT', stderr: 'ERR'}
     registered = {asyncio.Task(stderr.readline()): stderr,
                   asyncio.Task(stdout.readline()): stdout}
     while registered:
@@ -115,6 +118,7 @@ def main(loop):
 
     stdout_transport.close()
     stderr_transport.close()
+
 
 if __name__ == '__main__':
     if sys.platform == 'win32':

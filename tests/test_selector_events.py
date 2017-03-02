@@ -1673,7 +1673,7 @@ class SelectorDatagramTransportTests(test_utils.TestCase):
     def test_sendto_error_received_connected(self):
         data = b'data'
 
-        self.sock.send.side_effect = ConnectionRefusedError
+        self.sock.sendto.side_effect = ConnectionRefusedError
 
         transport = self.datagram_transport(address=('0.0.0.0', 1))
         transport._fatal_error = mock.Mock()
@@ -1768,7 +1768,7 @@ class SelectorDatagramTransportTests(test_utils.TestCase):
         self.assertFalse(transport._fatal_error.called)
 
     def test_sendto_ready_error_received_connection(self):
-        self.sock.send.side_effect = ConnectionRefusedError
+        self.sock.sendto.side_effect = ConnectionRefusedError
 
         transport = self.datagram_transport(address=('0.0.0.0', 1))
         transport._fatal_error = mock.Mock()

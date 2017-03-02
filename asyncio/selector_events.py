@@ -553,7 +553,10 @@ class _SelectorTransport(transports._FlowControlMixin,
     def __init__(self, loop, sock, protocol, extra=None, server=None):
         super().__init__(extra, loop)
         self._extra['socket'] = sock
-        self._extra['sockname'] = sock.getsockname()
+        try:
+            self._extra['sockname'] = sock.getsockname()
+        except socket.error:
+            self._extra['sockname'] = None
         if 'peername' not in self._extra:
             try:
                 self._extra['peername'] = sock.getpeername()
@@ -1083,9 +1086,11 @@ class _SelectorDatagramTransport(_SelectorTransport):
         if not data:
             return
 
-        if self._address and addr not in (None, self._address):
-            raise ValueError('Invalid address: must be None or %s' %
-                             (self._address,))
+        if self._address:
+            if addr not in (None, self._address):
+                raise ValueError(
+                    'Invalid address: must be None or %s' % (self._address,))
+            addr = self._address
 
         if self._conn_lost and self._address:
             if self._conn_lost >= constants.LOG_THRESHOLD_FOR_CONNLOST_WRITES:
@@ -1096,10 +1101,7 @@ class _SelectorDatagramTransport(_SelectorTransport):
         if not self._buffer:
             # Attempt to send it right away first.
             try:
-                if self._address:
-                    self._sock.send(data)
-                else:
-                    self._sock.sendto(data, addr)
+                self._sock.sendto(data, addr)
                 return
             except (BlockingIOError, InterruptedError):
                 self._loop._add_writer(self._sock_fd, self._sendto_ready)
@@ -1119,10 +1121,7 @@ class _SelectorDatagramTransport(_SelectorTransport):
         while self._buffer:
             data, addr = self._buffer.popleft()
             try:
-                if self._address:
-                    self._sock.send(data)
-                else:
-                    self._sock.sendto(data, addr)
+                self._sock.sendto(data, addr)
             except (BlockingIOError, InterruptedError):
                 self._buffer.appendleft((data, addr))  # Try again later.
                 break

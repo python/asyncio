@@ -1,6 +1,7 @@
 """Queues"""
 
-__all__ = ['Queue', 'PriorityQueue', 'LifoQueue', 'QueueFull', 'QueueEmpty']
+__all__ = ['Queue', 'PriorityQueue', 'LifoQueue',
+           'QueueFull', 'QueueEmpty', 'QueueClosed']
 
 import collections
 import heapq
@@ -8,6 +9,7 @@ import heapq
 from . import compat
 from . import events
 from . import locks
+from . import CancelledError
 from .coroutines import coroutine
 
 
@@ -15,14 +17,17 @@ class QueueEmpty(Exception):
     """Exception raised when Queue.get_nowait() is called on a Queue object
     which is empty.
     """
-    pass
 
 
 class QueueFull(Exception):
     """Exception raised when the Queue.put_nowait() method is called on a Queue
     object which is full.
     """
-    pass
+
+
+class QueueClosed(CancelledError):
+    """Exception raised by Queue.get() and Queue.put()
+    when Queue.close() or Queue.drain() is called"""
 
 
 class Queue:
@@ -46,12 +51,15 @@ class Queue:
 
         # Futures.
         self._getters = collections.deque()
-        # Futures.
         self._putters = collections.deque()
+        self._drainer = None
+
         self._unfinished_tasks = 0
         self._finished = locks.Event(loop=self._loop)
         self._finished.set()
         self._init(maxsize)
+        self.is_closed = False
+        self.is_draining = False
 
     # These three are overridable in subclasses.
 
@@ -73,6 +81,12 @@ class Queue:
             if not waiter.done():
                 waiter.set_result(None)
                 break
+
+    def _wakeup_all(self):
+        # wake up all waiters (if any) that aren't cancelled.
+        for waiters in (self._putters, self._getters):
+            while waiters:
+                self._wakeup_next(waiters)
 
     def __repr__(self):
         return '<{} at {:#x} {}>'.format(
@@ -127,6 +141,8 @@ class Queue:
         This method is a coroutine.
         """
         while self.full():
+            if self.is_closed or self.is_draining:
+                raise QueueClosed
             putter = self._loop.create_future()
             self._putters.append(putter)
             try:
@@ -145,6 +161,8 @@ class Queue:
 
         If no free slot is immediately available, raise QueueFull.
         """
+        if self.is_draining or self.is_closed:
+            raise QueueClosed
         if self.full():
             raise QueueFull
         self._put(item)
@@ -161,6 +179,16 @@ class Queue:
         This method is a coroutine.
         """
         while self.empty():
+            if self.is_closed:
+                raise QueueClosed
+            if self.is_draining:
+                if self._drainer:
+                    self._drainer.set_result(None)
+                    self._drainer = None
+                self.is_draining = False
+                self.is_closed = True
+                raise QueueClosed
+
             getter = self._loop.create_future()
             self._getters.append(getter)
             try:
@@ -179,6 +207,8 @@ class Queue:
 
         Return an item if one is immediately available, else raise QueueEmpty.
         """
+        if self.is_closed:
+            raise QueueClosed
         if self.empty():
             raise QueueEmpty
         item = self._get()
@@ -216,6 +246,45 @@ class Queue:
         """
         if self._unfinished_tasks > 0:
             yield from self._finished.wait()
+
+    @coroutine
+    def drain(self):
+        """ Closes the queue and lets the queue drain.
+        Waits until queue is empty before returning.
+
+        Any following calls to Queue.put() or Queue.put_nowait() will raise
+        a QueueClosed Exception. Following calls to Queue.get() will succeed
+        until the queue is empty. Once the queue is empty, Queue.get() will
+        raise a QueueClosed exception.
+
+        Raises QueueClosed if the queue is already being drained or is closed.
+        """
+        if self.is_draining:
+            raise QueueClosed
+        self.drain_nowait()
+        yield from self.join()
+
+    def drain_nowait(self):
+        """Closes the queue and lets the queue drain.
+        Does not wait for the queue to be drained before returning.
+        """
+        if self.empty():
+            self.is_draining = False
+            self.is_closed = True
+        else:
+            self.is_draining = True
+
+        self._wakeup_all()
+
+    def close(self):
+        """ Closes the queue immediately, preventing all puts or gets.
+
+        Any call to Queue.get(), Queue.put(), or Queue.put_nowait() will
+        raise a QueueClosed exception.
+        """
+        self.is_closed = True
+        self.is_draining = False
+        self._wakeup_all()
 
 
 class PriorityQueue(Queue):

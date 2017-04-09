@@ -599,7 +599,8 @@ class _GatheringFuture(futures.Future):
         return ret
 
 
-def gather(*coros_or_futures, loop=None, return_exceptions=False):
+def gather(*coros_or_futures, loop=None, return_exceptions=False,
+           exceptions_cancel_tasks=False):
     """Return a future aggregating results from the given coroutines
     or futures.
 
@@ -614,7 +615,10 @@ def gather(*coros_or_futures, loop=None, return_exceptions=False):
     exceptions in the tasks are treated the same as successful
     results, and gathered in the result list; otherwise, the first
     raised exception will be immediately propagated to the returned
-    future.
+    future.  If *exceptions_cancel_tasks* is True, the first raised
+    exception in one child will cancel any other children.  Note that
+    *return_exceptions* and *exceptions_cancel_tasks* are mutually
+    exclusive.
 
     Cancellation: if the outer Future is cancelled, all children (that
     have not completed yet) are also cancelled.  If any child is
@@ -623,6 +627,10 @@ def gather(*coros_or_futures, loop=None, return_exceptions=False):
     prevent the cancellation of one child to cause other children to
     be cancelled.)
     """
+    if return_exceptions and exceptions_cancel_tasks:
+        raise ValueError("return_exceptions and exceptions_cancel_tasks are"
+                         "mutually exclusive")
+
     if not coros_or_futures:
         if loop is None:
             loop = events.get_event_loop()
@@ -669,6 +677,9 @@ def gather(*coros_or_futures, loop=None, return_exceptions=False):
         elif fut._exception is not None:
             res = fut.exception()  # Mark exception retrieved.
             if not return_exceptions:
+                if exceptions_cancel_tasks:
+                    for _fut in children:
+                        _fut.cancel()
                 outer.set_exception(res)
                 return
         else:

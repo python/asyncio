@@ -624,6 +624,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         self._write_to_self()
         return handle
 
+    @coroutine
     def run_in_executor(self, executor, func, *args):
         self._check_closed()
         if self._debug:
@@ -633,7 +634,7 @@ class BaseEventLoop(events.AbstractEventLoop):
             if executor is None:
                 executor = concurrent.futures.ThreadPoolExecutor()
                 self._default_executor = executor
-        return futures.wrap_future(executor.submit(func, *args), loop=self)
+        return (yield from futures.wrap_future(executor.submit(func, *args), loop=self))
 
     def set_default_executor(self, executor):
         self._default_executor = executor

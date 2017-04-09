@@ -361,6 +361,7 @@ class EventLoopTestsMixin:
         res, thread_id = self.loop.run_until_complete(f2)
         self.assertEqual(res, 'yo')
         self.assertNotEqual(thread_id, threading.get_ident())
+        self.assertTrue(asyncio.iscoroutine(f2))
 
     def test_reader_callback(self):
         r, w = test_utils.socketpair()

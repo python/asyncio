@@ -1272,7 +1272,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         - 'asyncgen' (optional): Asynchronous generator that caused
                                  the exception.
 
-        New keys maybe introduced in the future.
+        New keys may be introduced in the future.
 
         Note: do not overload this method in an event loop subclass.
         For custom exception handling, use the

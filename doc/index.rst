@@ -46,7 +46,7 @@ Windows, Linux, Mac OS X, FreeBSD and OpenIndiana.
 * `Trollius project in the Python Cheeseshop (PyPI)
   <https://pypi.python.org/pypi/trollius>`_ (download wheel packages and
   tarballs)
-* `Trollius project at Github <https://github.com/haypo/trollius>`_
+* `Trollius project at Github <https://github.com/vstinner/trollius>`_
   (bug tracker, source code)
 * Mailing list: `python-tulip Google Group
   <https://groups.google.com/forum/?fromgroups#!forum/python-tulip>`_

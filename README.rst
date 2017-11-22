@@ -32,7 +32,6 @@ Python 2.6-3.5. It has been tested on Windows, Linux, Mac OS X, FreeBSD and
 OpenIndiana.
 
 * `Asyncio documentation <http://docs.python.org/dev/library/asyncio.html>`_
-* `Trollius documentation <https://trollius.readthedocs.io/>`_
 * `Trollius project in the Python Cheeseshop (PyPI)
   <https://pypi.python.org/pypi/trollius>`_
 * `Trollius project at Github <https://github.com/vstinner/trollius>`_

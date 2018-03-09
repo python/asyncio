@@ -1,3 +1,11 @@
+========
+Trollius
+========
+
+.. image:: http://unmaintained.tech/badge.svg
+   :target: http://unmaintained.tech/
+   :alt: No Maintenance Intended
+
 Trollius provides infrastructure for writing single-threaded concurrent
 code using coroutines, multiplexing I/O access over sockets and other
 resources, running network clients and servers, and other related primitives.

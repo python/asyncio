@@ -1,5 +1,6 @@
 # Prepare a release:
 #
+#  - git pull --rebase
 #  - fill trollius changelog
 #  - run maybe ./update-asyncio-step1.sh
 #  - run all tests on Linux: tox
@@ -17,15 +18,18 @@
 #
 #  - git tag trollius-VERSION
 #  - git push --tags
-#  - On Linux: python setup.py register sdist upload
+#  - Remove untracked files/dirs: git clean -fdx
+#  - On Linux: python2 setup.py sdist
 #    FIXME: don't use bdist_wheel because of
 #    FIXME: https://github.com/haypo/trollius/issues/1
+#  - twine upload dist/*
 #  - On Windows: python releaser.py release
 #
 # After the release:
 #
 #  - increment version in setup.py (version) and doc/conf.py (version, release)
-#  - git commit -a && git push
+#  - git commit -a -m "post release X.Y"
+#  - git push
 
 import os
 import sys

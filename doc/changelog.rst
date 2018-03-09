@@ -5,8 +5,20 @@ Change log
 .. warning::
    :ref:`The Trollius project is now deprecated! <deprecated>`
 
-Version 2.1
-===========
+Version 2.2 (2018-03-09)
+========================
+
+Changes:
+
+* ``run_aiotest.py`` has been removed since the ``aiotest`` project has been
+  removed
+* Add the "No Maintenance Intended" badge to README
+* The Trollius documentation is no longer online:
+  http://trollius.readthedocs.io/ has been removed
+* Update the GitHub URL to: https://github.com/vstinner/trollius
+
+Version 2.1 (2016-02-05)
+========================
 
 Changes:
 

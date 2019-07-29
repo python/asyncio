@@ -68,7 +68,7 @@ build_script:
 
 # Theer's nothing to actually test anymore; the aiotest dependency is gone.
 test_script:
-  - python --version
+  - "%PYEXE% --version"
 
 artifacts:
   - path: dist/*.whl

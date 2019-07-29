@@ -33,6 +33,8 @@ setup(
     packages=[
         "trollius",
     ],
+    zip_safe=False,
+    keywords="Deprecated Unmaintained asyncio backport",
     ext_modules=extensions,
     install_requires=requirements,
     python_requires=">=2.7, < 3",

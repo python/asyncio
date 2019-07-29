@@ -5,6 +5,12 @@
 .. warning::
    :ref:`The Trollius project is now deprecated! <deprecated>`
 
+2.2.post2 (unreleased)
+======================
+
+- Nothing changed yet.
+
+
 2.2.post1 (2019-07-29)
 ======================
 

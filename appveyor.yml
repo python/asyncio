@@ -64,7 +64,7 @@ install:
   - "%PYEXE% -m pip install -U setuptools wheel"
 
 build_script:
-  - python setup.py bdist_wheel
+  - "%PYEXE% setup.py bdist_wheel"
 
 # Theer's nothing to actually test anymore; the aiotest dependency is gone.
 test_script:

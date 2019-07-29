@@ -1,9 +1,17 @@
-++++++++++
-Change log
-++++++++++
+============
+ Change log
+============
 
 .. warning::
    :ref:`The Trollius project is now deprecated! <deprecated>`
+
+Version 2.3 (2019-07-29)
+========================
+
+This is a packaging-only release. It is intended to be the last
+release.
+
+- Release Windows wheels.
 
 Version 2.2 (2018-03-09)
 ========================
@@ -712,4 +720,3 @@ Other changes of Tulip 0.4.1:
 =======================
 
 - First public release
-

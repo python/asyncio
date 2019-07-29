@@ -1,12 +1,14 @@
-version: build-{build}-{branch}
-
 environment:
   matrix:
-    # http://www.appveyor.com/docs/installed-software#python lists available
-    # versions
-    - PYTHON: "C:\\Python27"
     - PYTHON: "C:\\Python27-x64"
-    # 32-bit
+      PYTHON_VERSION: "2.7.x" # currently 2.7.13
+      PYTHON_ARCH: "64"
+      PYTHON_EXE: python
+    - PYTHON: "C:\\Python27"
+      PYTHON_VERSION: "2.7.x" # currently 2.7.13
+      PYTHON_ARCH: "32"
+      PYTHON_EXE: python
+      GWHEEL_ONLY: true
     - PYTHON: "C:\\pypy2.7-v7.1.0-win32"
       PYTHON_ID: "pypy"
       PYTHON_EXE: pypy
@@ -15,15 +17,25 @@ environment:
 
 install:
   - "set PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%"
-  - python --version
-  - pip install wheel aiotest futures mock six unittest2
-  - pip install -e .
+  - "SET PATH=%PYTHON%;%PYTHON%\\Scripts;%PYTHON%\\bin;%PATH%"
+  - "SET PYEXE=%PYTHON%\\%PYTHON_EXE%.exe"
+
+  # Check that we have the expected version and architecture for Python
+  - "%PYEXE% --version"
+
+  - "%PYEXE% -m pip install --disable-pip-version-check -U pip"
+  - "%PYEXE% -m pip install -U setuptools wheel"
 
 build_script:
   - python setup.py bdist_wheel
 
+# Theer's nothing to actually test anymore; the aiotest dependency is gone.
 test_script:
-  - python runtests.py
+  - python --version
 
 artifacts:
   - path: dist/*.whl
+
+cache:
+  - "%TMP%\\py\\"
+  - '%LOCALAPPDATA%\pip\Cache'

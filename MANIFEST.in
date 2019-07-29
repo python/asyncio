@@ -4,6 +4,7 @@ include overlapped.c pypi.bat
 include check.py runtests.py release.py
 include update-asyncio-*.sh
 include .travis.yml
+include appveyor.yml
 include releaser.conf
 
 include doc/conf.py doc/make.bat doc/Makefile

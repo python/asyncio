@@ -5,8 +5,8 @@
 .. warning::
    :ref:`The Trollius project is now deprecated! <deprecated>`
 
-Version 2.2.post1 (2019-07-29)
-==============================
+Version 2.2.post1 (Unknown)
+===========================
 
 This is a packaging-only release. It is intended to be the last
 release.

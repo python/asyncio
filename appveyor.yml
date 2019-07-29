@@ -1,0 +1,29 @@
+version: build-{build}-{branch}
+
+environment:
+  matrix:
+    # http://www.appveyor.com/docs/installed-software#python lists available
+    # versions
+    - PYTHON: "C:\\Python27"
+    - PYTHON: "C:\\Python27-x64"
+    # 32-bit
+    - PYTHON: "C:\\pypy2.7-v7.1.0-win32"
+      PYTHON_ID: "pypy"
+      PYTHON_EXE: pypy
+      PYTHON_VERSION: "2.7.x"
+      PYTHON_ARCH: "32"
+
+install:
+  - "set PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%"
+  - python --version
+  - pip install wheel aiotest futures mock six unittest2
+  - pip install -e .
+
+build_script:
+  - python setup.py bdist_wheel
+
+test_script:
+  - python runtests.py
+
+artifacts:
+  - path: dist/*.whl

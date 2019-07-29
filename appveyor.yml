@@ -9,11 +9,15 @@ environment:
       PYTHON_ARCH: "32"
       PYTHON_EXE: python
       GWHEEL_ONLY: true
-    - PYTHON: "C:\\pypy2.7-v7.1.0-win32"
-      PYTHON_ID: "pypy"
-      PYTHON_EXE: pypy
-      PYTHON_VERSION: "2.7.x"
-      PYTHON_ARCH: "32"
+    # PyPy 7.1 won't actually build the _overlapped extension:
+    # overlapped.c(92) : warning C4013: 'PyErr_SetExcFromWindowsErr' undefined; assuming extern returning int
+    # overlapped.c(92) : warning C4047: 'return' : 'PyObject *' differs in levels of indirection from 'int'
+    # overlapped.c(1166) : warning C4101: 'AddressObj' : unreferenced local variable
+    # - PYTHON: "C:\\pypy2.7-v7.1.0-win32"
+    #   PYTHON_ID: "pypy"
+    #   PYTHON_EXE: pypy
+    #   PYTHON_VERSION: "2.7.x"
+    #   PYTHON_ARCH: "32"
 
 install:
   # If there is a newer build queued for the same PR, cancel this one.

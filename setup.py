@@ -18,7 +18,7 @@ if sys.version_info < (3,):
 
 setup(
     name="trollius",
-    version="2.3",
+    version="2.2.post1",
     license="Apache License 2.0",
     author='Victor Stinner',
     author_email='victor.stinner@gmail.com',

@@ -29,6 +29,7 @@ setup(
         "Programming Language :: Python",
         "Programming Language :: Python :: 2.7",
         "License :: OSI Approved :: Apache Software License",
+        "Development Status :: 7 - Inactive",
     ],
     packages=[
         "trollius",

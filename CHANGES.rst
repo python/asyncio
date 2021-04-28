@@ -6,6 +6,12 @@
    The Trollius project is now deprecated!
 
 
+2.2.2 (unreleased)
+==================
+
+- Nothing changed yet.
+
+
 2.2.1 (2021-04-28)
 ==================
 

@@ -14,3 +14,5 @@ include examples/*.py
 
 include tests/*.crt tests/*.pem tests/*.key
 include tests/*.py
+
+include *.rst

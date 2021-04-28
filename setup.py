@@ -5,6 +5,9 @@ from setuptools import setup, Extension
 with open("README.rst") as fp:
     long_description = fp.read()
 
+with open('CHANGES.rst') as fp:
+    long_description += '\n\n' + fp.read()
+
 extensions = []
 if os.name == 'nt':
     ext = Extension(
@@ -18,7 +21,7 @@ if sys.version_info < (3,):
 
 setup(
     name="trollius",
-    version="2.2.post1",
+    version="2.2.1",
     license="Apache License 2.0",
     author='Victor Stinner',
     author_email='victor.stinner@gmail.com',

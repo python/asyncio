@@ -6,7 +6,7 @@
    The Trollius project is now deprecated!
 
 
-2.2.1 (unreleased)
+2.2.1 (2021-04-28)
 ==================
 
 - Properly reraise socket.error with an errno of EBADF as an OSError.

@@ -151,7 +151,7 @@ def randomize_tests(tests, seed):
     random.shuffle(tests._tests)
 
 
-class TestsFinder:
+class TestsFinder(object):
 
     def __init__(self, testsdir, includes=(), excludes=()):
         self._testsdir = testsdir
@@ -167,7 +167,7 @@ class TestsFinder:
         mods = [mod for mod, _ in load_modules(self._testsdir)]
         for mod in mods:
             for name in set(dir(mod)):
-                if name.endswith('Tests'):
+                if name.endswith('Tests') or name.startswith('Test'):
                     self._test_factories.append(getattr(mod, name))
 
     def load_tests(self):

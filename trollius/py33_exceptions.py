@@ -79,6 +79,9 @@ _MAP_ERRNO = {
     errno.ESRCH: ProcessLookupError,
 }
 
+if hasattr(errno, 'EBADF') and errno.EBADF not in _MAP_ERRNO:
+    _MAP_ERRNO[errno.EBADF] = OSError
+
 if sys.platform == 'win32':
     from trollius import _overlapped
     _MAP_ERRNO.update({
